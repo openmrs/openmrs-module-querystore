@@ -4,6 +4,16 @@
 
 An OpenMRS module that maintains an optimized read-side projection of clinical data, following the Command Query Responsibility Segregation (CQRS) pattern. It synchronizes data from the OpenMRS transactional database into a purpose-built query store designed for AI applications, analytics, reporting, and any downstream system that needs to consume clinical data efficiently.
 
+## Table of Contents
+
+1. [Why a Query Store?](#why-a-query-store)
+2. [Why a Module and Not in Core?](#why-a-module-and-not-in-core)
+3. [Architecture](#architecture)
+4. [Data Model](#data-model)
+5. [Supported Clinical Data Types](#supported-clinical-data-types)
+6. [Text Serialization](#text-serialization)
+7. [License](#license)
+
 ## Why a Query Store?
 
 OpenMRS core uses a normalized relational database (MySQL) optimized for transactional clinical workflows — recording observations, placing orders, managing patient programs. These normalized structures are not well-suited for:
