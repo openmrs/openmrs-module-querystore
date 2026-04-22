@@ -193,7 +193,8 @@ Example document:
   "interpretation": "ABNORMAL",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
-  "provider": "Dr. Ochieng"
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
 }
 ```
 
@@ -215,7 +216,8 @@ Example document:
 | `interpretation` | Filter by clinical interpretation (e.g., "all abnormal results") |
 | `location_uuid` | Exact filtering by location, avoiding ambiguity from duplicate or similar location names |
 | `location_name` | Human-readable location name for display, keyword search, and aggregation (e.g., "obs count per facility") |
-| `provider` | Filter by who recorded the observation; useful for audit and workload analysis |
+| `provider_uuid` | Exact filtering by provider, avoiding ambiguity from duplicate or similar provider names |
+| `provider_name` | Human-readable provider name for display, keyword search, and workload analysis |
 
 ### Rationale
 Each component serves distinct purposes that the others cannot fulfill:
