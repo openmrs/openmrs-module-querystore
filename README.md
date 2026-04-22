@@ -12,7 +12,8 @@ An OpenMRS module that maintains an optimized read-side projection of clinical d
 4. [Data Model](#data-model)
 5. [Supported Clinical Data Types](#supported-clinical-data-types)
 6. [Text Serialization](#text-serialization)
-7. [License](#license)
+7. [Design Decisions](#design-decisions)
+8. [License](#license)
 
 ## Why a Query Store?
 
@@ -114,6 +115,10 @@ Example:
 Drug order: Metformin 500mg. Dose: 1.0 Tablet(s) Oral twice daily.
 Duration: 30 Day(s). Quantity: 60.0 Tablet(s). Action: NEW. Urgency: ROUTINE
 ```
+
+## Design Decisions
+
+See the [Architecture Decision Records](docs/adr.md) for detailed rationale behind the module's design choices.
 
 ## License
 
