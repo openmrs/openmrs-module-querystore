@@ -197,12 +197,32 @@ Example document:
 }
 ```
 
+### Field descriptions
+
+| Field | Purpose |
+|---|---|
+| `patient_uuid` | Filter search to a single patient's chart, or aggregate across patients |
+| `resource_type` | Distinguish clinical record types; route documents to the correct per-type index |
+| `resource_uuid` | Link back to the source record in OpenMRS via the REST API |
+| `encounter_uuid` | Group records from the same clinical encounter; link back to the encounter in OpenMRS |
+| `date` | Date range filtering and sorting (e.g., "labs from last 6 months", "most recent vital signs") |
+| `text` | BM25 keyword search matches against it; the embedding model was run on it; the LLM reads it when generating answers |
+| `embedding` | Dense vector for semantic similarity search (e.g., "blood sugar control" matching an HbA1c result) |
+| `concept_uuid` | Exact filtering by concept without relying on text matching (e.g., "all HbA1c results for this patient") |
+| `concept_name` | Human-readable concept name for display; also supports keyword search on concept names |
+| `concept_class` | Filter by category of clinical data (e.g., "Test", "Drug", "Diagnosis") |
+| `value_numeric` | Numeric range queries (e.g., "HbA1c values above 7", "systolic BP over 140") |
+| `units` | Filter or group by unit of measurement |
+| `interpretation` | Filter by clinical interpretation (e.g., "all abnormal results") |
+| `location` | Filter or aggregate by facility (e.g., "results from Kenyatta National Hospital", "obs count per facility") |
+| `provider` | Filter by who recorded the observation; useful for audit and workload analysis |
+
 ### Rationale
 Each component serves distinct purposes that the others cannot fulfill:
 
-- **Text chunk**: BM25 keyword search matches against it. The embedding model was run on it. The LLM reads it when generating answers. Without it, you can find a match but have nothing to display or feed to the LLM.
-- **Vector embedding**: Enables semantic similarity search (e.g., "blood sugar control" matching an HbA1c result). Without it, you can only do keyword matching.
-- **Structured metadata**: Enables precise filtering (by patient, date range, resource type, numeric value ranges) and aggregation that neither keyword nor semantic search can do well. Also provides the link back to the source record in OpenMRS via resource_type and resource_uuid.
+- **Text chunk** (`text`): BM25 keyword search matches against it. The embedding model was run on it. The LLM reads it when generating answers. Without it, you can find a match but have nothing to display or feed to the LLM.
+- **Vector embedding** (`embedding`): Enables semantic similarity search. Without it, you can only do keyword matching.
+- **Structured metadata** (all other fields): Enables precise filtering, sorting, aggregation, and linking back to source records. Neither keyword nor semantic search can reliably answer queries like "labs from last 6 months with value above 7 at Kenyatta National Hospital."
 
 Elasticsearch's strength is that it can combine all three in a single query — kNN on the vector, BM25 on the text, and filters on the metadata — making the three-component model a natural fit.
 
