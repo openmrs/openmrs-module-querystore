@@ -207,7 +207,7 @@ Example document:
 | `text` | BM25 keyword search matches against it; the embedding model was run on it; the LLM reads it when generating answers |
 | `embedding` | Dense vector for semantic similarity search (e.g., "blood sugar control" matching an HbA1c result) |
 | `concept_uuid` | Exact filtering by concept without relying on text matching (e.g., "all HbA1c results for this patient") |
-| `concept_name` | Human-readable concept name for display; also supports keyword search on concept names |
+| `concept_name` | Human-readable concept name in the deployment's configured locale (see [Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings)); supports keyword search and display |
 | `concept_class` | Filter by category of clinical data (e.g., "Test", "Drug", "Diagnosis") |
 | `value_numeric` | Numeric range queries (e.g., "HbA1c values above 7", "systolic BP over 140") |
 | `units` | Filter or group by unit of measurement |
