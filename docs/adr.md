@@ -186,6 +186,7 @@ Example document:
   "date": "2025-03-15",
   "text": "Fasting blood glucose: 11.2 mmol/L",
   "embedding": [0.023, -0.041, 0.078, ...],
+  "concept_uuid": "3cd6f600-26fe-102b-80cb-0017a47871b2",
   "concept_name": "Fasting blood glucose",
   "concept_class": "Test",
   "value_numeric": 11.2,
