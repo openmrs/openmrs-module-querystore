@@ -2,6 +2,16 @@
 
 This document captures the key architectural decisions for the OpenMRS Query Store Module.
 
+## Table of Contents
+
+1. [CQRS Pattern — Separate Read Store from Transactional Database](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)
+2. [Module, Not Core](#decision-2-module-not-core)
+3. [Elasticsearch as the Backing Store](#decision-3-elasticsearch-as-the-backing-store)
+4. [Per-Type Indices Over a Single Index](#decision-4-per-type-indices-over-a-single-index)
+5. [Plain Text Serialization Over JSON or FHIR](#decision-5-plain-text-serialization-over-json-or-fhir)
+6. [Document Model — Text, Embeddings, and Structured Metadata](#decision-6-document-model--text-embeddings-and-structured-metadata)
+7. [Date Separation — Excluded from Embeddings, Included at Query Time](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time)
+
 ---
 
 ## Decision 1: CQRS Pattern — Separate Read Store from Transactional Database
