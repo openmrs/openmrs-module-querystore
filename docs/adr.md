@@ -191,7 +191,8 @@ Example document:
   "value_numeric": 11.2,
   "units": "mmol/L",
   "interpretation": "ABNORMAL",
-  "location": "Kenyatta National Hospital",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
   "provider": "Dr. Ochieng"
 }
 ```
@@ -212,7 +213,8 @@ Example document:
 | `value_numeric` | Numeric range queries (e.g., "HbA1c values above 7", "systolic BP over 140") |
 | `units` | Filter or group by unit of measurement |
 | `interpretation` | Filter by clinical interpretation (e.g., "all abnormal results") |
-| `location` | Filter or aggregate by facility (e.g., "results from Kenyatta National Hospital", "obs count per facility") |
+| `location_uuid` | Exact filtering by location, avoiding ambiguity from duplicate or similar location names |
+| `location_name` | Human-readable location name for display, keyword search, and aggregation (e.g., "obs count per facility") |
 | `provider` | Filter by who recorded the observation; useful for audit and workload analysis |
 
 ### Rationale
