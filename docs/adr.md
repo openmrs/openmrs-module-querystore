@@ -203,7 +203,7 @@ Example document:
 |---|---|
 | `patient_uuid` | Filter search to a single patient's chart, or aggregate across patients |
 | `resource_type` | Distinguish clinical record types (e.g., "obs", "condition", "diagnosis", "drug_order", "test_order", "allergy", "program", "medication_dispense"); route documents to the correct per-type index |
-| `resource_uuid` | Link back to the source record in OpenMRS via the REST API |
+| `resource_uuid` | Link back to the source record in OpenMRS via the REST API (e.g., the obs UUID, condition UUID, order UUID, or allergy UUID depending on the resource_type) |
 | `encounter_uuid` | Group records from the same clinical encounter; link back to the encounter in OpenMRS |
 | `date` | Date range filtering and sorting (e.g., "labs from last 6 months", "most recent vital signs") |
 | `text` | BM25 keyword search matches against it; the embedding model was run on it; the LLM reads it when generating answers |
