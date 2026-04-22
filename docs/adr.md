@@ -11,6 +11,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 5. [Plain Text Serialization Over JSON or FHIR](#decision-5-plain-text-serialization-over-json-or-fhir)
 6. [Document Model — Text, Embeddings, and Structured Metadata](#decision-6-document-model--text-embeddings-and-structured-metadata)
 7. [Date Separation — Excluded from Embeddings, Included at Query Time](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time)
+8. [Locale-Specific Serialization with Multilingual Embeddings](#decision-8-locale-specific-serialization-with-multilingual-embeddings)
 
 ---
 
@@ -239,3 +240,40 @@ Dates are still available through:
 - The serialization layer must distinguish between record timestamps (excluded from text) and clinically significant dates (included in text).
 - Prompt assembly logic must prepend dates when constructing LLM input.
 - Date-based retrieval relies on structured filtering rather than semantic search, which is more precise anyway.
+
+---
+
+## Decision 8: Locale-Specific Serialization with Multilingual Embeddings
+
+### Status
+Accepted
+
+### Context
+Concept names in OpenMRS are locale-specific. A concept like "Fasting blood glucose" may be stored as "Glycémie à jeun" in French or "Glukosa darah puasa" in Indonesian. The serialized text used for embedding and search must account for this, since:
+
+- Embeddings are language-sensitive — mixing languages in the same index dilutes search quality.
+- BM25 keyword search does not match across languages (e.g., "blood glucose" will not match "Glycémie à jeun").
+- The LLM needs consistent language to reason over the chart.
+
+Options considered:
+
+| Option | Pros | Cons |
+|---|---|---|
+| Serialize in one fixed locale (e.g., English) | Standardized, best monolingual embedding quality | Clinicians may not search in English |
+| Serialize in the deployment's default locale | Text matches the language clinicians use | Embedding quality varies by language with monolingual models |
+| Serialize in multiple locales per record | Best retrieval across languages | Multiplies storage and indexing cost |
+| Serialize in the deployment's locale, embed with a multilingual model | Practical, natural language for clinicians, cross-language similarity | Slightly lower embedding quality than monolingual models |
+
+### Decision
+Serialize concept names in the deployment's configured locale and use a multilingual embedding model (e.g., `multilingual-e5`) for vector generation.
+
+### Rationale
+1. **Clinicians search in their own language.** A French-speaking clinician will type "glycémie" not "blood glucose." The serialized text and BM25 index should match the language they use.
+2. **Multilingual embedding models handle cross-language similarity.** Models like `multilingual-e5` are trained across 100+ languages and produce comparable vectors for semantically equivalent text regardless of language.
+3. **Single serialization per record keeps storage and indexing simple.** Storing multiple locale variants per record would multiply storage cost and complicate synchronization without proportional benefit.
+4. **Consistent with OpenMRS conventions.** OpenMRS already resolves concept names to the configured locale throughout its UI and APIs.
+
+### Consequences
+- The embedding model must be multilingual. Monolingual models (e.g., English-only) should not be used.
+- Deployments that change their default locale after initial indexing will need to re-serialize and re-index existing records.
+- Cross-deployment searches (e.g., a research network spanning French and English sites) would require additional consideration, potentially storing an English canonical form alongside the localized text.
