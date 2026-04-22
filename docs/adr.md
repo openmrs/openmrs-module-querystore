@@ -115,7 +115,7 @@ Use per-type indices (e.g., `openmrs_obs`, `openmrs_conditions`, `openmrs_drug_o
 2. **Better query performance.** Type-specific queries (e.g., "all patients with HbA1c above 7") only scan the relevant index rather than skipping irrelevant document types.
 3. **Better relevance scoring.** BM25 term frequencies are computed per index. Mixing clinical notes, lab results, and drug orders dilutes term frequencies across unrelated document types, hurting search quality.
 4. **Cross-type search is still easy.** Elasticsearch wildcard patterns (e.g., `openmrs_*`) allow querying across all types when needed, providing the same convenience as a single index.
-5. **Future-proof for cross-patient search.** Per-patient chart search works fine with either approach since the patient_id filter narrows the scope. But cross-patient search at scale benefits significantly from type-specific indices.
+5. **Future-proof for cross-patient search.** Per-patient chart search works fine with either approach since the patient_uuid filter narrows the scope. But cross-patient search at scale benefits significantly from type-specific indices.
 
 ### Consequences
 - More indices to manage, though an index template can share common settings across all `openmrs_*` indices.
@@ -174,15 +174,15 @@ Each Elasticsearch document contains three components:
 
 1. **Text chunk** — the plain text serialization of the clinical record.
 2. **Vector embedding** — a dense vector computed from the text chunk, stored in a `dense_vector` field.
-3. **Structured metadata** — typed fields for filtering and aggregation (patient_id, date, resource_type, resource_id, concept_name, and type-specific fields).
+3. **Structured metadata** — typed fields for filtering and aggregation (patient_uuid, date, resource_type, resource_uuid, concept_name, and type-specific fields).
 
 Example document:
 ```json
 {
-  "patient_id": 123,
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
   "resource_type": "obs",
-  "resource_id": 456,
-  "encounter_id": 789,
+  "resource_uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "encounter_uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
   "date": "2025-03-15",
   "text": "Fasting blood glucose: 11.2 mmol/L",
   "embedding": [0.023, -0.041, 0.078, ...],
@@ -201,7 +201,7 @@ Each component serves distinct purposes that the others cannot fulfill:
 
 - **Text chunk**: BM25 keyword search matches against it. The embedding model was run on it. The LLM reads it when generating answers. Without it, you can find a match but have nothing to display or feed to the LLM.
 - **Vector embedding**: Enables semantic similarity search (e.g., "blood sugar control" matching an HbA1c result). Without it, you can only do keyword matching.
-- **Structured metadata**: Enables precise filtering (by patient, date range, resource type, numeric value ranges) and aggregation that neither keyword nor semantic search can do well. Also provides the link back to the source record in OpenMRS via resource_type and resource_id.
+- **Structured metadata**: Enables precise filtering (by patient, date range, resource type, numeric value ranges) and aggregation that neither keyword nor semantic search can do well. Also provides the link back to the source record in OpenMRS via resource_type and resource_uuid.
 
 Elasticsearch's strength is that it can combine all three in a single query — kNN on the vector, BM25 on the text, and filters on the metadata — making the three-component model a natural fit.
 
