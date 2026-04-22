@@ -182,7 +182,6 @@ Example document:
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
   "resource_type": "obs",
   "resource_uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "encounter_uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
   "date": "2025-03-15",
   "text": "Fasting blood glucose: 11.2 mmol/L",
   "embedding": [0.023, -0.041, 0.078, ...],
@@ -204,7 +203,6 @@ Example document:
 | `patient_uuid` | Filter search to a single patient's chart, or aggregate across patients |
 | `resource_type` | Distinguish clinical record types (e.g., "obs", "condition", "diagnosis", "drug_order", "test_order", "allergy", "program", "medication_dispense"); route documents to the correct per-type index |
 | `resource_uuid` | Link back to the source record in OpenMRS (e.g., the obs UUID, condition UUID, order UUID, or allergy UUID depending on the resource_type) |
-| `encounter_uuid` | Group records from the same clinical encounter; link back to the encounter in OpenMRS |
 | `date` | Date range filtering and sorting (e.g., "labs from last 6 months", "most recent vital signs") |
 | `text` | BM25 keyword search matches against it; the embedding model was run on it; the LLM reads it when generating answers |
 | `embedding` | Dense vector for semantic similarity search (e.g., "blood sugar control" matching an HbA1c result) |
