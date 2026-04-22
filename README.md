@@ -81,7 +81,7 @@ Each document contains:
 
 | Data Type | Description |
 |---|---|
-| Observations | Lab results, vitals, assessments |
+| Observations | Lab results, vitals, assessments, clinical notes |
 | Conditions | Active and resolved conditions |
 | Diagnoses | Confirmed and provisional diagnoses |
 | Drug Orders | Medication prescriptions |
@@ -89,7 +89,6 @@ Each document contains:
 | Allergies | Drug, food, and environmental allergies |
 | Patient Programs | Program enrollments, states, and outcomes |
 | Medication Dispense | Dispensing records |
-| Clinical Notes | Free-text encounter notes |
 
 ## Text Serialization
 
