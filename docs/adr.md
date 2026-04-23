@@ -176,7 +176,9 @@ Each Elasticsearch document contains three components:
 2. **Vector embedding** — a dense vector computed from the text chunk, stored in a `dense_vector` field.
 3. **Structured metadata** — typed fields for filtering and aggregation (patient_uuid, date, resource_type, resource_uuid, concept_name, and type-specific fields).
 
-Example document:
+Example documents:
+
+**Observation** (openmrs_obs index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -191,6 +193,165 @@ Example document:
   "value_numeric": 11.2,
   "units": "mmol/L",
   "interpretation": "ABNORMAL",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Condition** (openmrs_conditions index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "condition",
+  "resource_uuid": "d4e5f6a7-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+  "date": "2023-06-10",
+  "text": "Condition: Type 2 Diabetes Mellitus. Status: ACTIVE. Verification: CONFIRMED",
+  "embedding": [0.015, -0.062, 0.044, ...],
+  "concept_uuid": "5cd3f6a0-26fe-102b-80cb-0017a47871b2",
+  "concept_name": "Type 2 Diabetes Mellitus",
+  "clinical_status": "ACTIVE",
+  "verification_status": "CONFIRMED",
+  "end_date": null,
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Diagnosis** (openmrs_diagnoses index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "diagnosis",
+  "resource_uuid": "e5f6a7b8-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+  "date": "2025-06-29",
+  "text": "Diagnosis: Tuberculosis. Certainty: CONFIRMED. Rank: Primary",
+  "embedding": [0.031, -0.019, 0.087, ...],
+  "concept_uuid": "7ef4a8b2-36de-112b-90db-1127b58972c3",
+  "concept_name": "Tuberculosis",
+  "certainty": "CONFIRMED",
+  "rank": "Primary",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Drug Order** (openmrs_drug_orders index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "drug_order",
+  "resource_uuid": "a7b8c9d0-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "date": "2025-01-10",
+  "text": "Drug order: Metformin 500mg. Dose: 1.0 Tablet(s) Oral twice daily. Duration: 30 Day(s). Quantity: 60.0 Tablet(s). Action: NEW. Urgency: ROUTINE",
+  "embedding": [0.042, -0.028, 0.053, ...],
+  "concept_uuid": "9ab2c4d6-48ef-223c-a1eb-2238c69083d4",
+  "concept_name": "Metformin",
+  "drug_name": "Metformin 500mg",
+  "dose": 1.0,
+  "dose_units": "Tablet(s)",
+  "route": "Oral",
+  "frequency": "twice daily",
+  "duration": 30,
+  "duration_units": "Day(s)",
+  "quantity": 60.0,
+  "quantity_units": "Tablet(s)",
+  "action": "NEW",
+  "urgency": "ROUTINE",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Allergy** (openmrs_allergies index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "allergy",
+  "resource_uuid": "b8c9d0e1-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+  "date": "2024-12-29",
+  "text": "Allergy: Penicillin (drug allergen). Severity: Severe. Reactions: Anaphylaxis, Rash",
+  "embedding": [0.018, -0.055, 0.071, ...],
+  "allergen_name": "Penicillin",
+  "allergen_type": "DRUG",
+  "severity": "Severe",
+  "reactions": ["Anaphylaxis", "Rash"],
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Patient Program** (openmrs_programs index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "program",
+  "resource_uuid": "c9d0e1f2-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+  "date": "2024-01-15",
+  "text": "Program: HIV Treatment. Enrolled: 2024-01-15. Status: Active. Current state: On ART",
+  "embedding": [0.027, -0.038, 0.062, ...],
+  "program_name": "HIV Treatment",
+  "enrollment_date": "2024-01-15",
+  "completion_date": null,
+  "active": true,
+  "outcome": null,
+  "current_state": "On ART",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Medication Dispense** (openmrs_medication_dispense index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "medication_dispense",
+  "resource_uuid": "d0e1f2a3-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+  "date": "2025-01-10",
+  "text": "Dispensed: Metformin 500mg. Status: Completed. Quantity: 60.0 Tablet(s). Dose: 1.0 Tablet(s) Oral twice daily. Handed over: 2025-01-10",
+  "embedding": [0.033, -0.047, 0.058, ...],
+  "drug_name": "Metformin 500mg",
+  "status": "Completed",
+  "quantity": 60.0,
+  "quantity_units": "Tablet(s)",
+  "dose": 1.0,
+  "dose_units": "Tablet(s)",
+  "route": "Oral",
+  "frequency": "twice daily",
+  "date_handed_over": "2025-01-10",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Test Order** (openmrs_test_orders index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "test_order",
+  "resource_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "date": "2025-06-29",
+  "text": "Test order: X-Ray Chest. Laterality: LEFT. Clinical history: Persistent cough for 3 weeks. Action: NEW. Urgency: STAT",
+  "embedding": [0.021, -0.034, 0.069, ...],
+  "concept_uuid": "8bc3d5e7-59fg-334d-b2fc-3349d7a194e5",
+  "concept_name": "X-Ray Chest",
+  "action": "NEW",
+  "urgency": "STAT",
+  "laterality": "LEFT",
+  "clinical_history": "Persistent cough for 3 weeks",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
