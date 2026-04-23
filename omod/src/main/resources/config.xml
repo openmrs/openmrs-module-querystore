@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE module PUBLIC "-//OpenMRS//DTD OpenMRS Config 1.6//EN"
+        "https://resources.openmrs.org/doctype/config-1.6.dtd">
+
+<module configVersion="1.6">
+
+    <id>${project.parent.artifactId}</id>
+    <name>${project.parent.name}</name>
+    <version>${project.parent.version}</version>
+    <package>org.openmrs.module.querystore</package>
+    <author>OpenMRS</author>
+    <description>${project.parent.description}</description>
+
+    <activator>org.openmrs.module.querystore.QueryStoreActivator</activator>
+
+    <require_version>2.8.0</require_version>
+
+    <updateURL>https://modules.openmrs.org/modules/download/${project.parent.artifactId}/update.rdf</updateURL>
+
+</module>

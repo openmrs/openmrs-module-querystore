@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.7.xsd">
+
+    <!--
+        No schema changes are required in the OpenMRS transactional database. The query store
+        lives in an external backend (Elasticsearch by default). Add changesets here only if the
+        module later needs to persist bookkeeping state (e.g., last-synchronized sequence numbers).
+    -->
+
+</databaseChangeLog>
