@@ -302,6 +302,7 @@ Example documents:
   "date": "2024-01-15",
   "text": "Program: HIV Treatment. Enrolled: 2024-01-15. Status: Active. Current state: On ART",
   "embedding": [0.027, -0.038, 0.062, ...],
+  "program_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
   "program_name": "HIV Treatment",
   "enrollment_date": "2024-01-15",
   "completion_date": null,
