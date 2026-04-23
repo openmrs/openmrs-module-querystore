@@ -281,6 +281,7 @@ Example documents:
   "text": "Allergy: Penicillin (drug allergen). Severity: Severe. Reactions: Anaphylaxis, Rash",
   "embedding": [0.018, -0.055, 0.071, ...],
   "allergen_name": "Penicillin",
+  "allergen_non_coded": null,
   "allergen_type": "DRUG",
   "severity": "Severe",
   "reactions": ["Anaphylaxis", "Rash"],
