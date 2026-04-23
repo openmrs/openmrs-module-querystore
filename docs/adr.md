@@ -280,6 +280,7 @@ Example documents:
   "date": "2024-12-29",
   "text": "Allergy: Penicillin (drug allergen). Severity: Severe. Reactions: Anaphylaxis, Rash",
   "embedding": [0.018, -0.055, 0.071, ...],
+  "allergen_uuid": "c2d3e4f5-6a7b-8c9d-0e1f-2a3b4c5d6e7f",
   "allergen_name": "Penicillin",
   "allergen_non_coded": null,
   "allergen_type": "DRUG",
