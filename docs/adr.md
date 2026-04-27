@@ -290,12 +290,17 @@ Example documents:
   "drug_uuid": "f1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
   "drug_name": "Metformin 500mg",
   "dose": 1.0,
+  "dose_units_uuid": "162384AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "dose_units": "Tablet(s)",
+  "route_uuid": "160240AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "route": "Oral",
+  "frequency_uuid": "160862AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "frequency": "twice daily",
   "duration": 30,
+  "duration_units_uuid": "1072AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "duration_units": "Day(s)",
   "quantity": 60.0,
+  "quantity_units_uuid": "162384AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "quantity_units": "Tablet(s)",
   "action": "NEW",
   "urgency": "ROUTINE",
@@ -385,10 +390,14 @@ Example documents:
   "drug_order_uuid": "a7b8c9d0-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
   "status": "Completed",
   "quantity": 60.0,
+  "quantity_units_uuid": "162384AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "quantity_units": "Tablet(s)",
   "dose": 1.0,
+  "dose_units_uuid": "162384AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "dose_units": "Tablet(s)",
+  "route_uuid": "160240AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "route": "Oral",
+  "frequency_uuid": "160862AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "frequency": "twice daily",
   "date_handed_over": "2025-01-10",
   "was_substituted": false,
@@ -624,6 +633,11 @@ Example documents:
 | `auto_expire_date` | (orders) Scheduled expiry date computed from duration; null if open-ended; required for filtering active vs. expired orders |
 | `previous_order_uuid` | (orders) Links to the prior order in a revise/renew/discontinue chain; null for original orders. Required to reconstruct order history without scanning |
 | `care_setting` | (orders) Inpatient vs. Outpatient setting; affects clinical interpretation of dose/frequency and is a common filter |
+| `dose_units_uuid` / `dose_units` | (drug_order / medication_dispense) Coded unit for the dose amount (e.g., Tablet(s), mg, mL); UUID enables locale-independent filtering and resilience to concept renames per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
+| `quantity_units_uuid` / `quantity_units` | (drug_order / medication_dispense) Coded unit for the dispensed quantity; same UUID/name rationale as `dose_units` |
+| `duration_units_uuid` / `duration_units` | (drug_order) Coded unit for order duration (e.g., Day(s), Week(s)); same UUID/name rationale as `dose_units` |
+| `route_uuid` / `route` | (drug_order / medication_dispense) Coded administration route (e.g., Oral, Intravenous); UUID enables queries like "all injectable orders" without locale-dependent name matching |
+| `frequency_uuid` / `frequency` | (drug_order / medication_dispense) Coded dosing frequency (e.g., twice daily, every 4 hours); UUID enables programmatic filtering of regimens that name-based matching can't reliably express across locales or deployments |
 | `dosing_instructions` | (drug_order) Free-text directions to the patient (e.g., "Take with food"); included in the embedded text since it carries clinical meaning |
 | `as_needed` / `as_needed_condition` | (drug_order) PRN flag and the condition under which the medication should be taken (e.g., "for pain"); critical to distinguish scheduled vs. PRN regimens |
 | `num_refills` | (drug_order) Number of refills authorized; needed for adherence and supply-chain queries |
