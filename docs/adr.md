@@ -191,8 +191,12 @@ Example documents:
   "concept_name": "Fasting blood glucose",
   "concept_class": "Test",
   "value_numeric": 11.2,
+  "value_coded_uuid": null,
+  "value_coded_name": null,
+  "value_text": null,
   "units": "mmol/L",
   "interpretation": "ABNORMAL",
+  "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -207,12 +211,13 @@ Example documents:
   "resource_type": "condition",
   "resource_uuid": "d4e5f6a7-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
   "date": "2023-06-10",
-  "text": "Condition: Type 2 Diabetes Mellitus. Status: ACTIVE. Verification: CONFIRMED",
+  "text": "Condition: Type 2 Diabetes Mellitus. Status: ACTIVE. Verification: CONFIRMED. Onset: 2020-03-15",
   "embedding": [0.015, -0.062, 0.044, ...],
   "concept_uuid": "5cd3f6a0-26fe-102b-80cb-0017a47871b2",
   "concept_name": "Type 2 Diabetes Mellitus",
   "clinical_status": "ACTIVE",
   "verification_status": "CONFIRMED",
+  "onset_date": "2020-03-15",
   "end_date": null,
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
@@ -264,6 +269,10 @@ Example documents:
   "quantity_units": "Tablet(s)",
   "action": "NEW",
   "urgency": "ROUTINE",
+  "order_number": "ORD-1234",
+  "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "date_stopped": null,
+  "auto_expire_date": "2025-02-09",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -325,8 +334,11 @@ Example documents:
   "date": "2025-01-10",
   "text": "Dispensed: Metformin 500mg. Status: Completed. Quantity: 60.0 Tablet(s). Dose: 1.0 Tablet(s) Oral twice daily. Handed over: 2025-01-10",
   "embedding": [0.033, -0.047, 0.058, ...],
+  "concept_uuid": "9ab2c4d6-48ef-223c-a1eb-2238c69083d4",
+  "concept_name": "Metformin",
   "drug_uuid": "f1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
   "drug_name": "Metformin 500mg",
+  "drug_order_uuid": "a7b8c9d0-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
   "status": "Completed",
   "quantity": 60.0,
   "quantity_units": "Tablet(s)",
@@ -357,6 +369,10 @@ Example documents:
   "urgency": "STAT",
   "laterality": "LEFT",
   "clinical_history": "Persistent cough for 3 weeks",
+  "order_number": "ORD-5678",
+  "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "date_stopped": null,
+  "auto_expire_date": null,
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -378,8 +394,18 @@ Example documents:
 | `concept_name` | Human-readable concept name in the deployment's configured locale (see [Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings)); supports keyword search and display |
 | `concept_class` | Filter by category of clinical data (e.g., "Test", "Drug", "Diagnosis") |
 | `value_numeric` | Numeric range queries (e.g., "HbA1c values above 7", "systolic BP over 140") |
+| `value_coded_uuid` | Exact filtering by coded answer concept (e.g., "all HIV-positive results", "all Yes answers to a symptom question") — null for numeric or text obs |
+| `value_coded_name` | Human-readable coded answer name for display and keyword search — null for numeric or text obs |
+| `value_text` | Raw free-text observation value for substring search and display — null for numeric or coded obs |
 | `units` | Filter or group by unit of measurement |
 | `interpretation` | Filter by clinical interpretation (e.g., "all abnormal results") |
+| `encounter_uuid` | Group all clinical data from the same encounter; enables "what was recorded during visit X" queries across obs, orders, and diagnoses |
+| `onset_date` | (conditions) Clinical date the condition started; distinct from `date` (the record creation date); included in the embedded text as a clinical fact per [Decision 7](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time) |
+| `order_number` | (orders) Human-readable order reference (e.g., ORD-1234) for display and linking back to source UI |
+| `date_stopped` | (orders) Date an order was manually discontinued; null if still active; required for filtering active vs. stopped orders |
+| `auto_expire_date` | (orders) Scheduled expiry date computed from duration; null if open-ended; required for filtering active vs. expired orders |
+| `reactions` | (allergies) Flat array of reaction names in the deployment's configured locale. Reaction UUIDs are intentionally omitted: reactions are always used as a refinement filter alongside `allergen_uuid`, never as the primary query axis (nobody queries "all patients with anaphylaxis" without first filtering by allergen or patient). Name-based matching is sufficient in this secondary role. The tradeoff accepted is that names are locale-dependent and mutable — if reaction-level UUID filtering becomes a real use case, adding a parallel `reaction_uuids` array is a serializer change plus a full re-index of `openmrs_allergies`; no schema migration or data loss is involved since the query store can be rebuilt from source at any time (see [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)). |
+| `drug_order_uuid` | (medication_dispense) UUID of the originating drug order; enables "was this order dispensed?" queries and links dispense records back to their prescriptions |
 | `location_uuid` | Exact filtering by location, avoiding ambiguity from duplicate or similar location names |
 | `location_name` | Human-readable location name for display, keyword search, and aggregation (e.g., "obs count per facility") |
 | `provider_uuid` | Exact filtering by provider, avoiding ambiguity from duplicate or similar provider names |
