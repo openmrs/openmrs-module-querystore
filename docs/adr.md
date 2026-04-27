@@ -15,6 +15,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 9. [Coded Fields — Store Both UUID and Name](#decision-9-coded-fields--store-both-uuid-and-name)
 10. [Voided Records — Deleted from the Read Store, Not Marked](#decision-10-voided-records--deleted-from-the-read-store-not-marked)
 11. [Retired Metadata — Data References Preserved, Names Snapshotted](#decision-11-retired-metadata--data-references-preserved-names-snapshotted)
+12. [Sync Mechanism — Events First, AOP as Last-Resort Gap Filler](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler)
 
 [Open Questions](#open-questions)
 
@@ -867,12 +868,57 @@ The two are not interchangeable. Retiring a concept does not invalidate the obs 
 
 ---
 
+## Decision 12: Sync Mechanism — Events First, AOP as Last-Resort Gap Filler
+
+### Status
+Accepted
+
+### Context
+[Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database) establishes the CQRS pattern (separate read store, eventually consistent with core) and names "events or AOP" as candidate sync mechanisms without picking one. The choice cascades into coverage, coupling, latency, and operational complexity, and several other decisions implicitly depend on the answer.
+
+Candidates considered:
+
+| Mechanism | Coverage | Coupling | Async | Infra cost |
+|---|---|---|---|---|
+| OpenMRS Event module | Whatever core publishes | Loose — public event contract | Yes | Adds Event module + JMS broker |
+| AOP (pointcuts on services) | Everything routed through service methods | Tight — internal service interfaces | Synchronous unless explicitly wrapped | None additional |
+| Database CDC (Debezium / binlog) | Everything, including direct DAO writes | None to core code | Yes | Adds binlog + Kafka + Debezium |
+| Polling | Anything queryable with a timestamp | Loose | N/A | None additional |
+
+### Decision
+Use the OpenMRS Event module as the primary sync mechanism. Subscribe to create / update / void events for the entity types this module indexes and apply the corresponding mutations to the read store.
+
+Where event coverage is incomplete in the supported core version, the preferred remedy is to patch core to emit the missing event. AOP is permitted only as a targeted gap filler — scoped to specific entity types where patching core is not feasible — and is treated as tech debt to be removed once core catches up.
+
+CDC and polling are excluded for the steady-state sync path. Polling is acceptable only for the initial backfill at install or after a rebuild (tracked as an open question below).
+
+### Rationale
+1. **Aligns with CQRS conventions.** Events are the canonical mechanism for read-side projections: core publishes, the projection consumes. [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)'s "data flows one way: from core to the query store" is most naturally implemented this way.
+2. **Established precedent in the OpenMRS ecosystem.** The FHIR2 module already uses the Event module to maintain a derived representation of clinical data. Following the same pattern keeps the operational picture consistent for deployers and avoids introducing a new sync paradigm alongside an existing one.
+3. **Decouples from internal service shapes.** AOP pointcuts attach to specific service method signatures; core renames, refactors, and method-extraction routinely break them. Events are a stable public contract that survives core's internal changes.
+4. **Async by default.** Event handlers run off the clinical request thread, so indexing latency and embedding generation do not slow clinical workflows. AOP would block the calling thread (and its transaction) unless explicitly wrapped, adding complexity.
+5. **Gaps are addressable upstream.** If the supported core version doesn't emit an event needed here, patching core is the right fix and benefits every projection that follows. Falling back to AOP for the remaining gaps preserves coverage without abandoning the events-first model for the entity types that already work.
+6. **CDC is over-engineered for typical deployments.** Debezium tailing the MySQL binlog catches every write regardless of code path, but the operational cost (binlog enabled on the production DB, Kafka, Debezium runtime) is disproportionate to the benefit for OpenMRS deployments on constrained infrastructure — a concern [Decision 3](#decision-3-elasticsearch-as-the-backing-store) already flagged for the base Elasticsearch dependency. Can be revisited if scale or coverage demands force it.
+
+### Consequences
+- This module depends on the OpenMRS Event module and a JMS broker (ActiveMQ by default). Deployments must run this infrastructure.
+- A gap inventory must be maintained: for each indexed resource type (obs, conditions, diagnoses, drug_orders, test_orders, allergies, programs, medication_dispense, patients, encounters, visits, appointments), record whether core emits create / update / void events and at what granularity. Gaps drive either upstream PRs to core or a scoped AOP shim.
+- Any AOP introduced as a gap filler must be documented with the entity type it covers, the core gap it works around, and a removal plan tied to a future core version.
+- Event payloads in OpenMRS are often minimal (UUID + action). Handlers therefore fetch the full entity from core after receiving an event. This means the sync path performs reads against the transactional database — acceptable, but worth noting since it couples sync throughput to core's read performance.
+- Lost events on broker restart are possible. Reliability, monitoring, and reconciliation are not solved by this decision and are tracked as separate open questions.
+- The initial bootstrap / backfill mechanism is not specified here. The steady-state mechanism only handles changes from the moment the projection is running; getting from "empty index" to "in sync" is a separate concern, also tracked below.
+
+---
+
 ## Open Questions
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.
 
-### Sync mechanism — events, AOP, or both?
-[Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database) names "events or AOP" without picking. AOP catches every internal service call but couples the module to core's service interfaces; events are decoupled but only fire where core publishes them. The choice affects sync completeness, reliability, and how custom modules participate. This is the foundational operational decision for the projection — most other operational details depend on it.
+### Initial backfill / bootstrap
+[Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
+
+### Sync reliability and reconciliation
+The Event module can lose events on broker restart, and consumer-side failures can drop messages even when delivery succeeded. [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) acknowledges this without solving it. Decision needed on: durable subscription configuration, dead-letter handling for permanently-failing events, periodic reconciliation (e.g., per-patient or per-type record-count comparisons against core to detect drift), and a remediation path when drift is detected (targeted re-sync vs. full rebuild). Related to but distinct from the bootstrap question above.
 
 ### Embedding model versioning
 [Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings) specifies a model class (multilingual-e5) but not a specific model identifier or upgrade path. Embeddings from different models are not comparable, so a model change is a full re-index of every vector. Needs a decision on model pinning, a per-document `embedding_model_version` field, and how model upgrades coordinate with index aliases (see next item).
