@@ -16,6 +16,8 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 10. [Voided Records — Deleted from the Read Store, Not Marked](#decision-10-voided-records--deleted-from-the-read-store-not-marked)
 11. [Retired Metadata — Data References Preserved, Names Snapshotted](#decision-11-retired-metadata--data-references-preserved-names-snapshotted)
 
+[Open Questions](#open-questions)
+
 ---
 
 ## Decision 1: CQRS Pattern — Separate Read Store from Transactional Database
@@ -862,3 +864,33 @@ The two are not interchangeable. Retiring a concept does not invalidate the obs 
 - Denormalized metadata names may be out of sync with core after a retirement-driven rename until the next re-index. Consumers requiring authoritative metadata names must consult core or trigger a re-sync.
 - Aggregations over denormalized names (e.g., "obs count grouped by `concept_name`") may attribute records to the pre-retirement name. UUID-based aggregations are unaffected, which reinforces [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name)'s rationale for storing both UUID and name.
 - If direct metadata indices are added later, this decision does not apply to them. A separate decision should specify retirement handling for any such index, where keeping retired entries with a `retired=true` flag is the likely choice (the opposite of [Decision 10](#decision-10-voided-records--deleted-from-the-read-store-not-marked)'s approach to voided clinical data, because the use cases are inverted).
+
+---
+
+## Open Questions
+
+Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.
+
+### Sync mechanism — events, AOP, or both?
+[Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database) names "events or AOP" without picking. AOP catches every internal service call but couples the module to core's service interfaces; events are decoupled but only fire where core publishes them. The choice affects sync completeness, reliability, and how custom modules participate. This is the foundational operational decision for the projection — most other operational details depend on it.
+
+### Embedding model versioning
+[Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings) specifies a model class (multilingual-e5) but not a specific model identifier or upgrade path. Embeddings from different models are not comparable, so a model change is a full re-index of every vector. Needs a decision on model pinning, a per-document `embedding_model_version` field, and how model upgrades coordinate with index aliases (see next item).
+
+### Re-index / alias strategy
+Multiple decisions ([8](#decision-8-locale-specific-serialization-with-multilingual-embeddings), [11](#decision-11-retired-metadata--data-references-preserved-names-snapshotted), and any future serializer change) imply re-indexing as the remedy. Doing this without downtime requires writing through aliases (e.g., `openmrs_obs` → `openmrs_obs_v1`, with atomic swap to `_v2` after backfill). No decision covers the alias convention, the cutover protocol, or how dual-writes are coordinated during the swap window. Several existing claims rely on this being possible.
+
+### Authorization
+Core enforces role-based privileges over patient data. The read store currently has no auth model defined. Options include: enforcing core's privileges at the query API, fronting Elasticsearch with a service that applies them, or treating the store as trusted-callers-only. The choice has material privacy implications — leaking sensitive obs (HIV status, mental health, etc.) via an unauthenticated query endpoint is the failure mode to avoid. Should be decided before any consumer is given direct access.
+
+### Patient merge handling
+When two patients are merged in core, all their clinical data is reassigned to the surviving UUID. The read store needs corresponding logic — at minimum, repointing every document keyed by the merged-away `patient_uuid`. Common operational reality in OpenMRS deployments. Decision needed on whether merges trigger an in-place update, a delete + re-index of the merged-away patient's data, or a different mechanism — and how to handle the in-flight inconsistency window.
+
+### Concept-set and hierarchy queries
+A query like "all glucose-related results" should match HbA1c, FPG, RBS, and other related concepts without enumerating every variant UUID at query time. OpenMRS has concept sets and concept hierarchies that could be denormalized into documents (e.g., a `concept_ancestor_uuids` array per obs). Decision needed on whether to support such queries directly in the index or to expand them at query time using a separate concept-relations service.
+
+### Timestamp time-zone convention
+Documents mix date-only fields (`date`, `birthdate`) with timestamp fields (`start_date_time`, `end_date_time`, `date_handed_over`). The time zone for timestamps is unspecified. UTC is the obvious default, but OpenMRS data often originates in deployment-local time and is stored without a zone offset. The convention needs to be explicit so consumers know how to interpret a value like `start_date_time = "2025-03-15T09:30:00"` and so date-range filters match consistently.
+
+### Person vs Patient model
+The `openmrs_patients` index conflates Person attributes (name, gender, birthdate, addresses, attributes) with Patient attributes (identifiers). In OpenMRS core these are separate entities — a Person can exist without being a Patient (e.g., providers, relatives). The current flattening is appropriate for a read-side projection focused on patient queries, but should be made explicit so downstream consumers do not expect an `openmrs_persons` resource type to also exist or look for non-patient Persons in this index.
