@@ -918,6 +918,21 @@ CDC and polling are excluded for the steady-state sync path. Polling is acceptab
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.
 
+- [Initial backfill / bootstrap](#initial-backfill--bootstrap)
+- [Sync reliability and reconciliation](#sync-reliability-and-reconciliation)
+- [Event-handler idempotency and ordering](#event-handler-idempotency-and-ordering)
+- [Embedding model versioning](#embedding-model-versioning)
+- [Long-text chunking for embeddings](#long-text-chunking-for-embeddings)
+- [Complex obs handling](#complex-obs-handling)
+- [Re-index / alias strategy](#re-index--alias-strategy)
+- [Authorization](#authorization)
+- [PII and data-minimization scopes](#pii-and-data-minimization-scopes)
+- [Patient merge handling](#patient-merge-handling)
+- [Concept-set and hierarchy queries](#concept-set-and-hierarchy-queries)
+- [Timestamp time-zone convention](#timestamp-time-zone-convention)
+- [Person vs Patient model](#person-vs-patient-model)
+- [Query interface / consumer API](#query-interface--consumer-api)
+
 ### Initial backfill / bootstrap
 [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
 
