@@ -14,6 +14,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 8. [Locale-Specific Serialization with Multilingual Embeddings](#decision-8-locale-specific-serialization-with-multilingual-embeddings)
 9. [Coded Fields — Store Both UUID and Name](#decision-9-coded-fields--store-both-uuid-and-name)
 10. [Voided Records — Deleted from the Read Store, Not Marked](#decision-10-voided-records--deleted-from-the-read-store-not-marked)
+11. [Retired Metadata — Data References Preserved, Names Snapshotted](#decision-11-retired-metadata--data-references-preserved-names-snapshotted)
 
 ---
 
@@ -814,3 +815,36 @@ The brief eventual-consistency window between a void in core and its propagation
 - Consumers needing audit or historical context (e.g., "who recorded a value that was later voided?") must query core directly. The read store cannot answer such questions and should not be expected to.
 - Revision-chain pointers (`previous_version_uuid` on conditions, `previous_order_uuid` on orders) may dangle when an earlier version was voided rather than superseded — they will reference UUIDs no longer present in the read store. This is acceptable: the pointer's value is informational ("this revises an earlier record"), and full history retrieval belongs in core.
 - "Show deleted" workflows for QA, debugging, or compliance review are not supported by the read store. If such a use case emerges later, it should be addressed by a separate, scoped decision (e.g., a parallel audit index or a time-bounded soft-tombstone) rather than by retrofitting `voided` onto every document.
+
+---
+
+## Decision 11: Retired Metadata — Data References Preserved, Names Snapshotted
+
+### Status
+Accepted
+
+### Context
+OpenMRS distinguishes two forms of logical removal:
+
+- **Voided** applies to clinical data records (obs, orders, conditions, allergies, encounters, visits, patients). It means "this record was wrong, retract it." Handled by [Decision 10](#decision-10-voided-records--deleted-from-the-read-store-not-marked).
+- **Retired** applies to metadata records (concepts, drugs, locations, providers, encounter types, visit types, forms, programs, services). It means "do not use this entry for new records, but historical references to it remain valid."
+
+The two are not interchangeable. Retiring a concept does not invalidate the obs that reference it, in the same way that a clinician leaving a hospital does not invalidate the encounters they conducted while employed there. The read store needs an explicit policy for how retirement of referenced metadata propagates — or doesn't — to data documents.
+
+### Decision
+1. Data documents that reference retired metadata are kept unchanged. No data is removed, retracted, or rewritten in response to a retirement event.
+2. No `retired` flag is added to data documents.
+3. Denormalized metadata names (e.g., `concept_name`, `location_name`, `provider_name`, `drug_name`, `encounter_type_name`, `form_name`, `program_name`, `service_name`, etc.) reflect the value at index time. They are not re-fetched when the underlying metadata is retired or renamed.
+4. Direct metadata indices (e.g., a hypothetical `openmrs_concepts` for picker UX) are not in scope. If introduced later, their retirement-handling rules are a separate decision and will likely differ — those indices exist precisely to drive new-entry filtering, where retirement *is* a primary query axis.
+
+### Rationale
+1. **Retirement is forward-looking, not retroactive.** Its purpose is to prevent future use of a metadata entry, not to invalidate historical references. A diabetes diagnosis recorded against a since-retired concept is still a real diagnosis — the patient was diagnosed, the record reflects what happened. Treating retirement as if it were voiding would silently rewrite clinical history.
+2. **Adding a `retired` field gives consumers nothing actionable.** Unlike voided data (which must be hidden by default for safety), retired metadata is *expected* to appear in historical references. There is no default filter consumers should apply, so the field would only add storage cost and confusion.
+3. **Denormalized names go stale on any metadata change.** Renames during retirement are one instance of a broader phenomenon — concept names, location names, and provider names all drift. The query store accepts eventual consistency on metadata names per [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database); re-indexing is the standard remedy when freshness matters. Treating retirement renames specially would create a one-off code path for a problem that already has a general solution.
+4. **Metadata-state queries belong in core.** Questions like "is this concept currently retired?" or "what concept replaced this retired one?" are metadata management concerns, not query workloads over clinical data. The read store is optimized for the latter; the former is core's job.
+
+### Consequences
+- Sync logic ignores retirement events on metadata records. Only voiding (data records) and changes to indexed data trigger read-store mutations.
+- Denormalized metadata names may be out of sync with core after a retirement-driven rename until the next re-index. Consumers requiring authoritative metadata names must consult core or trigger a re-sync.
+- Aggregations over denormalized names (e.g., "obs count grouped by `concept_name`") may attribute records to the pre-retirement name. UUID-based aggregations are unaffected, which reinforces [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name)'s rationale for storing both UUID and name.
+- If direct metadata indices are added later, this decision does not apply to them. A separate decision should specify retirement handling for any such index, where keeping retired entries with a `retired=true` flag is the likely choice (the opposite of [Decision 10](#decision-10-voided-records--deleted-from-the-read-store-not-marked)'s approach to voided clinical data, because the use cases are inverted).
