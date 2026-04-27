@@ -2,6 +2,12 @@
 
 This document captures the key architectural decisions for the OpenMRS Query Store Module.
 
+## Conventions
+
+- **Decisions are append-only and numbered.** Once accepted, a decision is not deleted or rewritten. Subsequent thinking is captured in a new decision that supersedes it.
+- **Superseding a decision.** Change the older decision's `### Status` from `Accepted` to `Superseded by [Decision N](#anchor-to-new-decision)` and leave the rest of its body intact for historical context. The new decision's `### Context` should explain what changed and why.
+- **Open questions are mutable.** Items in the [Open Questions](#open-questions) section are added when surfaced, refined as understanding sharpens, and removed when promoted to a numbered decision (or explicitly declared out of scope).
+
 ## Table of Contents
 
 1. [CQRS Pattern — Separate Read Store from Transactional Database](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)
