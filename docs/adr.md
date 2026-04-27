@@ -12,6 +12,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 6. [Document Model — Text, Embeddings, and Structured Metadata](#decision-6-document-model--text-embeddings-and-structured-metadata)
 7. [Date Separation — Excluded from Embeddings, Included at Query Time](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time)
 8. [Locale-Specific Serialization with Multilingual Embeddings](#decision-8-locale-specific-serialization-with-multilingual-embeddings)
+9. [Coded Fields — Store Both UUID and Name](#decision-9-coded-fields--store-both-uuid-and-name)
 
 ---
 
@@ -316,7 +317,9 @@ Example documents:
   "enrollment_date": "2024-01-15",
   "completion_date": null,
   "active": true,
+  "outcome_uuid": null,
   "outcome": null,
+  "current_state_uuid": "b4c5d6e7-8f9a-0b1c-2d3e-4f5a6b7c8d9e",
   "current_state": "On ART",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
@@ -405,6 +408,8 @@ Example documents:
 | `date_stopped` | (orders) Date an order was manually discontinued; null if still active; required for filtering active vs. stopped orders |
 | `auto_expire_date` | (orders) Scheduled expiry date computed from duration; null if open-ended; required for filtering active vs. expired orders |
 | `reactions` | (allergies) Flat array of reaction names in the deployment's configured locale. Reaction UUIDs are intentionally omitted: reactions are always used as a refinement filter alongside `allergen_uuid`, never as the primary query axis (nobody queries "all patients with anaphylaxis" without first filtering by allergen or patient). Name-based matching is sufficient in this secondary role. The tradeoff accepted is that names are locale-dependent and mutable — if reaction-level UUID filtering becomes a real use case, adding a parallel `reaction_uuids` array is a serializer change plus a full re-index of `openmrs_allergies`; no schema migration or data loss is involved since the query store can be rebuilt from source at any time (see [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)). |
+| `current_state_uuid` | (programs) UUID of the current program state concept; enables locale-independent exact filtering (e.g., "all patients currently On ART") per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
+| `outcome_uuid` | (programs) UUID of the program outcome concept; enables locale-independent exact filtering of completed program outcomes per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
 | `drug_order_uuid` | (medication_dispense) UUID of the originating drug order; enables "was this order dispensed?" queries and links dispense records back to their prescriptions |
 | `location_uuid` | Exact filtering by location, avoiding ambiguity from duplicate or similar location names |
 | `location_name` | Human-readable location name for display, keyword search, and aggregation (e.g., "obs count per facility") |
@@ -492,3 +497,43 @@ Serialize concept names in the deployment's configured locale and use a multilin
 - The embedding model must be multilingual. Monolingual models (e.g., English-only) should not be used.
 - Deployments that change their default locale after initial indexing will need to re-serialize and re-index existing records.
 - Cross-deployment searches (e.g., a research network spanning French and English sites) would require additional consideration, potentially storing an English canonical form alongside the localized text.
+
+---
+
+## Decision 9: Coded Fields — Store Both UUID and Name
+
+### Status
+Accepted
+
+### Context
+Many fields in the document model reference OpenMRS concepts — allergen, drug, program, program state, outcome, reaction, and others. Each can be represented as a UUID, a human-readable name, or both. The choice affects what query patterns are possible.
+
+### Decision
+For coded fields, store both the UUID and the human-readable name. Apply a narrow exception for small, stable, locale-invariant value sets where name-only is acceptable.
+
+Examples following the rule:
+- `allergen_uuid` + `allergen_name`
+- `concept_uuid` + `concept_name`
+- `drug_uuid` + `drug_name`
+- `program_uuid` + `program_name`
+- `current_state_uuid` + `current_state`
+- `outcome_uuid` + `outcome`
+- `value_coded_uuid` + `value_coded_name`
+
+Examples following the exception (name only):
+- `severity` in allergies — three stable values (Mild, Moderate, Severe) that are unlikely to vary by locale or change over time; programmatic filtering by severity UUID is not a realistic use case
+
+### Rationale
+UUID and name serve different consumers and different query patterns:
+
+- **UUID** enables stable, locale-independent programmatic filtering. A developer querying "all patients currently On ART" writes a filter against `current_state_uuid` using the known concept UUID. This works regardless of what locale the deployment uses or whether the concept name is later updated.
+- **Name** enables keyword search (BM25 matches against it) and human-readable display. A clinician searching "On ART" by text hits the name field.
+
+Without the UUID, programmatic filtering must use name strings, which breaks when the deployment locale differs from the query or when concept names change. Without the name, keyword search and display require an extra lookup against OpenMRS core.
+
+The exception applies when all three conditions hold: the value set is small (handful of values), the values are stable (unlikely to be renamed), and the values are locale-invariant (the same string is used across all deployments). Allergy severity meets all three. Most other coded fields do not.
+
+### Consequences
+- Every coded field requires two document fields instead of one.
+- Serializers must resolve both the UUID and the locale-specific name for each coded value at index time.
+- When adding a new coded field, the default should be to store both UUID and name unless the exception conditions are explicitly evaluated and met.
