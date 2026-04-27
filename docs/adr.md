@@ -882,7 +882,7 @@ Candidates considered:
 |---|---|---|---|---|
 | OpenMRS Event module | Whatever core publishes | Loose — public event contract | Yes | Adds Event module + JMS broker |
 | AOP (pointcuts on services) | Everything routed through service methods | Tight — internal service interfaces | Synchronous unless explicitly wrapped | None additional |
-| Database CDC (Debezium / binlog) | Everything, including direct DAO writes | None to core code | Yes | Adds binlog + Kafka + Debezium |
+| Database CDC (Debezium / binlog) | Everything, including direct DAO writes | Tight — to core's DB schema | Yes | Requires MySQL binlog enabled and row-based/GTID replication; runtime can be embedded (Debezium Engine) or standalone |
 | Polling | Anything queryable with a timestamp | Loose | N/A | None additional |
 
 ### Decision
@@ -898,7 +898,7 @@ CDC and polling are excluded for the steady-state sync path. Polling is acceptab
 3. **Decouples from internal service shapes.** AOP pointcuts attach to specific service method signatures; core renames, refactors, and method-extraction routinely break them. Events are a stable public contract that survives core's internal changes.
 4. **Async by default.** Event handlers run off the clinical request thread, so indexing latency and embedding generation do not slow clinical workflows. AOP would block the calling thread (and its transaction) unless explicitly wrapped, adding complexity.
 5. **Gaps are addressable upstream.** If the supported core version doesn't emit an event needed here, patching core is the right fix and benefits every projection that follows. Falling back to AOP for the remaining gaps preserves coverage without abandoning the events-first model for the entity types that already work.
-6. **CDC is over-engineered for typical deployments.** Debezium tailing the MySQL binlog catches every write regardless of code path, but the operational cost (binlog enabled on the production DB, Kafka, Debezium runtime) is disproportionate to the benefit for OpenMRS deployments on constrained infrastructure — a concern [Decision 3](#decision-3-elasticsearch-as-the-backing-store) already flagged for the base Elasticsearch dependency. Can be revisited if scale or coverage demands force it.
+6. **CDC trades loose code coupling for tight schema coupling.** Debezium tailing the MySQL binlog catches every write regardless of code path, and it does not require Kafka — the embedded Debezium Engine can run inside this module's JVM and write directly to Elasticsearch. The disqualifying problem is not infrastructure footprint but *what's being coupled to*: every column rename, table normalization, or schema migration in core silently breaks the CDC consumer, with no compile-time signal. Row-level deltas also have to be translated back into domain semantics (e.g., reconstructing "obs voided" from a row UPDATE setting `voided=1`), reproducing logic the service layer would have given for free. Enabling MySQL binlog in row-based / GTID mode is a non-trivial change for production DBAs to accept on a transactional clinical database. Together, these costs are disproportionate to the benefit for OpenMRS deployments. Can be revisited if scale or coverage demands force it.
 
 ### Consequences
 - This module depends on the OpenMRS Event module and a JMS broker (ActiveMQ by default). Deployments must run this infrastructure.
