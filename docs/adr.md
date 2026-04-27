@@ -13,6 +13,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 7. [Date Separation — Excluded from Embeddings, Included at Query Time](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time)
 8. [Locale-Specific Serialization with Multilingual Embeddings](#decision-8-locale-specific-serialization-with-multilingual-embeddings)
 9. [Coded Fields — Store Both UUID and Name](#decision-9-coded-fields--store-both-uuid-and-name)
+10. [Voided Records — Deleted from the Read Store, Not Marked](#decision-10-voided-records--deleted-from-the-read-store-not-marked)
 
 ---
 
@@ -106,7 +107,7 @@ A dedicated vector database was rejected because it would only serve semantic se
 Accepted
 
 ### Context
-Clinical data in OpenMRS spans multiple resource types: observations, conditions, diagnoses, drug orders, test orders, allergies, patient programs, and medication dispenses. These types have different fields and different query patterns. The data can be stored in a single Elasticsearch index with a `resource_type` discriminator or in separate per-type indices.
+Data in OpenMRS spans multiple resource types: patients, encounters, visits, appointments, observations, conditions, diagnoses, drug orders, test orders, allergies, patient programs, and medication dispenses. These types have different fields and different query patterns. The data can be stored in a single Elasticsearch index with a `resource_type` discriminator or in separate per-type indices.
 
 ### Decision
 Use per-type indices (e.g., `openmrs_obs`, `openmrs_conditions`, `openmrs_drug_orders`, etc.) rather than a single mixed index.
@@ -195,9 +196,19 @@ Example documents:
   "value_coded_uuid": null,
   "value_coded_name": null,
   "value_text": null,
+  "value_datetime": null,
+  "value_boolean": null,
   "units": "mmol/L",
   "interpretation": "ABNORMAL",
+  "status": "FINAL",
+  "comment": null,
+  "obs_group_uuid": null,
   "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Adult Outpatient Visit",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Adult Outpatient Form",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -216,10 +227,19 @@ Example documents:
   "embedding": [0.015, -0.062, 0.044, ...],
   "concept_uuid": "5cd3f6a0-26fe-102b-80cb-0017a47871b2",
   "concept_name": "Type 2 Diabetes Mellitus",
+  "non_coded": null,
   "clinical_status": "ACTIVE",
   "verification_status": "CONFIRMED",
   "onset_date": "2020-03-15",
   "end_date": null,
+  "additional_detail": null,
+  "previous_version_uuid": null,
+  "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Adult Outpatient Visit",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Adult Outpatient Form",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -238,8 +258,16 @@ Example documents:
   "embedding": [0.031, -0.019, 0.087, ...],
   "concept_uuid": "7ef4a8b2-36de-112b-90db-1127b58972c3",
   "concept_name": "Tuberculosis",
+  "non_coded": null,
   "certainty": "CONFIRMED",
   "rank": "Primary",
+  "condition_uuid": null,
+  "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Adult Outpatient Visit",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Adult Outpatient Form",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -254,7 +282,7 @@ Example documents:
   "resource_type": "drug_order",
   "resource_uuid": "a7b8c9d0-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
   "date": "2025-01-10",
-  "text": "Drug order: Metformin 500mg. Dose: 1.0 Tablet(s) Oral twice daily. Duration: 30 Day(s). Quantity: 60.0 Tablet(s). Action: NEW. Urgency: ROUTINE",
+  "text": "Drug order: Metformin 500mg. Dose: 1.0 Tablet(s) Oral twice daily. Duration: 30 Day(s). Quantity: 60.0 Tablet(s). Action: NEW. Urgency: ROUTINE. Take with food",
   "embedding": [0.042, -0.028, 0.053, ...],
   "concept_uuid": "9ab2c4d6-48ef-223c-a1eb-2238c69083d4",
   "concept_name": "Metformin",
@@ -270,8 +298,19 @@ Example documents:
   "quantity_units": "Tablet(s)",
   "action": "NEW",
   "urgency": "ROUTINE",
+  "dosing_instructions": "Take with food",
+  "as_needed": false,
+  "as_needed_condition": null,
+  "num_refills": 0,
+  "care_setting": "Outpatient",
+  "previous_order_uuid": null,
   "order_number": "ORD-1234",
   "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Adult Outpatient Visit",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Adult Outpatient Form",
   "date_stopped": null,
   "auto_expire_date": "2025-02-09",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
@@ -296,6 +335,7 @@ Example documents:
   "allergen_type": "DRUG",
   "severity": "Severe",
   "reactions": ["Anaphylaxis", "Rash"],
+  "comment": null,
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -350,6 +390,19 @@ Example documents:
   "route": "Oral",
   "frequency": "twice daily",
   "date_handed_over": "2025-01-10",
+  "was_substituted": false,
+  "substitution_type_uuid": null,
+  "substitution_type": null,
+  "substitution_reason_uuid": null,
+  "substitution_reason": null,
+  "dispenser_uuid": "c3d4e5f6-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+  "dispenser_name": "Pharm. Wanjiku",
+  "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Pharmacy Dispense",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Dispense Form",
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -372,10 +425,159 @@ Example documents:
   "urgency": "STAT",
   "laterality": "LEFT",
   "clinical_history": "Persistent cough for 3 weeks",
+  "instructions": null,
+  "specimen_source_uuid": null,
+  "specimen_source_name": null,
+  "care_setting": "Outpatient",
+  "previous_order_uuid": null,
   "order_number": "ORD-5678",
   "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Adult Outpatient Visit",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Adult Outpatient Form",
   "date_stopped": null,
   "auto_expire_date": null,
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+**Patient** (openmrs_patients index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "patient",
+  "resource_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "date": "2018-04-22",
+  "text": "Patient: Achieng Otieno. Female. Born 1982-07-14. Address: Kibera, Nairobi, Kenya. Identifiers: MRN 100023, National ID 12345678",
+  "embedding": [0.012, -0.054, 0.067, ...],
+  "given_name": "Achieng",
+  "middle_name": null,
+  "family_name": "Otieno",
+  "gender": "F",
+  "birthdate": "1982-07-14",
+  "birthdate_estimated": false,
+  "age_years": 43,
+  "dead": false,
+  "death_date": null,
+  "cause_of_death_uuid": null,
+  "cause_of_death_name": null,
+  "identifiers": [
+    {
+      "type_uuid": "a5d38e09-efcb-4d91-a526-50ce1ba5011a",
+      "type_name": "MRN",
+      "value": "100023",
+      "preferred": true,
+      "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+    },
+    {
+      "type_uuid": "b6e49f1a-fdcc-5e02-b637-61df2ca6022b",
+      "type_name": "National ID",
+      "value": "12345678",
+      "preferred": false,
+      "location_uuid": null
+    }
+  ],
+  "addresses": [
+    {
+      "address1": null,
+      "city_village": "Kibera",
+      "state_province": "Nairobi",
+      "postal_code": null,
+      "country": "Kenya",
+      "preferred": true
+    }
+  ],
+  "attributes": [
+    {
+      "type_uuid": "c7f5a02b-0edd-6f13-c748-72e03db7033c",
+      "type_name": "Telephone",
+      "value": "+254712345678"
+    }
+  ]
+}
+```
+
+**Encounter** (openmrs_encounters index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "encounter",
+  "resource_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "date": "2025-03-15",
+  "text": "Encounter: Adult Outpatient Visit at Kenyatta National Hospital. Provider: Dr. Ochieng (Clinician). Form: Adult Outpatient Form",
+  "embedding": [0.019, -0.043, 0.058, ...],
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Adult Outpatient Visit",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Adult Outpatient Form",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "providers": [
+    {
+      "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+      "provider_name": "Dr. Ochieng",
+      "role_uuid": "d8e6b13c-1fee-7024-d859-83f14ec8044d",
+      "role_name": "Clinician"
+    }
+  ]
+}
+```
+
+**Visit** (openmrs_visits index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "visit",
+  "resource_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "date": "2025-03-15",
+  "text": "Visit: Outpatient at Kenyatta National Hospital. Indication: Routine follow-up for diabetes",
+  "embedding": [0.024, -0.036, 0.061, ...],
+  "visit_type_uuid": "e9f7c24d-30ff-8135-e96a-9402fd905155",
+  "visit_type_name": "Outpatient",
+  "start_date_time": "2025-03-15T09:30:00",
+  "end_date_time": "2025-03-15T11:15:00",
+  "active": false,
+  "indication_uuid": "fab8d35e-4100-9246-fa7b-a513fea16266",
+  "indication_name": "Routine follow-up for diabetes",
+  "encounter_uuids": [
+    "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e"
+  ],
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "attributes": [
+    {
+      "type_uuid": "0bc9e46f-5211-a357-0b8c-b624afb27377",
+      "type_name": "Insurance Provider",
+      "value": "NHIF"
+    }
+  ]
+}
+```
+
+**Appointment** (openmrs_appointments index):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "appointment",
+  "resource_uuid": "1cdaf57a-6322-b468-1c9d-c735bac38488",
+  "date": "2025-04-10",
+  "text": "Appointment: Adult Diabetes Clinic follow-up. Status: Scheduled. Service: Adult Diabetes Clinic at Kenyatta National Hospital",
+  "embedding": [0.028, -0.039, 0.064, ...],
+  "service_uuid": "2deb068b-7433-c579-2dae-d846cbd49599",
+  "service_name": "Adult Diabetes Clinic",
+  "service_type_uuid": "3efc179c-8544-d68a-3ebf-e957dce5a6a0",
+  "service_type_name": "Follow-up",
+  "status": "Scheduled",
+  "start_date_time": "2025-04-10T09:00:00",
+  "end_date_time": "2025-04-10T09:30:00",
+  "appointment_kind": "Scheduled",
+  "comment": null,
   "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "location_name": "Kenyatta National Hospital",
   "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
@@ -388,8 +590,8 @@ Example documents:
 | Field | Purpose |
 |---|---|
 | `patient_uuid` | Filter search to a single patient's chart, or aggregate across patients |
-| `resource_type` | Distinguish clinical record types (e.g., "obs", "condition", "diagnosis", "drug_order", "test_order", "allergy", "program", "medication_dispense"); route documents to the correct per-type index |
-| `resource_uuid` | Link back to the source record in OpenMRS (e.g., the obs UUID, condition UUID, order UUID, or allergy UUID depending on the resource_type) |
+| `resource_type` | Distinguish record types (e.g., "obs", "condition", "diagnosis", "drug_order", "test_order", "allergy", "program", "medication_dispense", "patient", "encounter", "visit", "appointment"); route documents to the correct per-type index |
+| `resource_uuid` | Link back to the source record in OpenMRS (e.g., the obs UUID, condition UUID, order UUID, allergy UUID, patient UUID, encounter UUID, etc., depending on the resource_type) |
 | `date` | Date range filtering and sorting (e.g., "labs from last 6 months", "most recent vital signs") |
 | `text` | BM25 keyword search matches against it; the embedding model was run on it; the LLM reads it when generating answers |
 | `embedding` | Dense vector for semantic similarity search (e.g., "blood sugar control" matching an HbA1c result) |
@@ -400,17 +602,57 @@ Example documents:
 | `value_coded_uuid` | Exact filtering by coded answer concept (e.g., "all HIV-positive results", "all Yes answers to a symptom question") — null for numeric or text obs |
 | `value_coded_name` | Human-readable coded answer name for display and keyword search — null for numeric or text obs |
 | `value_text` | Raw free-text observation value for substring search and display — null for numeric or coded obs |
+| `value_datetime` | (obs) Date/time observation value (e.g., "Date of last menstrual period"); null for non-datetime obs |
+| `value_boolean` | (obs) True/false observation value (e.g., "Pregnant: yes/no"); null for non-boolean obs |
+| `obs_group_uuid` | (obs) UUID of the parent obs when this obs is part of a group (e.g., a BP panel with systolic and diastolic children); null for ungrouped obs |
+| `status` | (obs / medication_dispense / appointment) Lifecycle state — for obs: FINAL / PRELIMINARY / AMENDED; for dispense: status of the dispense; for appointment: scheduling state |
+| `comment` | Free-text clinician note attached to the record (obs, allergy, appointment); supports BM25 search |
 | `units` | Filter or group by unit of measurement |
 | `interpretation` | Filter by clinical interpretation (e.g., "all abnormal results") |
+| `non_coded` | (condition / diagnosis) Free-text label used when the clinician records a condition or diagnosis without selecting a concept; null when a coded `concept_uuid` is present |
+| `additional_detail` | (conditions) Free-text annotation captured alongside the condition (e.g., site, severity narrative) |
+| `previous_version_uuid` | (conditions) Links to a prior version of this condition record when a condition is edited; null for original entries |
+| `condition_uuid` | (diagnoses) Links a diagnosis to its associated condition record when one exists; null otherwise |
 | `encounter_uuid` | Group all clinical data from the same encounter; enables "what was recorded during visit X" queries across obs, orders, and diagnoses |
+| `encounter_type_uuid` / `encounter_type_name` | (encounter-scoped records) Denormalized encounter type for filtering ("all admission obs", "all dispense events") without joining against the encounter index; UUID enables locale-independent filtering per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
+| `visit_uuid` | (encounter-scoped records) Denormalized visit pointer; lets you aggregate everything from one visit (which may span multiple encounters) without indirection through the encounter |
+| `form_uuid` / `form_name` | (encounter-scoped records) Identifies which form captured the data; used for data-quality audits and form-scoped queries |
 | `onset_date` | (conditions) Clinical date the condition started; distinct from `date` (the record creation date); included in the embedded text as a clinical fact per [Decision 7](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time) |
 | `order_number` | (orders) Human-readable order reference (e.g., ORD-1234) for display and linking back to source UI |
 | `date_stopped` | (orders) Date an order was manually discontinued; null if still active; required for filtering active vs. stopped orders |
 | `auto_expire_date` | (orders) Scheduled expiry date computed from duration; null if open-ended; required for filtering active vs. expired orders |
+| `previous_order_uuid` | (orders) Links to the prior order in a revise/renew/discontinue chain; null for original orders. Required to reconstruct order history without scanning |
+| `care_setting` | (orders) Inpatient vs. Outpatient setting; affects clinical interpretation of dose/frequency and is a common filter |
+| `dosing_instructions` | (drug_order) Free-text directions to the patient (e.g., "Take with food"); included in the embedded text since it carries clinical meaning |
+| `as_needed` / `as_needed_condition` | (drug_order) PRN flag and the condition under which the medication should be taken (e.g., "for pain"); critical to distinguish scheduled vs. PRN regimens |
+| `num_refills` | (drug_order) Number of refills authorized; needed for adherence and supply-chain queries |
+| `instructions` | (test_order) Free-text instructions to the lab/imaging team (e.g., "fasting required"); distinct from `clinical_history` which describes the patient's situation |
+| `specimen_source_uuid` / `specimen_source_name` | (test_order) Specimen type for lab orders (e.g., "Whole blood", "Urine"); null for imaging or non-specimen orders |
 | `reactions` | (allergies) Flat array of reaction names in the deployment's configured locale. Reaction UUIDs are intentionally omitted: reactions are always used as a refinement filter alongside `allergen_uuid`, never as the primary query axis (nobody queries "all patients with anaphylaxis" without first filtering by allergen or patient). Name-based matching is sufficient in this secondary role. The tradeoff accepted is that names are locale-dependent and mutable — if reaction-level UUID filtering becomes a real use case, adding a parallel `reaction_uuids` array is a serializer change plus a full re-index of `openmrs_allergies`; no schema migration or data loss is involved since the query store can be rebuilt from source at any time (see [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)). |
 | `current_state_uuid` | (programs) UUID of the current program state concept; enables locale-independent exact filtering (e.g., "all patients currently On ART") per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
 | `outcome_uuid` | (programs) UUID of the program outcome concept; enables locale-independent exact filtering of completed program outcomes per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
 | `drug_order_uuid` | (medication_dispense) UUID of the originating drug order; enables "was this order dispensed?" queries and links dispense records back to their prescriptions |
+| `was_substituted` | (medication_dispense) True when a different drug was dispensed than ordered (e.g., generic substitution); pairs with `substitution_type` and `substitution_reason` |
+| `substitution_type_uuid` / `substitution_type` | (medication_dispense) Coded type of substitution (e.g., generic, therapeutic); null when `was_substituted` is false |
+| `substitution_reason_uuid` / `substitution_reason` | (medication_dispense) Coded reason for the substitution (e.g., out of stock, formulary); null when `was_substituted` is false |
+| `dispenser_uuid` / `dispenser_name` | (medication_dispense) Pharmacist or other staff who handed over the medication; distinct from `provider_uuid` (the prescribing clinician) |
+| `given_name` / `middle_name` / `family_name` | (patient) Person name components; supports keyword search and display |
+| `gender` | (patient) Filter by gender; codes follow OpenMRS conventions (e.g., M, F, O, U) |
+| `birthdate` / `birthdate_estimated` | (patient) Date of birth and a flag indicating whether the date was estimated rather than known precisely; required for accurate age-based filtering |
+| `age_years` | (patient) Pre-computed age at index time; convenient for "patients over 50" queries without date arithmetic. Note: this is a derived value and goes stale — clients that need point-in-time accuracy should compute from `birthdate` |
+| `dead` / `death_date` / `cause_of_death_uuid` / `cause_of_death_name` | (patient) Mortality data; cause is a coded concept stored as UUID + name per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
+| `identifiers` | (patient) Array of identifier objects ({type_uuid, type_name, value, preferred, location_uuid}); enables exact-match lookup by MRN, national ID, etc. across types |
+| `addresses` | (patient) Array of address objects with structured city/state/country fields; supports geographic filtering and aggregation |
+| `attributes` | (patient / visit) Array of typed attribute objects ({type_uuid, type_name, value}); captures deployment-specific metadata (telephone, insurance, etc.) without hard-coding fields |
+| `providers` | (encounters) Array of provider objects ({provider_uuid, provider_name, role_uuid, role_name}); encounters can have multiple providers in different roles, unlike single-provider events |
+| `visit_type_uuid` / `visit_type_name` | (visits) Coded visit type (e.g., Outpatient, Inpatient); UUID enables locale-independent filtering per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
+| `start_date_time` / `end_date_time` | (visits / appointments) Full timestamp boundaries; visits and appointments are time-ranged rather than single-instant events. For visits, `end_date_time` is null when the visit is still active |
+| `active` | (visits) Boolean computed from `end_date_time IS NULL`; redundant but enables faster filtering of active vs. closed visits |
+| `indication_uuid` / `indication_name` | (visits) Coded reason for the visit; UUID enables locale-independent filtering per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
+| `encounter_uuids` | (visits) Array of encounter UUIDs that belong to this visit; lets a visit document be the entry point for traversal without a reverse lookup |
+| `service_uuid` / `service_name` | (appointments) Coded clinical service (e.g., Adult Diabetes Clinic); UUID enables locale-independent filtering per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
+| `service_type_uuid` / `service_type_name` | (appointments) Sub-categorization within a service (e.g., Follow-up, Initial visit) |
+| `appointment_kind` | (appointments) Scheduled / WalkIn / Virtual; distinct from `status` which tracks the appointment's lifecycle |
 | `location_uuid` | Exact filtering by location, avoiding ambiguity from duplicate or similar location names |
 | `location_name` | Human-readable location name for display, keyword search, and aggregation (e.g., "obs count per facility") |
 | `provider_uuid` | Exact filtering by provider, avoiding ambiguity from duplicate or similar provider names |
@@ -537,3 +779,38 @@ The exception applies when all three conditions hold: the value set is small (ha
 - Every coded field requires two document fields instead of one.
 - Serializers must resolve both the UUID and the locale-specific name for each coded value at index time.
 - When adding a new coded field, the default should be to store both UUID and name unless the exception conditions are explicitly evaluated and met.
+
+---
+
+## Decision 10: Voided Records — Deleted from the Read Store, Not Marked
+
+### Status
+Accepted
+
+### Context
+OpenMRS uses logical deletion in its transactional database. When a record is voided, the row remains in the underlying tables with a `voided` flag set, preserving audit information on the write side. The read store must decide how to handle void events from core.
+
+Three options were considered:
+
+| Option | Behavior on void event | Trade-off |
+|---|---|---|
+| Delete from index | Document is removed from Elasticsearch | Simplest reads; no audit on read side |
+| Keep with `voided` flag | Document stays; every query must filter `voided=false` | Audit available on read side; every consumer must remember the filter |
+| Parallel audit index | Move voided documents to a sibling index (e.g., `openmrs_obs_voided`) | Clean separation; doubles index management |
+
+### Decision
+On a void event, delete the corresponding document from the read store. No `voided` field is stored on documents.
+
+### Rationale
+1. **Audit lives in core, not the projection.** Per [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database), core remains the source of truth and the read store is rebuildable. The audit data model is already designed for the write side. Replicating audit responsibility into a query-optimized projection mixes concerns and makes the read store a partial, lossy copy of something core already does completely.
+2. **Filter-everywhere is fragile.** Keeping voided records means every default query must include `voided=false`. A single forgotten filter surfaces clinically retracted data to a clinician or LLM. Deletion is a stronger guarantee than a convention.
+3. **Voided records pollute semantic search.** Vectors for retracted records still match in kNN search unless filtered. A voided abnormal lab result could surface as a top semantic match for a query like "blood sugar control" and end up in an LLM prompt — a clinical safety problem, not just a quality issue.
+4. **Storage cost.** Voided records consume index space (text + vector + structured metadata) for no read-side benefit, since the canonical record is preserved in core.
+
+The brief eventual-consistency window between a void in core and its propagation to the read store is acceptable, consistent with the trade-off already accepted in [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database). Idempotent delete-by-`resource_uuid` handles late-arriving and duplicate void events without special logic.
+
+### Consequences
+- Sync logic must handle void events explicitly, deleting by `resource_uuid` from the appropriate per-type index.
+- Consumers needing audit or historical context (e.g., "who recorded a value that was later voided?") must query core directly. The read store cannot answer such questions and should not be expected to.
+- Revision-chain pointers (`previous_version_uuid` on conditions, `previous_order_uuid` on orders) may dangle when an earlier version was voided rather than superseded — they will reference UUIDs no longer present in the read store. This is acceptable: the pointer's value is informational ("this revises an earlier record"), and full history retrieval belongs in core.
+- "Show deleted" workflows for QA, debugging, or compliance review are not supported by the read store. If such a use case emerges later, it should be addressed by a separate, scoped decision (e.g., a parallel audit index or a time-bounded soft-tombstone) rather than by retrofitting `voided` onto every document.
