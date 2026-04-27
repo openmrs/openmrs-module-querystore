@@ -36,11 +36,14 @@ Follow the Command Query Responsibility Segregation (CQRS) pattern. OpenMRS core
 
 Data flows one way: from core to the query store. The query store is eventually consistent with the transactional database. Clinical events (obs created, order placed, condition updated, etc.) trigger synchronization via OpenMRS events or AOP.
 
+**Self-sufficiency principle.** For any query pattern the read store claims to serve, it must answer the query without round-tripping to core. Core is permitted only for *content fetches* — binary attachments referenced by `value_complex_uri`, full historical/audit lookups the read store deliberately omits (current state only), or admin/system metadata indexed nowhere by design. Going to core to enrich a read-store result with missing fields, to fall back when a frequent query pattern isn't indexed, or to walk object graphs is a smell: the right response is to denormalize the field, decide whether to index the pattern, or model the graph as multi-hop ES queries — not to silently re-couple to core's transactional database. This rule is the test future open questions are evaluated against.
+
 ### Consequences
 - Clinical workflows are unaffected by query workloads.
 - The query store can be rebuilt from scratch at any time since core remains the source of truth.
 - Consumers must tolerate eventual consistency — there is a brief delay between a write in core and its availability in the query store.
 - Two systems must be kept in sync, adding operational complexity.
+- Consumers gain a predictable contract: clinical and analytical queries are served by the read store; bytes and full audit history are fetched from core. New query patterns force an explicit decision (index it, declare it out of scope, or route to core for content) rather than implicit core fallback.
 
 ---
 
@@ -906,7 +909,7 @@ CDC and polling are excluded for the steady-state sync path. Polling is acceptab
 
 ### Consequences
 - This module depends on the OpenMRS Event module and a JMS broker (ActiveMQ by default). Deployments must run this infrastructure.
-- A gap inventory must be maintained: for each indexed resource type (obs, conditions, diagnoses, drug_orders, test_orders, allergies, programs, medication_dispense, patients, encounters, visits, appointments), record whether core emits create / update / void events and at what granularity. Gaps drive either upstream PRs to core or a scoped AOP shim.
+- A gap inventory must be maintained: for each indexed resource type (obs, conditions, diagnoses, drug_orders, test_orders, allergies, programs, medication_dispense, patients, encounters, visits, appointments), record whether core emits create / update / void / purge events and at what granularity. Purge events are called out explicitly alongside void because cascading deletes (e.g., purging a patient triggers deletion of their obs, orders, encounters) are core's domain knowledge — the read store consumes whatever per-record events core fans out and does not reproduce cascade logic. A missing purge or cascaded-delete event is a coverage gap, not a read-store responsibility. Gaps drive either upstream PRs to core or a scoped AOP shim.
 - Any AOP introduced as a gap filler must be documented with the entity type it covers, the core gap it works around, and a removal plan tied to a future core version.
 - Event payloads in OpenMRS are often minimal (UUID + action). Handlers therefore fetch the full entity from core after receiving an event. This means the sync path performs reads against the transactional database — acceptable, but worth noting since it couples sync throughput to core's read performance.
 - Lost events on broker restart are possible. Reliability, monitoring, and reconciliation are not solved by this decision and are tracked as separate open questions.
