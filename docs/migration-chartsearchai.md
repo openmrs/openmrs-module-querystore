@@ -40,7 +40,7 @@ Five querystore [open questions](./adr.md#open-questions) must be resolved befor
 
 These are not querystore gaps — they are migration work on the chartsearchai side.
 
-1. **Per-type indices vs. single shared index.** querystore is `openmrs_obs`, `openmrs_conditions`, etc. ([Decision 4](./adr.md#decision-4-per-type-indices-over-a-single-index)). chartsearchai's retrieval layer either queries the wildcard `openmrs_*` (recommended; promoted to the official cross-type convention by [Decision 13](./adr.md#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types)) or updates to multi-index queries.
+1. **Per-type indices vs. single shared index.** querystore is `openmrs_obs`, `openmrs_condition`, etc. ([Decision 4](./adr.md#decision-4-per-type-indices-over-a-single-index)). chartsearchai's retrieval layer either queries the wildcard `openmrs_*` (recommended; promoted to the official cross-type convention by [Decision 13](./adr.md#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types)) or updates to multi-index queries.
 2. **Embedding model alignment.** querystore embeds at index time with the model picked under [Decision 8](./adr.md#decision-8-locale-specific-serialization-with-multilingual-embeddings) (multilingual-e5 class). chartsearchai must switch its query-time embedder to the same model — the embedding-model contract from [Decision 13](./adr.md#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) applies to every consumer. Embeddings from different models are not comparable; mismatch produces silently broken kNN results.
 
 ## What stays in chartsearchai unchanged

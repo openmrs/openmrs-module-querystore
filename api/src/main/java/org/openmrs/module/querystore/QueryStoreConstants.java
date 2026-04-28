@@ -16,16 +16,16 @@ public final class QueryStoreConstants {
 	public static final String INDEX_PREFIX = "openmrs_";
 
 	public static final String INDEX_OBS = INDEX_PREFIX + "obs";
-	public static final String INDEX_CONDITIONS = INDEX_PREFIX + "conditions";
-	public static final String INDEX_DIAGNOSES = INDEX_PREFIX + "diagnoses";
-	public static final String INDEX_DRUG_ORDERS = INDEX_PREFIX + "drug_orders";
-	public static final String INDEX_TEST_ORDERS = INDEX_PREFIX + "test_orders";
-	public static final String INDEX_ALLERGIES = INDEX_PREFIX + "allergies";
-	public static final String INDEX_PROGRAMS = INDEX_PREFIX + "programs";
+	public static final String INDEX_CONDITION = INDEX_PREFIX + "condition";
+	public static final String INDEX_DIAGNOSIS = INDEX_PREFIX + "diagnosis";
+	public static final String INDEX_DRUG_ORDER = INDEX_PREFIX + "drug_order";
+	public static final String INDEX_TEST_ORDER = INDEX_PREFIX + "test_order";
+	public static final String INDEX_ALLERGY = INDEX_PREFIX + "allergy";
+	public static final String INDEX_PROGRAM = INDEX_PREFIX + "program";
 	public static final String INDEX_MEDICATION_DISPENSE = INDEX_PREFIX + "medication_dispense";
-	public static final String INDEX_PATIENTS = INDEX_PREFIX + "patients";
-	public static final String INDEX_ENCOUNTERS = INDEX_PREFIX + "encounters";
-	public static final String INDEX_VISITS = INDEX_PREFIX + "visits";
+	public static final String INDEX_PATIENT = INDEX_PREFIX + "patient";
+	public static final String INDEX_ENCOUNTER = INDEX_PREFIX + "encounter";
+	public static final String INDEX_VISIT = INDEX_PREFIX + "visit";
 
 	public static final String GP_ELASTICSEARCH_HOST = "querystore.elasticsearch.host";
 	public static final String GP_ELASTICSEARCH_PORT = "querystore.elasticsearch.port";

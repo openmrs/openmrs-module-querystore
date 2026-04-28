@@ -123,7 +123,7 @@ Accepted
 Data in OpenMRS spans multiple resource types: patients, encounters, visits, observations, conditions, diagnoses, drug orders, test orders, allergies, patient programs, and medication dispenses. These types have different fields and different query patterns. The data can be stored in a single Elasticsearch index with a `resource_type` discriminator or in separate per-type indices.
 
 ### Decision
-Use per-type indices (e.g., `openmrs_obs`, `openmrs_conditions`, `openmrs_drug_orders`, etc.) rather than a single mixed index. All index names are prefixed with `openmrs_` so the prefix functions as a stable cluster-wide namespace for everything this module produces.
+Use per-type indices (e.g., `openmrs_obs`, `openmrs_condition`, `openmrs_drug_order`, etc.) rather than a single mixed index. All index names follow `openmrs_<resource_type>` — the suffix equals the document's `resource_type` exactly — so the prefix functions as a stable cluster-wide namespace for everything this module produces and routing code can derive the index name from any document mechanically.
 
 ### Rationale
 1. **No sparse fields.** Each index contains only the fields relevant to its type. A single index would carry empty drug order fields on every obs document and vice versa, wasting storage and slowing queries at scale.
@@ -239,7 +239,7 @@ Example documents:
 }
 ```
 
-**Condition** (openmrs_conditions index):
+**Condition** (openmrs_condition index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -270,7 +270,7 @@ Example documents:
 }
 ```
 
-**Diagnosis** (openmrs_diagnoses index):
+**Diagnosis** (openmrs_diagnosis index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -298,7 +298,7 @@ Example documents:
 }
 ```
 
-**Drug Order** (openmrs_drug_orders index):
+**Drug Order** (openmrs_drug_order index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -348,7 +348,7 @@ Example documents:
 }
 ```
 
-**Allergy** (openmrs_allergies index):
+**Allergy** (openmrs_allergy index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -371,7 +371,7 @@ Example documents:
 }
 ```
 
-**Patient Program** (openmrs_programs index):
+**Patient Program** (openmrs_program index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -442,7 +442,7 @@ Example documents:
 }
 ```
 
-**Test Order** (openmrs_test_orders index):
+**Test Order** (openmrs_test_order index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -478,7 +478,7 @@ Example documents:
 }
 ```
 
-**Patient** (openmrs_patients index):
+**Patient** (openmrs_patient index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -534,7 +534,7 @@ Example documents:
 }
 ```
 
-**Encounter** (openmrs_encounters index):
+**Encounter** (openmrs_encounter index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -561,7 +561,7 @@ Example documents:
 }
 ```
 
-**Visit** (openmrs_visits index):
+**Visit** (openmrs_visit index):
 ```json
 {
   "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
@@ -642,7 +642,7 @@ Example documents:
 | `num_refills` | (drug_order) Number of refills authorized; needed for adherence and supply-chain queries |
 | `instructions` | (test_order) Free-text instructions to the lab/imaging team (e.g., "fasting required"); distinct from `clinical_history` which describes the patient's situation |
 | `specimen_source_uuid` / `specimen_source_name` | (test_order) Specimen type for lab orders (e.g., "Whole blood", "Urine"); null for imaging or non-specimen orders |
-| `reactions` | (allergies) Flat array of reaction names in the deployment's configured locale. Reaction UUIDs are intentionally omitted: reactions are always used as a refinement filter alongside `allergen_uuid`, never as the primary query axis (nobody queries "all patients with anaphylaxis" without first filtering by allergen or patient). Name-based matching is sufficient in this secondary role. The tradeoff accepted is that names are locale-dependent and mutable — if reaction-level UUID filtering becomes a real use case, adding a parallel `reaction_uuids` array is a serializer change plus a full re-index of `openmrs_allergies`; no schema migration or data loss is involved since the query store can be rebuilt from source at any time (see [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)). |
+| `reactions` | (allergies) Flat array of reaction names in the deployment's configured locale. Reaction UUIDs are intentionally omitted: reactions are always used as a refinement filter alongside `allergen_uuid`, never as the primary query axis (nobody queries "all patients with anaphylaxis" without first filtering by allergen or patient). Name-based matching is sufficient in this secondary role. The tradeoff accepted is that names are locale-dependent and mutable — if reaction-level UUID filtering becomes a real use case, adding a parallel `reaction_uuids` array is a serializer change plus a full re-index of `openmrs_allergy`; no schema migration or data loss is involved since the query store can be rebuilt from source at any time (see [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)). |
 | `current_state_uuid` | (programs) UUID of the current program state concept; enables locale-independent exact filtering (e.g., "all patients currently On ART") per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
 | `outcome_uuid` | (programs) UUID of the program outcome concept; enables locale-independent exact filtering of completed program outcomes per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
 | `drug_order_uuid` | (medication_dispense) UUID of the originating drug order; enables "was this order dispensed?" queries and links dispense records back to their prescriptions |
@@ -895,7 +895,7 @@ CDC and polling are excluded for the steady-state sync path. Polling is acceptab
 
 ### Consequences
 - This module depends on the OpenMRS Event module and a JMS broker (ActiveMQ by default). Deployments must run this infrastructure.
-- A gap inventory must be maintained: for each indexed resource type (obs, conditions, diagnoses, drug_orders, test_orders, allergies, programs, medication_dispense, patients, encounters, visits), record whether core emits create / update / void / purge events and at what granularity. Purge events are called out explicitly alongside void because cascading deletes (e.g., purging a patient triggers deletion of their obs, orders, encounters) are core's domain knowledge — the read store consumes whatever per-record events core fans out and does not reproduce cascade logic. A missing purge or cascaded-delete event is a coverage gap, not a read-store responsibility. Gaps drive either upstream PRs to core or a scoped AOP shim.
+- A gap inventory must be maintained: for each indexed resource type (obs, condition, diagnosis, drug_order, test_order, allergy, program, medication_dispense, patient, encounter, visit), record whether core emits create / update / void / purge events and at what granularity. Purge events are called out explicitly alongside void because cascading deletes (e.g., purging a patient triggers deletion of their obs, orders, encounters) are core's domain knowledge — the read store consumes whatever per-record events core fans out and does not reproduce cascade logic. A missing purge or cascaded-delete event is a coverage gap, not a read-store responsibility. Gaps drive either upstream PRs to core or a scoped AOP shim.
 - Any AOP introduced as a gap filler must be documented with the entity type it covers, the core gap it works around, and a removal plan tied to a future core version.
 - Event payloads in OpenMRS are often minimal (UUID + action). Handlers therefore fetch the full entity from core after receiving an event. This means the sync path performs reads against the transactional database — acceptable, but worth noting since it couples sync throughput to core's read performance.
 - Lost events on broker restart are possible. Reliability, monitoring, and reconciliation are not solved by this decision and are tracked as separate open questions.
@@ -974,7 +974,6 @@ Design questions that have been recognized but not yet resolved. Each item below
 - [Timestamp time-zone convention](#timestamp-time-zone-convention)
 - [Person vs Patient model](#person-vs-patient-model)
 - [Query interface / consumer API](#query-interface--consumer-api)
-- [Resource-type to index-name mapping](#resource-type-to-index-name-mapping)
 
 ### Initial backfill / bootstrap
 [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
@@ -1010,7 +1009,7 @@ Multiple decisions ([8](#decision-8-locale-specific-serialization-with-multiling
 Core enforces role-based privileges over patient data. The read store currently has no auth model defined. Options include: enforcing core's privileges at the query API, fronting Elasticsearch with a service that applies them, or treating the store as trusted-callers-only. The choice has material privacy implications — leaking sensitive obs (HIV status, mental health, etc.) via an unauthenticated query endpoint is the failure mode to avoid. Should be decided before any consumer is given direct access.
 
 ### PII and data-minimization scopes
-The current document model stores full identifiers, names, addresses, and contact attributes in the `openmrs_patients` index, plus provider names everywhere. Different consumers need different shapes of the same data: clinical-care callers need full patient identity; research-analytics callers typically need de-identified or pseudonymized projections. Decision needed on whether the read store maintains one fully-detailed projection with redaction applied at query time, multiple parallel projections at different sensitivity levels, or pushes minimization onto consumers entirely. Adjacent to but distinct from authorization (which governs *who can read*); this governs *what is stored and in what form*.
+The current document model stores full identifiers, names, addresses, and contact attributes in the `openmrs_patient` index, plus provider names everywhere. Different consumers need different shapes of the same data: clinical-care callers need full patient identity; research-analytics callers typically need de-identified or pseudonymized projections. Decision needed on whether the read store maintains one fully-detailed projection with redaction applied at query time, multiple parallel projections at different sensitivity levels, or pushes minimization onto consumers entirely. Adjacent to but distinct from authorization (which governs *who can read*); this governs *what is stored and in what form*.
 
 ### Patient merge handling
 When two patients are merged in core, all their clinical data is reassigned to the surviving UUID. The read store needs corresponding logic — at minimum, repointing every document keyed by the merged-away `patient_uuid`. Two sub-questions: (a) does core emit a patient-merge event under [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler)'s sync model, or is this a gap to fill upstream or via scoped AOP, and (b) given a trigger, does the read store handle the merge as an in-place `patient_uuid` rewrite across every affected document, a delete + re-index of the merged-away patient's data, or another mechanism, including how the in-flight inconsistency window is handled.
@@ -1022,14 +1021,8 @@ A query like "all glucose-related results" should match HbA1c, FPG, RBS, and oth
 Documents mix date-only fields (`date`, `birthdate`) with timestamp fields (`start_date_time`, `end_date_time`, `date_handed_over`). The time zone for timestamps is unspecified. UTC is the obvious default, but OpenMRS data often originates in deployment-local time and is stored without a zone offset. The convention needs to be explicit so consumers know how to interpret a value like `start_date_time = "2025-03-15T09:30:00"` and so date-range filters match consistently.
 
 ### Person vs Patient model
-The `openmrs_patients` index conflates Person attributes (name, gender, birthdate, addresses, attributes) with Patient attributes (identifiers). In OpenMRS core these are separate entities — a Person can exist without being a Patient (e.g., providers, relatives). The current flattening is appropriate for a read-side projection focused on patient queries, but should be made explicit so downstream consumers do not expect an `openmrs_persons` resource type to also exist or look for non-patient Persons in this index.
+The `openmrs_patient` index conflates Person attributes (name, gender, birthdate, addresses, attributes) with Patient attributes (identifiers). In OpenMRS core these are separate entities — a Person can exist without being a Patient (e.g., providers, relatives). The current flattening is appropriate for a read-side projection focused on patient queries, but should be made explicit so downstream consumers do not expect an `openmrs_persons` resource type to also exist or look for non-patient Persons in this index.
 
 ### Query interface / consumer API
 The ADR specifies what is indexed in detail but says nothing about how consumers reach the index. Options span direct Elasticsearch access (consumers issue ES Query DSL themselves), a thin Java service interface in this module (consumers depend on the module's classes), a REST API exposed by the OpenMRS web layer, FHIR Search backed by the index, or a domain-specific query DSL. Each choice cascades into authorization (where checks run), coupling (how tightly consumers depend on the document model), and what query shapes are practical (e.g., FHIR Search constrains expressivity vs. raw ES). Should be decided before any non-internal consumer is wired up — the choice is hard to reverse once consumers exist.
 
-### Resource-type to index-name mapping
-[Decision 6](#decision-6-document-model--text-embeddings-and-structured-metadata)'s `resource_type` values are singular (`obs`, `condition`, `diagnosis`, `drug_order`, `test_order`, `allergy`, `program`, `medication_dispense`, `patient`, `encounter`, `visit`). [Decision 4](#decision-4-per-type-indices-over-a-single-index)'s worked examples use idiomatic English plurals for some types (`openmrs_conditions`, `openmrs_drug_orders`, `openmrs_allergies`, `openmrs_programs`, `openmrs_patients`, `openmrs_encounters`, `openmrs_visits`) and singular for others (`openmrs_obs`, `openmrs_medication_dispense`). [Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) names module-contributed indices `openmrs_<resource_type>`, which would imply singular-only.
-
-The two readings are reconcilable in spirit — Decision 4 uses ergonomic plurals where they read naturally, Decision 13 standardizes on the literal `resource_type` for module contributions — but routing code (`document.resource_type` → index name) needs an explicit rule, and contributing modules have no way to derive their index name from `resource_type` without one.
-
-Decision needed on either: (a) keep the ergonomic plurals for core types, document the per-type mapping in code (a small lookup table), and amend Decision 13 to state that the contributing module's index suffix equals its `resource_type`; or (b) align the two ends — rename the plural index examples in Decision 4 to match the singular `resource_type` (`openmrs_condition`, `openmrs_drug_order`, etc.) — making `index_suffix == resource_type` a cluster-wide invariant. Either way, pick one rule that a serializer or contributing module can encode mechanically.
