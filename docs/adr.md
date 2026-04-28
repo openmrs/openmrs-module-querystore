@@ -4,8 +4,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 
 ## Conventions
 
-- **Decisions are append-only and numbered.** Once accepted, a decision is not deleted or rewritten. Subsequent thinking is captured in a new decision that supersedes it.
-- **Superseding a decision.** Change the older decision's `### Status` from `Accepted` to `Superseded by [Decision N](#anchor-to-new-decision)` and leave the rest of its body intact for historical context. The new decision's `### Context` should explain what changed and why.
+- **The ADR is in draft.** Decisions can be edited, renumbered, or removed in place while we iterate. The append-only and supersession conventions are suspended until the doc stabilizes (or the first non-trivial implementation lands against it).
 - **Open questions are mutable.** Items in the [Open Questions](#open-questions) section are added when surfaced, refined as understanding sharpens, and removed when promoted to a numbered decision (or explicitly declared out of scope).
 
 ## Table of Contents
@@ -121,7 +120,7 @@ A dedicated vector database was rejected because it would only serve semantic se
 Accepted
 
 ### Context
-Data in OpenMRS spans multiple resource types: patients, encounters, visits, appointments, observations, conditions, diagnoses, drug orders, test orders, allergies, patient programs, and medication dispenses. These types have different fields and different query patterns. The data can be stored in a single Elasticsearch index with a `resource_type` discriminator or in separate per-type indices.
+Data in OpenMRS spans multiple resource types: patients, encounters, visits, observations, conditions, diagnoses, drug orders, test orders, allergies, patient programs, and medication dispenses. These types have different fields and different query patterns. The data can be stored in a single Elasticsearch index with a `resource_type` discriminator or in separate per-type indices.
 
 ### Decision
 Use per-type indices (e.g., `openmrs_obs`, `openmrs_conditions`, `openmrs_drug_orders`, etc.) rather than a single mixed index. All index names are prefixed with `openmrs_` so the prefix functions as a stable cluster-wide namespace for everything this module produces.
@@ -593,37 +592,12 @@ Example documents:
 }
 ```
 
-**Appointment** (openmrs_appointments index):
-```json
-{
-  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
-  "resource_type": "appointment",
-  "resource_uuid": "1cdaf57a-6322-b468-1c9d-c735bac38488",
-  "date": "2025-04-10",
-  "text": "Appointment: Adult Diabetes Clinic follow-up. Status: Scheduled. Service: Adult Diabetes Clinic at Kenyatta National Hospital",
-  "embedding": [0.028, -0.039, 0.064, ...],
-  "service_uuid": "2deb068b-7433-c579-2dae-d846cbd49599",
-  "service_name": "Adult Diabetes Clinic",
-  "service_type_uuid": "3efc179c-8544-d68a-3ebf-e957dce5a6a0",
-  "service_type_name": "Follow-up",
-  "status": "Scheduled",
-  "start_date_time": "2025-04-10T09:00:00",
-  "end_date_time": "2025-04-10T09:30:00",
-  "appointment_kind": "Scheduled",
-  "comment": null,
-  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
-  "location_name": "Kenyatta National Hospital",
-  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
-  "provider_name": "Dr. Ochieng"
-}
-```
-
 ### Field descriptions
 
 | Field | Purpose |
 |---|---|
 | `patient_uuid` | Filter search to a single patient's chart, or aggregate across patients |
-| `resource_type` | Distinguish record types (e.g., "obs", "condition", "diagnosis", "drug_order", "test_order", "allergy", "program", "medication_dispense", "patient", "encounter", "visit", "appointment"); route documents to the correct per-type index |
+| `resource_type` | Distinguish record types (e.g., "obs", "condition", "diagnosis", "drug_order", "test_order", "allergy", "program", "medication_dispense", "patient", "encounter", "visit"); route documents to the correct per-type index |
 | `resource_uuid` | Link back to the source record in OpenMRS (e.g., the obs UUID, condition UUID, order UUID, allergy UUID, patient UUID, encounter UUID, etc., depending on the resource_type) |
 | `date` | Date range filtering and sorting (e.g., "labs from last 6 months", "most recent vital signs") |
 | `text` | BM25 keyword search matches against it; the embedding model was run on it; the LLM reads it when generating answers |
@@ -640,8 +614,8 @@ Example documents:
 | `value_complex_uri` | (obs) Pointer back to core's complex-obs storage for observations whose value is bound to a `complexHandler` (images, PDFs, audio/video, long free text). Null for non-complex obs. The binary content itself is not stored in the read store; consumers fetch it from core. See the *Complex obs handling* open question for per-handler treatment |
 | `value_complex_handler` | (obs) Name of the OpenMRS `complexHandler` that produced the value (e.g., `ImageHandler`, `BinaryDataHandler`, `LongFreeTextHandler`, `MediaHandler`). Routes consumer-side rendering and signals which handler-specific extraction (if any) was applied at index time |
 | `obs_group_uuid` | (obs) UUID of the parent obs when this obs is part of a group (e.g., a BP panel with systolic and diastolic children); null for ungrouped obs |
-| `status` | (obs / medication_dispense / appointment) Lifecycle state — for obs: FINAL / PRELIMINARY / AMENDED; for dispense: status of the dispense; for appointment: scheduling state |
-| `comment` | Free-text clinician note attached to the record (obs, allergy, appointment); supports BM25 search |
+| `status` | (obs / medication_dispense) Lifecycle state — for obs: FINAL / PRELIMINARY / AMENDED; for dispense: status of the dispense |
+| `comment` | Free-text clinician note attached to the record (obs, allergy); supports BM25 search |
 | `units` | Filter or group by unit of measurement |
 | `interpretation` | Filter by clinical interpretation (e.g., "all abnormal results") |
 | `non_coded` | (condition / diagnosis) Free-text label used when the clinician records a condition or diagnosis without selecting a concept; null when a coded `concept_uuid` is present |
@@ -686,13 +660,10 @@ Example documents:
 | `attributes` | (patient / visit) Array of typed attribute objects ({type_uuid, type_name, value}); captures deployment-specific metadata (telephone, insurance, etc.) without hard-coding fields |
 | `providers` | (encounters) Array of provider objects ({provider_uuid, provider_name, role_uuid, role_name}); encounters can have multiple providers in different roles, unlike single-provider events |
 | `visit_type_uuid` / `visit_type_name` | (visits) Coded visit type (e.g., Outpatient, Inpatient); UUID enables locale-independent filtering per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
-| `start_date_time` / `end_date_time` | (visits / appointments) Full timestamp boundaries; visits and appointments are time-ranged rather than single-instant events. For visits, `end_date_time` is null when the visit is still active |
+| `start_date_time` / `end_date_time` | (visits) Full timestamp boundaries; visits are time-ranged rather than single-instant events. `end_date_time` is null when the visit is still active |
 | `active` | (visits) Boolean computed from `end_date_time IS NULL`; redundant but enables faster filtering of active vs. closed visits |
 | `indication_uuid` / `indication_name` | (visits) Coded reason for the visit; UUID enables locale-independent filtering per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
 | `encounter_uuids` | (visits) Array of encounter UUIDs that belong to this visit; lets a visit document be the entry point for traversal without a reverse lookup |
-| `service_uuid` / `service_name` | (appointments) Coded clinical service (e.g., Adult Diabetes Clinic); UUID enables locale-independent filtering per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name) |
-| `service_type_uuid` / `service_type_name` | (appointments) Sub-categorization within a service (e.g., Follow-up, Initial visit) |
-| `appointment_kind` | (appointments) Scheduled / WalkIn / Virtual; distinct from `status` which tracks the appointment's lifecycle |
 | `location_uuid` | Exact filtering by location, avoiding ambiguity from duplicate or similar location names |
 | `location_name` | Human-readable location name for display, keyword search, and aggregation (e.g., "obs count per facility") |
 | `provider_uuid` | Exact filtering by provider, avoiding ambiguity from duplicate or similar provider names |
@@ -924,7 +895,7 @@ CDC and polling are excluded for the steady-state sync path. Polling is acceptab
 
 ### Consequences
 - This module depends on the OpenMRS Event module and a JMS broker (ActiveMQ by default). Deployments must run this infrastructure.
-- A gap inventory must be maintained: for each indexed resource type (obs, conditions, diagnoses, drug_orders, test_orders, allergies, programs, medication_dispense, patients, encounters, visits, appointments), record whether core emits create / update / void / purge events and at what granularity. Purge events are called out explicitly alongside void because cascading deletes (e.g., purging a patient triggers deletion of their obs, orders, encounters) are core's domain knowledge — the read store consumes whatever per-record events core fans out and does not reproduce cascade logic. A missing purge or cascaded-delete event is a coverage gap, not a read-store responsibility. Gaps drive either upstream PRs to core or a scoped AOP shim.
+- A gap inventory must be maintained: for each indexed resource type (obs, conditions, diagnoses, drug_orders, test_orders, allergies, programs, medication_dispense, patients, encounters, visits), record whether core emits create / update / void / purge events and at what granularity. Purge events are called out explicitly alongside void because cascading deletes (e.g., purging a patient triggers deletion of their obs, orders, encounters) are core's domain knowledge — the read store consumes whatever per-record events core fans out and does not reproduce cascade logic. A missing purge or cascaded-delete event is a coverage gap, not a read-store responsibility. Gaps drive either upstream PRs to core or a scoped AOP shim.
 - Any AOP introduced as a gap filler must be documented with the entity type it covers, the core gap it works around, and a removal plan tied to a future core version.
 - Event payloads in OpenMRS are often minimal (UUID + action). Handlers therefore fetch the full entity from core after receiving an event. This means the sync path performs reads against the transactional database — acceptable, but worth noting since it couples sync throughput to core's read performance.
 - Lost events on broker restart are possible. Reliability, monitoring, and reconciliation are not solved by this decision and are tracked as separate open questions.
@@ -1004,7 +975,6 @@ Design questions that have been recognized but not yet resolved. Each item below
 - [Person vs Patient model](#person-vs-patient-model)
 - [Query interface / consumer API](#query-interface--consumer-api)
 - [Resource-type to index-name mapping](#resource-type-to-index-name-mapping)
-- [Appointments treated as a core type](#appointments-treated-as-a-core-type)
 
 ### Initial backfill / bootstrap
 [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
@@ -1058,17 +1028,8 @@ The `openmrs_patients` index conflates Person attributes (name, gender, birthdat
 The ADR specifies what is indexed in detail but says nothing about how consumers reach the index. Options span direct Elasticsearch access (consumers issue ES Query DSL themselves), a thin Java service interface in this module (consumers depend on the module's classes), a REST API exposed by the OpenMRS web layer, FHIR Search backed by the index, or a domain-specific query DSL. Each choice cascades into authorization (where checks run), coupling (how tightly consumers depend on the document model), and what query shapes are practical (e.g., FHIR Search constrains expressivity vs. raw ES). Should be decided before any non-internal consumer is wired up — the choice is hard to reverse once consumers exist.
 
 ### Resource-type to index-name mapping
-[Decision 6](#decision-6-document-model--text-embeddings-and-structured-metadata)'s `resource_type` values are singular (`obs`, `condition`, `diagnosis`, `drug_order`, `test_order`, `allergy`, `program`, `medication_dispense`, `patient`, `encounter`, `visit`, `appointment`). [Decision 4](#decision-4-per-type-indices-over-a-single-index)'s worked examples use idiomatic English plurals for some types (`openmrs_conditions`, `openmrs_drug_orders`, `openmrs_allergies`, `openmrs_programs`, `openmrs_patients`, `openmrs_encounters`, `openmrs_visits`, `openmrs_appointments`) and singular for others (`openmrs_obs`, `openmrs_medication_dispense`). [Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) names module-contributed indices `openmrs_<resource_type>`, which would imply singular-only.
+[Decision 6](#decision-6-document-model--text-embeddings-and-structured-metadata)'s `resource_type` values are singular (`obs`, `condition`, `diagnosis`, `drug_order`, `test_order`, `allergy`, `program`, `medication_dispense`, `patient`, `encounter`, `visit`). [Decision 4](#decision-4-per-type-indices-over-a-single-index)'s worked examples use idiomatic English plurals for some types (`openmrs_conditions`, `openmrs_drug_orders`, `openmrs_allergies`, `openmrs_programs`, `openmrs_patients`, `openmrs_encounters`, `openmrs_visits`) and singular for others (`openmrs_obs`, `openmrs_medication_dispense`). [Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) names module-contributed indices `openmrs_<resource_type>`, which would imply singular-only.
 
 The two readings are reconcilable in spirit — Decision 4 uses ergonomic plurals where they read naturally, Decision 13 standardizes on the literal `resource_type` for module contributions — but routing code (`document.resource_type` → index name) needs an explicit rule, and contributing modules have no way to derive their index name from `resource_type` without one.
 
 Decision needed on either: (a) keep the ergonomic plurals for core types, document the per-type mapping in code (a small lookup table), and amend Decision 13 to state that the contributing module's index suffix equals its `resource_type`; or (b) align the two ends — rename the plural index examples in Decision 4 to match the singular `resource_type` (`openmrs_condition`, `openmrs_drug_order`, etc.) — making `index_suffix == resource_type` a cluster-wide invariant. Either way, pick one rule that a serializer or contributing module can encode mechanically.
-
-### Appointments treated as a core type
-[Decision 6](#decision-6-document-model--text-embeddings-and-structured-metadata) includes an `appointment` worked example with `resource_type: "appointment"` and an unprefixed index `openmrs_appointments`. [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler)'s gap inventory enumerates appointments alongside core types. The Field descriptions table in Decision 6 also lists `appointment` among core `resource_type` values.
-
-Appointments are not in OpenMRS core. They are provided by separate modules — `openmrs-module-appointments` (Bahmni-style, the modern choice) and `openmrs-module-appointmentscheduling` (older). Core defines `Patient`, `Encounter`, `Visit`, `Obs`, `Order`, `Condition`, `Allergy`, `PatientProgram`, and `MedicationDispense`, but no appointment domain object.
-
-[Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) says: "Unprefixed names (`openmrs_obs`, `openmrs_condition`, `openmrs_patient`, etc.) are reserved for the types this module itself indexes from core; module contributions are always prefixed." So `openmrs_appointments` cannot stay as documented without violating Decision 13.
-
-Decision needed on either: (a) remove the appointment example from Decision 6 and treat appointments as the canonical first SPI consumer, with index name `openmrs_<appointments_moduleid>_appointment` per Decision 13's namespacing — and pick which moduleid (`appointments` vs `appointmentscheduling`) the example uses; (b) carve out an explicit exception in Decision 13 for "core-shipped reference modules" and define which modules qualify; or (c) supersede Decision 13's namespacing rule with one that admits non-core but ubiquitous types. Until resolved, no appointment-specific code in this module should rely on the unprefixed index name.
