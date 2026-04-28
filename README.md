@@ -100,6 +100,10 @@ Each document contains:
 | Allergies | Drug, food, and environmental allergies |
 | Patient Programs | Program enrollments, states, and outcomes |
 | Medication Dispense | Dispensing records |
+| Patients | Demographics, identifiers, addresses, and attributes |
+| Encounters | Clinical encounters with type, providers, location, and form |
+| Visits | Time-ranged visits and the encounters they contain |
+| Appointments | Scheduled appointments with service, status, and timing |
 
 ## Text Serialization
 

@@ -1,3 +1,12 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License,
+ * v. 2.0. If a copy of the MPL was not distributed with this file, You can
+ * obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+ * the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+ *
+ * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+ * graphic logo is a trademark of OpenMRS Inc.
+ */
 package org.openmrs.module.querystore.api.impl;
 
 import java.util.Collections;
@@ -24,12 +33,19 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (document == null || document.getResourceUuid() == null) {
 			return;
 		}
-		log.debug("Indexing " + document.getResourceType() + " " + document.getResourceUuid());
+		if (log.isDebugEnabled()) {
+			log.debug("Indexing " + document.getResourceType() + " " + document.getResourceUuid());
+		}
 	}
 
 	@Override
 	public void delete(String resourceType, String resourceUuid) {
-		log.debug("Deleting " + resourceType + " " + resourceUuid);
+		if (resourceType == null || resourceUuid == null) {
+			return;
+		}
+		if (log.isDebugEnabled()) {
+			log.debug("Deleting " + resourceType + " " + resourceUuid);
+		}
 	}
 
 	@Override

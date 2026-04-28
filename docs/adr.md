@@ -1003,6 +1003,7 @@ Design questions that have been recognized but not yet resolved. Each item below
 - [Timestamp time-zone convention](#timestamp-time-zone-convention)
 - [Person vs Patient model](#person-vs-patient-model)
 - [Query interface / consumer API](#query-interface--consumer-api)
+- [Resource-type to index-name mapping](#resource-type-to-index-name-mapping)
 
 ### Initial backfill / bootstrap
 [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
@@ -1054,3 +1055,10 @@ The `openmrs_patients` index conflates Person attributes (name, gender, birthdat
 
 ### Query interface / consumer API
 The ADR specifies what is indexed in detail but says nothing about how consumers reach the index. Options span direct Elasticsearch access (consumers issue ES Query DSL themselves), a thin Java service interface in this module (consumers depend on the module's classes), a REST API exposed by the OpenMRS web layer, FHIR Search backed by the index, or a domain-specific query DSL. Each choice cascades into authorization (where checks run), coupling (how tightly consumers depend on the document model), and what query shapes are practical (e.g., FHIR Search constrains expressivity vs. raw ES). Should be decided before any non-internal consumer is wired up — the choice is hard to reverse once consumers exist.
+
+### Resource-type to index-name mapping
+[Decision 6](#decision-6-document-model--text-embeddings-and-structured-metadata)'s `resource_type` values are singular (`obs`, `condition`, `diagnosis`, `drug_order`, `test_order`, `allergy`, `program`, `medication_dispense`, `patient`, `encounter`, `visit`, `appointment`). [Decision 4](#decision-4-per-type-indices-over-a-single-index)'s worked examples use idiomatic English plurals for some types (`openmrs_conditions`, `openmrs_drug_orders`, `openmrs_allergies`, `openmrs_programs`, `openmrs_patients`, `openmrs_encounters`, `openmrs_visits`, `openmrs_appointments`) and singular for others (`openmrs_obs`, `openmrs_medication_dispense`). [Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) names module-contributed indices `openmrs_<resource_type>`, which would imply singular-only.
+
+The two readings are reconcilable in spirit — Decision 4 uses ergonomic plurals where they read naturally, Decision 13 standardizes on the literal `resource_type` for module contributions — but routing code (`document.resource_type` → index name) needs an explicit rule, and contributing modules have no way to derive their index name from `resource_type` without one.
+
+Decision needed on either: (a) keep the ergonomic plurals for core types, document the per-type mapping in code (a small lookup table), and amend Decision 13 to state that the contributing module's index suffix equals its `resource_type`; or (b) align the two ends — rename the plural index examples in Decision 4 to match the singular `resource_type` (`openmrs_condition`, `openmrs_drug_order`, etc.) — making `index_suffix == resource_type` a cluster-wide invariant. Either way, pick one rule that a serializer or contributing module can encode mechanically.
