@@ -22,6 +22,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 11. [Retired Metadata — Data References Preserved, Names Snapshotted](#decision-11-retired-metadata--data-references-preserved-names-snapshotted)
 12. [Sync Mechanism — Events First, AOP as Last-Resort Gap Filler](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler)
 13. [Module Extension SPI (Service Provider Interface) for Custom Resource Types](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types)
+14. [Authorization and Consumer API Surface](#decision-14-authorization-and-consumer-api-surface)
 
 [Open Questions](#open-questions)
 
@@ -956,6 +957,43 @@ Querystore retains ownership of the shared infrastructure:
 
 ---
 
+## Decision 14: Authorization and Consumer API Surface
+
+### Status
+Accepted
+
+### Context
+The ADR specifies what is indexed and how data flows in, but says nothing about how consumers reach the index or how access is controlled. The two questions are coupled: where authorization checks run depends on what surface consumers hit. Picking an authorization model in isolation requires either silently picking an interface or pretending one doesn't exist.
+
+The chartsearchai migration ([migration-chartsearchai.md](./migration-chartsearchai.md)) makes this concrete. chartsearchai today enforces an "AI Query Patient Data" privilege plus core's per-patient access checks. Without an authorization model on the querystore side, a migration either pushes those checks onto every consumer (fragile, easy to forget) or runs unauthenticated queries against patient data — the leakage failure mode the original Authorization open question flagged.
+
+### Decision
+1. **Primary consumer surface for v1 is a Java service** (`QueryStoreService`) running in-process inside the OpenMRS JVM. Elasticsearch is internal infrastructure; consumers never query it directly. REST, FHIR Search, and other HTTP-fronted surfaces are out of v1 scope but explicitly additive — they layer on top of the same Java service and apply the same enforcement boundary at their own entry points.
+
+2. **Authorization mirrors core's privilege model.** Querystore service calls run through `Context.getAuthenticatedUser()` and enforce core's existing privilege contract before issuing any Elasticsearch query:
+   - **Patient-scoped queries** require the privileges core requires to read that patient — typically `View Patients`, plus any per-patient access policy core enforces. The check is performed by calling `PatientService.getPatient(uuid)` upfront and propagating its access exception; the Elasticsearch query is issued only on success.
+   - **Cross-patient queries** require a coarse-grained `View Patients`-equivalent privilege. Per-patient post-filtering is *not* applied in v1 — see consequences.
+
+3. **Querystore does not invent its own privilege scheme.** Privilege names follow OpenMRS conventions; deployments configure access through core's role and privilege management. Specialised privileges — chartsearchai's "AI Query Patient Data" being the canonical example — are deployment-defined, assigned to roles in core, and required by *consumers* before they invoke querystore. Querystore enforces what core would enforce on the equivalent direct call; it does not introduce parallel authorization concepts.
+
+4. **The contract is "no result a core API would refuse."** Any document returned by querystore must be one the authenticated caller could have read via core's APIs. If a deployment's policy denies the caller access to certain records (sensitive obs, restricted patients), querystore must not surface those documents. The mechanism — pre-filter the ES query, post-filter the results, or denormalise sensitivity labels into documents — is implementation choice; the contract is binding.
+
+### Rationale
+1. **Java service mirrors how OpenMRS modules are normally consumed.** `Context.getService(QueryStoreService.class)` already exists and is what `moduleApplicationContext.xml` wires. Picking it as the v1 surface means consumers integrate the same way they integrate every other OpenMRS service.
+2. **In-process auth is cheap and accurate.** Because the service runs in the same JVM as core, `Context.getAuthenticatedUser()` and `Context.requirePrivilege(...)` work without cross-process plumbing. The auth check delegates to the same code path that runs when a consumer queries core directly.
+3. **Mirroring core avoids divergence.** A bespoke auth model — querystore-specific privilege names, a dedicated permission service — would drift from core over time. Mirroring keeps the two systems aligned: when core adds a new patient-access rule, querystore inherits it the moment the wrapping `PatientService.getPatient` enforces it.
+4. **Deferring REST / FHIR keeps v1 small without precluding them.** The Java service is the minimal surface chartsearchai needs to migrate. Adding a REST layer later is a controller that authenticates the request (session token, OAuth, whatever the deployment uses) and dispatches to the same `QueryStoreService` — the auth boundary already exists, the new layer routes to it.
+5. **Cross-patient search relying on a coarse privilege matches existing practice.** chartsearchai's "AI Query Patient Data" privilege is a coarse gate, not a per-patient check. Adopting the same coarse model for querystore's cross-patient search keeps the migration straightforward and matches operational reality: deployments granting AI/analytics access already trust those callers at the patient-set level.
+
+### Consequences
+- **Cross-patient search results may include patients the caller cannot read individually via core.** The coarse `View Patients`-equivalent privilege gates the query; per-result patient-access filtering is not enforced in v1. Deployments needing finer cross-patient enforcement must either restrict who holds the cross-patient privilege or add post-filtering in their consumer. A follow-up decision can revisit this once a real use case forces the trade-off.
+- **The auth path makes one core call per query** (`PatientService.getPatient` for patient-scoped queries). This is a deliberate exception to [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)'s self-sufficiency principle: auth is a policy path, not a content path, and the round-trip is once per query rather than per result.
+- **Sensitive-data access policy is binding but its mechanism is unspecified.** v1 implementations may pre-filter the ES query (faster), post-filter the results (simpler), or denormalise sensitivity labels into documents (most efficient, most invasive). The contract — no result a core API would refuse — holds regardless of mechanism. A future decision may pin one approach if multiple implementations diverge or an audit obligation requires it.
+- **External consumers (non-JVM, non-OpenMRS) cannot integrate in v1.** Any such consumer requires a REST or FHIR surface, which is deferred. This is explicitly a v1 limitation, not a permanent one.
+- **Audit logging of querystore queries is not mandated by this decision.** Audit (who searched for what, when) is an adjacent concern; it should be addressed by a separate decision if it surfaces as a real requirement.
+
+---
+
 ## Open Questions
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.
@@ -967,13 +1005,11 @@ Design questions that have been recognized but not yet resolved. Each item below
 - [Long-text chunking for embeddings](#long-text-chunking-for-embeddings)
 - [Complex obs handling](#complex-obs-handling)
 - [Re-index / alias strategy](#re-index--alias-strategy)
-- [Authorization](#authorization)
 - [PII and data-minimization scopes](#pii-and-data-minimization-scopes)
 - [Patient merge handling](#patient-merge-handling)
 - [Concept-set and hierarchy queries](#concept-set-and-hierarchy-queries)
 - [Timestamp time-zone convention](#timestamp-time-zone-convention)
 - [Person vs Patient model](#person-vs-patient-model)
-- [Query interface / consumer API](#query-interface--consumer-api)
 
 ### Initial backfill / bootstrap
 [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
@@ -1005,9 +1041,6 @@ A decision should pick the per-handler behavior, the default for unknown handler
 ### Re-index / alias strategy
 Multiple decisions ([8](#decision-8-locale-specific-serialization-with-multilingual-embeddings), [11](#decision-11-retired-metadata--data-references-preserved-names-snapshotted), and any future serializer change) imply re-indexing as the remedy. Doing this without downtime requires writing through aliases (e.g., `openmrs_obs` → `openmrs_obs_v1`, with atomic swap to `_v2` after backfill). No decision covers the alias convention, the cutover protocol, or — given [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) — how the live event subscription is coordinated during cutover (events arriving mid-rebuild must land somewhere: dual-write to old and new aliases, replay from a snapshot, or a controlled subscription pause). Several existing claims rely on this being possible.
 
-### Authorization
-Core enforces role-based privileges over patient data. The read store currently has no auth model defined. Options include: enforcing core's privileges at the query API, fronting Elasticsearch with a service that applies them, or treating the store as trusted-callers-only. The choice has material privacy implications — leaking sensitive obs (HIV status, mental health, etc.) via an unauthenticated query endpoint is the failure mode to avoid. Should be decided before any consumer is given direct access.
-
 ### PII and data-minimization scopes
 The current document model stores full identifiers, names, addresses, and contact attributes in the `openmrs_patient` index, plus provider names everywhere. Different consumers need different shapes of the same data: clinical-care callers need full patient identity; research-analytics callers typically need de-identified or pseudonymized projections. Decision needed on whether the read store maintains one fully-detailed projection with redaction applied at query time, multiple parallel projections at different sensitivity levels, or pushes minimization onto consumers entirely. Adjacent to but distinct from authorization (which governs *who can read*); this governs *what is stored and in what form*.
 
@@ -1022,7 +1055,4 @@ Documents mix date-only fields (`date`, `birthdate`) with timestamp fields (`sta
 
 ### Person vs Patient model
 The `openmrs_patient` index conflates Person attributes (name, gender, birthdate, addresses, attributes) with Patient attributes (identifiers). In OpenMRS core these are separate entities — a Person can exist without being a Patient (e.g., providers, relatives). The current flattening is appropriate for a read-side projection focused on patient queries, but should be made explicit so downstream consumers do not expect an `openmrs_persons` resource type to also exist or look for non-patient Persons in this index.
-
-### Query interface / consumer API
-The ADR specifies what is indexed in detail but says nothing about how consumers reach the index. Options span direct Elasticsearch access (consumers issue ES Query DSL themselves), a thin Java service interface in this module (consumers depend on the module's classes), a REST API exposed by the OpenMRS web layer, FHIR Search backed by the index, or a domain-specific query DSL. Each choice cascades into authorization (where checks run), coupling (how tightly consumers depend on the document model), and what query shapes are practical (e.g., FHIR Search constrains expressivity vs. raw ES). Should be decided before any non-internal consumer is wired up — the choice is hard to reverse once consumers exist.
 

@@ -25,15 +25,14 @@ The ADR is dense; here is the minimal load-bearing set with anchors.
 
 ## Implementation priorities
 
-The fastest path to a useful querystore is unblocking [chartsearchai's migration](docs/migration-chartsearchai.md). That requires resolving these five [open questions](docs/adr.md#open-questions) first:
+The fastest path to a useful querystore is unblocking [chartsearchai's migration](docs/migration-chartsearchai.md). Authorization and the v1 consumer API surface are now settled by [Decision 14](docs/adr.md#decision-14-authorization-and-consumer-api-surface). The remaining four [open questions](docs/adr.md#open-questions) on the chartsearchai-blocking path:
 
-1. [Authorization](docs/adr.md#authorization)
-2. [Patient merge handling](docs/adr.md#patient-merge-handling)
-3. [Initial backfill / bootstrap](docs/adr.md#initial-backfill--bootstrap)
-4. [Long-text chunking for embeddings](docs/adr.md#long-text-chunking-for-embeddings)
-5. [Sync reliability and reconciliation](docs/adr.md#sync-reliability-and-reconciliation)
+1. [Patient merge handling](docs/adr.md#patient-merge-handling)
+2. [Initial backfill / bootstrap](docs/adr.md#initial-backfill--bootstrap)
+3. [Long-text chunking for embeddings](docs/adr.md#long-text-chunking-for-embeddings)
+4. [Sync reliability and reconciliation](docs/adr.md#sync-reliability-and-reconciliation)
 
-Other open questions (event-handler idempotency, embedding model versioning, complex obs handling, re-index/alias strategy, PII scopes, concept-set queries, time-zone convention, Person vs Patient, query interface) can be tackled after these or in parallel, depending on what surfaces during code work.
+Other open questions (event-handler idempotency, embedding model versioning, complex obs handling, re-index/alias strategy, PII scopes, concept-set queries, time-zone convention, Person vs Patient) can be tackled after these or in parallel, depending on what surfaces during code work.
 
 ## Project layout
 

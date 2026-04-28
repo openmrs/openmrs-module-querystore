@@ -19,10 +19,9 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 /**
- * Default implementation of {@link QueryStoreService}. Writes and reads are delegated to the
- * configured backend (Elasticsearch by default, per ADR decision 3). This scaffold logs calls and
- * returns empty results; wire a real {@code QueryStoreBackend} in {@code moduleApplicationContext.xml}
- * to activate indexing and search.
+ * Default implementation of {@link QueryStoreService}. Writes and reads will be delegated to the
+ * configured backend (Elasticsearch by default, per ADR decision 3) once the backend abstraction
+ * lands. This scaffold logs calls and returns empty results.
  */
 public class QueryStoreServiceImpl extends BaseOpenmrsService implements QueryStoreService {
 

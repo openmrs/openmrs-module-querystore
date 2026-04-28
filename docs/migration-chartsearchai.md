@@ -24,17 +24,16 @@ Notes capturing what came out of the design discussion, for the team that takes 
 | Locale-aware concept names | [Decision 8](./adr.md#decision-8-locale-specific-serialization-with-multilingual-embeddings) | |
 | Voiding handling | [Decision 10](./adr.md#decision-10-voided-records--deleted-from-the-read-store-not-marked) | |
 | Encounter-scoped events | [Decision 12](./adr.md#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) + gap inventory | |
-| Indexed types: obs, conditions, diagnoses, orders, allergies, programs, dispense | [Decision 6](./adr.md#decision-6-document-model--text-embeddings-and-structured-metadata) example documents | querystore is a superset (also patient, encounter, visit, appointment) |
+| Indexed types: obs, conditions, diagnoses, orders, allergies, programs, dispense | [Decision 6](./adr.md#decision-6-document-model--text-embeddings-and-structured-metadata) example documents | querystore is a superset (also patient, encounter, visit) |
 
 ## What blocks migration today
 
-Five querystore [open questions](./adr.md#open-questions) must be resolved before chartsearchai can switch:
+Authorization and the v1 consumer API surface are settled by [Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface): chartsearchai's "AI Query Patient Data" privilege stays a chartsearchai-side concern, and querystore enforces core's per-patient access checks via `PatientService.getPatient` on its Java service boundary. Four querystore [open questions](./adr.md#open-questions) remain before chartsearchai can switch:
 
-1. **[Authorization](./adr.md#authorization)** — chartsearchai relies on the "AI Query Patient Data" privilege and OpenMRS patient access checks. Without an auth model in querystore, chartsearchai must apply access control client-side or migrating breaks privacy guarantees (HIV status, mental health, etc.).
-2. **[Patient merge handling](./adr.md#patient-merge-handling)** — chartsearchai handles this via AOP today. querystore needs to define repointing / re-indexing behavior on merge events, including whether core emits the event at all.
-3. **[Initial backfill / bootstrap](./adr.md#initial-backfill--bootstrap)** — chartsearchai indexes lazily on first chart access plus a bulk task. querystore must specify a clear bootstrap path before it can replace that.
-4. **[Long-text chunking for embeddings](./adr.md#long-text-chunking-for-embeddings)** — chartsearchai's MiniLM has a 256-token cap; long obs are silently truncated. querystore must resolve chunking strategy before parity, or it inherits the same silent-truncation problem.
-5. **[Sync reliability and reconciliation](./adr.md#sync-reliability-and-reconciliation)** — chartsearchai's "best-effort, swallow errors" model is acceptable for an in-process index but not for a shared read store. Production-grade event sync needs durable subscription, dead-letter handling, and reconciliation.
+1. **[Patient merge handling](./adr.md#patient-merge-handling)** — chartsearchai handles this via AOP today. querystore needs to define repointing / re-indexing behavior on merge events, including whether core emits the event at all.
+2. **[Initial backfill / bootstrap](./adr.md#initial-backfill--bootstrap)** — chartsearchai indexes lazily on first chart access plus a bulk task. querystore must specify a clear bootstrap path before it can replace that.
+3. **[Long-text chunking for embeddings](./adr.md#long-text-chunking-for-embeddings)** — chartsearchai's MiniLM has a 256-token cap; long obs are silently truncated. querystore must resolve chunking strategy before parity, or it inherits the same silent-truncation problem.
+4. **[Sync reliability and reconciliation](./adr.md#sync-reliability-and-reconciliation)** — chartsearchai's "best-effort, swallow errors" model is acceptable for an in-process index but not for a shared read store. Production-grade event sync needs durable subscription, dead-letter handling, and reconciliation.
 
 ## Structural deltas chartsearchai will absorb
 
@@ -58,8 +57,8 @@ These are layered above the index. The migration touches retrieval (where the in
 
 ## Suggested migration order
 
-1. Resolve querystore open questions 1–5 above — design and ship.
+1. Resolve querystore open questions 1–4 above — design and ship.
 2. chartsearchai switches its query-time embedding model to querystore's choice (test fixture and config change; small).
-3. chartsearchai swaps its retrieval layer to query `openmrs_*` against querystore.
+3. chartsearchai swaps its retrieval layer to query `openmrs_*` via the `QueryStoreService` Java surface ([Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface)) against querystore.
 4. chartsearchai removes its AOP indexing code and `chartsearchai-patient-records` index.
 5. Validate with chartsearchai's existing eval dataset (153 records, query-recall benchmarks) against the new pipeline.
