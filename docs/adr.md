@@ -1004,6 +1004,7 @@ Design questions that have been recognized but not yet resolved. Each item below
 - [Person vs Patient model](#person-vs-patient-model)
 - [Query interface / consumer API](#query-interface--consumer-api)
 - [Resource-type to index-name mapping](#resource-type-to-index-name-mapping)
+- [Appointments treated as a core type](#appointments-treated-as-a-core-type)
 
 ### Initial backfill / bootstrap
 [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
@@ -1062,3 +1063,12 @@ The ADR specifies what is indexed in detail but says nothing about how consumers
 The two readings are reconcilable in spirit — Decision 4 uses ergonomic plurals where they read naturally, Decision 13 standardizes on the literal `resource_type` for module contributions — but routing code (`document.resource_type` → index name) needs an explicit rule, and contributing modules have no way to derive their index name from `resource_type` without one.
 
 Decision needed on either: (a) keep the ergonomic plurals for core types, document the per-type mapping in code (a small lookup table), and amend Decision 13 to state that the contributing module's index suffix equals its `resource_type`; or (b) align the two ends — rename the plural index examples in Decision 4 to match the singular `resource_type` (`openmrs_condition`, `openmrs_drug_order`, etc.) — making `index_suffix == resource_type` a cluster-wide invariant. Either way, pick one rule that a serializer or contributing module can encode mechanically.
+
+### Appointments treated as a core type
+[Decision 6](#decision-6-document-model--text-embeddings-and-structured-metadata) includes an `appointment` worked example with `resource_type: "appointment"` and an unprefixed index `openmrs_appointments`. [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler)'s gap inventory enumerates appointments alongside core types. The Field descriptions table in Decision 6 also lists `appointment` among core `resource_type` values.
+
+Appointments are not in OpenMRS core. They are provided by separate modules — `openmrs-module-appointments` (Bahmni-style, the modern choice) and `openmrs-module-appointmentscheduling` (older). Core defines `Patient`, `Encounter`, `Visit`, `Obs`, `Order`, `Condition`, `Allergy`, `PatientProgram`, and `MedicationDispense`, but no appointment domain object.
+
+[Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) says: "Unprefixed names (`openmrs_obs`, `openmrs_condition`, `openmrs_patient`, etc.) are reserved for the types this module itself indexes from core; module contributions are always prefixed." So `openmrs_appointments` cannot stay as documented without violating Decision 13.
+
+Decision needed on either: (a) remove the appointment example from Decision 6 and treat appointments as the canonical first SPI consumer, with index name `openmrs_<appointments_moduleid>_appointment` per Decision 13's namespacing — and pick which moduleid (`appointments` vs `appointmentscheduling`) the example uses; (b) carve out an explicit exception in Decision 13 for "core-shipped reference modules" and define which modules qualify; or (c) supersede Decision 13's namespacing rule with one that admits non-core but ubiquitous types. Until resolved, no appointment-specific code in this module should rely on the unprefixed index name.

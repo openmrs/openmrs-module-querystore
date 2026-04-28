@@ -103,7 +103,6 @@ Each document contains:
 | Patients | Demographics, identifiers, addresses, and attributes |
 | Encounters | Clinical encounters with type, providers, location, and form |
 | Visits | Time-ranged visits and the encounters they contain |
-| Appointments | Scheduled appointments with service, status, and timing |
 
 ## Text Serialization
 

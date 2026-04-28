@@ -26,7 +26,6 @@ public final class QueryStoreConstants {
 	public static final String INDEX_PATIENTS = INDEX_PREFIX + "patients";
 	public static final String INDEX_ENCOUNTERS = INDEX_PREFIX + "encounters";
 	public static final String INDEX_VISITS = INDEX_PREFIX + "visits";
-	public static final String INDEX_APPOINTMENTS = INDEX_PREFIX + "appointments";
 
 	public static final String GP_ELASTICSEARCH_HOST = "querystore.elasticsearch.host";
 	public static final String GP_ELASTICSEARCH_PORT = "querystore.elasticsearch.port";
