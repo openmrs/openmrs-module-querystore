@@ -22,6 +22,7 @@ This document captures the key architectural decisions for the OpenMRS Query Sto
 10. [Voided Records — Deleted from the Read Store, Not Marked](#decision-10-voided-records--deleted-from-the-read-store-not-marked)
 11. [Retired Metadata — Data References Preserved, Names Snapshotted](#decision-11-retired-metadata--data-references-preserved-names-snapshotted)
 12. [Sync Mechanism — Events First, AOP as Last-Resort Gap Filler](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler)
+13. [Module Extension SPI (Service Provider Interface) for Custom Resource Types](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types)
 
 [Open Questions](#open-questions)
 
@@ -920,6 +921,59 @@ CDC and polling are excluded for the steady-state sync path. Polling is acceptab
 - Event payloads in OpenMRS are often minimal (UUID + action). Handlers therefore fetch the full entity from core after receiving an event. This means the sync path performs reads against the transactional database — acceptable, but worth noting since it couples sync throughput to core's read performance.
 - Lost events on broker restart are possible. Reliability, monitoring, and reconciliation are not solved by this decision and are tracked as separate open questions.
 - The initial bootstrap / backfill mechanism is not specified here. The steady-state mechanism only handles changes from the moment the projection is running; getting from "empty index" to "in sync" is a separate concern, also tracked below.
+
+---
+
+## Decision 13: Module Extension SPI (Service Provider Interface) for Custom Resource Types
+
+### Status
+Accepted
+
+### Context
+OpenMRS's module ecosystem ships clinical data beyond what core defines: radiology reports, bed assignments, vaccination records, oncology regimens, custom form outputs, lab extensions, and many others. Consumers (clinical UIs, AI/analytics tools like Chart Search AI, reporting modules) want unified retrieval across all of this data, not just core types.
+
+Three approaches were considered:
+
+| Option | What querystore does | What modules do | Coupling |
+|---|---|---|---|
+| Closed scope (core types only) | Indexes core types | Ship their own per-module indices | None, but consumers must federate across multiple stores |
+| Monolithic querystore | Indexes everything, knows every module's entities | Nothing | Querystore depends on every data-owning module |
+| Module extension SPI | Provides shared infrastructure and a contribution interface | Contribute serializers, event subscribers, and own per-type index | Modules depend on querystore; querystore knows nothing about specific modules |
+
+### Decision
+Adopt the module extension SPI (Service Provider Interface) model. Querystore exposes a Java interface that data-owning modules implement to contribute custom resource types; querystore discovers implementations at runtime via the OpenMRS module loader and wires them into the indexing pipeline without ever depending on the contributing module directly. Each contributing module:
+
+1. Declares a unique `resource_type` name (e.g., `radiology_report`, `vaccination`, `bed_assignment`).
+2. Provides a serializer that maps the entity to text + structured fields per [Decision 5](#decision-5-plain-text-serialization-over-json-or-fhir).
+3. Provides an event subscriber per [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler), or a scoped AOP shim where the module's services don't yet emit events. The same gap-inventory and tech-debt rules apply.
+4. Receives a per-type index `openmrs_<resource_type>` under [Decision 4](#decision-4-per-type-indices-over-a-single-index)'s naming convention.
+
+Querystore retains ownership of the shared infrastructure:
+- Elasticsearch connection and index lifecycle (creation, mapping, alias management).
+- The embedding pipeline ([Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings)). Modules provide text; querystore embeds. Modules do not pick their own embedding model.
+- Voiding ([Decision 10](#decision-10-voided-records--deleted-from-the-read-store-not-marked)) and retired-metadata ([Decision 11](#decision-11-retired-metadata--data-references-preserved-names-snapshotted)) handling.
+- Locale-aware serialization conventions ([Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings)).
+- The self-sufficiency principle ([Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)).
+
+**Cross-cutting field contract.** Every module-contributed document must include the same cross-cutting fields that core-type documents include: `patient_uuid`, `resource_type`, `resource_uuid`, `date`, `text`, `embedding`, and where applicable `location_uuid` / `location_name`, `provider_uuid` / `provider_name`, `encounter_uuid`, `visit_uuid`, `form_uuid` / `form_name`, and `encounter_type_uuid` / `encounter_type_name`. Modules may add as many type-specific fields as they need beyond these. The cross-cutting set is non-negotiable — without it, cross-type queries break.
+
+**Cross-type query convention.** Consumers needing unified retrieval query the `openmrs_*` wildcard pattern. This was already permitted by [Decision 4](#decision-4-per-type-indices-over-a-single-index); promoting it to the official cross-type contract is part of this decision. Per-type queries continue to use the specific index name. Embedding-based queries against the wildcard work because every contributing module embeds via the same pipeline (next point).
+
+**Embedding model contract for query-time consumers.** Because querystore embeds at index time with a single model ([Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings)), every consumer that issues kNN queries must embed its query with the same model. Mismatched models produce incomparable vectors and silently broken results. The embedding model identifier is therefore part of querystore's public contract, surfaced through the SPI for consumers that need it.
+
+### Rationale
+1. **Mirrors [Decision 2](#decision-2-module-not-core) one level down.** Just as core should not depend on every module that records clinical data, querystore should not depend on every module that wants to index it. The contribution model lets modules participate without entangling the indexer.
+2. **Avoids coupling explosion.** A monolithic querystore becomes a chokepoint for every module's release cycle. The SPI lets modules ship new resource types independently as long as they meet the contract.
+3. **Preserves existing decisions uniformly.** Embedding model, locale, voiding, retirement, self-sufficiency — all apply to module-contributed types via the SPI. No parallel rules; the SPI is the surface that enforces existing rules on extension data.
+4. **Wildcard cross-type retrieval is already cheap.** Per-type indices made cross-type retrieval inexpensive from the start ([Decision 4](#decision-4-per-type-indices-over-a-single-index)). Modules contributing new indices automatically join the cross-type query surface with no consumer code change.
+
+### Consequences
+- The SPI's exact Java interface, registration mechanism, and lifecycle hooks are implementation work. This decision establishes the principle and the contract; the signature is settled at implementation time.
+- Modules wanting to contribute clinical data depend on querystore (transitively or directly). Deployments that don't install querystore lose any module-contributed indexing — same property as [Decision 2](#decision-2-module-not-core)'s "not every deployment needs it" applied recursively.
+- Resource-type name collisions across modules must be prevented. Either a registry, a naming convention (e.g., module-prefixed names like `radiology_radiology_report`), or first-registration-wins. Settled with the SPI implementation, but worth flagging now.
+- The cross-cutting field contract creates a documentation obligation for every contributing module: their docs must specify which cross-cutting fields are populated and which are intentionally null.
+- Module developers gain access to the embedding pipeline without having to re-implement it; they also inherit the rules and cannot, for example, retain voided records or pick a different embedding model. This is a feature, not a constraint.
+- Consumers of querystore (UIs, AI/analytics tools) can rely on a single retrieval surface for every patient-scoped clinical type in the deployment, regardless of which module recorded the data.
 
 ---
 
