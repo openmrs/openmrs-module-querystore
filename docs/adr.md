@@ -124,7 +124,7 @@ Accepted
 Data in OpenMRS spans multiple resource types: patients, encounters, visits, appointments, observations, conditions, diagnoses, drug orders, test orders, allergies, patient programs, and medication dispenses. These types have different fields and different query patterns. The data can be stored in a single Elasticsearch index with a `resource_type` discriminator or in separate per-type indices.
 
 ### Decision
-Use per-type indices (e.g., `openmrs_obs`, `openmrs_conditions`, `openmrs_drug_orders`, etc.) rather than a single mixed index.
+Use per-type indices (e.g., `openmrs_obs`, `openmrs_conditions`, `openmrs_drug_orders`, etc.) rather than a single mixed index. All index names are prefixed with `openmrs_` so the prefix functions as a stable cluster-wide namespace for everything this module produces.
 
 ### Rationale
 1. **No sparse fields.** Each index contains only the fields relevant to its type. A single index would carry empty drug order fields on every obs document and vice versa, wasting storage and slowing queries at scale.
@@ -132,6 +132,14 @@ Use per-type indices (e.g., `openmrs_obs`, `openmrs_conditions`, `openmrs_drug_o
 3. **Better relevance scoring.** BM25 term frequencies are computed per index. Mixing clinical notes, lab results, and drug orders dilutes term frequencies across unrelated document types, hurting search quality.
 4. **Cross-type search is still easy.** Elasticsearch wildcard patterns (e.g., `openmrs_*`) allow querying across all types when needed, providing the same convenience as a single index.
 5. **Future-proof for cross-patient search.** Per-patient chart search works fine with either approach since the patient_uuid filter narrows the scope. But cross-patient search at scale benefits significantly from type-specific indices.
+
+#### Why the `openmrs_` prefix
+The prefix scopes every index this module manages under a single cluster-wide namespace. This matters for four reasons:
+
+- **Cluster sharing.** Elasticsearch clusters are often shared with other applications, or with multiple OpenMRS environments (dev / staging / prod) on the same cluster. Generic names like `obs`, `patient`, or `report` would collide; `openmrs_` keeps OpenMRS data unambiguously identifiable.
+- **Reliable wildcard target.** `openmrs_*` matches every index this module produces and nothing else, making it the natural target for cross-type retrieval (the convention promoted by [Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types)) without having to enumerate names or risk pulling in unrelated indices.
+- **Index templates and lifecycle policies.** ES index templates apply by name pattern. A single template on `openmrs_*` propagates common settings — shard count, replicas, refresh interval, vector-index parameters — to every OpenMRS index, including module-contributed ones. Without the prefix, templates either get broader than intended or have to be maintained per name.
+- **Operational visibility.** A DBA scanning the cluster sees at a glance which indices belong to OpenMRS. Useful for capacity planning, audit, and incident response.
 
 ### Consequences
 - More indices to manage, though an index template can share common settings across all `openmrs_*` indices.
