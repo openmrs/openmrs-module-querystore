@@ -32,7 +32,7 @@ The fastest path to a useful querystore is unblocking [chartsearchai's migration
 3. [Long-text chunking for embeddings](docs/adr.md#long-text-chunking-for-embeddings)
 4. [Sync reliability and reconciliation](docs/adr.md#sync-reliability-and-reconciliation)
 
-Other open questions (event-handler idempotency, embedding model versioning, complex obs handling, re-index/alias strategy, PII scopes, concept-set queries, time-zone convention, Person vs Patient) can be tackled after these or in parallel, depending on what surfaces during code work.
+Other open questions (migration-time re-projection hook, event-handler idempotency, embedding model versioning, complex obs handling, re-index/alias strategy, name-refresh re-projection, PII scopes, concept-set queries, time-zone convention, Person vs Patient) can be tackled after these or in parallel, depending on what surfaces during code work.
 
 ## Project layout
 
