@@ -2,6 +2,10 @@
 
 This document captures the key architectural decisions for the OpenMRS Query Store Module.
 
+## Background
+
+Originating discussion: [RFC: A separate read-optimized projection of OpenMRS clinical data](https://talk.openmrs.org/t/rfc-a-separate-read-optimized-projection-of-openmrs-clinical-data/49397) on OpenMRS Talk.
+
 ## Conventions
 
 - **The ADR is in draft.** Decisions can be edited, renumbered, or removed in place while we iterate. The append-only and supersession conventions are suspended until the doc stabilizes (or the first non-trivial implementation lands against it).
