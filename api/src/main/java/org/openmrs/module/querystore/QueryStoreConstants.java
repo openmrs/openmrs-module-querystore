@@ -59,6 +59,33 @@ public final class QueryStoreConstants {
 	public static final String FIELD_RANK = "rank";
 	public static final String FIELD_CONDITION_UUID = "condition_uuid";
 
+	public static final String FIELD_DRUG_UUID = "drug_uuid";
+	public static final String FIELD_DRUG_NAME = "drug_name";
+	public static final String FIELD_DOSE = "dose";
+	public static final String FIELD_DOSE_UNITS_UUID = "dose_units_uuid";
+	public static final String FIELD_DOSE_UNITS = "dose_units";
+	public static final String FIELD_ROUTE_UUID = "route_uuid";
+	public static final String FIELD_ROUTE = "route";
+	public static final String FIELD_FREQUENCY_UUID = "frequency_uuid";
+	public static final String FIELD_FREQUENCY = "frequency";
+	public static final String FIELD_DURATION = "duration";
+	public static final String FIELD_DURATION_UNITS_UUID = "duration_units_uuid";
+	public static final String FIELD_DURATION_UNITS = "duration_units";
+	public static final String FIELD_QUANTITY = "quantity";
+	public static final String FIELD_QUANTITY_UNITS_UUID = "quantity_units_uuid";
+	public static final String FIELD_QUANTITY_UNITS = "quantity_units";
+	public static final String FIELD_ACTION = "action";
+	public static final String FIELD_URGENCY = "urgency";
+	public static final String FIELD_DOSING_INSTRUCTIONS = "dosing_instructions";
+	public static final String FIELD_AS_NEEDED = "as_needed";
+	public static final String FIELD_AS_NEEDED_CONDITION = "as_needed_condition";
+	public static final String FIELD_NUM_REFILLS = "num_refills";
+	public static final String FIELD_CARE_SETTING = "care_setting";
+	public static final String FIELD_PREVIOUS_ORDER_UUID = "previous_order_uuid";
+	public static final String FIELD_ORDER_NUMBER = "order_number";
+	public static final String FIELD_DATE_STOPPED = "date_stopped";
+	public static final String FIELD_AUTO_EXPIRE_DATE = "auto_expire_date";
+
 	public static final String FIELD_ENCOUNTER_UUID = "encounter_uuid";
 	public static final String FIELD_ENCOUNTER_TYPE_UUID = "encounter_type_uuid";
 	public static final String FIELD_ENCOUNTER_TYPE_NAME = "encounter_type_name";

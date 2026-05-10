@@ -1173,6 +1173,7 @@ Design questions that have been recognized but not yet resolved. Each item below
 - [Knowledge-base and reference-data projection](#knowledge-base-and-reference-data-projection)
 - [Timestamp time-zone convention](#timestamp-time-zone-convention)
 - [Person vs Patient model](#person-vs-patient-model)
+- [Drug-order non-coded drug handling](#drug-order-non-coded-drug-handling)
 
 ### Initial backfill / bootstrap
 [Decision 12](#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler) covers steady-state sync but not how the read store reaches "in sync" the first time, after a full rebuild, or after adding a new indexed resource type to an existing deployment. Likely shape: a one-time service-API scan that paginates through every entity of each type, serializes it, generates embeddings, and writes through index aliases. Decision needed on chunking strategy, throttling to avoid overloading core, embedding-generation throughput, progress tracking, and how the steady-state event subscription is started without missing events emitted during the backfill window.
@@ -1259,4 +1260,7 @@ Documents mix date-only fields (`date`, `birthdate`) with timestamp fields (`sta
 
 ### Person vs Patient model
 The `openmrs_patient` index conflates Person attributes (name, gender, birthdate, addresses, attributes) with Patient attributes (identifiers). In OpenMRS core these are separate entities — a Person can exist without being a Patient (e.g., providers, relatives). The current flattening is appropriate for a read-side projection focused on patient queries, but should be made explicit so downstream consumers do not expect an `openmrs_persons` resource type to also exist or look for non-patient Persons in this index.
+
+### Drug-order non-coded drug handling
+`DrugOrder` exposes `drugNonCoded` (a free-text drug name used when the clinician records a drug outside the dictionary), the order-side analog of `Condition.nonCoded` and `Diagnosis.nonCoded`. The Decision 6 drug-order example doc and the field-descriptions table do not mention it, and the v1 serializer drops drug orders whose display name resolves to empty — so a non-coded drug with no `concept` and no `Drug` becomes a skipped document. Decision needed on whether to add a third fallback to the display-name resolution chain (`drug.name → concept preferred name → trimmed drugNonCoded`), mirror Condition/Diagnosis by storing it on a `non_coded` (or order-specific `drug_non_coded`) metadata field, and whether `DrugOrder.brandName` / `dispenseAsWritten` deserve indexed surfaces of their own. The same question applies to `Order.orderReasonNonCoded` (the free-text variant of `orderReason`) which is similarly absent from v1.
 
