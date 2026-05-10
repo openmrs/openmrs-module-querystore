@@ -24,5 +24,10 @@ public interface ClinicalRecordSerializer<T> {
 
 	Class<T> getSupportedType();
 
+	/**
+	 * Returns the document for the given record, or {@code null} if the record produces no
+	 * document (for example, an obs group parent whose own value is empty — its members are
+	 * indexed individually per the ADR decision 6 group obs convention).
+	 */
 	QueryDocument serialize(T record);
 }

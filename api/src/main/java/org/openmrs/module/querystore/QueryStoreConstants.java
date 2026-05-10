@@ -21,6 +21,43 @@ public final class QueryStoreConstants {
 
 	public static final String FIELD_RECORD_DATE = "record_date";
 
+	// Document metadata field names per ADR Decision 6. Keep aligned with the example documents
+	// and field-descriptions table in docs/adr.md.
+
+	public static final String FIELD_CONCEPT_UUID = "concept_uuid";
+	public static final String FIELD_CONCEPT_NAME = "concept_name";
+	public static final String FIELD_CONCEPT_CLASS = "concept_class";
+	public static final String FIELD_SYNONYMS = "synonyms";
+
+	public static final String FIELD_VALUE_NUMERIC = "value_numeric";
+	public static final String FIELD_VALUE_CODED_UUID = "value_coded_uuid";
+	public static final String FIELD_VALUE_CODED_NAME = "value_coded_name";
+	public static final String FIELD_VALUE_TEXT = "value_text";
+	public static final String FIELD_VALUE_DATETIME = "value_datetime";
+	public static final String FIELD_VALUE_BOOLEAN = "value_boolean";
+	public static final String FIELD_VALUE_DRUG_UUID = "value_drug_uuid";
+	public static final String FIELD_VALUE_DRUG_NAME = "value_drug_name";
+	public static final String FIELD_VALUE_COMPLEX_URI = "value_complex_uri";
+	public static final String FIELD_VALUE_COMPLEX_HANDLER = "value_complex_handler";
+
+	public static final String FIELD_UNITS = "units";
+	public static final String FIELD_INTERPRETATION = "interpretation";
+	public static final String FIELD_STATUS = "status";
+	public static final String FIELD_COMMENT = "comment";
+	public static final String FIELD_OBS_GROUP_UUID = "obs_group_uuid";
+	public static final String FIELD_OBS_GROUP_CONCEPT_NAME = "obs_group_concept_name";
+
+	public static final String FIELD_ENCOUNTER_UUID = "encounter_uuid";
+	public static final String FIELD_ENCOUNTER_TYPE_UUID = "encounter_type_uuid";
+	public static final String FIELD_ENCOUNTER_TYPE_NAME = "encounter_type_name";
+	public static final String FIELD_VISIT_UUID = "visit_uuid";
+	public static final String FIELD_FORM_UUID = "form_uuid";
+	public static final String FIELD_FORM_NAME = "form_name";
+	public static final String FIELD_LOCATION_UUID = "location_uuid";
+	public static final String FIELD_LOCATION_NAME = "location_name";
+	public static final String FIELD_PROVIDER_UUID = "provider_uuid";
+	public static final String FIELD_PROVIDER_NAME = "provider_name";
+
 	public static final String INDEX_OBS = INDEX_PREFIX + "obs";
 	public static final String INDEX_CONDITION = INDEX_PREFIX + "condition";
 	public static final String INDEX_DIAGNOSIS = INDEX_PREFIX + "diagnosis";

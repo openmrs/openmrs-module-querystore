@@ -22,6 +22,9 @@
     <bean id="querystore.embedding.dispatcher"
           class="org.openmrs.module.querystore.embedding.ConfiguredEmbeddingProvider"/>
 
+    <bean id="querystore.serializer.obs"
+          class="org.openmrs.module.querystore.serialization.ObsRecordSerializer"/>
+
     <bean id="queryStoreService"
           class="org.openmrs.module.querystore.api.impl.QueryStoreServiceImpl">
         <property name="backend" ref="querystore.backend"/>

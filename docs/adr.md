@@ -282,6 +282,7 @@ Example documents:
   "concept_uuid": "3cd6f600-26fe-102b-80cb-0017a47871b2",
   "concept_name": "Fasting blood glucose",
   "concept_class": "Test",
+  "synonyms": ["FBG", "Fasting glucose"],
   "value_numeric": 11.2,
   "value_coded_uuid": null,
   "value_coded_name": null,
@@ -295,6 +296,7 @@ Example documents:
   "status": "FINAL",
   "comment": null,
   "obs_group_uuid": null,
+  "obs_group_concept_name": null,
   "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
   "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
   "encounter_type_name": "Adult Outpatient Visit",
@@ -307,6 +309,48 @@ Example documents:
   "provider_name": "Dr. Ochieng"
 }
 ```
+
+**Group obs member** (openmrs_obs index, member of a vital signs panel — same shape as the obs example, with the group fields populated):
+```json
+{
+  "patient_uuid": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+  "resource_type": "obs",
+  "resource_uuid": "ba8c1d3e-4f5a-6b7c-8d9e-0f1a2b3c4d5e",
+  "date": "2025-03-15",
+  "text": "Systolic blood pressure: 120 mmHg",
+  "embedding": [0.027, -0.038, 0.062, ...],
+  "concept_uuid": "5085AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "concept_name": "Systolic blood pressure",
+  "concept_class": "Finding",
+  "synonyms": ["SBP"],
+  "value_numeric": 120,
+  "value_coded_uuid": null,
+  "value_coded_name": null,
+  "value_text": null,
+  "value_datetime": null,
+  "value_boolean": null,
+  "value_complex_uri": null,
+  "value_complex_handler": null,
+  "units": "mmHg",
+  "interpretation": null,
+  "status": "FINAL",
+  "comment": null,
+  "obs_group_uuid": "f1c2d3e4-5b6a-7d8c-9e0f-1a2b3c4d5e6f",
+  "obs_group_concept_name": "Vital signs",
+  "encounter_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6e",
+  "encounter_type_uuid": "e1f2a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "encounter_type_name": "Adult Outpatient Visit",
+  "visit_uuid": "f2a3b4c5-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+  "form_uuid": "a3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+  "form_name": "Adult Outpatient Form",
+  "location_uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "location_name": "Kenyatta National Hospital",
+  "provider_uuid": "b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "provider_name": "Dr. Ochieng"
+}
+```
+
+The stored `text` is just `"Systolic blood pressure: 120 mmHg"`, but the embedding above is computed from `"Vital signs — Systolic blood pressure: 120 mmHg SBP"` per the [Synonyms and group obs convention](#synonyms-and-group-obs-convention) below. No separate parent group-aggregate document is emitted; consumers cluster atomic hits by `obs_group_uuid` when group-level rendering or multivariate reasoning is needed.
 
 **Condition** (openmrs_condition index):
 ```json
@@ -661,6 +705,16 @@ Example documents:
 }
 ```
 
+### Synonyms and group obs convention
+
+Two cross-cutting conventions apply to documents that carry a primary clinical concept (obs, condition, diagnosis, drug_order, allergy, program, medication_dispense, test_order). Both decouple **stored shape** (what backends persist and consumers cite) from **embedding-input shape** (what the embedder sees), using the three-component model from this decision. Other example documents above omit `synonyms` for brevity, but their serializers populate it on the same rules.
+
+**Synonyms.** Concept synonyms in the deployment's configured locale (per [Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings)) are kept on a `synonyms` field as a list of strings — capped per document for index size, deterministically sorted. The stored `text` field contains the preferred name only, keeping LLM citations clean. Synonyms enrich retrieval through two paths: (1) the indexer concatenates them onto the embedding input so vectors are synonym-aware (a "HTN" query hits a doc whose preferred name is "Hypertension" without forcing every consumer to either strip parenthetical noise from text or implement query-side synonym expansion); (2) backends BM25-index `synonyms` so exact-keyword matches on alternative terms are also handled.
+
+**Group obs.** Obs that are members of a group are indexed as atomic documents with `obs_group_uuid` and `obs_group_concept_name` set on the metadata. No parent (group-aggregate) document is emitted. The group concept name is concatenated onto the embedding input — but not the stored `text` — so a group-level semantic query like "vitals" matches member vectors without the prefix appearing in citations or duplicating across siblings. Multivariate reasoning happens at response time: consumers (LLM-driven or otherwise) cluster atomic hits by `obs_group_uuid` to assemble group-level narratives or reason over sibling values together. This preserves member-level structured filtering (`value_numeric` etc.) and avoids the storage duplication, cascade-on-edit, and citation-ambiguity costs of materializing parent docs.
+
+**Embedding input construction.** For a coded record, the embedding input is `[obs_group_concept_name + " — "] + text + [" " + synonyms.join(" ")]` (bracketed parts conditional on presence). The stored `text` is unaffected. An indexer that has access to the structured fields can reconstruct the embedding input deterministically; round-tripping `text` through the embedder is therefore *not* the contract.
+
 ### Field descriptions
 
 | Field | Purpose |
@@ -669,11 +723,12 @@ Example documents:
 | `resource_type` | Distinguish record types (e.g., "obs", "condition", "diagnosis", "drug_order", "test_order", "allergy", "program", "medication_dispense", "patient", "encounter", "visit"); route documents to the correct per-type index |
 | `resource_uuid` | Link back to the source record in OpenMRS (e.g., the obs UUID, condition UUID, order UUID, allergy UUID, patient UUID, encounter UUID, etc., depending on the resource_type) |
 | `date` | Date range filtering and sorting (e.g., "labs from last 6 months", "most recent vital signs") |
-| `text` | BM25 keyword search matches against it; the embedding model was run on it; the LLM reads it when generating answers |
+| `text` | BM25 keyword search matches against it; the LLM reads it when generating answers. Embedding input is derived from `text` enriched with `obs_group_concept_name` and `synonyms` per the [Synonyms and group obs convention](#synonyms-and-group-obs-convention); stored `text` itself stays focused for clean citations and is not what the embedder sees |
 | `embedding` | Dense vector for semantic similarity search (e.g., "blood sugar control" matching an HbA1c result) |
 | `concept_uuid` | Exact filtering by concept without relying on text matching (e.g., "all HbA1c results for this patient") |
 | `concept_name` | Human-readable concept name in the deployment's configured locale (see [Decision 8](#decision-8-locale-specific-serialization-with-multilingual-embeddings)); supports keyword search and display |
 | `concept_class` | Filter by category of clinical data (e.g., "Test", "Drug", "Diagnosis") |
+| `synonyms` | (records with a primary concept) Locale-aware concept synonyms as a list of strings, capped per document and deterministically sorted. BM25-indexed by backends so exact-keyword matches on alternative terms work; concatenated onto embedding input at index time for synonym-aware vectors. Excluded from `text` to keep LLM citations clean. See [Synonyms and group obs convention](#synonyms-and-group-obs-convention) |
 | `value_numeric` | Numeric range queries (e.g., "HbA1c values above 7", "systolic BP over 140") |
 | `value_coded_uuid` | Exact filtering by coded answer concept (e.g., "all HIV-positive results", "all Yes answers to a symptom question") — null for numeric or text obs |
 | `value_coded_name` | Human-readable coded answer name for display and keyword search — null for numeric or text obs |
@@ -683,6 +738,7 @@ Example documents:
 | `value_complex_uri` | (obs) Pointer back to core's complex-obs storage for observations whose value is bound to a `complexHandler` (images, PDFs, audio/video, long free text). Null for non-complex obs. The binary content itself is not stored in the read store; consumers fetch it from core. See the *Complex obs handling* open question for per-handler treatment |
 | `value_complex_handler` | (obs) Name of the OpenMRS `complexHandler` that produced the value (e.g., `ImageHandler`, `BinaryDataHandler`, `LongFreeTextHandler`, `MediaHandler`). Routes consumer-side rendering and signals which handler-specific extraction (if any) was applied at index time |
 | `obs_group_uuid` | (obs) UUID of the parent obs when this obs is part of a group (e.g., a BP panel with systolic and diastolic children); null for ungrouped obs |
+| `obs_group_concept_name` | (obs) Denormalized name of the group concept when this obs is part of a group; null for ungrouped obs. Concatenated onto embedding input (but not stored `text`) so group-level semantic queries match member vectors. See [Synonyms and group obs convention](#synonyms-and-group-obs-convention) |
 | `status` | (obs / medication_dispense) Lifecycle state — for obs: FINAL / PRELIMINARY / AMENDED; for dispense: status of the dispense |
 | `comment` | Free-text clinician note attached to the record (obs, allergy); supports BM25 search |
 | `units` | Filter or group by unit of measurement |
