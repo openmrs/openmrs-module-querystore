@@ -1,0 +1,94 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License,
+ * v. 2.0. If a copy of the MPL was not distributed with this file, You can
+ * obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+ * the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+ *
+ * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+ * graphic logo is a trademark of OpenMRS Inc.
+ */
+package org.openmrs.module.querystore.bridge;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+/**
+ * Shared executor for the AOP migration bridge (ADR Decision 12 "Migration bridge"). Per-type
+ * advice classes hand projection tasks here so indexing runs off the clinical request thread, after
+ * the originating transaction has committed. Pool size is two threads — enough headroom to overlap
+ * one embedding with the next document's submission, but no wider because the default ONNX
+ * embedder's {@code embed} is {@code synchronized} (a larger pool would just queue against the
+ * embedder's monitor).
+ *
+ * <p>Wired as a Spring bean with {@code init-method="start"} and {@code destroy-method="stop"} so
+ * the executor's lifecycle tracks the module's. Failures inside submitted tasks are caught and
+ * logged at the dispatcher, never here — this class is a plain executor wrapper.
+ */
+public class BridgeExecutor {
+
+	private static final Log log = LogFactory.getLog(BridgeExecutor.class);
+
+	/** Drain timeout on shutdown. Indexing tasks are short (one embed + one upsert, < 1s under the
+	 *  default ONNX embedder); 30s tolerates an in-flight task without stalling module unload more
+	 *  than a redeploy can afford. Tasks dropped on timeout are eventually re-projected by the
+	 *  bootstrap. */
+	private static final long SHUTDOWN_TIMEOUT_SECONDS = 30L;
+
+	private final int poolSize;
+
+	private ExecutorService executor;
+
+	public BridgeExecutor() {
+		this(2);
+	}
+
+	BridgeExecutor(int poolSize) {
+		this.poolSize = poolSize;
+	}
+
+	public void start() {
+		ThreadFactory factory = new ThreadFactory() {
+			private final AtomicInteger n = new AtomicInteger(1);
+
+			@Override
+			public Thread newThread(Runnable r) {
+				Thread t = new Thread(r, "querystore-bridge-" + n.getAndIncrement());
+				t.setDaemon(true);
+				return t;
+			}
+		};
+		executor = Executors.newFixedThreadPool(poolSize, factory);
+	}
+
+	public void stop() {
+		if (executor == null) {
+			return;
+		}
+		executor.shutdown();
+		try {
+			if (!executor.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+				log.warn("BridgeExecutor did not drain within " + SHUTDOWN_TIMEOUT_SECONDS
+				        + "s; outstanding tasks are dropped");
+				executor.shutdownNow();
+			}
+		}
+		catch (InterruptedException ie) {
+			Thread.currentThread().interrupt();
+			executor.shutdownNow();
+		}
+	}
+
+	public void submit(Runnable task) {
+		if (executor.isShutdown()) {
+			log.warn("BridgeExecutor is shut down; dropping projection task");
+			return;
+		}
+		executor.submit(task);
+	}
+}

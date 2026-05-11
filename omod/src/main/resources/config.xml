@@ -15,6 +15,17 @@
 
     <require_version>2.8.0</require_version>
 
+    <!--
+        Migration-bridge advice per ADR Decision 12. Each entry projects writes through the same
+        serialize → embed → index pipeline an events-first handler will drive once core publishes
+        the corresponding events. Bridge entries are time-bound: delete the entry (and the advice
+        class) when the events subscriber for that type ships and has been verified at parity.
+    -->
+    <advice>
+        <point>org.openmrs.api.ObsService</point>
+        <class>org.openmrs.module.querystore.bridge.ObsIndexingAdvice</class>
+    </advice>
+
     <updateURL>https://modules.openmrs.org/modules/download/${project.parent.artifactId}/update.rdf</updateURL>
 
     <globalProperty>

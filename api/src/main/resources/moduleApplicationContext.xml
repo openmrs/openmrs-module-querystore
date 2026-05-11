@@ -141,6 +141,21 @@
         <constructor-arg ref="dbSessionFactory"/>
     </bean>
 
+    <bean id="querystore.bridge.executor"
+          class="org.openmrs.module.querystore.bridge.BridgeExecutor"
+          init-method="start" destroy-method="stop"/>
+
+    <bean id="querystore.bridge.dispatcher"
+          class="org.openmrs.module.querystore.bridge.AfterCommitDispatcher">
+        <constructor-arg ref="querystore.bridge.executor"/>
+    </bean>
+
+    <bean id="querystore.bridge.indexer"
+          class="org.openmrs.module.querystore.bridge.BridgeIndexer">
+        <constructor-arg ref="queryStoreService"/>
+        <constructor-arg ref="querystore.embedding.dispatcher"/>
+    </bean>
+
     <bean id="bootstrapService"
           class="org.openmrs.module.querystore.bootstrap.BootstrapServiceImpl">
         <property name="progressDao" ref="querystore.bootstrap.progressDao"/>
