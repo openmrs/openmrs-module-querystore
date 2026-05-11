@@ -1,10 +1,10 @@
 ---
-name: converge
-description: Run iterative /review and /simplify passes on the current slice in two phases until both converge. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "converge".
+name: harden
+description: Run iterative /review and /simplify passes on the current slice in two phases until both converge. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
 version: 0.1.0
 ---
 
-# Converge
+# Harden
 
 Iteratively review and polish the current slice in two phases. Phase order matters: review catches structural issues (correctness, missing tests, design concerns); simplify catches polish (duplication, naming, micro-efficiency). Doing simplify on structurally-incomplete code wastes work — review-first surfaces the real fixes before polish happens.
 
@@ -60,6 +60,6 @@ After stopping, summarize:
 
 ## When NOT to use this skill
 
-- For a brand-new slice that hasn't been reviewed once. Run /review first; promote to /converge only if the slice would benefit from iterative polishing (typical for code that's structurally non-trivial — serializers, parsers, multi-step pipelines).
+- For a brand-new slice that hasn't been reviewed once. Run /review first; promote to /harden only if the slice would benefit from iterative polishing (typical for code that's structurally non-trivial — serializers, parsers, multi-step pipelines).
 - When the user wants a single-pass sanity check. Use /review or /simplify for that.
 - For changes the user flagged as exploratory or about-to-be-reverted.
