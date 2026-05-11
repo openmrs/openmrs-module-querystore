@@ -31,16 +31,16 @@ public final class DateFormatUtil {
 	private DateFormatUtil() {
 	}
 
+	// Returns null on null input — caller decides whether to omit the field, set a placeholder, or
+	// short-circuit text composition. Centralising the null-check here lets call sites drop the
+	// redundant `date != null ? formatDate(date) : null` guard pattern.
 	public static String formatDate(Date date) {
 		if (date == null) {
-			return "unknown";
+			return null;
 		}
 		return date.toInstant().atZone(UTC).toLocalDate().format(DATE_FORMAT);
 	}
 
-	// Returns null on null input — caller decides whether to omit the field. Diverges from
-	// formatDate's "unknown" fallback because timestamps are projected as optional metadata, not
-	// inlined into clinical text where omission would read as missing data.
 	public static String formatDateTime(Date date) {
 		if (date == null) {
 			return null;

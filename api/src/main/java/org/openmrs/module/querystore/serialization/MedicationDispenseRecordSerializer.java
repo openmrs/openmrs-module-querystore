@@ -107,8 +107,7 @@ public class MedicationDispenseRecordSerializer extends AbstractRecordSerializer
 		String routeName = ConceptNameUtil.getPreferredNameOrNull(route);
 		String frequencyName = frequency != null ? ConceptNameUtil.getPreferredNameOrNull(frequency.getConcept()) : null;
 		String quantityUnitsName = ConceptNameUtil.getPreferredNameOrNull(quantityUnits);
-		String dateHandedOverText = dispense.getDateHandedOver() != null
-		        ? DateFormatUtil.formatDate(dispense.getDateHandedOver()) : null;
+		String dateHandedOverText = DateFormatUtil.formatDate(dispense.getDateHandedOver());
 		Double dose = dispense.getDose();
 		Double quantity = dispense.getQuantity();
 		Boolean asNeeded = dispense.getAsNeeded();

@@ -95,10 +95,8 @@ public class PatientProgramRecordSerializer extends AbstractRecordSerializer<Pat
 			return;
 		}
 
-		String enrolledText = patientProgram.getDateEnrolled() != null
-		        ? DateFormatUtil.formatDate(patientProgram.getDateEnrolled()) : null;
-		String completedText = patientProgram.getDateCompleted() != null
-		        ? DateFormatUtil.formatDate(patientProgram.getDateCompleted()) : null;
+		String enrolledText = DateFormatUtil.formatDate(patientProgram.getDateEnrolled());
+		String completedText = DateFormatUtil.formatDate(patientProgram.getDateCompleted());
 		boolean active = patientProgram.getActive();
 		Concept outcomeConcept = patientProgram.getOutcome();
 		String outcomeName = ConceptNameUtil.getPreferredNameOrNull(outcomeConcept);

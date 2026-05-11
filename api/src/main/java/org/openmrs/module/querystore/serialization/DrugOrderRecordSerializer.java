@@ -81,10 +81,8 @@ public class DrugOrderRecordSerializer extends AbstractOrderRecordSerializer<Dru
 		String durationUnitsName = ConceptNameUtil.getPreferredNameOrNull(order.getDurationUnits());
 		String quantityUnitsName = ConceptNameUtil.getPreferredNameOrNull(order.getQuantityUnits());
 
-		String dateStoppedText = order.getDateStopped() != null
-		        ? DateFormatUtil.formatDate(order.getDateStopped()) : null;
-		String autoExpireText = order.getAutoExpireDate() != null
-		        ? DateFormatUtil.formatDate(order.getAutoExpireDate()) : null;
+		String dateStoppedText = DateFormatUtil.formatDate(order.getDateStopped());
+		String autoExpireText = DateFormatUtil.formatDate(order.getAutoExpireDate());
 		String dosingInstructions = trimToNull(order.getDosingInstructions());
 		String asNeededCondition = trimToNull(order.getAsNeededCondition());
 

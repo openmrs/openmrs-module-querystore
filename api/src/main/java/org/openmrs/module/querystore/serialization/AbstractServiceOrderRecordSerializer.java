@@ -15,8 +15,6 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_LATERALITY
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SPECIMEN_SOURCE_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SPECIMEN_SOURCE_UUID;
 
-import java.util.Date;
-
 import org.openmrs.Concept;
 import org.openmrs.Order;
 import org.openmrs.ServiceOrder;
@@ -59,10 +57,8 @@ public abstract class AbstractServiceOrderRecordSerializer<T extends ServiceOrde
 		ServiceOrder.Laterality laterality = order.getLaterality();
 		Order.Action action = order.getAction();
 		Order.Urgency urgency = order.getUrgency();
-		Date dateStopped = order.getDateStopped();
-		String dateStoppedText = dateStopped != null ? DateFormatUtil.formatDate(dateStopped) : null;
-		Date autoExpireDate = order.getAutoExpireDate();
-		String autoExpireText = autoExpireDate != null ? DateFormatUtil.formatDate(autoExpireDate) : null;
+		String dateStoppedText = DateFormatUtil.formatDate(order.getDateStopped());
+		String autoExpireText = DateFormatUtil.formatDate(order.getAutoExpireDate());
 
 		doc.setText(buildText(preferredName, laterality, action, urgency, clinicalHistory,
 		        instructions, dateStoppedText));

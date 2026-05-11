@@ -75,10 +75,8 @@ public class ConditionRecordSerializer extends AbstractRecordSerializer<Conditio
 			return;
 		}
 
-		String onsetText = condition.getOnsetDate() != null
-		        ? DateFormatUtil.formatDate(condition.getOnsetDate()) : null;
-		String endText = condition.getEndDate() != null
-		        ? DateFormatUtil.formatDate(condition.getEndDate()) : null;
+		String onsetText = DateFormatUtil.formatDate(condition.getOnsetDate());
+		String endText = DateFormatUtil.formatDate(condition.getEndDate());
 
 		doc.setText(buildText(name, condition, onsetText, endText));
 
