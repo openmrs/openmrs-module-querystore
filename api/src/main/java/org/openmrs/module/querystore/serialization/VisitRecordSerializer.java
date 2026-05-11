@@ -158,11 +158,7 @@ public class VisitRecordSerializer extends AbstractRecordSerializer<Visit> {
 		List<VisitAttribute> sorted = new ArrayList<>(active);
 		// Sort by visitAttributeId (insertion order) so the array is stable across re-projections —
 		// getActiveAttributes() returns a Collection backed by a Set with unspecified iteration order.
-		sorted.sort(Comparator
-		        .comparing(VisitAttribute::getVisitAttributeId,
-		                Comparator.nullsLast(Comparator.naturalOrder()))
-		        .thenComparing(va -> va.getUuid(),
-		                Comparator.nullsLast(Comparator.naturalOrder())));
+		sorted.sort(byIdThenUuid(VisitAttribute::getVisitAttributeId, VisitAttribute::getUuid));
 		List<Map<String, Object>> out = new ArrayList<>(sorted.size());
 		for (VisitAttribute attr : sorted) {
 			VisitAttributeType attributeType = attr.getAttributeType();

@@ -24,7 +24,6 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VISIT_UUID
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -136,11 +135,8 @@ public class EncounterRecordSerializer extends AbstractRecordSerializer<Encounte
 		// Sort by encounterProviderId (insertion order) so the text-baked primary provider and the
 		// providers array are stable across re-projections — getActiveEncounterProviders() returns a
 		// Set whose iteration order is unspecified.
-		sorted.sort(Comparator
-		        .comparing(EncounterProvider::getEncounterProviderId,
-		                Comparator.nullsLast(Comparator.naturalOrder()))
-		        .thenComparing(ep -> ep.getProvider() != null ? ep.getProvider().getUuid() : null,
-		                Comparator.nullsLast(Comparator.naturalOrder())));
+		sorted.sort(byIdThenUuid(EncounterProvider::getEncounterProviderId,
+		        ep -> ep.getProvider() != null ? ep.getProvider().getUuid() : null));
 		List<Map<String, Object>> out = new ArrayList<>(sorted.size());
 		for (EncounterProvider ep : sorted) {
 			Provider provider = ep.getProvider();

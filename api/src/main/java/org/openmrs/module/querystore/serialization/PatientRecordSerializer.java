@@ -261,14 +261,11 @@ public class PatientRecordSerializer extends AbstractRecordSerializer<Patient> {
 		}
 		List<PatientIdentifier> sorted = new ArrayList<>(active);
 		// Preferred identifiers sort first so the citation-baked text clause leads with the
-		// preferred ID (typically MRN). Mirrors the address sort. patientIdentifierId then UUID
-		// fall back to deterministically order multiple non-preferred entries.
+		// preferred ID (typically MRN). Mirrors the address sort.
 		sorted.sort(Comparator
 		        .comparing((PatientIdentifier i) -> !Boolean.TRUE.equals(i.getPreferred()))
-		        .thenComparing(PatientIdentifier::getPatientIdentifierId,
-		                Comparator.nullsLast(Comparator.naturalOrder()))
-		        .thenComparing(PatientIdentifier::getUuid,
-		                Comparator.nullsLast(Comparator.naturalOrder())));
+		        .thenComparing(byIdThenUuid(PatientIdentifier::getPatientIdentifierId,
+		                PatientIdentifier::getUuid)));
 		List<Map<String, Object>> out = new ArrayList<>(sorted.size());
 		for (PatientIdentifier id : sorted) {
 			String value = trimToNull(id.getIdentifier());
@@ -308,14 +305,10 @@ public class PatientRecordSerializer extends AbstractRecordSerializer<Patient> {
 			return Collections.emptyList();
 		}
 		// Preferred addresses sort first so the formatAddressClause primary pick lands on the
-		// preferred one when present. PersonAddress.getPersonAddressId() falls back next for
-		// stable ordering of multiple non-preferred entries.
+		// preferred one when present.
 		nonVoided.sort(Comparator
 		        .comparing((PersonAddress a) -> !Boolean.TRUE.equals(a.getPreferred()))
-		        .thenComparing(PersonAddress::getPersonAddressId,
-		                Comparator.nullsLast(Comparator.naturalOrder()))
-		        .thenComparing(PersonAddress::getUuid,
-		                Comparator.nullsLast(Comparator.naturalOrder())));
+		        .thenComparing(byIdThenUuid(PersonAddress::getPersonAddressId, PersonAddress::getUuid)));
 		List<Map<String, Object>> out = new ArrayList<>(nonVoided.size());
 		for (PersonAddress a : nonVoided) {
 			Map<String, Object> entry = new LinkedHashMap<>();
@@ -341,11 +334,7 @@ public class PatientRecordSerializer extends AbstractRecordSerializer<Patient> {
 			return Collections.emptyList();
 		}
 		List<PersonAttribute> sorted = new ArrayList<>(active);
-		sorted.sort(Comparator
-		        .comparing(PersonAttribute::getPersonAttributeId,
-		                Comparator.nullsLast(Comparator.naturalOrder()))
-		        .thenComparing(PersonAttribute::getUuid,
-		                Comparator.nullsLast(Comparator.naturalOrder())));
+		sorted.sort(byIdThenUuid(PersonAttribute::getPersonAttributeId, PersonAttribute::getUuid));
 		List<Map<String, Object>> out = new ArrayList<>(sorted.size());
 		for (PersonAttribute attr : sorted) {
 			PersonAttributeType type = attr.getAttributeType();

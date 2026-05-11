@@ -25,7 +25,9 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VISIT_UUID;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.function.Function;
 
 import org.openmrs.Concept;
 import org.openmrs.ConceptClass;
@@ -159,6 +161,20 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 		}
 		String t = s.trim();
 		return t.isEmpty() ? null : t;
+	}
+
+	/**
+	 * Stable-order Comparator for nested-object metadata arrays per the Decision 6
+	 * "Nested-object metadata arrays" convention. Sorts by the entity's primary-key id with a UUID
+	 * tiebreaker; both keys use {@code nullsLast} so transient or test-constructed records (no id
+	 * yet) and partially-built entities (no UUID) still produce a deterministic order. Callers that
+	 * need a leading preferred-first key chain this as the secondary sort via
+	 * {@code .thenComparing(byIdThenUuid(...))}.
+	 */
+	protected static <T> Comparator<T> byIdThenUuid(Function<T, Integer> idGetter,
+	                                                Function<T, String> uuidGetter) {
+		return Comparator.comparing(idGetter, Comparator.nullsLast(Comparator.naturalOrder()))
+		        .thenComparing(uuidGetter, Comparator.nullsLast(Comparator.naturalOrder()));
 	}
 
 	private static Provider pickActiveProvider(Encounter encounter) {
