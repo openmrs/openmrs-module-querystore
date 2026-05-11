@@ -178,6 +178,8 @@ public final class QueryStoreConstants {
 	public static final String INDEX_ENCOUNTER = INDEX_PREFIX + "encounter";
 	public static final String INDEX_VISIT = INDEX_PREFIX + "visit";
 
+	public static final String GP_BOOTSTRAP_AUTOSTART = "querystore.bootstrap.autostart";
+
 	public static final String GP_ELASTICSEARCH_HOST = "querystore.elasticsearch.host";
 	public static final String GP_ELASTICSEARCH_PORT = "querystore.elasticsearch.port";
 	public static final String GP_ELASTICSEARCH_SCHEME = "querystore.elasticsearch.scheme";

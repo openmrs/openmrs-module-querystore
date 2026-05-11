@@ -55,4 +55,13 @@
             place to redesign that behavior.</description>
     </globalProperty>
 
+    <globalProperty>
+        <property>querystore.bootstrap.autostart</property>
+        <defaultValue>false</defaultValue>
+        <description>Set to true to run (or resume) a read-store bootstrap when this module starts.
+            Default false. After the initial bootstrap completes, subsequent restarts with this flag
+            true perform an incremental top-up from each type's persisted cursor. Bootstrap can also
+            be triggered programmatically via BootstrapService regardless of this flag.</description>
+    </globalProperty>
+
 </module>
