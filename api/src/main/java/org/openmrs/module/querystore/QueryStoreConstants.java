@@ -129,6 +129,9 @@ public final class QueryStoreConstants {
 	public static final String FIELD_LOCATION_NAME = "location_name";
 	public static final String FIELD_PROVIDER_UUID = "provider_uuid";
 	public static final String FIELD_PROVIDER_NAME = "provider_name";
+	public static final String FIELD_PROVIDERS = "providers";
+	public static final String FIELD_ROLE_UUID = "role_uuid";
+	public static final String FIELD_ROLE_NAME = "role_name";
 
 	public static final String INDEX_OBS = INDEX_PREFIX + "obs";
 	public static final String INDEX_CONDITION = INDEX_PREFIX + "condition";
