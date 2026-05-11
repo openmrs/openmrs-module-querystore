@@ -14,7 +14,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -142,6 +144,92 @@ public class MysqlBackendStoreIntegrationTest {
 		assertEquals(near.getResourceUuid(), result.getHits().get(0).getDocument().getResourceUuid());
 		assertEquals(1, result.getHits().get(0).getRank());
 		assertEquals(2, result.getHits().get(1).getRank());
+	}
+
+	@Test
+	public void upsertWithOlderLastModifiedIsSkipped() {
+		String uuid = UUID.randomUUID().toString();
+		Instant t1 = Instant.parse("2025-03-15T09:00:00Z");
+		Instant t2 = t1.plus(1, ChronoUnit.HOURS);
+
+		QueryDocument fresh = doc("obs", "patient-A", "Glucose: 8.1 mmol/L (10:00)", null);
+		fresh.setResourceUuid(uuid);
+		fresh.setLastModified(t2);
+		assertTrue(backend.upsert(fresh).isSucceeded());
+
+		QueryDocument stale = doc("obs", "patient-A", "Glucose: 5.4 mmol/L (09:00)", null);
+		stale.setResourceUuid(uuid);
+		stale.setLastModified(t1);
+		assertTrue("stale upsert still reports success (write applied or skipped — both succeed)",
+		        backend.upsert(stale).isSucceeded());
+
+		SearchResult result = backend.bm25(SearchRequest.builder().resourceType("obs").queryText("Glucose")
+		        .filter(Filter.patientScope("patient-A")).limit(10).build());
+		assertEquals(1, result.getHits().size());
+		QueryDocument stored = result.getHits().get(0).getDocument();
+		assertEquals("fresh version must survive a stale concurrent write",
+		        "Glucose: 8.1 mmol/L (10:00)", stored.getText());
+		assertEquals(t2, stored.getLastModified());
+	}
+
+	@Test
+	public void upsertWithNewerLastModifiedReplacesOlder() {
+		String uuid = UUID.randomUUID().toString();
+		Instant t1 = Instant.parse("2025-03-15T09:00:00Z");
+		Instant t2 = t1.plus(1, ChronoUnit.HOURS);
+
+		QueryDocument first = doc("obs", "patient-A", "Glucose: 5.4 mmol/L (09:00)", null);
+		first.setResourceUuid(uuid);
+		first.setLastModified(t1);
+		assertTrue(backend.upsert(first).isSucceeded());
+
+		QueryDocument second = doc("obs", "patient-A", "Glucose: 8.1 mmol/L (10:00)", null);
+		second.setResourceUuid(uuid);
+		second.setLastModified(t2);
+		assertTrue(backend.upsert(second).isSucceeded());
+
+		SearchResult result = backend.bm25(SearchRequest.builder().resourceType("obs").queryText("Glucose")
+		        .filter(Filter.patientScope("patient-A")).limit(10).build());
+		assertEquals(1, result.getHits().size());
+		assertEquals("Glucose: 8.1 mmol/L (10:00)", result.getHits().get(0).getDocument().getText());
+	}
+
+	@Test
+	public void upsertWithSameLastModifiedAppliesIdempotently() {
+		// Duplicate-event delivery: the same save event arrives twice, handlers re-fetch the
+		// entity, both upserts carry the entity's current dateChanged as last_modified. The >=
+		// guard (not >) must let the second write apply so the operation is naturally idempotent.
+		String uuid = UUID.randomUUID().toString();
+		Instant t = Instant.parse("2025-03-15T09:00:00Z");
+
+		QueryDocument first = doc("obs", "patient-A", "Glucose: 5.4 mmol/L", null);
+		first.setResourceUuid(uuid);
+		first.setLastModified(t);
+		assertTrue(backend.upsert(first).isSucceeded());
+		assertTrue(backend.upsert(first).isSucceeded());
+
+		SearchResult result = backend.bm25(SearchRequest.builder().resourceType("obs").queryText("Glucose")
+		        .filter(Filter.patientScope("patient-A")).limit(10).build());
+		assertEquals(1, result.getHits().size());
+		assertEquals(t, result.getHits().get(0).getDocument().getLastModified());
+	}
+
+	@Test
+	public void upsertWithoutLastModifiedFallsBackToLastWriteWins() {
+		String uuid = UUID.randomUUID().toString();
+
+		QueryDocument first = doc("obs", "patient-A", "Pulse: 72 bpm", null);
+		first.setResourceUuid(uuid);
+		assertTrue(backend.upsert(first).isSucceeded());
+
+		QueryDocument second = doc("obs", "patient-A", "Pulse: 88 bpm", null);
+		second.setResourceUuid(uuid);
+		assertTrue(backend.upsert(second).isSucceeded());
+
+		SearchResult result = backend.bm25(SearchRequest.builder().resourceType("obs").queryText("Pulse")
+		        .filter(Filter.patientScope("patient-A")).limit(10).build());
+		assertEquals(1, result.getHits().size());
+		assertEquals("Pulse: 88 bpm", result.getHits().get(0).getDocument().getText());
 	}
 
 	@Test

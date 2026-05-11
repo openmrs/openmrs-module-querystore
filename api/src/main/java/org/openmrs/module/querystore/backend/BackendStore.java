@@ -46,10 +46,22 @@ public interface BackendStore {
 
 	// ---------- writes ----------
 
+	/**
+	 * Writes the document, dropping the call when {@link QueryDocument#getLastModified()} is older
+	 * than the stored version (conditional-upsert-by-version contract; see the third SPI invariant
+	 * in ADR Decision 3). Null on either side falls back to last-write-wins. The successful result
+	 * does not distinguish "applied" from "dropped as stale" — both are no-error outcomes consistent
+	 * with idempotency.
+	 */
 	WriteResult upsert(QueryDocument doc);
 
 	WriteResult delete(String resourceType, String resourceUuid);
 
+	/**
+	 * Bulk variant of {@link #upsert(QueryDocument)} carrying the same conditional-upsert-by-version
+	 * contract per document. Documents whose {@code last_modified} is older than the stored version
+	 * are dropped silently; per-document non-version failures surface via {@link BulkWriteResult}.
+	 */
 	BulkWriteResult bulkUpsert(List<QueryDocument> docs);
 
 	BulkWriteResult bulkDelete(String resourceType, List<String> resourceUuids);

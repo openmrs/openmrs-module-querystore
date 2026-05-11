@@ -24,11 +24,14 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PROVIDER_U
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VISIT_UUID;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.function.Function;
 
+import org.openmrs.BaseOpenmrsData;
 import org.openmrs.Concept;
 import org.openmrs.ConceptClass;
 import org.openmrs.Encounter;
@@ -55,6 +58,7 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 		doc.setPatientUuid(getPatientUuid(record));
 		doc.setResourceUuid(getResourceUuid(record));
 		doc.setDate(getDate(record));
+		doc.setLastModified(getLastModified(record));
 		populate(record, doc);
 		String text = doc.getText();
 		if (text == null || text.isEmpty()) {
@@ -68,6 +72,18 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 	protected abstract String getResourceUuid(T record);
 
 	protected abstract LocalDate getDate(T record);
+
+	/**
+	 * Returns the source-entity timestamp the backend uses as a write-version: any concurrent write
+	 * carrying an older value is dropped so a slow bootstrap projection can't overwrite a fresher
+	 * AOP / event projection (see the QueryDocument javadoc). The default reads
+	 * {@code dateChanged ?? dateCreated} from any {@link BaseOpenmrsData} record and falls back to
+	 * {@code null} (last-write-wins) for sources without audit timestamps; subclasses override only
+	 * when their version source lives elsewhere.
+	 */
+	protected Instant getLastModified(T record) {
+		return record instanceof BaseOpenmrsData ? lastModifiedOf((BaseOpenmrsData) record) : null;
+	}
 
 	/**
 	 * Walks the record exactly once to populate {@link QueryDocument#setText(String) text} and
@@ -148,6 +164,20 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 		if (resolvedName != null) {
 			doc.putMetadata(nameKey, resolvedName);
 		}
+	}
+
+	/**
+	 * Standard {@code dateChanged ?? dateCreated} formula for the version timestamp on a record
+	 * sourced from a {@link BaseOpenmrsData} entity. Returns {@code null} when both audit dates are
+	 * unset (a transient or test-constructed entity), which leaves the document without version
+	 * protection on the backend write path.
+	 */
+	protected static Instant lastModifiedOf(BaseOpenmrsData record) {
+		if (record == null) {
+			return null;
+		}
+		Date d = record.getDateChanged() != null ? record.getDateChanged() : record.getDateCreated();
+		return d != null ? d.toInstant() : null;
 	}
 
 	/**

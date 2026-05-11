@@ -15,8 +15,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -24,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.sql.DataSource;
 
@@ -61,7 +66,27 @@ public class MysqlBackendStore implements BackendStore {
 
 	private static final int BATCH_SIZE = 500;
 
-	private static final String UPSERT_COLUMNS = "(resource_uuid, patient_uuid, record_date, text, embedding, metadata_json)";
+	private static final String UPSERT_COLUMNS = "(resource_uuid, patient_uuid, record_date, text, embedding, metadata_json, last_modified)";
+
+	private static final String[] MUTABLE_COLUMNS = { "patient_uuid", "record_date", "text", "embedding",
+	        "metadata_json", "last_modified" };
+
+	// Conditional-upsert guard so a slow projection (bootstrap scan, out-of-order event) cannot
+	// overwrite a fresher document. Permits writes when either side lacks a version (last-write-wins
+	// fallback) and uses >= so the same version reapplied is idempotent.
+	private static final String FRESHNESS_GUARD = "VALUES(last_modified) IS NULL OR last_modified IS NULL"
+	        + " OR VALUES(last_modified) >= last_modified";
+
+	// last_modified is the only column compared cross-JVM; bind / read it through an explicit UTC
+	// calendar so the DATETIME(3) round-trip preserves the Instant regardless of JVM and MySQL
+	// session time zones. Without this, two nodes in different zones could write versions that
+	// compare against shifted stored values.
+	private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
+
+	// Per-table upsert SQL cache. The SQL is identical for every write to a given resource type;
+	// caching avoids re-running the FRESHNESS_GUARD loop and StringBuilder allocations on the hot
+	// write path (steady-state events + bootstrap fan-out at 100s/sec).
+	private final Map<String, String> upsertSqlCache = new ConcurrentHashMap<>();
 
 	private static final Comparator<Hit> SCORE_DESC = (a, b) -> Double.compare(b.getRawScore(), a.getRawScore());
 
@@ -89,7 +114,7 @@ public class MysqlBackendStore implements BackendStore {
 		validate(doc);
 		schemaManager.ensureTable(doc.getResourceType());
 		String table = MysqlSchemaManager.tableName(doc.getResourceType());
-		try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(upsertSql(table))) {
+		try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(cachedUpsertSql(table))) {
 			bindUpsertParams(ps, doc);
 			ps.executeUpdate();
 			return WriteResult.success();
@@ -245,7 +270,7 @@ public class MysqlBackendStore implements BackendStore {
 		schemaManager.ensureTable(resourceType);
 		String table = MysqlSchemaManager.tableName(resourceType);
 		int succeeded = 0;
-		try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(upsertSql(table))) {
+		try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(cachedUpsertSql(table))) {
 			for (List<QueryDocument> chunk : ListUtils.partition(docs, BATCH_SIZE)) {
 				for (QueryDocument doc : chunk) {
 					bindUpsertParams(ps, doc);
@@ -274,7 +299,7 @@ public class MysqlBackendStore implements BackendStore {
 		StringBuilder sql = new StringBuilder();
 		// Embedding column omitted: BM25 callers do not consume the vector and decoding it per row
 		// is wasted work on every hybrid-search hit.
-		sql.append("SELECT resource_uuid, patient_uuid, record_date, text, metadata_json, ")
+		sql.append("SELECT resource_uuid, patient_uuid, record_date, text, metadata_json, last_modified, ")
 		        .append("MATCH(text) AGAINST (? IN NATURAL LANGUAGE MODE) AS score FROM ").append(table)
 		        .append(" WHERE MATCH(text) AGAINST (? IN NATURAL LANGUAGE MODE)");
 		appendFilterClause(sql, filterSql);
@@ -306,7 +331,7 @@ public class MysqlBackendStore implements BackendStore {
 		String filterSql = translator.getSql();
 
 		StringBuilder sql = new StringBuilder();
-		sql.append("SELECT resource_uuid, patient_uuid, record_date, text, embedding, metadata_json FROM ").append(table)
+		sql.append("SELECT resource_uuid, patient_uuid, record_date, text, embedding, metadata_json, last_modified FROM ").append(table)
 		        .append(" WHERE embedding IS NOT NULL");
 		appendFilterClause(sql, filterSql);
 
@@ -389,6 +414,10 @@ public class MysqlBackendStore implements BackendStore {
 		if (includeEmbedding) {
 			doc.setEmbedding(MysqlVectorCodec.decode(rs.getBytes("embedding")));
 		}
+		Timestamp ts = rs.getTimestamp("last_modified", Calendar.getInstance(UTC));
+		if (ts != null) {
+			doc.setLastModified(ts.toInstant());
+		}
 		Map<String, Object> meta = MysqlMetadataCodec.decode(rs.getString("metadata_json"));
 		for (Map.Entry<String, Object> entry : meta.entrySet()) {
 			doc.putMetadata(entry.getKey(), entry.getValue());
@@ -396,10 +425,23 @@ public class MysqlBackendStore implements BackendStore {
 		return doc;
 	}
 
-	private static String upsertSql(String table) {
-		return "INSERT INTO " + table + " " + UPSERT_COLUMNS + " VALUES (?, ?, ?, ?, ?, ?) "
-		        + "ON DUPLICATE KEY UPDATE patient_uuid=VALUES(patient_uuid), record_date=VALUES(record_date), "
-		        + "text=VALUES(text), embedding=VALUES(embedding), metadata_json=VALUES(metadata_json)";
+	private String cachedUpsertSql(String table) {
+		return upsertSqlCache.computeIfAbsent(table, MysqlBackendStore::buildUpsertSql);
+	}
+
+	private static String buildUpsertSql(String table) {
+		StringBuilder sql = new StringBuilder();
+		sql.append("INSERT INTO ").append(table).append(" ").append(UPSERT_COLUMNS)
+		        .append(" VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ");
+		for (int i = 0; i < MUTABLE_COLUMNS.length; i++) {
+			if (i > 0) {
+				sql.append(", ");
+			}
+			String c = MUTABLE_COLUMNS[i];
+			sql.append(c).append(" = IF(").append(FRESHNESS_GUARD)
+			        .append(", VALUES(").append(c).append("), ").append(c).append(")");
+		}
+		return sql.toString();
 	}
 
 	private static void appendFilterClause(StringBuilder sql, String filterSql) {
@@ -422,11 +464,16 @@ public class MysqlBackendStore implements BackendStore {
 		if (doc.getDate() != null) {
 			ps.setDate(3, Date.valueOf(doc.getDate()));
 		} else {
-			ps.setNull(3, java.sql.Types.DATE);
+			ps.setNull(3, Types.DATE);
 		}
 		ps.setString(4, doc.getText());
 		ps.setBytes(5, MysqlVectorCodec.encode(doc.getEmbedding()));
 		ps.setString(6, MysqlMetadataCodec.encode(doc.getMetadata()));
+		if (doc.getLastModified() != null) {
+			ps.setTimestamp(7, Timestamp.from(doc.getLastModified()), Calendar.getInstance(UTC));
+		} else {
+			ps.setNull(7, Types.TIMESTAMP);
+		}
 	}
 
 	private static int countSucceeded(int[] batchResult) {

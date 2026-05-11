@@ -16,6 +16,7 @@ import static org.junit.Assert.assertTrue;
 import static org.openmrs.module.querystore.serialization.DateFixtures.utcDate;
 import static org.openmrs.module.querystore.serialization.ProviderFixtures.providerNamed;
 
+import java.time.Instant;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
@@ -232,6 +233,29 @@ public class EncounterRecordSerializerTest {
 
 		assertEquals("patient-uuid", doc.getPatientUuid());
 		assertEquals("encounter-uuid", doc.getResourceUuid());
+	}
+
+	@Test
+	public void serialize_lastModifiedPrefersDateChangedFallsBackToDateCreated() {
+		Encounter changed = encounter("enc-1",
+		        utcDate(2025, Calendar.MARCH, 15),
+		        encounterType("type-uuid", "Adult Outpatient Visit"));
+		changed.setDateCreated(utcDate(2025, Calendar.JANUARY, 1));
+		changed.setDateChanged(utcDate(2025, Calendar.MARCH, 14));
+		assertEquals(Instant.ofEpochMilli(utcDate(2025, Calendar.MARCH, 14).getTime()),
+		        serializer.serialize(changed).getLastModified());
+
+		Encounter createdOnly = encounter("enc-2",
+		        utcDate(2025, Calendar.MARCH, 15),
+		        encounterType("type-uuid", "Adult Outpatient Visit"));
+		createdOnly.setDateCreated(utcDate(2025, Calendar.FEBRUARY, 2));
+		assertEquals(Instant.ofEpochMilli(utcDate(2025, Calendar.FEBRUARY, 2).getTime()),
+		        serializer.serialize(createdOnly).getLastModified());
+
+		Encounter neither = encounter("enc-3",
+		        utcDate(2025, Calendar.MARCH, 15),
+		        encounterType("type-uuid", "Adult Outpatient Visit"));
+		assertNull(serializer.serialize(neither).getLastModified());
 	}
 
 	@Test

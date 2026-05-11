@@ -123,6 +123,7 @@ final class MysqlSchemaManager {
 		        + "  text MEDIUMTEXT,"
 		        + "  embedding MEDIUMBLOB,"
 		        + "  metadata_json MEDIUMTEXT,"
+		        + "  last_modified DATETIME(3) NULL,"
 		        + "  PRIMARY KEY (id),"
 		        + "  UNIQUE KEY uq_" + table + "_resource (resource_uuid),"
 		        + "  KEY idx_" + table + "_patient (patient_uuid),"

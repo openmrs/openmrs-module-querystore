@@ -9,6 +9,7 @@
  */
 package org.openmrs.module.querystore.model;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -17,6 +18,11 @@ import java.util.Map;
 /**
  * A document written to the query store. Mirrors the three-component model from ADR decision 6:
  * plain-text chunk, dense-vector embedding, and structured metadata.
+ *
+ * <p>{@code lastModified} carries the source entity's "this projection is current as of" timestamp
+ * (typically {@code dateChanged} falling back to {@code dateCreated}) so the backend can drop
+ * stale writes when concurrent paths — bootstrap scan, AOP bridge, event handlers — race on the
+ * same record. Optional: when null, the backend falls back to last-write-wins.
  */
 public class QueryDocument {
 
@@ -31,6 +37,8 @@ public class QueryDocument {
 	private String text;
 
 	private float[] embedding;
+
+	private Instant lastModified;
 
 	private final Map<String, Object> metadata = new LinkedHashMap<>();
 
@@ -80,6 +88,14 @@ public class QueryDocument {
 
 	public void setEmbedding(float[] embedding) {
 		this.embedding = embedding;
+	}
+
+	public Instant getLastModified() {
+		return lastModified;
+	}
+
+	public void setLastModified(Instant lastModified) {
+		this.lastModified = lastModified;
 	}
 
 	public Map<String, Object> getMetadata() {
