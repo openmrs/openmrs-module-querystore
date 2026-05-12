@@ -11,9 +11,10 @@ An OpenMRS module that maintains an optimized read-side projection of clinical d
 3. [Architecture](#architecture)
 4. [Data Model](#data-model)
 5. [Supported Clinical Data Types](#supported-clinical-data-types)
-6. [Text Serialization](#text-serialization)
-7. [Design Decisions](#design-decisions)
-8. [License](#license)
+6. [Extending with Custom Resource Types](#extending-with-custom-resource-types)
+7. [Text Serialization](#text-serialization)
+8. [Design Decisions](#design-decisions)
+9. [License](#license)
 
 ## Why a Query Store?
 
@@ -97,12 +98,19 @@ Each document contains:
 | Diagnoses | Confirmed and provisional diagnoses |
 | Drug Orders | Medication prescriptions |
 | Test Orders | Lab and radiology orders |
+| Referral Orders | Referrals to other providers or services |
 | Allergies | Drug, food, and environmental allergies |
 | Patient Programs | Program enrollments, states, and outcomes |
 | Medication Dispense | Dispensing records |
 | Patients | Demographics, identifiers, addresses, and attributes |
 | Encounters | Clinical encounters with type, providers, location, and form |
 | Visits | Time-ranged visits and the encounters they contain |
+
+## Extending with Custom Resource Types
+
+The 12 types above are what the query store indexes out of the box. Modules can contribute their own resource types — patient appointments from an appointments module, financial bills from a billing module, radiology reports, oncology regimens, and so on — through the `ResourceTypeProvider` SPI. Contributed types share the same backend, embedding pipeline, cross-type search, and patient-cascade behavior as the core types; querystore knows nothing about specific modules.
+
+See [`docs/spi-providers.md`](docs/spi-providers.md) for the step-by-step walkthrough — domain entity, serializer, bootstrapper, AOP advice, provider bean, Spring wiring, and verification. The walkthrough is verified by an end-to-end test that builds a `billing_bill` provider from scratch.
 
 ## Text Serialization
 
