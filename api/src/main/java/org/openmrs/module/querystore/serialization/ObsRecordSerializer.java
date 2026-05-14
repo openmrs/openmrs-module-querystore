@@ -38,7 +38,7 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes an {@link Obs} into a {@link QueryDocument} for the {@code openmrs_obs} index.
+ * Serializes an {@link Obs} into a {@link QueryDocument} for the {@code querystore_obs} index.
  * Group obs members are emitted as atomic documents with {@code obs_group_uuid} and
  * {@code obs_group_concept_name} populated; group parents whose own value is empty are skipped
  * (their members are serialized individually) per the ADR decision 6 Synonyms and group obs

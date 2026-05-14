@@ -13,7 +13,7 @@ public final class QueryStoreConstants {
 
 	public static final String MODULE_ID = "querystore";
 
-	public static final String INDEX_PREFIX = "openmrs_";
+	public static final String INDEX_PREFIX = "querystore_";
 
 	public static final String FIELD_PATIENT_UUID = "patient_uuid";
 

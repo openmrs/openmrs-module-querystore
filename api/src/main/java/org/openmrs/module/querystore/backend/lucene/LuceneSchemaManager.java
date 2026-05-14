@@ -29,7 +29,7 @@ import org.openmrs.module.querystore.QueryStoreConstants;
 
 /**
  * Owns the per-type {@link IndexWriter} instances. One Lucene directory per resource type
- * ({@code openmrs_<type>} per Decision 4); writers are created lazily on first
+ * ({@code querystore_<type>} per Decision 4); writers are created lazily on first
  * {@link #ensureWriter(String)} call and cached for the JVM lifetime.
  */
 final class LuceneSchemaManager implements AutoCloseable {
@@ -77,7 +77,7 @@ final class LuceneSchemaManager implements AutoCloseable {
 	}
 
 	/**
-	 * Enumerates {@code openmrs_*} index directories on disk. Used by cross-type operations
+	 * Enumerates {@code querystore_*} index directories on disk. Used by cross-type operations
 	 * (e.g. {@code bulkDeleteByPatient}) where the caller does not know which types contain
 	 * documents for a given patient. Symmetric with the MySQL backend's {@code listAllTables}.
 	 *

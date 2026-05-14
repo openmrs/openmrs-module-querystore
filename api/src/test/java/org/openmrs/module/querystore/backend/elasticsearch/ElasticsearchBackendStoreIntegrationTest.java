@@ -301,7 +301,7 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		backend.upsert(doc("obs", "patient-A", "Temperature: 38.5", null));
 		backend.upsert(doc("condition", "patient-A", "Type 2 Diabetes", null));
 
-		// The point is that the call resolves openmrs_* without naming a type. Only the condition
+		// The point is that the call resolves querystore_* without naming a type. Only the condition
 		// doc contains the term "diabetes", so the wildcard correctly narrows to one hit.
 		SearchResult result = backend.bm25(SearchRequest.builder().queryText("diabetes").limit(10).build());
 		assertEquals(1, result.getHits().size());
@@ -430,7 +430,7 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		ElasticsearchClient client = clientFactory.getClient();
 		boolean exists = client.indices()
 		        .exists(e -> e.index(QueryStoreConstants.INDEX_PREFIX + "obs")).value();
-		assertFalse("openmrs_obs should not exist after deleteSchema", exists);
+		assertFalse("querystore_obs should not exist after deleteSchema", exists);
 	}
 
 	@Test

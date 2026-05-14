@@ -50,8 +50,8 @@ import org.openmrs.module.querystore.spi.ResourceTypeProvider;
  * exercise:
  * <ul>
  *   <li>{@link BootstrapServiceImpl} discovers the provider and runs its bootstrapper after core types.</li>
- *   <li>Documents land in the prefixed {@code openmrs_<moduleid>_<type>} index, not the unprefixed core form.</li>
- *   <li>Cross-type search via the {@code openmrs_*} wildcard returns the provider's documents alongside
+ *   <li>Documents land in the prefixed {@code querystore_<moduleid>_<type>} index, not the unprefixed core form.</li>
+ *   <li>Cross-type search via the {@code querystore_*} wildcard returns the provider's documents alongside
  *       any core-type documents.</li>
  *   <li>Patient-scoped retrieval correctly filters provider documents by {@code patient_uuid}.</li>
  * </ul>
@@ -62,7 +62,7 @@ import org.openmrs.module.querystore.spi.ResourceTypeProvider;
 public class ProviderEndToEndTest {
 
 	// Resource type the test contribution claims. Follows the Decision 13 convention
-	// <moduleid>_<type>; the corresponding index is openmrs_billing_bill.
+	// <moduleid>_<type>; the corresponding index is querystore_billing_bill.
 	private static final String RESOURCE_TYPE = "billing_bill";
 
 	private static final String INDEX_NAME = QueryStoreConstants.INDEX_PREFIX + RESOURCE_TYPE;
@@ -121,7 +121,7 @@ public class ProviderEndToEndTest {
 
 		bootstrap.bootstrap();
 
-		// Decision 4 mandates the openmrs_<moduleid>_<type> form for module contributions; the
+		// Decision 4 mandates the querystore_<moduleid>_<type> form for module contributions; the
 		// Lucene backend creates one directory per resource type under the index root.
 		Path expectedDir = indexRoot.resolve(INDEX_NAME);
 		assertTrue("expected Lucene directory '" + INDEX_NAME + "' to exist", Files.isDirectory(expectedDir));
@@ -144,7 +144,7 @@ public class ProviderEndToEndTest {
 		        bill("bill-2", "patient-B", "Outpatient consultation fee", 50_00));
 		bootstrap.bootstrap();
 
-		// Cross-type query — no resourceType filter → BackendStore searches all openmrs_* stores.
+		// Cross-type query — no resourceType filter → BackendStore searches all querystore_* stores.
 		List<QueryDocument> hits = service.search("glucose", 10);
 
 		// Both the core obs and the provider bill mention "glucose"; cross-type retrieval must
@@ -178,7 +178,7 @@ public class ProviderEndToEndTest {
 		        bill("bill-2", "patient-B", "Outpatient consultation", 50_00));
 		bootstrap.bootstrap();
 
-		// Backend-level patient cascade — used by the void/merge paths. Must iterate openmrs_*
+		// Backend-level patient cascade — used by the void/merge paths. Must iterate querystore_*
 		// directories including the provider's prefixed one, not just core indices.
 		backend.bulkDeleteByPatient("patient-A");
 

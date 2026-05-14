@@ -16,7 +16,7 @@ import org.openmrs.module.querystore.model.QueryDocument;
 /**
  * Cross-tier helpers shared by every {@link BackendStore} implementation. Centralises the rules
  * that every tier must apply identically — input validation, the scalar-metadata filter
- * eligibility predicate, and the {@code openmrs_<type>} ↔ {@code type} prefix conversion — so a
+ * eligibility predicate, and the {@code querystore_<type>} ↔ {@code type} prefix conversion — so a
  * future SPI change (e.g. tightening identity requirements, expanding filterable metadata types)
  * lands in one place rather than three.
  */
@@ -48,7 +48,7 @@ public final class BackendDocs {
 		return value instanceof String || value instanceof Number || value instanceof Boolean;
 	}
 
-	/** Strips the {@code openmrs_} prefix off a per-type index/table name. */
+	/** Strips the {@code querystore_} prefix off a per-type index/table name. */
 	public static String stripPrefix(String prefixed) {
 		return StringUtils.removeStart(prefixed, QueryStoreConstants.INDEX_PREFIX);
 	}

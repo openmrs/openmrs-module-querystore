@@ -23,10 +23,10 @@ import javax.sql.DataSource;
 import org.openmrs.module.querystore.QueryStoreConstants;
 
 /**
- * Creates and drops per-type tables ({@code openmrs_<type>}) in the OpenMRS database. Tables are
+ * Creates and drops per-type tables ({@code querystore_<type>}) in the OpenMRS database. Tables are
  * created lazily on first {@link #ensureTable(String)} call; existence is cached so repeated
- * upserts don't repeat DDL probes. The OpenMRS prefix on every table name (Decision 4) keeps
- * querystore data unambiguously identifiable next to core's tables.
+ * upserts don't repeat DDL probes. The {@code querystore_} prefix on every table name (Decision 4)
+ * keeps querystore data unambiguously identifiable next to core's tables.
  */
 final class MysqlSchemaManager {
 
@@ -40,7 +40,7 @@ final class MysqlSchemaManager {
 		this.dataSource = dataSource;
 	}
 
-	/** Idempotently creates the {@code openmrs_<resourceType>} table if missing. */
+	/** Idempotently creates the {@code querystore_<resourceType>} table if missing. */
 	void ensureTable(String resourceType) {
 		String table = tableName(resourceType);
 		if (knownTables.contains(table)) {
@@ -78,7 +78,7 @@ final class MysqlSchemaManager {
 	}
 
 	/**
-	 * Returns the names of every {@code openmrs_*} table currently in the database. Used by
+	 * Returns the names of every {@code querystore_*} table currently in the database. Used by
 	 * cross-table operations like {@link MysqlBackendStore#bulkDeleteByPatient(String)} where the
 	 * caller does not know which types contain documents for a given patient.
 	 */

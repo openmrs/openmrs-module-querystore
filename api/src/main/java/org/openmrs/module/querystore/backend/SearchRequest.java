@@ -17,7 +17,7 @@ import java.util.List;
  * Search request crossing the backend SPI boundary.
  *
  * <p>{@code resourceTypes} narrows the search to a subset of per-type stores. An empty list means
- * "all OpenMRS-prefixed types" (the {@code openmrs_*} wildcard).
+ * "all querystore-prefixed types" (the {@code querystore_*} wildcard).
  *
  * <p>{@code queryText} is required for {@link BackendStore#bm25(SearchRequest)} and
  * {@link BackendStore#hybrid(SearchRequest)}; {@code queryVector} is required for

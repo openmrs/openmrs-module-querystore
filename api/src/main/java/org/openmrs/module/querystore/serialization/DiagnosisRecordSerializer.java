@@ -25,7 +25,7 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes a {@link Diagnosis} into a {@link QueryDocument} for the {@code openmrs_diagnosis}
+ * Serializes a {@link Diagnosis} into a {@link QueryDocument} for the {@code querystore_diagnosis}
  * index. Mirrors {@link ConditionRecordSerializer}: coded diagnoses populate
  * {@code concept_uuid}/{@code concept_name}/{@code synonyms}; non-coded diagnoses populate
  * {@code non_coded} with the free-text label and use it as the display name. Rank is mapped to

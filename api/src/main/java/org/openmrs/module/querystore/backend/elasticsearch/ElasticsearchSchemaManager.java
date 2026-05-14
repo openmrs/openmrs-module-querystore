@@ -45,7 +45,7 @@ final class ElasticsearchSchemaManager {
 
 	private final ElasticsearchClientFactory clientFactory;
 
-	/** Cache of {@code openmrs_<type>} → embedding dim, primed lazily on first ensure/list. */
+	/** Cache of {@code querystore_<type>} → embedding dim, primed lazily on first ensure/list. */
 	private final ConcurrentMap<String, Integer> knownDims = new ConcurrentHashMap<>();
 
 	ElasticsearchSchemaManager(ElasticsearchClientFactory clientFactory) {
@@ -107,7 +107,7 @@ final class ElasticsearchSchemaManager {
 	}
 
 	/**
-	 * Enumerates {@code openmrs_*} indices on the cluster. Side-effect: any discovered index is
+	 * Enumerates {@code querystore_*} indices on the cluster. Side-effect: any discovered index is
 	 * primed into the dim cache for subsequent {@link #ensureIndex(String, int)} hits.
 	 */
 	Set<String> listAllIndexes() {

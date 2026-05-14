@@ -49,7 +49,7 @@ import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
  * Serializes a {@link MedicationDispense} into a {@link QueryDocument} for the
- * {@code openmrs_medication_dispense} index. Mirrors {@link DrugOrderRecordSerializer} for the
+ * {@code querystore_medication_dispense} index. Mirrors {@link DrugOrderRecordSerializer} for the
  * shared dosing surface (dose, route, frequency, units) but is not an order — it has its own
  * lifecycle (status), its own clinical-event time ({@link MedicationDispense#getDateHandedOver()
  * dateHandedOver}), and a distinct provider role (dispenser, populated as separate

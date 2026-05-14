@@ -33,13 +33,13 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes an {@link Allergy} into a {@link QueryDocument} for the {@code openmrs_allergy}
+ * Serializes an {@link Allergy} into a {@link QueryDocument} for the {@code querystore_allergy}
  * index. The allergen is wrapped in an {@link Allergen} carrying either a coded concept or a
  * free-text label plus an {@link AllergenType} discriminator (DRUG/FOOD/ENVIRONMENT/OTHER); the
  * coded-or-free-text resolution mirrors {@link ConditionRecordSerializer} but the resulting
  * fields are named {@code allergen_uuid}/{@code allergen_name}/{@code allergen_non_coded} rather
  * than the generic {@code concept_*} because the allergen role is domain-specific (ADR Decision 6
- * example for {@code openmrs_allergy}). {@code severity} and {@code reactions} are name-only per
+ * example for {@code querystore_allergy}). {@code severity} and {@code reactions} are name-only per
  * the Decision 9 small-stable-value-set exception. Reaction UUIDs are intentionally omitted —
  * reactions are a refinement filter alongside {@code allergen_uuid}, never a primary query axis,
  * so name-based matching is sufficient. The allergen concept's synonyms still populate the

@@ -46,7 +46,7 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes a {@link Visit} into a {@link QueryDocument} for the {@code openmrs_visit} index.
+ * Serializes a {@link Visit} into a {@link QueryDocument} for the {@code querystore_visit} index.
  * The visit IS the document, so {@code resource_uuid} is the visit UUID and the cross-cutting
  * {@code encounter_uuid} field is not used — visits aggregate encounters via {@code encounter_uuids}
  * instead, an array carrying the visit's non-voided encounter UUIDs per the Decision 6 example.

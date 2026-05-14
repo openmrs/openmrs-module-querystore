@@ -27,7 +27,7 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes a {@link Condition} into a {@link QueryDocument} for the {@code openmrs_condition}
+ * Serializes a {@link Condition} into a {@link QueryDocument} for the {@code querystore_condition}
  * index. Coded conditions populate {@code concept_uuid}/{@code concept_name}/{@code synonyms};
  * non-coded conditions populate {@code non_coded} with the free-text label and use it as the
  * display name. Onset and end (resolution) dates are clinically significant and appear in both

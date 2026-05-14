@@ -81,7 +81,7 @@ Clinical records are stored as per-type indices (one index per clinical resource
 - **Avoids sparse fields** — each index has only the fields relevant to its type
 - **Improves query performance** — type-specific queries only scan relevant documents
 - **Produces better relevance scoring** — BM25 term frequencies are not diluted across unrelated document types
-- **Supports cross-type search** — Elasticsearch wildcard patterns (e.g., `openmrs_*`) allow querying across all types when needed
+- **Supports cross-type search** — Elasticsearch wildcard patterns (e.g., `querystore_*`) allow querying across all types when needed
 
 Each document contains:
 

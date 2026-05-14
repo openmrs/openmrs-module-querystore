@@ -37,7 +37,7 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes a {@link PatientProgram} into a {@link QueryDocument} for the {@code openmrs_program}
+ * Serializes a {@link PatientProgram} into a {@link QueryDocument} for the {@code querystore_program}
  * index. The primary clinical concept is wrapped in a {@link Program} metadata entity, so
  * UUID/name surface as {@code program_uuid}/{@code program_name} from the entity (not the
  * concept) — analogous to the allergen rename in {@link AllergyRecordSerializer} — while the

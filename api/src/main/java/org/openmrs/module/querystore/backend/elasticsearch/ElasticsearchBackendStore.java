@@ -60,7 +60,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 
 /**
  * Elasticsearch reference {@link BackendStore} (Decision 3, "large" tier). One ES index per
- * resource type ({@code openmrs_<type>} per Decision 4) with native {@code dense_vector} HNSW kNN
+ * resource type ({@code querystore_<type>} per Decision 4) with native {@code dense_vector} HNSW kNN
  * and BM25 text. The durable+visible contract is satisfied by {@code refresh=wait_for} on every
  * write; the conditional-upsert-by-version invariant is enforced via external versioning
  * ({@code version_type=external_gte} with {@code last_modified} as the version).
@@ -207,7 +207,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public BulkWriteResult bulkDeleteByPatient(String patientUuid) {
-		// Single cross-index call — ES handles the openmrs_* wildcard natively, no per-type loop.
+		// Single cross-index call — ES handles the querystore_* wildcard natively, no per-type loop.
 		// wait_for_completion + refresh=true together satisfy the durable+visible contract.
 		List<DocFailure> failures = new ArrayList<>();
 		long deleted = 0;

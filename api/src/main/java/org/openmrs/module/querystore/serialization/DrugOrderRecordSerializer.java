@@ -38,7 +38,7 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes a {@link DrugOrder} into a {@link QueryDocument} for the {@code openmrs_drug_order}
+ * Serializes a {@link DrugOrder} into a {@link QueryDocument} for the {@code querystore_drug_order}
  * index. Order-base fields (action, urgency, care setting, previous order, order number, date
  * stopped, auto-expire date) and the Order-identity overrides plus the orderer-overrides-encounter-
  * provider convention live in {@link AbstractOrderRecordSerializer}; this class handles the

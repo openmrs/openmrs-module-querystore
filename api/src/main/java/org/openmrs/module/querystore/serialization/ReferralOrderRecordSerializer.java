@@ -14,10 +14,10 @@ import org.openmrs.module.querystore.model.QueryDocument;
 
 /**
  * Serializes a {@link ReferralOrder} into a {@link QueryDocument} for the {@code
- * openmrs_referral_order} index. {@code ReferralOrder} is structurally identical to {@code
+ * querystore_referral_order} index. {@code ReferralOrder} is structurally identical to {@code
  * TestOrder} — both extend {@link org.openmrs.ServiceOrder} and add no fields — so the populate
  * logic lives in {@link AbstractServiceOrderRecordSerializer}; this class only declares the
- * discriminators that pin the subtype to its {@code openmrs_referral_order} index. The surface
+ * discriminators that pin the subtype to its {@code querystore_referral_order} index. The surface
  * actually written today is the Order-base fields plus ServiceOrder's laterality, specimen source,
  * and clinical history. {@code ServiceOrder.frequency}, {@code numberOfRepeats}, and
  * {@code ServiceOrder.location} (the service-location concept, distinct from the encounter's

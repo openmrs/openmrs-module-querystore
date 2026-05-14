@@ -13,7 +13,7 @@ When making non-trivial implementation choices: check whether the ADR already co
 The ADR is dense; here is the minimal load-bearing set with anchors.
 
 - **CQRS + self-sufficiency** ([Decision 1](docs/adr.md#decision-1-cqrs-pattern--separate-read-store-from-transactional-database)). The read store answers its declared queries without round-tripping to core. Core is permitted only for content fetches (binaries, audit history). Going to core to enrich a result or fall back on un-indexed patterns is a smell — denormalize, or decide whether to index, or declare out of scope.
-- **Per-type indices, `openmrs_` prefix** ([Decision 4](docs/adr.md#decision-4-per-type-indices-over-a-single-index)). Core types are `openmrs_<type>`; module-contributed types are `openmrs_<moduleid>_<type>`. Cross-type queries use `openmrs_*`.
+- **Per-type indices, `querystore_` prefix** ([Decision 4](docs/adr.md#decision-4-per-type-indices-over-a-single-index)). Core types are `querystore_<type>`; module-contributed types are `querystore_<moduleid>_<type>`. Cross-type queries use `querystore_*`.
 - **Plain-text serialization** ([Decision 5](docs/adr.md#decision-5-plain-text-serialization-over-json-or-fhir)). Labeled prose, not JSON or FHIR.
 - **Document = text + embedding + structured** ([Decision 6](docs/adr.md#decision-6-document-model--text-embeddings-and-structured-metadata)). Cross-cutting field contract applies to every document.
 - **Date separation** ([Decision 7](docs/adr.md#decision-7-date-separation--excluded-from-embeddings-included-at-query-time)). Record timestamps in metadata, not in embedded text. Clinically significant dates (onset, resolution) belong in embedded text.

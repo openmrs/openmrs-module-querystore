@@ -294,7 +294,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 		}
 		Query filterQuery = LuceneFilterTranslator.toQuery(req.getFilters());
 		// Parse the BM25 query once per request; it doesn't vary by resource type, and on wildcard
-		// reads (every openmrs_* index) reparsing inside the loop fans the cost out by the type
+		// reads (every querystore_* index) reparsing inside the loop fans the cost out by the type
 		// count for no behavioural reason.
 		Query bm25Query;
 		try {

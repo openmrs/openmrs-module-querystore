@@ -58,7 +58,7 @@ import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes a {@link Patient} into a {@link QueryDocument} for the {@code openmrs_patient} index.
+ * Serializes a {@link Patient} into a {@link QueryDocument} for the {@code querystore_patient} index.
  * The patient IS the document, so {@code resource_uuid} mirrors {@code patient_uuid}. Person and
  * Patient state is flattened into one document per the Decision 6 example — see the
  * {@code Person vs Patient model} open question in docs/adr.md for the explicit rationale.

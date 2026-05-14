@@ -40,7 +40,7 @@ import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
- * Serializes an {@link Encounter} into a {@link QueryDocument} for the {@code openmrs_encounter}
+ * Serializes an {@link Encounter} into a {@link QueryDocument} for the {@code querystore_encounter}
  * index. The encounter IS the document, so {@code resource_uuid} is the encounter UUID and the
  * cross-cutting {@code encounter_uuid} field is not duplicated — that field belongs to
  * encounter-scoped data records (obs, condition, order, etc.) that point back to their parent

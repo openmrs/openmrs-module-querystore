@@ -452,7 +452,7 @@ public class LuceneBackendStoreTest {
 	@Test
 	public void deleteSchemaRemovesIndexDirectory() throws IOException {
 		backend.upsert(doc("drug_order", "patient-A", "scratch drug order", null));
-		Path dir = indexRoot.resolve("openmrs_drug_order");
+		Path dir = indexRoot.resolve("querystore_drug_order");
 		assertTrue("drug_order directory created on first upsert", Files.isDirectory(dir));
 
 		backend.deleteSchema("drug_order");
