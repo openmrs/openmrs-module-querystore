@@ -48,8 +48,8 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * Unit-level coverage of the embedded {@link LuceneBackendStore}. Lucene is in-JVM so this runs
  * in the default {@code mvn test} pass — unlike the MySQL backend, no external service is needed.
  * Tests cover the three SPI invariants pinned in ADR Decision 3 (idempotency, sub-linear
- * patient-scoped reads, conditional upsert by {@code last_modified}) plus BM25 and HNSW kNN
- * behaviour.
+ * patient-scoped reads, conditional upsert by {@code last_modified}) plus BM25 and brute-force
+ * cosine kNN behaviour.
  */
 public class LuceneBackendStoreTest {
 
@@ -187,6 +187,45 @@ public class LuceneBackendStoreTest {
 		for (int i = 0; i < vec.length; i++) {
 			assertEquals(vec[i], retrieved[i], 1e-6);
 		}
+	}
+
+	@Test
+	public void knnWithoutPatientFilterScansAcrossAllPatients() {
+		// The un-filtered branch routes through MatchAllDocsQuery — without an explicit test the
+		// only thing exercising it is a hypothetical cross-patient call. Two docs, two patients,
+		// no filter, query vector closest to the second one: result must include both, ranked.
+		QueryDocument a = doc("obs", "patient-A", "a", new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f });
+		QueryDocument b = doc("obs", "patient-B", "b", new float[] { 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f });
+		backend.upsert(a);
+		backend.upsert(b);
+
+		SearchResult result = backend.knn(SearchRequest.builder().resourceType("obs")
+		        .queryVector(new float[] { 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f }).limit(2).build());
+
+		assertEquals(2, result.getHits().size());
+		assertEquals(b.getResourceUuid(), result.getHits().get(0).getDocument().getResourceUuid());
+		assertEquals(a.getResourceUuid(), result.getHits().get(1).getDocument().getResourceUuid());
+	}
+
+	@Test
+	public void knnSkipsDocumentsWithoutEmbedding() {
+		// The scan's null-embedding skip protects against entries that satisfy the structured
+		// filter but were indexed without an embedding (e.g. mid-rollout, or a serializer that
+		// chose to skip embedding for a particular record). Without this branch the heap would
+		// admit them with score 0, polluting the top-K.
+		QueryDocument embedded = doc("obs", "patient-A", "has vector",
+		        new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f });
+		QueryDocument unembedded = doc("obs", "patient-A", "no vector", null);
+		backend.upsert(embedded);
+		backend.upsert(unembedded);
+
+		SearchResult result = backend.knn(SearchRequest.builder().resourceType("obs")
+		        .queryVector(new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f }).limit(10)
+		        .filter(Filter.patientScope("patient-A")).build());
+
+		assertEquals("kNN must skip documents without an indexed embedding",
+		        1, result.getHits().size());
+		assertEquals(embedded.getResourceUuid(), result.getHits().get(0).getDocument().getResourceUuid());
 	}
 
 	@Test
@@ -328,8 +367,8 @@ public class LuceneBackendStoreTest {
 		// Sanity-check that the PATIENT_SCOPE filter routes through the inverted index instead of
 		// scanning the whole corpus. 5000 docs across 50 patients; querying for one patient's slice
 		// should complete in well under five seconds even on a slow CI runner.
-		// Lucene's HNSW writer asserts a non-zero magnitude under cosine; the embedding payload here
-		// is incidental to the patient-filter test, so a tiny constant non-zero vector is enough.
+		// The embedding payload is incidental to this BM25 test — any non-null vector works since
+		// the brute-force scan only consumes embeddings under knn(), not bm25().
 		float[] vec = new float[8];
 		Arrays.fill(vec, 0.1f);
 		for (int p = 0; p < 50; p++) {

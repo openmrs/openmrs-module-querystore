@@ -33,9 +33,11 @@ final class LuceneFieldNames {
 
 	static final String TEXT = "text";
 
-	static final String EMBEDDING = "embedding";
-
-	/** Stored byte blob carrying the raw float32 embedding for retrieval after a kNN/BM25 hit. */
+	/**
+	 * Stored byte blob carrying the raw float32 embedding. Doubles as the source the brute-force
+	 * kNN scan iterates over — Lucene 8 ships no native HNSW kNN field, and the tier is pinned
+	 * to 8.11.2 to match core's transitive Lucene (see {@code LuceneBackendStore} class javadoc).
+	 */
 	static final String EMBEDDING_STORED = "embedding_bytes";
 
 	static final String METADATA_JSON = "metadata_json";

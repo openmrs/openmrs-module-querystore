@@ -40,17 +40,21 @@
             <artifactId>elasticsearch-java</artifactId>
         </dependency>
 
+        <!--
+            Lucene 8.11.2 ships transitively with OpenMRS core (Hibernate Search 6.2.4). The omod
+            must not double-bundle these jars — that's what triggered the Codec ServiceLoader
+            collision in issue #13. StandardAnalyzer lives in lucene-core in 8.x, so we don't need
+            lucene-analyzers-common at all.
+        -->
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.lucene</groupId>
-            <artifactId>lucene-analysis-common</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-queryparser</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -72,6 +76,22 @@
 
     <build>
         <plugins>
+            <!--
+                Integration tests are excluded from BOTH test-compile and test-execution by default.
+                The surefire exclusion alone is insufficient — testcontainers deps are scoped to the
+                `integration` profile, so without compiler-side exclusion the default-profile build
+                fails at testCompile on a clean checkout. Both excludes are cleared by the
+                `integration` profile below so the integration build picks the tests back up.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <testExcludes>
+                        <testExclude>**/*IntegrationTest.java</testExclude>
+                    </testExcludes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -114,6 +134,13 @@
             </dependencies>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <testExcludes combine.self="override"/>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>

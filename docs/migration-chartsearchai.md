@@ -49,7 +49,7 @@ Querystore's backend is pluggable per [Decision 3](./adr.md#decision-3-pluggable
 | chartsearchai pipeline today | Closest querystore tier | Notes |
 |---|---|---|
 | `embedding` (MySQL embeddings + in-process keyword scoring) | `mysql` | querystore improves on this by using MySQL FULLTEXT for keyword rather than in-process scoring |
-| `lucene` (Lucene-only BM25, no embeddings) | not directly available | querystore's `lucene` tier always carries both BM25 and HNSW kNN — there is no embeddings-free option |
+| `lucene` (Lucene-only BM25, no embeddings) | not directly available | querystore's `lucene` tier always carries both BM25 and brute-force cosine kNN (Lucene 8.x has no native HNSW; see [ADR Decision 3](./adr.md#decision-3-pluggable-backend-spi-with-three-reference-implementations) Consequences) — there is no embeddings-free option |
 | `hybrid` (MySQL embeddings + Lucene BM25, in-process RRF) | `lucene` | querystore stores both vectors and text in Lucene rather than splitting across MySQL and Lucene; functionally equivalent at the consumer layer |
 | `elasticsearch` (single shared ES index, RRF retriever) | `elasticsearch` | querystore restructures into per-type indices but keeps RRF fusion on the same retriever path |
 

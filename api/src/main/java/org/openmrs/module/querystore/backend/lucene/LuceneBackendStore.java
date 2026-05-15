@@ -30,7 +30,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.KnnFloatVectorField;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
@@ -39,17 +38,19 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.KnnFloatVectorQuery;
+import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.SimpleCollector;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.BytesRef;
@@ -75,7 +76,12 @@ import org.openmrs.util.OpenmrsUtil;
 /**
  * Embedded-Lucene reference {@link BackendStore} (Decision 3, "medium" tier). One {@code FSDirectory}
  * per resource type under the OpenMRS app-data directory (Decision 4), native BM25 over a
- * {@link StandardAnalyzer} text field, and native HNSW kNN via {@link KnnFloatVectorField}.
+ * {@link StandardAnalyzer} text field, and brute-force in-process cosine kNN over the stored
+ * embedding bytes. The Lucene line is pinned to 8.11.2 to match what OpenMRS core ships
+ * transitively via Hibernate Search 6.2.4 (see {@code pom.xml} and issue #13) — Lucene 8 has no
+ * native HNSW kNN, so the kNN scan trades native HNSW for capability parity with the MySQL tier
+ * (sub-linear when a patient filter narrows the candidate set; O(N) on un-filtered cross-patient
+ * queries — the same ceiling the tier already advertised as "single-host, bounded by one JVM").
  * Single-host, no replication; index loss requires rebuild from core. Hybrid fusion stays at the
  * service layer per Decision 3's "uniformity is the default" principle.
  */
@@ -86,11 +92,6 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 	private static final int RECOMMENDED_MAX_CORPUS = 5_000_000;
 
 	private static final int BATCH_SIZE = 500;
-
-	// Cap the per-segment kNN candidate set. Service-layer RRF consumes ranks only, so over-fetching
-	// here doesn't change the fused result — but it does bound work on very large indexes where the
-	// HNSW graph traversal cost grows with the candidate width.
-	private static final int KNN_NUM_CANDIDATES_FLOOR = 100;
 
 	// Stripe count for the conditional-upsert read-then-update window. MySQL gets this for free
 	// from row-level locking in ON DUPLICATE KEY UPDATE; Lucene has to provide its own narrow
@@ -322,18 +323,19 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 		if (req.getQueryVector() == null || req.getLimit() <= 0) {
 			return SearchResult.empty();
 		}
+		// Brute-force cosine over the filter-matched candidate set — the inverted index narrows by
+		// patient_uuid (and any other structured filters) first, then the scan computes cosine on
+		// each survivor's stored embedding bytes. Mirrors the MySQL tier's knnSingleTable: O(k) on
+		// a patient-scoped query (k = patient's documents), O(N) only on un-filtered cross-patient
+		// queries — matching the tier's "single-host, single JVM" ceiling per Decision 3.
 		Query filterQuery = LuceneFilterTranslator.toQuery(req.getFilters());
+		Query scanQuery = filterQuery != null ? filterQuery : new MatchAllDocsQuery();
+		float[] queryVector = req.getQueryVector();
+		double queryNorm = LuceneVectorCodec.norm(queryVector);
 		PriorityQueue<Hit> heap = TopKHits.heap(req.getLimit());
-		// HNSW searches faster with a wider candidate window than the requested k; over-fetch by
-		// 4x with a floor so very small limits still get enough graph traversal to converge.
-		int numCandidates = Math.max(req.getLimit() * 4, KNN_NUM_CANDIDATES_FLOOR);
 		for (String resourceType : resolveResourceTypes(req)) {
 			try {
-				Query knn = new KnnFloatVectorQuery(LuceneFieldNames.EMBEDDING, req.getQueryVector(),
-				        numCandidates, filterQuery);
-				for (Hit h : searchOneIndex(resourceType, knn, req.getLimit())) {
-					TopKHits.offer(heap, h, req.getLimit());
-				}
+				knnSingleIndex(resourceType, scanQuery, queryVector, queryNorm, heap, req.getLimit());
 			}
 			catch (IOException e) {
 				throw new IllegalStateException("kNN scan on " + resourceType + " failed", e);
@@ -477,8 +479,6 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 		}
 
 		if (source.getEmbedding() != null) {
-			target.add(new KnnFloatVectorField(LuceneFieldNames.EMBEDDING, source.getEmbedding(),
-			        VectorSimilarityFunction.COSINE));
 			target.add(new StoredField(LuceneFieldNames.EMBEDDING_STORED,
 			        LuceneVectorCodec.encode(source.getEmbedding())));
 		}
@@ -555,11 +555,62 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			TopDocs topDocs = searcher.search(query, limit);
 			List<Hit> hits = new ArrayList<>(topDocs.scoreDocs.length);
 			for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-				Document stored = searcher.storedFields().document(scoreDoc.doc);
+				Document stored = searcher.doc(scoreDoc.doc);
 				QueryDocument doc = readDocument(resourceType, stored);
 				hits.add(new Hit(doc, scoreDoc.score, 0));
 			}
 			return hits;
+		}
+	}
+
+	private void knnSingleIndex(String resourceType, Query scanQuery, float[] queryVector,
+	        double queryNorm, PriorityQueue<Hit> heap, int limit) throws IOException {
+		IndexWriter writer = schemaManager.ensureWriter(resourceType);
+		try (DirectoryReader reader = DirectoryReader.open(writer)) {
+			IndexSearcher searcher = new IndexSearcher(reader);
+			searcher.search(scanQuery, new SimpleCollector() {
+
+				private int docBase;
+
+				@Override
+				protected void doSetNextReader(LeafReaderContext context) {
+					this.docBase = context.docBase;
+				}
+
+				@Override
+				public void collect(int doc) throws IOException {
+					int globalDoc = docBase + doc;
+					// First fetch: only the embedding bytes. Lucene 8 stored fields share a
+					// block-compressed blob with text and metadata_json, so a full
+					// {@code searcher.doc(globalDoc)} pays for decompressing every stored field
+					// per candidate; restricting to {@code EMBEDDING_STORED} confines that work
+					// to the scoring step. The MySQL sibling gets the equivalent for free from
+					// SQL column projection.
+					Document embeddingOnly = searcher.doc(globalDoc,
+					    Collections.singleton(LuceneFieldNames.EMBEDDING_STORED));
+					BytesRef embeddingBytes = embeddingOnly.getBinaryValue(LuceneFieldNames.EMBEDDING_STORED);
+					if (embeddingBytes == null) {
+						return;
+					}
+					double score = LuceneVectorCodec.cosineFromBytes(queryVector, queryNorm,
+					    embeddingBytes.bytes, embeddingBytes.offset, embeddingBytes.length);
+					if (heap.size() >= limit && score <= heap.peek().getRawScore()) {
+						return;
+					}
+					// Second fetch: full stored fields only once the heap has admitted this
+					// candidate. Gating the metadata_json decode and embedding float[] copy
+					// behind admission keeps per-candidate cost proportional to top-K rather
+					// than to the candidate set.
+					Document stored = searcher.doc(globalDoc);
+					QueryDocument hitDoc = readDocument(resourceType, stored);
+					TopKHits.offer(heap, new Hit(hitDoc, score, 0), limit);
+				}
+
+				@Override
+				public ScoreMode scoreMode() {
+					return ScoreMode.COMPLETE_NO_SCORES;
+				}
+			});
 		}
 	}
 

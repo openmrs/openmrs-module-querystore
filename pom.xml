@@ -45,7 +45,13 @@
 
         <openMRSVersion>2.8.0</openMRSVersion>
         <elasticsearchVersion>8.13.4</elasticsearchVersion>
-        <luceneVersion>9.11.1</luceneVersion>
+        <!--
+            Pinned to match the Lucene line OpenMRS core ships transitively via Hibernate Search
+            6.2.4 (lucene-core, lucene-queryparser, … all 8.11.2). A newer Lucene 9.x line collides
+            on the Codec ServiceLoader at runtime under OpenMRS standalone (issue #13). Lucene-*
+            artifacts are also scoped `provided` at use-sites — core has them on the classpath.
+        -->
+        <luceneVersion>8.11.2</luceneVersion>
         <onnxruntimeVersion>1.24.3</onnxruntimeVersion>
 
         <junitVersion>4.13.2</junitVersion>
@@ -99,11 +105,6 @@
             <dependency>
                 <groupId>org.apache.lucene</groupId>
                 <artifactId>lucene-core</artifactId>
-                <version>${luceneVersion}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.lucene</groupId>
-                <artifactId>lucene-analysis-common</artifactId>
                 <version>${luceneVersion}</version>
             </dependency>
             <dependency>
