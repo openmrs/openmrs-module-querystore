@@ -231,7 +231,7 @@ public class ProviderEndToEndTest {
 			doc.setResourceUuid(bill.uuid);
 			doc.setPatientUuid(bill.patientUuid);
 			doc.setLastModified(bill.lastModified);
-			doc.setDate(LocalDate.ofInstant(bill.lastModified, java.time.ZoneOffset.UTC));
+			doc.setDate(bill.lastModified.atZone(java.time.ZoneOffset.UTC).toLocalDate());
 			doc.setText("Bill: " + bill.description + ". Amount: "
 			        + (bill.amountCents / 100.0) + " USD.");
 			doc.putMetadata("amount_cents", bill.amountCents);
