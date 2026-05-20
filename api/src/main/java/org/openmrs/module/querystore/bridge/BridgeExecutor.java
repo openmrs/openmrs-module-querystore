@@ -66,6 +66,16 @@ public class BridgeExecutor {
 		executor = Executors.newFixedThreadPool(poolSize, factory);
 	}
 
+	/**
+	 * Shuts the pool down with a bounded drain. Dispatched tasks run inside daemon threads spawned
+	 * by {@code Daemon.runInDaemonThreadAndWait} (see {@code AfterCommitDispatcher}); on forced
+	 * {@code shutdownNow()} the pool thread's wait is interrupted but the daemon thread is NOT
+	 * — its work continues against potentially-closing backend writers and may throw
+	 * {@code AlreadyClosedException}, and on a Tomcat redeploy the leaked daemon thread holds the
+	 * old classloader until it exits naturally. The window is bounded by SHUTDOWN_TIMEOUT_SECONDS;
+	 * proper interrupt-propagation to the daemon thread is a follow-up tied to the broader
+	 * bridge-shutdown coordination (ADR Decision 12 open).
+	 */
 	public void stop() {
 		if (executor == null) {
 			return;
@@ -74,7 +84,8 @@ public class BridgeExecutor {
 		try {
 			if (!executor.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
 				log.warn("BridgeExecutor did not drain within " + SHUTDOWN_TIMEOUT_SECONDS
-				        + "s; outstanding tasks are dropped");
+				        + "s; outstanding tasks are dropped and any in-flight daemon thread will"
+				        + " continue against potentially-closing writers (see stop() javadoc)");
 				executor.shutdownNow();
 			}
 		}

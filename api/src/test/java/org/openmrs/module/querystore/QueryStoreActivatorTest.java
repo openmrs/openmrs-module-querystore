@@ -19,9 +19,11 @@ import static org.mockito.Mockito.when;
 import org.junit.Before;
 import org.junit.Test;
 import org.openmrs.api.AdministrationService;
+import org.openmrs.module.DaemonToken;
 import org.openmrs.module.querystore.api.impl.QueryStoreServiceImpl;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
+import org.openmrs.module.querystore.bridge.AfterCommitDispatcher;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 public class QueryStoreActivatorTest {
@@ -58,6 +60,77 @@ public class QueryStoreActivatorTest {
 		when(admin.getGlobalPropertyValue(eq(QueryStoreConstants.GP_BOOTSTRAP_AUTOSTART), eq(Boolean.FALSE)))
 		        .thenReturn(Boolean.FALSE);
 		assertFalse(activator.isAutostartEnabled(admin));
+	}
+
+	@Test
+	public void setDaemonToken_eagerlyPropagatesToDispatcher_whenLookupSucceeds() {
+		// OpenMRS' setDaemonToken typically arrives before started(); the activator must eagerly
+		// hand it to the bridge dispatcher so AOP advice firing between setDaemonToken and
+		// started() runs with a UserContext. Without this propagation path, documents in that
+		// window are silently dropped by the bridge swallow guard.
+		AfterCommitDispatcher dispatcher = mock(AfterCommitDispatcher.class);
+		QueryStoreActivator capturingActivator = new QueryStoreActivator() {
+			@Override
+			AfterCommitDispatcher findBridgeDispatcher() {
+				return dispatcher;
+			}
+		};
+		DaemonToken token = new DaemonToken("token-eager");
+		capturingActivator.setDaemonToken(token);
+		verify(dispatcher).setDaemonToken(token);
+	}
+
+	@Test
+	public void setDaemonToken_swallowsLookupFailure_whenSpringNotReady() {
+		// Spring's ServiceContext is not refreshed yet when setDaemonToken first fires on most
+		// platform versions. The lookup must fail-soft so the module doesn't fail to start — and
+		// started() retries propagation once the context is up. Pin both halves of that contract.
+		QueryStoreActivator failingLookup = new QueryStoreActivator() {
+			@Override
+			AfterCommitDispatcher findBridgeDispatcher() {
+				throw new IllegalStateException("Spring not ready");
+			}
+		};
+		// Must not throw — the activator survives the early-startup lookup miss.
+		failingLookup.setDaemonToken(new DaemonToken("token-early"));
+	}
+
+	@Test
+	public void wireBridgeDaemonToken_propagatesAgain_afterEagerPathRan() {
+		// Pin both halves of the dual-propagation contract: setDaemonToken eagerly hands the
+		// token to the dispatcher, and wireBridgeDaemonToken (called from started()) ALSO hands
+		// it over. The second hop is the safety net for platform versions where the eager lookup
+		// failed because Spring wasn't refreshed yet. Asserting two calls catches a regression
+		// where someone replaces one with the other "to deduplicate."
+		AfterCommitDispatcher dispatcher = mock(AfterCommitDispatcher.class);
+		QueryStoreActivator activatorWithToken = new QueryStoreActivator() {
+			@Override
+			AfterCommitDispatcher findBridgeDispatcher() {
+				return dispatcher;
+			}
+		};
+		DaemonToken token = new DaemonToken("token-dual");
+		activatorWithToken.setDaemonToken(token);
+		activatorWithToken.wireBridgeDaemonToken();
+		// Twice with the same token: once from setDaemonToken's eager path, once from started().
+		verify(dispatcher, org.mockito.Mockito.times(2)).setDaemonToken(token);
+	}
+
+	@Test
+	public void wireBridgeDaemonToken_skipsLookup_whenTokenNull() {
+		// If started() runs and no token has arrived yet, the activator must NOT look up the
+		// dispatcher — that would silently install a null token, masking the configuration miss
+		// behind a no-op. Pin: dispatcher lookup is not called.
+		final boolean[] lookupAttempted = { false };
+		QueryStoreActivator nullToken = new QueryStoreActivator() {
+			@Override
+			AfterCommitDispatcher findBridgeDispatcher() {
+				lookupAttempted[0] = true;
+				return mock(AfterCommitDispatcher.class);
+			}
+		};
+		nullToken.wireBridgeDaemonToken();
+		assertFalse("must skip dispatcher lookup when no token is wired", lookupAttempted[0]);
 	}
 
 	@Test

@@ -11,6 +11,7 @@ package org.openmrs.module.querystore.bridge;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.openmrs.module.DaemonToken;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -79,6 +81,101 @@ public class AfterCommitDispatcherTest {
 		assertEquals(1, executor.submitted.size());
 		// Must not propagate — the dispatcher wraps tasks in a log-and-swallow guard so an aspect
 		// can never throw an indexing failure back into the clinical request thread.
+		executor.submitted.get(0).run();
+	}
+
+	@Test
+	public void wrapped_runnable_routesThroughDaemonContext_whenTokenWired() {
+		// Regression guard: before the fix, BridgeExecutor pool threads had no UserContext, so
+		// the dispatched embedder calls (which read global properties) blew up with
+		// "A user context must first be passed to setUserContext()". Setting a daemon token must
+		// force the wrapped runnable through runWithDaemonContext.
+		AtomicBoolean ranInDaemonPath = new AtomicBoolean();
+		AfterCommitDispatcher tokenedDispatcher = new AfterCommitDispatcher(executor) {
+			@Override
+			void runWithDaemonContext(Runnable task) {
+				ranInDaemonPath.set(true);
+				task.run();
+			}
+		};
+		tokenedDispatcher.setDaemonToken(new DaemonToken("test-token"));
+
+		AtomicBoolean innerRan = new AtomicBoolean();
+		tokenedDispatcher.dispatch(() -> innerRan.set(true));
+
+		assertEquals(1, executor.submitted.size());
+		executor.submitted.get(0).run();
+		assertTrue("dispatcher routed wrapped runnable through daemon-context hook",
+		        ranInDaemonPath.get());
+		assertTrue("inner task ran inside the daemon-context wrapper", innerRan.get());
+	}
+
+	@Test
+	public void runWithDaemonContext_runsTaskInline_whenTokenAbsent() {
+		// The legacy test path (no daemon token wired) must continue to invoke the task directly so
+		// existing assertions that observe side effects on the pool thread keep working without
+		// requiring an OpenMRS Daemon at test time.
+		AtomicBoolean ran = new AtomicBoolean();
+		dispatcher.runWithDaemonContext(() -> ran.set(true));
+		assertTrue("token-less dispatcher must fall back to inline execution", ran.get());
+	}
+
+	@Test
+	public void runWithDaemonContext_surfacesEmbedderFailure_whenPlatformDaemonSwallowsIt() {
+		// Regression guard for the diagnostic chain. The platform's runInDaemonThreadAndWait does
+		// NOT surface daemon-thread exceptions (Future.get's ExecutionException is discarded on
+		// some platforms; thread.join only routes through UncaughtExceptionHandler on others).
+		// Without runWithDaemonContext's per-task capture-rethrow, the embedder's RuntimeException
+		// would be invisible to wrap()'s log-and-swallow guard — operators would lose the "Bridge
+		// skipping index for X" warn-log they rely on to spot poison documents.
+		//
+		// Inject a DaemonExecutor that mimics the platform's swallow (runs the task, discards any
+		// RuntimeException). The production runWithDaemonContext must STILL surface the failure
+		// to its caller via the AtomicReference capture-then-rethrow. If a future refactor removes
+		// the rethrow, this test breaks.
+		dispatcher.setDaemonExecutorForTest((daemonTask, token) -> {
+			try {
+				daemonTask.run();
+			}
+			catch (RuntimeException swallowed) {
+				// Simulate platform behaviour: exception is lost, caller sees a clean return.
+			}
+		});
+		dispatcher.setDaemonToken(new DaemonToken("test-token"));
+
+		RuntimeException expected = new RuntimeException("simulated embedder failure");
+		try {
+			dispatcher.runWithDaemonContext(() -> {
+				throw expected;
+			});
+			throw new AssertionError("runWithDaemonContext must rethrow the captured exception");
+		}
+		catch (RuntimeException actual) {
+			assertSame("rethrown exception must be the captured one", expected, actual);
+		}
+	}
+
+	@Test
+	public void dispatch_endToEnd_logsAndSwallowsFailureFromDaemonHop() {
+		// End-to-end regression: an embedder throw inside a daemon hop must reach wrap()'s
+		// log-and-swallow guard via the dispatcher's normal dispatch path. Pins the chain
+		// dispatcher.dispatch → executor.submit(guarded) → guarded → runWithDaemonContext →
+		// daemonExecutor (here: simulating platform-swallow) → capture-rethrow → wrap()'s catch.
+		dispatcher.setDaemonExecutorForTest((daemonTask, token) -> {
+			try {
+				daemonTask.run();
+			}
+			catch (RuntimeException swallowed) {
+				// Platform-swallow simulation.
+			}
+		});
+		dispatcher.setDaemonToken(new DaemonToken("test-token"));
+
+		dispatcher.dispatch(() -> {
+			throw new RuntimeException("end-to-end embedder failure");
+		});
+		assertEquals(1, executor.submitted.size());
+		// Must not throw — wrap()'s outer catch must absorb the rethrow from runWithDaemonContext.
 		executor.submitted.get(0).run();
 	}
 

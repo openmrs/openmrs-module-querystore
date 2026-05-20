@@ -21,6 +21,7 @@ import org.openmrs.module.querystore.api.impl.QueryStoreServiceImpl;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
+import org.openmrs.module.querystore.bridge.AfterCommitDispatcher;
 
 public class QueryStoreActivator extends BaseModuleActivator implements DaemonTokenAware {
 
@@ -31,6 +32,16 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 	@Override
 	public void setDaemonToken(DaemonToken token) {
 		this.daemonToken = token;
+		// OpenMRS' module lifecycle calls setDaemonToken close to started() but the exact ordering
+		// has shifted between platform versions. Propagate eagerly so a late-arriving token still
+		// lands on the dispatcher; the lookup is guarded for the case where Spring isn't up yet
+		// (in which case started() will redo the propagation once the context is refreshed).
+		try {
+			findBridgeDispatcher().setDaemonToken(token);
+		}
+		catch (RuntimeException ex) {
+			log.debug("Deferring bridge daemon-token wiring until started(); Spring not ready yet", ex);
+		}
 	}
 
 	@Override
@@ -39,9 +50,40 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 		wireBackend(
 		    Context.getRegisteredComponent("querystore.backend.selector", BackendStoreSelector.class),
 		    Context.getRegisteredComponent("queryStoreService", QueryStoreServiceImpl.class));
+		// The bridge dispatcher's pool threads have no UserContext; embedder reads of querystore
+		// global properties (provider bean, model/vocab paths) need one, so hand it the daemon
+		// token before any AOP advice can fire. Activator owns the token (via DaemonTokenAware);
+		// the dispatcher is constructed by Spring without it, so propagation lives here.
+		wireBridgeDaemonToken();
 		if (isAutostartEnabled(Context.getAdministrationService())) {
 			triggerBootstrap();
 		}
+	}
+
+	void wireBridgeDaemonToken() {
+		if (daemonToken == null) {
+			log.warn("Daemon token unavailable; bridge AOP projection will run without a"
+			        + " UserContext until the token is wired. Documents created in this window"
+			        + " are silently dropped by the dispatcher's swallow guard — re-run the"
+			        + " bootstrap (or restart the module) once the token arrives to reconcile.");
+			return;
+		}
+		findBridgeDispatcher().setDaemonToken(daemonToken);
+	}
+
+	/**
+	 * Visible-for-testing seam over the static {@link Context#getRegisteredComponent} call so the
+	 * activator's two daemon-token propagation paths (eager from {@link #setDaemonToken} and
+	 * deferred from {@link #started()}) can be unit-tested without standing up a Spring context.
+	 *
+	 * <p>Package-private deliberately: the override mechanism relies on a subclass in the same
+	 * package. A test that needs to substitute this seam from a different package must either
+	 * move into {@code org.openmrs.module.querystore} or pull the substitution into a public
+	 * setter — do not widen visibility without that decision.
+	 */
+	AfterCommitDispatcher findBridgeDispatcher() {
+		return Context.getRegisteredComponent(
+		    "querystore.bridge.dispatcher", AfterCommitDispatcher.class);
 	}
 
 	/**
