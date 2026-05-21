@@ -17,10 +17,14 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.openmrs.module.querystore.api.QueryStoreService;
+import org.openmrs.module.querystore.backend.DocFailure;
+import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.RecordingService;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
@@ -88,6 +92,46 @@ public class BridgeIndexerTest {
 		indexer.bulkDeleteByPatient("patient-9");
 		assertEquals(1, service.bulkDeletedPatients.size());
 		assertEquals("patient-9", service.bulkDeletedPatients.get(0));
+	}
+
+	@Test
+	public void index_swallowsServiceFailureSoAfterCommitDispatchSurvives() {
+		// The bridge runs from AfterCommitDispatcher, which catches per-task RuntimeException but
+		// can't distinguish "the indexer's own logic broke" from "the backend dropped this write."
+		// Bridge writes failing must NOT propagate — they're logged at this layer with the offending
+		// resource_uuid context, and the dispatcher continues with subsequent tasks. A future
+		// "simplification" that re-introduces propagation would surface every dropped write as a
+		// noisy after-commit failure, masking the per-doc context this layer's log line carries.
+		QueryStoreService failingService = new QueryStoreService() {
+			@Override public WriteResult index(QueryDocument document) {
+				return WriteResult.failed(new DocFailure(document.getResourceType(),
+				        document.getResourceUuid(), "simulated backend drop", false));
+			}
+			@Override public void delete(String resourceType, String resourceUuid) { }
+			@Override public void bulkDeleteByPatient(String patientUuid) { }
+			@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
+			@Override public List<QueryDocument> search(String q, int l) { return Collections.emptyList(); }
+			@Override public void onStartup() { }
+			@Override public void onShutdown() { }
+		};
+		CountingEmbedder failingEmbedder = new CountingEmbedder();
+		BridgeIndexer failingIndexer = new BridgeIndexer(failingService, failingEmbedder);
+		QueryDocument doc = new QueryDocument();
+		doc.setResourceType("obs");
+		doc.setResourceUuid("u-fail");
+		doc.setText("anything");
+
+		// Must not throw — assertion is the absence of an exception. If propagation regresses, this
+		// line throws and the test fails loudly.
+		failingIndexer.index(doc);
+
+		// Pin the embed-then-index ordering: a future "short-circuit on failing backend" refactor
+		// that skips the embed call when the service is unhealthy would change AOP semantics
+		// (downstream consumers of the document mutation depend on the embedding being populated
+		// before the write attempt). Verify the embed step still ran even though the write was
+		// reported as failed.
+		assertEquals("embedder still ran before the failing index call",
+		        1, failingEmbedder.inputs.size());
 	}
 
 	private static final class CountingEmbedder implements EmbeddingProvider {

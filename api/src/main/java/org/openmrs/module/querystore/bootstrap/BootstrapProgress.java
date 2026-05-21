@@ -86,6 +86,20 @@ public class BootstrapProgress {
 		this.cursorUuid = cursorUuid;
 	}
 
+	/**
+	 * Cumulative count of confirmed-landed writes for this resource type, as reported by
+	 * {@link org.openmrs.module.querystore.api.QueryStoreService#index(org.openmrs.module.querystore.model.QueryDocument)}
+	 * via {@link org.openmrs.module.querystore.backend.WriteResult#isSucceeded()}.
+	 *
+	 * <p>Historical caveat: rows written by pre-WriteResult releases counted any non-throwing
+	 * {@code index()} call as success, which inflated the count by the size of any silently-dropped
+	 * writes (null-backend wiring gaps, backend per-doc IO failures). The fix #1 backend-mismatch
+	 * reset re-runs the bootstrap and re-stamps the counter from scratch when the GP flips, so the
+	 * inconsistency only persists on rows whose backend has not changed since the upgrade. An
+	 * operator who suspects an inflated counter on a same-backend row can force a recount by
+	 * deleting that row's entry from {@code querystore_bootstrap_progress} and restarting the
+	 * module — the next bootstrap walks the corpus fresh under the new honest-counting contract.
+	 */
 	public long getDocumentsIndexed() {
 		return documentsIndexed;
 	}

@@ -79,8 +79,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			throw new IllegalStateException(
 			        "No BackendStore wired into QueryStoreServiceImpl; cannot index "
 			                + document.getResourceType() + "/" + document.getResourceUuid()
-			                + ". Check wireBackend() in QueryStoreActivator.started() and the "
-			                + "querystore.backend GP value.");
+			                + ". Production: check wireBackend() in QueryStoreActivator.started() and "
+			                + "the querystore.backend GP value. Tests: call setBackend() before "
+			                + "exercising the index path.");
 		}
 		return backend.upsert(document);
 	}

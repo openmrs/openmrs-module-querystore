@@ -9,6 +9,8 @@
  */
 package org.openmrs.module.querystore.bridge;
 
+import java.util.Objects;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.querystore.api.QueryStoreService;
@@ -50,10 +52,15 @@ public class BridgeIndexer {
 	 */
 	public void index(QueryDocument doc) {
 		doc.setEmbedding(embeddingProvider.embed(doc.getEmbeddingInput()));
-		WriteResult result = queryStoreService.index(doc);
+		// The SPI contract is non-null; an out-of-tree QueryStoreService that returns null would NPE
+		// inside the dispatcher's swallow guard and the failure would look identical to a per-task
+		// throw. Enforce the contract here so the message names the offending implementation path.
+		WriteResult result = Objects.requireNonNull(queryStoreService.index(doc),
+		        "QueryStoreService.index returned null for " + doc.getResourceType() + "/"
+		                + doc.getResourceUuid() + " — non-null is part of the SPI contract");
 		if (!result.isSucceeded()) {
 			DocFailure f = result.getFailure();
-			log.warn("Bridge write failed for " + doc.getResourceType() + "/" + doc.getResourceUuid()
+			log.warn("[bridge] write failed for " + doc.getResourceType() + "/" + doc.getResourceUuid()
 			        + ": " + (f != null ? f.getErrorMessage() : "no failure detail"));
 		}
 	}

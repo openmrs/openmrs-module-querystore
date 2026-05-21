@@ -11,6 +11,7 @@ package org.openmrs.module.querystore.bootstrap;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -192,16 +193,22 @@ public abstract class TypeBootstrapper<T> {
 				return false;
 			}
 			doc.setEmbedding(embedder.embed(doc.getEmbeddingInput()));
-			WriteResult result = service.index(doc);
+			// Non-null is part of the SPI contract — see QueryStoreService.index javadoc. Enforce
+			// here so an out-of-tree impl that returns null gets a clear error instead of an NPE
+			// that the outer RuntimeException catch absorbs as if it were a poison-record skip.
+			WriteResult result = Objects.requireNonNull(service.index(doc),
+			        "QueryStoreService.index returned null for " + getResourceType() + "/"
+			                + getUuid(entity) + " — non-null is part of the SPI contract");
 			if (result.isSucceeded()) {
 				return true;
 			}
 			DocFailure f = result.getFailure();
-			log.warn("Bootstrap write for " + getResourceType() + "/" + getUuid(entity)
-			        + " did not land: " + (f != null ? f.getErrorMessage() : "no failure detail"));
+			log.warn("[bootstrap] write failed for " + getResourceType() + "/" + getUuid(entity)
+			        + ": " + (f != null ? f.getErrorMessage() : "no failure detail"));
 		}
 		catch (RuntimeException e) {
-			log.warn("Skipping " + getResourceType() + "/" + getUuid(entity) + " due to failure", e);
+			log.warn("[bootstrap] skipping " + getResourceType() + "/" + getUuid(entity)
+			        + " due to failure", e);
 		}
 		return false;
 	}

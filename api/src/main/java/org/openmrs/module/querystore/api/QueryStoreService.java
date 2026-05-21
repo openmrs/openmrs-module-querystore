@@ -29,13 +29,16 @@ public interface QueryStoreService extends OpenmrsService {
 	 * based on {@link QueryDocument#getResourceType()}. Internal: invoked by the sync pipeline,
 	 * not by consumers.
 	 *
-	 * <p>Returns a {@link WriteResult} describing whether the write actually landed. Callers that
-	 * track persistence accuracy (notably the bootstrap dispatcher, whose {@code documents_indexed}
-	 * counter must reflect confirmed writes, not just "the call didn't throw") MUST consult
-	 * {@link WriteResult#isSucceeded()} before counting the write as successful. A returned
-	 * failure carries the per-doc {@link org.openmrs.module.querystore.backend.DocFailure} so the
-	 * caller can log specifics. Throws {@link IllegalStateException} when the backend isn't
-	 * wired — a misconfiguration that the caller should surface, not silently absorb.
+	 * <p>Returns a non-null {@link WriteResult} describing whether the write actually landed.
+	 * Callers that track persistence accuracy (notably the bootstrap dispatcher, whose
+	 * {@code documents_indexed} counter must reflect confirmed writes, not just "the call didn't
+	 * throw") MUST consult {@link WriteResult#isSucceeded()} before counting the write as
+	 * successful. A returned failure carries the per-doc
+	 * {@link org.openmrs.module.querystore.backend.DocFailure} so the caller can log specifics.
+	 * Implementations MUST return a {@code WriteResult} (success or failed), never {@code null} —
+	 * a null return would NPE inside the bootstrap dispatcher and silently abort the type's run.
+	 * Throws {@link IllegalStateException} when the backend isn't wired — a misconfiguration that
+	 * the caller should surface, not silently absorb.
 	 */
 	WriteResult index(QueryDocument document);
 

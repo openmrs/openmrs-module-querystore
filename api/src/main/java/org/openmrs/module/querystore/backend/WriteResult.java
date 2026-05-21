@@ -11,6 +11,13 @@ package org.openmrs.module.querystore.backend;
 
 public final class WriteResult {
 
+	/** The single success instance the {@link #success()} factory returns. Success carries no
+	 *  state — a flyweight is safe and avoids ~one allocation per write across the bootstrap loop
+	 *  and every per-row inner loop in the backend stores (Lucene/MySQL/ES each call
+	 *  {@code success()} per record). The type is immutable (both fields final), so sharing a
+	 *  single instance can't leak state across callers. */
+	private static final WriteResult SUCCESS = new WriteResult(true, null);
+
 	private final boolean succeeded;
 
 	private final DocFailure failure;
@@ -29,7 +36,7 @@ public final class WriteResult {
 	}
 
 	public static WriteResult success() {
-		return new WriteResult(true, null);
+		return SUCCESS;
 	}
 
 	public static WriteResult failed(DocFailure failure) {
