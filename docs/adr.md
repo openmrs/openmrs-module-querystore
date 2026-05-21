@@ -38,9 +38,11 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 Accepted
 
 ### Context
-OpenMRS core uses a normalized MySQL database optimized for transactional clinical workflows — recording observations, placing orders, managing patient programs. Consumers such as AI applications, analytics tools, and reporting systems need to query this data in ways that normalized transactional schemas are not designed for: full-text search, semantic similarity search, cross-patient aggregation, and large-scale scans.
+OpenMRS core uses a normalized MySQL database optimized for transactional clinical workflows — recording observations, placing orders, managing patient programs. Consumers such as AI applications, analytics tools, and reporting systems need to query this data in ways that normalized transactional schemas are not designed for: full-text search, semantic similarity search, and embedding-ranked retrieval.
 
-Running these workloads against the production database risks degrading clinical workflow performance and requires complex queries that fight the normalized schema.
+Structured analytical workloads — aggregations, cohort definitions, "missing data" queries, time-series reporting — are a related but distinct query shape, well served in modern OpenMRS deployments by flattened analytical layers like MambaETL where deployed. Querystore's scope is specifically the semantic / free-text / kNN slice. Analytical layers and querystore are co-equal read-side projections of the same transactional source, each optimized for the query shape it is built for; the CQRS rule below applies to both.
+
+Running either workload against the production database risks degrading clinical workflow performance and requires complex queries that fight the normalized schema.
 
 ### Decision
 Follow the Command Query Responsibility Segregation (CQRS) pattern. OpenMRS core owns the write side (source of truth). This module maintains a separate, denormalized read-side projection optimized for query workloads.
@@ -1032,7 +1034,7 @@ The two are not interchangeable. Retiring a concept does not invalidate the obs 
 1. Data documents that reference retired or renamed metadata are kept unchanged. No data is removed, retracted, or rewritten in response to a retirement or rename event.
 2. No `retired` flag is added to data documents.
 3. Denormalized metadata names (e.g., `concept_name`, `location_name`, `provider_name`, `drug_name`, `encounter_type_name`, `form_name`, `program_name`, `service_name`, etc.) reflect the value at index time. They are not re-fetched when the underlying metadata is retired or renamed.
-4. Direct metadata indices (e.g., a hypothetical `querystore_concepts` for picker UX) are not in scope. If introduced later, their retirement-handling rules are a separate decision and will likely differ — those indices exist precisely to drive new-entry filtering, where retirement *is* a primary query axis. The broader question of which knowledge-base resources to project, when, and via what mechanism is tracked as the [Knowledge-base and reference-data projection](#knowledge-base-and-reference-data-projection) open question.
+4. Direct metadata indices (e.g., a hypothetical `querystore_concepts` for picker UX) are not in scope. If introduced later, their retirement-handling rules are a separate decision and will likely differ — those indices exist precisely to drive new-entry filtering, where retirement *is* a primary query axis. The criterion for whether a metadata type warrants an index at all is captured in [Decision 13's Criteria for contributing a metadata resource type](#criteria-for-contributing-a-metadata-resource-type); most metadata types fail it. The broader question of which knowledge-base resources to project, when, and via what mechanism is tracked as the [Knowledge-base and reference-data projection](#knowledge-base-and-reference-data-projection) open question.
 
 ### Rationale
 1. **Retirement is forward-looking, not retroactive.** Its purpose is to prevent future use of a metadata entry, not to invalidate historical references. A diabetes diagnosis recorded against a since-retired concept is still a real diagnosis — the patient was diagnosed, the record reflects what happened. Treating retirement as if it were voiding would silently rewrite clinical history.
@@ -1173,6 +1175,19 @@ The interface bundles three things and only three things — the resource-type n
 **Run order: core first, providers after.** `BootstrapServiceImpl` iterates core bootstrappers (in their configured order, ending in obs) and then providers (in the order Spring returns them). Deferring providers until after the long-running core obs scan is the wrong default in theory but right in practice: providers tend to be small (appointments, billing) and core obs dwarfs them, so what gets delayed by ordering is small to begin with and what gets prioritised by ordering is the slowest scan.
 
 **Worked example for provider authors.** [`docs/spi-providers.md`](spi-providers.md) is the step-by-step walkthrough — serializer, bootstrapper, AOP advice, provider bean, Spring wiring, post-install backfill convention. The walkthrough is verified by `ProviderEndToEndTest`, which builds a `billing_bill` provider from scratch and asserts discovery, prefixed-index routing, cross-type search, patient-scoped retrieval, and patient cascade.
+
+### Criteria for contributing a metadata resource type
+The mechanics above make it cheap to register a `ResourceTypeProvider` for any OpenMRS type, including types extending `BaseOpenmrsMetadata`. That does not make every metadata type a good candidate. A module should contribute a metadata `ResourceTypeProvider` *if and only if* the type carries free-text content where embedding/semantic recall delivers materially better results than:
+
+- structured SQL queries against the transactional DB *or* a downstream analytical projection like MambaETL where deployed (filters by tag, type, department, "never referenced" via `LEFT JOIN ... IS NULL` / `NOT IN (...)`, aggregations, cohort definitions, time-series), or
+- the denormalized `*_uuid + *_name` already present on clinical-data documents per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name).
+
+Two corollaries follow:
+
+1. **Missing-data queries are not querystore's job.** Questions of the form "drugs never prescribed," "BillableService never billed," "forms not yet used," or "locations with no encounters this year" are negation queries best served by the transactional DB or a downstream analytical projection (MambaETL where deployed). Embedding similarity does not help find absences; the SQL idiom (`LEFT JOIN ... IS NULL`, `NOT IN (...)`) is both cheaper and more expressive.
+2. **Clinical-content discovery in actively-used catalogs is often covered by obs.** "Which forms collect family-planning method?" can be answered by querying obs whose concept semantically matches FP method and grouping by `encounter.form_id`. Indexing the catalog itself is justified only when the catalog carries text, locale synonyms, code mappings, or relationships that obs documents do not propagate.
+
+Types that pass the criterion in practice tend to share three properties: rich free-text fields beyond the canonical name (descriptions, locale synonyms, indications, code-system mappings); a search surface where users phrase queries in terms that do not appear in the canonical name; and a deployment-specific shape that upstream services (OCL, FHIR `$lookup`, public terminology browsers) cannot answer because they do not see local state. The concept dictionary is the largest candidate that meets all three — see the [Knowledge-base and reference-data projection](#knowledge-base-and-reference-data-projection) open question for that case and the OCL/FHIR delegation default that gates it.
 
 ### Consequences
 - Modules wanting to contribute clinical data depend on querystore (transitively or directly). Deployments that don't install querystore lose any module-contributed indexing — same property as [Decision 2](#decision-2-module-not-core)'s "not every deployment needs it" applied recursively.
@@ -1349,6 +1364,17 @@ A query like "all glucose-related results" should match HbA1c, FPG, RBS, and oth
 - **Core querystore concern vs. SPI contribution.** Knowledge-base indices could be owned by querystore directly (consistent with the prefix convention) or pushed entirely to contributing modules via [Decision 13](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types). The latter keeps querystore lean but means CIEL- or OCL-aware indexing requires a separate module; the former pulls a substantial domain into core scope.
 - **Mixed retrieval semantics.** The `querystore_*` wildcard already makes mixed retrieval (instance data + knowledge base) syntactically cheap, but ranking, relevance, and embedding-space coherence across structurally different document types (clinical events vs. concept definitions) is not yet thought through. Co-mingling them in a single kNN result set may produce nonsensical orderings without per-type weighting.
 - **Relationship to upstream terminology services.** Most OpenMRS deployments use CIEL or OCL/OCL-Online for their dictionary, and FHIR provides standard CodeSystem / ValueSet / ConceptMap shapes. Decision needed on whether querystore re-projects a local snapshot of these (subject to the same staleness concerns as Decision 11) or proxies live to the terminology service. The latter avoids divergence but couples query latency to an external service.
+
+**Recommended default: delegate dictionary lookups to OCL / FHIR terminology operations** (`$lookup` for definitions and designations, `$translate` for cross-system mappings, `$expand` for value-set members) rather than re-projecting the dictionary into querystore. Querystore documents already carry `concept_uuid` per [Decision 9](#decision-9-coded-fields--store-both-uuid-and-name), which is the crosswalk key between clinical retrieval and dictionary lookup. Re-implementing synonym/locale/mapping search inside querystore duplicates work OCL already does centrally for every deployment and shifts the cost of embedding ~50K+ concepts onto each install plus every CIEL refresh.
+
+The deployment-specific residual that OCL cannot answer reduces to four cases:
+
+1. The CIEL subset this deployment actually loaded — "concepts in *our* dictionary" rather than "concepts anywhere in CIEL."
+2. Local custom concepts not present in CIEL/OCL upstream.
+3. Concepts intersected with this deployment's clinical data ("concepts with at least one obs against them here") — a join between dictionary and data only this deployment can resolve.
+4. Co-mingled embedding-space retrieval that ranks dictionary entries alongside obs/encounters/orders in a single semantic query.
+
+Items 1–3 are largely answerable with SQL against `concept` filtered to deployment scope; they do not by themselves require an index. Only item 4 requires concept content co-located with clinical data in the same embedding space, and that is the case the **Mixed retrieval semantics** bullet above flags as unresolved (ranking coherence across structurally different document types). Re-opening this open question for projection in querystore therefore reduces to demonstrating a consumer use case that item 4 serves and that UUID-crosswalk to OCL/FHIR does not.
 
 Out-of-v1 by design; the gating signal for re-opening this is whether the chartsearchai eval workflow surfaces queries that need knowledge-base projections to answer well, or whether downstream consumers (FHIR analytics, AI agents reasoning over coded data) request it concretely.
 
