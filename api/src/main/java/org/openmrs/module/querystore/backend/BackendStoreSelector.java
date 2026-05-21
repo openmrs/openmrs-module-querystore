@@ -51,20 +51,43 @@ public class BackendStoreSelector {
 	 * the class-level javadoc for the deadlock that prompted this constraint.
 	 */
 	public BackendStore getStore() {
-		String chosen = resolveBackendName();
-		BackendStore store = candidates.get(chosen);
-		if (store == null) {
-			log.warn("Unknown querystore.backend='" + chosen + "'; falling back to "
-			        + QueryStoreConstants.DEFAULT_BACKEND);
-			store = candidates.get(QueryStoreConstants.DEFAULT_BACKEND);
-		}
+		String name = resolveValidatedName();
+		BackendStore store = candidates.get(name);
 		if (store == null) {
 			throw new IllegalStateException(
-			        "No BackendStore candidate registered for querystore.backend=" + chosen
+			        "No BackendStore candidate registered for querystore.backend=" + name
 			                + " and no default candidate '" + QueryStoreConstants.DEFAULT_BACKEND + "' wired");
 		}
-		log.info("Query Store backend resolved: " + chosen);
+		log.info("Query Store backend resolved: " + name);
 		return store;
+	}
+
+	/**
+	 * Returns the name of the backend {@link #getStore()} would resolve to right now. Bootstrap
+	 * stamps this on the progress row so a {@code querystore.backend} GP flip detected on the next
+	 * run forces a cursor reset instead of inheriting "completed" state against a different
+	 * backend's empty index. Shares the validate-and-fall-back path with {@code getStore()} so the
+	 * two answers cannot drift; the GP-unknown warn log fires from that shared path.
+	 */
+	public String currentBackendName() {
+		return resolveValidatedName();
+	}
+
+	/**
+	 * Returns the GP-resolved name post-fallback: either the verbatim GP value (when it names a
+	 * registered candidate) or {@link QueryStoreConstants#DEFAULT_BACKEND} when it doesn't.
+	 * Side-effect-free apart from a single warn log when the GP value is rejected in favor of the
+	 * default — so {@link #getStore()} and {@link #currentBackendName()} produce one consistent
+	 * "fell back to default" record per call.
+	 */
+	private String resolveValidatedName() {
+		String chosen = resolveBackendName();
+		if (candidates.containsKey(chosen)) {
+			return chosen;
+		}
+		log.warn("Unknown querystore.backend='" + chosen + "'; falling back to "
+		        + QueryStoreConstants.DEFAULT_BACKEND);
+		return QueryStoreConstants.DEFAULT_BACKEND;
 	}
 
 	private static String resolveBackendName() {

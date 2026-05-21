@@ -15,14 +15,17 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.querystore.api.QueryStoreService;
+import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 import org.openmrs.module.querystore.spi.ResourceTypeNames;
@@ -66,10 +69,18 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 
 	private EmbeddingProvider embeddingProvider;
 
+	private BackendStoreSelector backendSelector;
+
 	// Test override: when non-null, replaces the Spring-context discovery path so tests can pin
 	// the provider set without a live OpenMRS context. Normal runtime leaves this null and
 	// discovers via Context.getRegisteredComponents on each bootstrap call.
 	private List<ResourceTypeProvider> providersOverride;
+
+	// Test seam parallel to providersOverride: when non-null, replaces the
+	// BackendStoreSelector.currentBackendName() lookup so tests can exercise the backend-mismatch
+	// reset path without standing up a real selector + GP wiring. Normal runtime leaves this null
+	// and consults the injected selector.
+	private Supplier<String> backendNameSupplierOverride;
 
 	public void setProgressDao(BootstrapProgressDao progressDao) {
 		this.progressDao = progressDao;
@@ -81,6 +92,16 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 
 	public void setEmbeddingProvider(EmbeddingProvider embeddingProvider) {
 		this.embeddingProvider = embeddingProvider;
+	}
+
+	public void setBackendSelector(BackendStoreSelector backendSelector) {
+		this.backendSelector = backendSelector;
+	}
+
+	/** Test seam — see {@link #backendNameSupplierOverride}. Package-private; production code wires
+	 *  the {@link BackendStoreSelector} via {@link #setBackendSelector}. */
+	void setBackendNameSupplierOverride(Supplier<String> backendNameSupplier) {
+		this.backendNameSupplierOverride = backendNameSupplier;
 	}
 
 	public void setBootstrappers(List<TypeBootstrapper<?>> list) {
@@ -178,11 +199,68 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		Object lock = typeLocks.computeIfAbsent(resourceType, k -> new Object());
 		synchronized (lock) {
 			BootstrapProgress progress = progressDao.find(resourceType);
+			String currentBackend = currentBackendName();
 			if (progress == null) {
 				progress = new BootstrapProgress(resourceType);
+				progress.setBackend(currentBackend);
+			} else if (!Objects.equals(progress.getBackend(), currentBackend)) {
+				// A querystore.backend GP flip leaves the new backend's storage empty (or holding
+				// whatever a prior session wrote there), while the persisted cursor points past
+				// records that were written into the old backend. Inheriting that cursor would
+				// declare the new backend "completed" without it ever having seen any data — the
+				// silent-data-loss class of bug. Reset the row so the bootstrap loop walks the
+				// corpus afresh against the current backend. Null on the stored side (rows written
+				// before the backend column existed) is treated as a mismatch, so one re-bootstrap
+				// follows the schema migration.
+				//
+				// Caveat operators should know: this reset reconciles the historical corpus only.
+				// QueryStoreServiceImpl.backend is wired once in QueryStoreActivator.started(); a
+				// runtime GP flip without a module restart means AOP writes between flip and
+				// restart still go to the previous backend and are lost to the new one. The reset
+				// path makes the static corpus correct on the next start but cannot recover those
+				// in-flight writes. If runtime backend swaps become a supported workflow, a
+				// GlobalPropertyListener that re-wires QueryStoreServiceImpl is the next fix.
+				log.info("Resetting bootstrap progress for " + resourceType
+				        + " (backend changed: " + progress.getBackend() + " -> " + currentBackend + ")");
+				resetProgressForBackend(progress, currentBackend);
+				progressDao.save(progress);
 			}
 			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao);
 		}
+	}
+
+	/**
+	 * Fail-fast: the production path must always wire {@link #backendSelector} via Spring; tests
+	 * either inject a selector or install {@link #backendNameSupplierOverride}. A silently-null
+	 * answer would let one untouched dispatch stamp the row with {@code null}, then a subsequent
+	 * properly-wired dispatch would see "null != lucene", reset, re-walk — and the row would now
+	 * be stamped with the real name. The third dispatch matches and is fine. The damage is a
+	 * spurious extra full re-bootstrap on the run after the misconfiguration is fixed — bounded,
+	 * but only if we don't fail-fast here. With this guard, a misconfigured deployment surfaces
+	 * the wiring gap in the activator's daemon thread instead.
+	 */
+	private String currentBackendName() {
+		if (backendNameSupplierOverride != null) {
+			return backendNameSupplierOverride.get();
+		}
+		if (backendSelector == null) {
+			throw new IllegalStateException(
+			        "BackendStoreSelector not wired into BootstrapServiceImpl; "
+			                + "production deployments must wire it via moduleApplicationContext.xml, "
+			                + "tests via setBackendSelector or setBackendNameSupplierOverride");
+		}
+		return backendSelector.currentBackendName();
+	}
+
+	private static void resetProgressForBackend(BootstrapProgress p, String backend) {
+		p.setStatus(BootstrapStatus.NOT_STARTED);
+		p.setCursorDateChanged(null);
+		p.setCursorUuid(null);
+		p.setDocumentsIndexed(0);
+		p.setStartedAt(null);
+		p.setCompletedAt(null);
+		p.setFailureMessage(null);
+		p.setBackend(backend);
 	}
 
 	private void runOneForPatient(String resourceType, String patientUuid,

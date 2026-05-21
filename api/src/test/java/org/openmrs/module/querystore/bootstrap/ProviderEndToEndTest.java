@@ -93,6 +93,10 @@ public class ProviderEndToEndTest {
 		bootstrap.setQueryStoreService(service);
 		bootstrap.setEmbeddingProvider(new ZeroEmbedder());
 		bootstrap.setBootstrappers(Collections.<TypeBootstrapper<?>>emptyList());
+		// Match the production discipline: BootstrapServiceImpl requires either a wired
+		// BackendStoreSelector or an explicit supplier override. SPI routing is the assertion here,
+		// not backend identity, so a constant default is fine.
+		bootstrap.setBackendNameSupplierOverride(() -> "lucene");
 	}
 
 	@After

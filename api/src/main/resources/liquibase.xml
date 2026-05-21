@@ -31,4 +31,17 @@
         </createTable>
     </changeSet>
 
+    <!--
+        Record which backend wrote the row so a querystore.backend GP flip invalidates the row
+        instead of inheriting a cursor that points into a different backend's empty index. Nullable
+        because pre-existing rows from changeset -1 don't know their backend; BootstrapServiceImpl
+        treats a null value as "unknown, reset on first run against the current backend."
+    -->
+    <changeSet id="querystore-bootstrap-progress-2" author="dkayiwa">
+        <comment>Track the backend the row was bootstrapped against; reset cursor on mismatch.</comment>
+        <addColumn tableName="querystore_bootstrap_progress">
+            <column name="backend" type="VARCHAR(32)"/>
+        </addColumn>
+    </changeSet>
+
 </databaseChangeLog>

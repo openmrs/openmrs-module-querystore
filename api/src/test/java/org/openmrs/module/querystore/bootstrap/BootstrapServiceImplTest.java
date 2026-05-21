@@ -11,6 +11,7 @@ package org.openmrs.module.querystore.bootstrap;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -49,6 +50,11 @@ public class BootstrapServiceImplTest {
 		// discovery off the Context.getRegisteredComponents path. Tests exercising providers
 		// override this with their own list.
 		service.setProvidersOverride(Collections.<ResourceTypeProvider>emptyList());
+		// Match the providersOverride discipline for the backend-identity lookup: production wires a
+		// BackendStoreSelector; tests must install a supplier (or a real selector) so the dispatcher
+		// can compare stored vs current. A constant default is fine when the test doesn't care about
+		// backend semantics — tests exercising the mismatch path override this with their own value.
+		service.setBackendNameSupplierOverride(() -> "test-backend");
 	}
 
 	@Test
@@ -110,7 +116,9 @@ public class BootstrapServiceImplTest {
 		prior.setCursorUuid("z");
 		prior.setCursorDateChanged(Instant.parse("2025-03-15T09:00:00Z"));
 		prior.setDocumentsIndexed(42);
+		prior.setBackend("lucene");
 		dao.store.put("obs", prior);
+		service.setBackendNameSupplierOverride(() -> "lucene");
 		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
 		service.setBootstrappers(Collections.singletonList(obs));
 
@@ -122,6 +130,93 @@ public class BootstrapServiceImplTest {
 		        Instant.parse("2025-03-15T09:00:00Z"), obs.lastAfterDateChanged);
 		assertEquals("documents_indexed preserved across resume",
 		        42, dao.find("obs").getDocumentsIndexed());
+	}
+
+	@Test
+	public void bootstrap_resetsCursorWhenBackendChanges() {
+		// A querystore.backend GP flip leaves the new backend's storage empty but inherits the old
+		// backend's cursor. Without a reset, the loop reports "completed" against an empty index —
+		// the silent-data-loss class of bug. The dispatcher must reset the row on mismatch.
+		BootstrapProgress prior = new BootstrapProgress("obs");
+		prior.setStatus(BootstrapStatus.COMPLETED);
+		prior.setCursorUuid("z");
+		prior.setCursorDateChanged(Instant.parse("2025-03-15T09:00:00Z"));
+		prior.setDocumentsIndexed(42);
+		prior.setBackend("elasticsearch");
+		dao.store.put("obs", prior);
+		service.setBackendNameSupplierOverride(() -> "lucene");
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		service.bootstrap("obs");
+
+		assertNull("cursor uuid cleared so the new backend re-scans from the start", obs.lastAfterUuid);
+		assertNull("cursor timestamp cleared so the new backend re-scans from the start",
+		        obs.lastAfterDateChanged);
+		BootstrapProgress reloaded = dao.find("obs");
+		assertEquals("documents_indexed reset on backend change", 0, reloaded.getDocumentsIndexed());
+		assertEquals("backend identity updated to the current one", "lucene", reloaded.getBackend());
+	}
+
+	@Test
+	public void bootstrap_resetsCursorWhenStoredBackendIsNull() {
+		// Rows written before the backend column existed carry null. Treat them as mismatched so
+		// one re-bootstrap follows the schema migration; otherwise we'd inherit a cursor that the
+		// silent-no-op bug may have advanced past records that were never persisted.
+		BootstrapProgress prior = new BootstrapProgress("obs");
+		prior.setStatus(BootstrapStatus.COMPLETED);
+		prior.setCursorUuid("z");
+		prior.setCursorDateChanged(Instant.parse("2025-03-15T09:00:00Z"));
+		prior.setDocumentsIndexed(42);
+		// backend is null — simulates a row migrated from changeset -1.
+		dao.store.put("obs", prior);
+		service.setBackendNameSupplierOverride(() -> "lucene");
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		service.bootstrap("obs");
+
+		assertNull(obs.lastAfterUuid);
+		assertNull(obs.lastAfterDateChanged);
+		assertEquals("lucene", dao.find("obs").getBackend());
+	}
+
+	@Test
+	public void bootstrap_failsFastWhenBackendIdentityNotWired() {
+		// Production must always wire BackendStoreSelector; a silently-null answer would let one
+		// dispatch stamp the row with null and the next properly-wired dispatch would reset
+		// spuriously. Tests that don't care about backend identity install a constant supplier
+		// (see setUp). Detecting the missing wiring loudly here surfaces the gap in the activator's
+		// daemon thread instead of corrupting progress rows.
+		BootstrapServiceImpl bare = new BootstrapServiceImpl();
+		bare.setProgressDao(new InMemoryDao());
+		bare.setQueryStoreService(new NullQueryStoreService());
+		bare.setEmbeddingProvider(new ZeroEmbedder());
+		bare.setProvidersOverride(Collections.<ResourceTypeProvider>emptyList());
+		bare.setBootstrappers(Collections.singletonList(new EmptyPageBootstrapper("obs")));
+
+		try {
+			bare.bootstrap("obs");
+			fail("expected IllegalStateException because no BackendStoreSelector or supplier override was installed");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue("error message should point to the wiring options",
+			        expected.getMessage().contains("BackendStoreSelector")
+			                && expected.getMessage().contains("setBackendNameSupplierOverride"));
+		}
+	}
+
+	@Test
+	public void bootstrap_stampsBackendOnFreshRow() {
+		// A first-ever run for this resource type creates the row from scratch; the backend
+		// identity must land on it so a subsequent GP flip is detectable.
+		service.setBackendNameSupplierOverride(() -> "lucene");
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		service.bootstrap("obs");
+
+		assertEquals("lucene", dao.find("obs").getBackend());
 	}
 
 	@Test

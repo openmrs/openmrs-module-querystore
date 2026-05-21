@@ -185,6 +185,7 @@
         <property name="progressDao" ref="querystore.bootstrap.progressDao"/>
         <property name="queryStoreService" ref="queryStoreService"/>
         <property name="embeddingProvider" ref="querystore.embedding.dispatcher"/>
+        <property name="backendSelector" ref="querystore.backend.selector"/>
         <property name="bootstrappers">
             <!--
                 Order matters operationally: obs typically dwarfs every other type combined (often

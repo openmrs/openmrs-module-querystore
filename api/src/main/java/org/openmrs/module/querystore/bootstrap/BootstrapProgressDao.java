@@ -34,7 +34,7 @@ public class BootstrapProgressDao {
 	private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
 
 	private static final String COLUMNS = "resource_type, status, cursor_date_changed, cursor_uuid, "
-	        + "documents_indexed, started_at, completed_at, failure_message";
+	        + "documents_indexed, started_at, completed_at, failure_message, backend";
 
 	private final DbSessionFactory sessionFactory;
 
@@ -80,33 +80,27 @@ public class BootstrapProgressDao {
 
 	public void save(BootstrapProgress progress) {
 		String sql = "INSERT INTO querystore_bootstrap_progress (" + COLUMNS + ") "
-		        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+		        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
 		        + "ON DUPLICATE KEY UPDATE status = VALUES(status), "
 		        + "cursor_date_changed = VALUES(cursor_date_changed), "
 		        + "cursor_uuid = VALUES(cursor_uuid), "
 		        + "documents_indexed = VALUES(documents_indexed), "
 		        + "started_at = VALUES(started_at), "
 		        + "completed_at = VALUES(completed_at), "
-		        + "failure_message = VALUES(failure_message)";
+		        + "failure_message = VALUES(failure_message), "
+		        + "backend = VALUES(backend)";
 		try {
 			JdbcSupport.inTransaction(sessionFactory, conn -> {
 				try (PreparedStatement ps = conn.prepareStatement(sql)) {
 					ps.setString(1, progress.getResourceType());
 					ps.setString(2, progress.getStatus().name());
 					setInstant(ps, 3, progress.getCursorDateChanged());
-					if (progress.getCursorUuid() != null) {
-						ps.setString(4, progress.getCursorUuid());
-					} else {
-						ps.setNull(4, Types.CHAR);
-					}
+					setNullableString(ps, 4, progress.getCursorUuid(), Types.CHAR);
 					ps.setLong(5, progress.getDocumentsIndexed());
 					setInstant(ps, 6, progress.getStartedAt());
 					setInstant(ps, 7, progress.getCompletedAt());
-					if (progress.getFailureMessage() != null) {
-						ps.setString(8, progress.getFailureMessage());
-					} else {
-						ps.setNull(8, Types.VARCHAR);
-					}
+					setNullableString(ps, 8, progress.getFailureMessage(), Types.VARCHAR);
+					setNullableString(ps, 9, progress.getBackend(), Types.VARCHAR);
 					ps.executeUpdate();
 				}
 			});
@@ -126,6 +120,7 @@ public class BootstrapProgressDao {
 		p.setStartedAt(readInstant(rs, "started_at"));
 		p.setCompletedAt(readInstant(rs, "completed_at"));
 		p.setFailureMessage(rs.getString("failure_message"));
+		p.setBackend(rs.getString("backend"));
 		return p;
 	}
 
@@ -134,6 +129,14 @@ public class BootstrapProgressDao {
 			ps.setTimestamp(idx, Timestamp.from(instant), Calendar.getInstance(UTC));
 		} else {
 			ps.setNull(idx, Types.TIMESTAMP);
+		}
+	}
+
+	private static void setNullableString(PreparedStatement ps, int idx, String value, int sqlType) throws SQLException {
+		if (value != null) {
+			ps.setString(idx, value);
+		} else {
+			ps.setNull(idx, sqlType);
 		}
 	}
 

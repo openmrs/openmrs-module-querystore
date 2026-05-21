@@ -16,6 +16,16 @@ import java.time.Instant;
  * {@code cursorDateChanged}/{@code cursorUuid} pair is the resume point: the next page is "records
  * whose effective dateChanged is strictly after the cursor, ordered ascending, tie-broken by UUID."
  * Persisted after each page so an interrupted run resumes without re-projecting.
+ *
+ * <p>{@link #getBackend() backend} records the {@link
+ * org.openmrs.module.querystore.backend.BackendStore} this row belongs to — the value of
+ * {@code querystore.backend} in effect when the row was last written (which is also where any
+ * non-null cursor points). The dispatcher compares it with the currently-resolved backend and
+ * resets the row when they disagree, so a GP flip from one backend to another doesn't inherit a
+ * "completed" cursor pointing into a different backend's empty index. After a reset, the backend
+ * is stamped with the new value while the cursor is null — i.e., "this row will track the new
+ * backend from the start." Null on rows written before this field existed; treated as a mismatch
+ * on first post-upgrade run.
  */
 public class BootstrapProgress {
 
@@ -34,6 +44,8 @@ public class BootstrapProgress {
 	private Instant completedAt;
 
 	private String failureMessage;
+
+	private String backend;
 
 	public BootstrapProgress() {
 	}
@@ -104,5 +116,13 @@ public class BootstrapProgress {
 
 	public void setFailureMessage(String failureMessage) {
 		this.failureMessage = failureMessage;
+	}
+
+	public String getBackend() {
+		return backend;
+	}
+
+	public void setBackend(String backend) {
+		this.backend = backend;
 	}
 }

@@ -60,6 +60,7 @@ public class BootstrapIntegrationTest {
 	        + "  started_at DATETIME(3) NULL,"
 	        + "  completed_at DATETIME(3) NULL,"
 	        + "  failure_message TEXT NULL,"
+	        + "  backend VARCHAR(32) NULL,"
 	        + "  PRIMARY KEY (resource_type)"
 	        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
@@ -125,6 +126,7 @@ public class BootstrapIntegrationTest {
 		p.setCursorUuid("uuid-cursor");
 		p.setDocumentsIndexed(123);
 		p.setStartedAt(t);
+		p.setBackend("lucene");
 
 		progressDao.save(p);
 		BootstrapProgress loaded = progressDao.find("test");
@@ -136,6 +138,7 @@ public class BootstrapIntegrationTest {
 		assertEquals(123, loaded.getDocumentsIndexed());
 		assertEquals(t, loaded.getStartedAt());
 		assertNull(loaded.getCompletedAt());
+		assertEquals("lucene", loaded.getBackend());
 	}
 
 	@Test
@@ -225,6 +228,9 @@ public class BootstrapIntegrationTest {
 		service.setProgressDao(progressDao);
 		service.setQueryStoreService(queryStoreService);
 		service.setEmbeddingProvider(new ZeroEmbedder());
+		// Production wires a BackendStoreSelector; tests install a constant supplier when backend
+		// identity is incidental to the assertion.
+		service.setBackendNameSupplierOverride(() -> "lucene");
 
 		FakeBootstrapper b1 = new FakeBootstrapper();
 		FakeBootstrapper b2 = new FakeBootstrapper() {
