@@ -26,6 +26,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -33,6 +34,7 @@ import org.openmrs.Concept;
 import org.openmrs.ConceptComplex;
 import org.openmrs.ConceptClass;
 import org.openmrs.ConceptDatatype;
+import org.openmrs.ConceptDescription;
 import org.openmrs.ConceptMap;
 import org.openmrs.ConceptNumeric;
 import org.openmrs.ConceptReferenceTerm;
@@ -255,6 +257,31 @@ public class ObsRecordSerializerTest {
 		assertEquals("xray-handler|/storage/xray/123.png",
 				doc.getMetadata().get("value_complex_uri"));
 		assertEquals("ImageHandler", doc.getMetadata().get("value_complex_handler"));
+	}
+
+	@Test
+	public void serialize_description_populatedFromConcept() {
+		// End-to-end integration: a concept with a description flows through
+		// ObsRecordSerializer.serialize → AbstractRecordSerializer.putConceptFields →
+		// putDescription → metadata['description']. Parity with the analogous
+		// mapping-names test below: without this assertion, a refactor that removes the
+		// putDescription() call from putConceptFields would silently stop writing the
+		// field — every existing test still passes because the description-indexing slice
+		// (exp 5) shipped before this hardening discipline was established.
+		Concept c = new Concept();
+		c.addName(preferredName("Blood urea nitrogen"));
+		ConceptDescription d = new ConceptDescription();
+		d.setDescription("Lab test reflecting kidney function. Used to assess renal status.");
+		d.setLocale(Locale.ENGLISH);
+		c.addDescription(d);
+
+		Obs obs = obs(c);
+		obs.setValueText("noted");
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals("Lab test reflecting kidney function. Used to assess renal status.",
+				doc.getMetadata().get("description"));
 	}
 
 	@Test
