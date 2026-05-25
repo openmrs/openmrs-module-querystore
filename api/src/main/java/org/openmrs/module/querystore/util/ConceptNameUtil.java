@@ -18,6 +18,7 @@ import java.util.TreeSet;
 import org.openmrs.Concept;
 import org.openmrs.ConceptDescription;
 import org.openmrs.ConceptName;
+import org.openmrs.api.ConceptNameType;
 import org.openmrs.api.context.Context;
 import org.openmrs.util.LocaleUtility;
 
@@ -30,7 +31,7 @@ import org.openmrs.util.LocaleUtility;
  */
 public final class ConceptNameUtil {
 
-	private static final int MAX_SYNONYMS = 3;
+	private static final int MAX_NON_SHORT_SYNONYMS = 10;
 
 	private ConceptNameUtil() {
 	}
@@ -115,6 +116,14 @@ public final class ConceptNameUtil {
 	 * re-resolving the locale. {@code preferredName} must equal what {@link #getPreferredName}
 	 * would return for the active locale; passing a different string corrupts the dedupe filter
 	 * and can leak the preferred name into the synonyms list.
+	 *
+	 * <p>SHORT-typed names ({@link ConceptNameType#SHORT}) are returned unconditionally —
+	 * clinical abbreviations like {@code DTG}, {@code HTN}, {@code T2DM} are how clinicians
+	 * actually type queries, and a single alphabetic cap would let them lose slots to
+	 * locale-equivalent FQN variants. Non-SHORT synonyms are still capped at
+	 * {@link #MAX_NON_SHORT_SYNONYMS} so concepts with many alternate name variants don't skew
+	 * BM25 term-frequency normalization; cap is on the non-SHORT bucket only. Same-string
+	 * names appearing in both buckets are deduplicated.
 	 */
 	public static List<String> getSynonyms(Concept concept, String preferredName) {
 		if (concept == null || concept.getNames() == null) {
@@ -124,7 +133,8 @@ public final class ConceptNameUtil {
 		// OCL) typically tag names as "en" while deployment locales are often "en_GB" or "en_US";
 		// Concept.getSynonyms(Locale)'s strict Locale.equals would silently drop those.
 		String localeLanguage = resolveLocale().getLanguage();
-		TreeSet<String> sorted = new TreeSet<>();
+		TreeSet<String> shortNames = new TreeSet<>();
+		TreeSet<String> otherNames = new TreeSet<>();
 		for (ConceptName cn : concept.getNames()) {
 			String name = cn.getName();
 			if (name == null || name.equals(preferredName)) {
@@ -133,14 +143,28 @@ public final class ConceptNameUtil {
 			if (cn.getLocale() != null && !cn.getLocale().getLanguage().equals(localeLanguage)) {
 				continue;
 			}
-			sorted.add(name);
+			if (cn.getConceptNameType() == ConceptNameType.SHORT) {
+				shortNames.add(name);
+			} else {
+				otherNames.add(name);
+			}
 		}
-		List<String> result = new ArrayList<>(Math.min(sorted.size(), MAX_SYNONYMS));
-		for (String name : sorted) {
-			if (result.size() >= MAX_SYNONYMS) {
+		List<String> result = new ArrayList<>(
+				shortNames.size() + Math.min(otherNames.size(), MAX_NON_SHORT_SYNONYMS));
+		result.addAll(shortNames);
+		int cap = MAX_NON_SHORT_SYNONYMS;
+		for (String name : otherNames) {
+			if (cap == 0) {
 				break;
 			}
+			// Same string registered with both SHORT and non-SHORT types is rare but possible
+			// in messy real-world dictionaries; the SHORT bucket already carries the entry, so
+			// the non-SHORT pass must skip it to avoid the result list double-counting.
+			if (shortNames.contains(name)) {
+				continue;
+			}
 			result.add(name);
+			cap--;
 		}
 		return result;
 	}
