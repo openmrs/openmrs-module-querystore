@@ -11,6 +11,11 @@
            http://www.springframework.org/schema/tx
            http://www.springframework.org/schema/tx/spring-tx-4.3.xsd">
 
+    <!-- Scoped to .web only: picks up the omod REST controller(s) without touching the explicitly
+         declared api beans below, and stays a no-op during api-module tests (where omod classes are
+         absent from the classpath). -->
+    <context:component-scan base-package="org.openmrs.module.querystore.web"/>
+
     <bean id="querystore.backend.mysql"
           class="org.openmrs.module.querystore.backend.mysql.MysqlBackendStore">
         <constructor-arg ref="dbSessionFactory"/>

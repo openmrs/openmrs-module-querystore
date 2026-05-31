@@ -15,6 +15,12 @@
 
     <require_version>2.8.0</require_version>
 
+    <!-- The webservices.rest module hosts the /ws/rest/v1 dispatcher that serves the indexing-status
+         REST controller (org.openmrs.module.querystore.web.rest). -->
+    <require_modules>
+        <require_module version="2.44.0">org.openmrs.module.webservices.rest</require_module>
+    </require_modules>
+
     <!--
         Migration-bridge advice per ADR Decision 12. Each entry projects writes through the same
         serialize → embed → index pipeline an events-first handler will drive once core publishes

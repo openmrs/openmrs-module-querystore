@@ -23,6 +23,15 @@
             <scope>compile</scope>
         </dependency>
 
+        <!-- Provides the /ws/rest/v1 dispatcher + RestConstants for the indexing-status controller.
+             Provided: supplied at runtime by the required webservices.rest module (see config.xml). -->
+        <dependency>
+            <groupId>org.openmrs.module</groupId>
+            <artifactId>webservices.rest-omod-common</artifactId>
+            <version>2.44.0</version>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.openmrs.api</groupId>
             <artifactId>openmrs-api</artifactId>
