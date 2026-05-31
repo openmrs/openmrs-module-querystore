@@ -490,6 +490,7 @@ public class QueryStoreServiceImplTest {
 				onEnsureIndexed.accept(patientUuid);
 			}
 		}
+		@Override public void reindexPatient(String patientUuid) { }
 		@Override public List<BootstrapProgress> getStatus() { return Collections.emptyList(); }
 		@Override public BootstrapProgress getStatus(String resourceType) { return null; }
 		@Override public void onStartup() { }

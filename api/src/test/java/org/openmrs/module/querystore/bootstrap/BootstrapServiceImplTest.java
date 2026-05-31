@@ -588,7 +588,103 @@ public class BootstrapServiceImplTest {
 		t2.join(2000);
 	}
 
+	@Test
+	public void reindexPatient_deletesExistingDocsThenReprojectsEveryType() {
+		List<String> events = new java.util.ArrayList<String>();
+		RecordingQueryStoreService qs = new RecordingQueryStoreService(events);
+		service.setQueryStoreService(qs);
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project:" + t);
+		EmptyPageBootstrapper enc = new EmptyPageBootstrapper("encounter");
+		enc.onFetch = t -> events.add("project:" + t);
+		service.setBootstrappers(Arrays.asList(obs, enc));
+
+		service.reindexPatient("patient-uuid");
+
+		assertEquals("patient's existing docs must be deleted exactly once", 1, qs.bulkDeleteCount);
+		assertEquals("patient-uuid", qs.lastDeletedPatient);
+		assertEquals("every registered type must be re-projected", 1, obs.fetchForPatientCount);
+		assertEquals(1, enc.fetchForPatientCount);
+		assertEquals("patient-uuid", obs.lastPatientUuid);
+		// Order invariant — load-bearing: delete MUST precede projection. Projecting first and then
+		// deleting would re-add the patient's records and then wipe them, leaving the patient EMPTY
+		// (silent data loss). Pin delete as the first recorded event.
+		assertEquals("delete must happen before any projection", "delete", events.get(0));
+		assertTrue("both types projected after the delete",
+		        events.contains("project:obs") && events.contains("project:encounter"));
+	}
+
+	@Test
+	public void reindexPatient_nullOrBlankUuid_isNoOp() {
+		List<String> events = new java.util.ArrayList<String>();
+		RecordingQueryStoreService qs = new RecordingQueryStoreService(events);
+		service.setQueryStoreService(qs);
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project:" + t);
+		service.setBootstrappers(Arrays.asList(obs));
+
+		service.reindexPatient(null);
+		service.reindexPatient("");
+
+		assertEquals("null/blank uuid must not delete anything", 0, qs.bulkDeleteCount);
+		assertEquals("null/blank uuid must not project anything", 0, obs.fetchForPatientCount);
+	}
+
+	@Test
+	public void reindexPatient_perTypeFailureIsolated() {
+		RecordingQueryStoreService qs = new RecordingQueryStoreService(new java.util.ArrayList<String>());
+		service.setQueryStoreService(qs);
+		EmptyPageBootstrapper failing = new EmptyPageBootstrapper("obs");
+		failing.perPatientFailure = new RuntimeException("boom");
+		EmptyPageBootstrapper ok = new EmptyPageBootstrapper("encounter");
+		service.setBootstrappers(Arrays.asList(failing, ok));
+
+		service.reindexPatient("patient-uuid");
+
+		assertEquals(1, qs.bulkDeleteCount);
+		assertEquals("a per-type projection failure must not abort the rest", 1, ok.fetchForPatientCount);
+	}
+
 	// ---------- fakes ----------
+
+	/** QueryStoreService that records bulkDeleteByPatient calls (and order, via the shared events
+	 *  list) so reindex tests can pin the delete-before-projection invariant. */
+	private static final class RecordingQueryStoreService implements QueryStoreService {
+
+		private final List<String> events;
+
+		int bulkDeleteCount;
+
+		String lastDeletedPatient;
+
+		RecordingQueryStoreService(List<String> events) {
+			this.events = events;
+		}
+
+		@Override
+		public void bulkDeleteByPatient(String patientUuid) {
+			bulkDeleteCount++;
+			lastDeletedPatient = patientUuid;
+			events.add("delete");
+		}
+
+		@Override
+		public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+			return org.openmrs.module.querystore.backend.WriteResult.success();
+		}
+
+		@Override public void delete(String resourceType, String resourceUuid) { }
+
+		@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
+
+		@Override public List<QueryDocument> search(String q, int l) { return Collections.emptyList(); }
+
+		@Override public List<QueryDocument> getPatientChart(String patientUuid) { return Collections.emptyList(); }
+
+		@Override public void onStartup() { }
+
+		@Override public void onShutdown() { }
+	}
 
 	/**
 	 * Bootstrapper whose corpus is empty — fetchPage is called once, returns no records, the loop

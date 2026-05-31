@@ -159,25 +159,52 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			if (backendSelector != null && backendSelector.getStore().existsByPatient(patientUuid)) {
 				return;
 			}
-			Map<String, ResourceTypeProvider> providers = discoverProviders();
-			for (String resourceType : allResourceTypes(providers)) {
-				try {
-					runOneForPatient(resourceType, patientUuid, providers);
+			projectAllTypesForPatient(patientUuid);
+		}
+	}
+
+	@Override
+	public void reindexPatient(String patientUuid) {
+		if (patientUuid == null || patientUuid.isEmpty()) {
+			return;
+		}
+		Object lock = patientLocks.computeIfAbsent(patientUuid, k -> new Object());
+		synchronized (lock) {
+			// Force a full re-projection (repairs a partially-indexed patient, which ensureIndexed's
+			// existsByPatient gate refuses to touch). Delete FIRST: this clears stale rows AND means
+			// the projection isn't gated by existing docs. Order is load-bearing — projecting before
+			// deleting would re-add the patient's records and then wipe them, leaving the patient
+			// empty. Same per-patient lock as ensureIndexed, so a concurrent cold-touch projection
+			// can't interleave with the delete. queryStoreService is called unconditionally (as
+			// elsewhere in this class): a null here is a wiring fault that must fail loudly, not
+			// silently skip the delete and leave stale docs alongside the re-projected ones.
+			queryStoreService.bulkDeleteByPatient(patientUuid);
+			projectAllTypesForPatient(patientUuid);
+		}
+	}
+
+	/** The per-type per-patient projection loop shared by {@link #ensureIndexed} and
+	 *  {@link #reindexPatient}. Per-type and per-record failures are isolated and logged so one
+	 *  type's failure doesn't abort the rest. Caller holds the per-patient lock. */
+	private void projectAllTypesForPatient(String patientUuid) {
+		Map<String, ResourceTypeProvider> providers = discoverProviders();
+		for (String resourceType : allResourceTypes(providers)) {
+			try {
+				runOneForPatient(resourceType, patientUuid, providers);
+			}
+			catch (UnsupportedOperationException noPerPatientImpl) {
+				// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
+				// default throw). Legitimate no-op for reference-data SPI types that don't carry a
+				// patient association — log at debug so a deployment with several such providers
+				// doesn't spam warnings on every cold searchByPatient.
+				if (log.isDebugEnabled()) {
+					log.debug("Skipping " + resourceType + " for patient " + patientUuid
+					        + " — no per-patient projection implemented");
 				}
-				catch (UnsupportedOperationException noPerPatientImpl) {
-					// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
-					// default throw). Legitimate no-op for reference-data SPI types that don't carry a
-					// patient association — log at debug so a deployment with several such providers
-					// doesn't spam warnings on every cold searchByPatient.
-					if (log.isDebugEnabled()) {
-						log.debug("Skipping " + resourceType + " for patient " + patientUuid
-						        + " — no per-patient projection implemented");
-					}
-				}
-				catch (RuntimeException e) {
-					log.warn("Per-patient projection of " + resourceType + " for patient " + patientUuid
-					        + " failed; continuing with remaining types", e);
-				}
+			}
+			catch (RuntimeException e) {
+				log.warn("Per-patient projection of " + resourceType + " for patient " + patientUuid
+				        + " failed; continuing with remaining types", e);
 			}
 		}
 	}

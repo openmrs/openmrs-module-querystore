@@ -49,6 +49,22 @@ public interface BootstrapService extends OpenmrsService {
 	 */
 	void ensureIndexed(String patientUuid);
 
+	/**
+	 * Forces a full re-projection of one patient: deletes the patient's existing read-store
+	 * documents, then re-projects every registered resource type from core — the same per-type
+	 * projection {@link #ensureIndexed(String)} uses, but <em>unconditional</em>. Unlike
+	 * {@code ensureIndexed} (which short-circuits when the patient already has any document), this
+	 * repairs a <em>partially</em>-indexed patient — e.g. one whose recent records were added by a
+	 * SQL dump that bypassed the live indexing bridge and which the lazy cold-touch path can
+	 * therefore never refresh.
+	 *
+	 * <p>Delete and re-projection run under the same per-patient lock as {@code ensureIndexed}, so
+	 * a concurrent cold-touch projection cannot interleave with the delete and leave the patient
+	 * under-indexed. No-op for a null/blank uuid. Per-record and per-type failures are isolated and
+	 * logged, matching {@code ensureIndexed}.
+	 */
+	void reindexPatient(String patientUuid);
+
 	List<BootstrapProgress> getStatus();
 
 	BootstrapProgress getStatus(String resourceType);
