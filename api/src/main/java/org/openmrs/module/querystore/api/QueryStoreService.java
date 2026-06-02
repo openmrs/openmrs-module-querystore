@@ -9,10 +9,13 @@
  */
 package org.openmrs.module.querystore.api;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.openmrs.annotation.Authorized;
 import org.openmrs.api.OpenmrsService;
+import org.openmrs.module.querystore.backend.BulkWriteResult;
+import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.util.PrivilegeConstants;
@@ -41,6 +44,48 @@ public interface QueryStoreService extends OpenmrsService {
 	 * the caller should surface, not silently absorb.
 	 */
 	WriteResult index(QueryDocument document);
+
+	/**
+	 * Indexes a batch of clinical records in one backend round-trip, routing each to its per-type
+	 * index. Internal: invoked by the bootstrap dispatcher to avoid the per-document commit that
+	 * dominates backfill wall-clock (one transaction/commit per record — see ADR Decision 3). The
+	 * documents need not share a resource type; the backend groups them.
+	 *
+	 * <p>Returns a non-null {@link BulkWriteResult} whose {@link BulkWriteResult#getSucceeded()} is
+	 * the count of confirmed writes and whose {@link BulkWriteResult#getFailures()} carries the
+	 * per-doc {@link org.openmrs.module.querystore.backend.DocFailure}s. Like {@link #index}, the
+	 * caller MUST consult the result rather than treating "did not throw" as success, and
+	 * implementations MUST NOT return {@code null}. An empty input list returns an empty result
+	 * (zero requested, zero succeeded) without touching the backend. Throws
+	 * {@link IllegalStateException} when the backend isn't wired.
+	 *
+	 * <p>A {@code default} so existing implementers (test doubles, out-of-tree services) keep
+	 * compiling and get a correct — if unbatched — fallback that loops {@link #index}; the production
+	 * {@code QueryStoreServiceImpl} overrides it with a single batched backend round-trip, which is
+	 * the throughput win the bootstrap needs.
+	 */
+	default BulkWriteResult bulkIndex(List<QueryDocument> documents) {
+		if (documents == null || documents.isEmpty()) {
+			return new BulkWriteResult(0, 0, new ArrayList<DocFailure>());
+		}
+		int succeeded = 0;
+		List<DocFailure> failures = new ArrayList<DocFailure>();
+		for (QueryDocument doc : documents) {
+			WriteResult result = index(doc);
+			if (result != null && result.isSucceeded()) {
+				succeeded++;
+			} else if (result != null) {
+				failures.add(result.getFailure());
+			} else {
+				// index() MUST NOT return null (see its contract). Count a violation as a failure
+				// rather than silently dropping it, so succeeded + failures.size() == requested holds.
+				failures.add(new DocFailure(doc == null ? null : doc.getResourceType(),
+				        doc == null ? null : doc.getResourceUuid(),
+				        "index() returned null (SPI contract violation)", false));
+			}
+		}
+		return new BulkWriteResult(documents.size(), succeeded, failures);
+	}
 
 	/**
 	 * Removes the document with the given resource UUID from the given per-type index. Internal:

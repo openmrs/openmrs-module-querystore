@@ -26,7 +26,7 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * writes via {@link QueryStoreService#index(QueryDocument)}, which honors the
  * conditional-upsert-by-version invariant (ADR Decision 3).
  *
- * <p>Mirrors {@code TypeBootstrapper.projectOne} so the two write paths produce identical
+ * <p>Mirrors {@code TypeBootstrapper.serializeAndEmbed} so the two write paths produce identical
  * documents for the same source record — both delegate the embedding-input construction to
  * {@link QueryDocument#getEmbeddingInput()} so the rule lives on the model, not at the call sites.
  */
@@ -47,8 +47,9 @@ public class BridgeIndexer {
 	 * Embed and write the document. The AOP path is fire-and-forget by design (invoked from
 	 * {@code AfterCommitDispatcher} after the source-record transaction has committed), so per-doc
 	 * failures are logged here rather than thrown — there's no caller upstack who could meaningfully
-	 * react. Bootstrap goes through {@code TypeBootstrapper.projectOne} instead and consumes the
-	 * {@link WriteResult} directly so its progress counter only credits confirmed writes.
+	 * react. Bootstrap goes through {@code TypeBootstrapper.projectBatch} instead and consumes the
+	 * {@link org.openmrs.module.querystore.backend.BulkWriteResult} directly so its progress counter
+	 * only credits confirmed writes.
 	 */
 	public void index(QueryDocument doc) {
 		doc.setEmbedding(embeddingProvider.embed(doc.getEmbeddingInput()));

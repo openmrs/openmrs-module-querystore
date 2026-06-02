@@ -10,8 +10,8 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -19,7 +19,8 @@ import org.openmrs.BaseOpenmrsData;
 import org.openmrs.OpenmrsObject;
 import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.api.QueryStoreService;
-import org.openmrs.module.querystore.backend.WriteResult;
+import org.openmrs.module.querystore.backend.BulkWriteResult;
+import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.serialization.AbstractRecordSerializer;
@@ -28,8 +29,8 @@ import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 /**
  * Per-type backfill driver shared across resource types (ADR open question on initial bootstrap).
  * Walks core's transactional data ordered by effective dateChanged ascending, projects each
- * record through the type's {@link ClinicalRecordSerializer}, embeds the text, and writes via
- * {@link QueryStoreService#index(QueryDocument)} — which honors the conditional-upsert-by-version
+ * record through the type's {@link ClinicalRecordSerializer}, embeds the text, and writes each page
+ * in one {@link QueryStoreService#bulkIndex} call — which honors the conditional-upsert-by-version
  * SPI invariant so a slow scan can't overwrite a fresher concurrent AOP / event write.
  *
  * <p>Subclasses implement {@link #fetchPage} and {@link #getSerializer} for their entity type;
@@ -111,13 +112,18 @@ public abstract class TypeBootstrapper<T> {
 
 		try {
 			while (true) {
-				List<T> page = fetchPage(progress.getCursorDateChanged(), progress.getCursorUuid(), PAGE_SIZE);
-				if (page.isEmpty()) {
+				PageResult<T> page = nextPage(progress.getCursorDateChanged(), progress.getCursorUuid(), PAGE_SIZE);
+				if (page == null) {
 					break;
 				}
-				for (T entity : page) {
-					indexOne(entity, progress, service, embedder);
-				}
+				// Batch the writes: one bulkIndex per page instead of one index() per record avoids the
+				// per-doc commit (MySQL per-row txn+fsync, Lucene segment-per-doc) that dominates backfill
+				// wall-clock — ADR Decision 3. The cursor is checkpointed per page, not per record; a crash
+				// mid-page re-does that page on resume, which the version-guarded upsert makes idempotent.
+				progress.setDocumentsIndexed(progress.getDocumentsIndexed()
+				        + projectBatch(page.entities, service, embedder));
+				progress.setCursorDateChanged(page.nextCursorDate);
+				progress.setCursorUuid(page.nextCursorUuid);
 				progressDao.save(progress);
 			}
 			progress.setStatus(BootstrapStatus.COMPLETED);
@@ -138,10 +144,11 @@ public abstract class TypeBootstrapper<T> {
 
 	/**
 	 * Patient-scoped variant of {@link #run}: walks {@link #fetchPageForPatient} until exhausted and
-	 * projects each record through the serializer + embedder + write path. No progress row is
+	 * batch-projects each page through the serializer + embedder + bulk write path. No progress row is
 	 * persisted — the per-patient path is invoked from the auto-index path on cold search and its
-	 * cursor lives only for the duration of the call. Per-record failures are isolated by
-	 * {@link #projectOne}; a fetch-side failure propagates.
+	 * cursor lives only for the duration of the call. Per-record serialize/embed failures are isolated
+	 * by {@link #serializeAndEmbed}; a page-fetch failure propagates (the poison-page fallback that
+	 * {@link #run} uses is scoped to the global scan for now — a per-patient orphan still surfaces).
 	 */
 	public final void runForPatient(String patientUuid, QueryStoreService service, EmbeddingProvider embedder) {
 		Instant cursor = null;
@@ -151,67 +158,86 @@ public abstract class TypeBootstrapper<T> {
 			if (page.isEmpty()) {
 				break;
 			}
-			for (T entity : page) {
-				try {
-					projectOne(entity, service, embedder);
-				}
-				finally {
-					cursor = getDateChanged(entity);
-					cursorUuid = getUuid(entity);
-				}
-			}
+			projectBatch(page, service, embedder);
+			T last = page.get(page.size() - 1);
+			cursor = getDateChanged(last);
+			cursorUuid = getUuid(last);
 		}
 	}
 
-	private void indexOne(T entity, BootstrapProgress progress, QueryStoreService service,
-	                      EmbeddingProvider embedder) {
-		try {
-			if (projectOne(entity, service, embedder)) {
-				progress.setDocumentsIndexed(progress.getDocumentsIndexed() + 1);
-			}
+	/**
+	 * Fetches the next page as a {@link PageResult} carrying the page plus the cursor to resume after it
+	 * (the last record's effective date + uuid). Returns {@code null} when the scan is exhausted.
+	 */
+	private PageResult<T> nextPage(Instant cursor, String cursorUuid, int pageSize) {
+		List<T> fast = fetchPage(cursor, cursorUuid, pageSize);
+		if (fast.isEmpty()) {
+			return null;
 		}
-		finally {
-			// Advance the cursor whether or not a document was produced (null-serializing records
-			// like group-obs parents) and whether or not the index call succeeded (per-entity
-			// failure is treated as a skip); resume must not revisit them.
-			progress.setCursorDateChanged(getDateChanged(entity));
-			progress.setCursorUuid(getUuid(entity));
-		}
+		T last = fast.get(fast.size() - 1);
+		return new PageResult<T>(fast, getDateChanged(last), getUuid(last));
 	}
 
-	/** Serialize → embed → index a single entity, returning true only when the backend confirmed
-	 *  the write. Per-entity skip on failure: a poison record must not stall a scan (the
-	 *  {@link #run} cursor advances past it; {@link #runForPatient} likewise advances its local
-	 *  cursor). Reading {@link WriteResult#isSucceeded()} — rather than treating "no throw" as
-	 *  success — is what keeps {@code documents_indexed} honest. The old contract counted any
-	 *  call that didn't throw, which silently inflated the counter when the service swallowed a
-	 *  null-backend wiring gap or a backend's per-doc IO failure. */
-	private boolean projectOne(T entity, QueryStoreService service, EmbeddingProvider embedder) {
+	/** Serialize + embed every entity in the page and write the resulting documents in one
+	 *  {@link QueryStoreService#bulkIndex} call, returning the count of confirmed writes. A null
+	 *  serialization (group-obs parent) or a per-record serialize/embed failure is skipped, not fatal;
+	 *  a backend write failure is logged via the per-doc {@link BulkWriteResult#getFailures()} and not
+	 *  counted, keeping {@code documents_indexed} honest (writes confirmed, not "calls that didn't throw"). */
+	private int projectBatch(List<T> page, QueryStoreService service, EmbeddingProvider embedder) {
+		List<QueryDocument> batch = new ArrayList<QueryDocument>(page.size());
+		for (T entity : page) {
+			QueryDocument doc = serializeAndEmbed(entity, embedder);
+			if (doc != null) {
+				batch.add(doc);
+			}
+		}
+		if (batch.isEmpty()) {
+			return 0;
+		}
+		BulkWriteResult result = service.bulkIndex(batch);
+		for (DocFailure failure : result.getFailures()) {
+			// Grep-able by the [querystore-skip] tag; operators filter retryable=true to find candidates
+			// to re-project after a transient backend incident.
+			log.warn(SkipLogFormat.format("bootstrap", failure));
+		}
+		return result.getSucceeded();
+	}
+
+	/** Serializes and embeds one entity into a write-ready document, or returns {@code null} to skip it:
+	 *  a null serialization (e.g. a group-obs parent) or a per-record serialize/embed failure (logged,
+	 *  never fatal to the scan). */
+	private QueryDocument serializeAndEmbed(T entity, EmbeddingProvider embedder) {
 		try {
 			QueryDocument doc = getSerializer().serialize(entity);
 			if (doc == null) {
-				return false;
+				return null;
 			}
 			doc.setEmbedding(embedder.embed(doc.getEmbeddingInput()));
-			// Non-null is part of the SPI contract — see QueryStoreService.index javadoc. Enforce
-			// here so an out-of-tree impl that returns null gets a clear error instead of an NPE
-			// that the outer RuntimeException catch absorbs as if it were a poison-record skip.
-			WriteResult result = Objects.requireNonNull(service.index(doc),
-			        "QueryStoreService.index returned null for " + getResourceType() + "/"
-			                + getUuid(entity) + " — non-null is part of the SPI contract");
-			if (result.isSucceeded()) {
-				return true;
-			}
-			// Grep-able by the [querystore-skip] tag SkipLogFormat owns. Operators recovering from a
-			// transient backend incident filter on retryable=true to find candidates to re-project.
-			log.warn(SkipLogFormat.format("bootstrap", result.getFailure()));
+			return doc;
 		}
 		catch (RuntimeException e) {
-			// retryable=null → "unknown": we caught a thrown exception, not a DocFailure-bearing
-			// WriteResult, so the backend's retryable hint isn't available on this path.
+			// retryable=null → "unknown": a thrown exception, not a DocFailure-bearing WriteResult.
 			log.warn(SkipLogFormat.format("bootstrap", getResourceType(), getUuid(entity),
 			        null, e.getMessage()), e);
+			return null;
 		}
-		return false;
+	}
+
+	/** A fetched page plus the cursor to resume after it. {@code entities} may be empty (an all-poison
+	 *  window the fallback skipped) while {@code nextCursorDate}/{@code nextCursorUuid} still advance past
+	 *  it, so the scan progresses rather than re-fetching the same poison window forever. */
+	protected static final class PageResult<E> {
+
+		final List<E> entities;
+
+		final Instant nextCursorDate;
+
+		final String nextCursorUuid;
+
+		protected PageResult(List<E> entities, Instant nextCursorDate, String nextCursorUuid) {
+			this.entities = entities;
+			this.nextCursorDate = nextCursorDate;
+			this.nextCursorUuid = nextCursorUuid;
+		}
 	}
 }

@@ -22,6 +22,7 @@ import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
+import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.SearchRequest;
@@ -94,8 +95,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			// Misconfiguration, not a per-doc problem — silently swallowing here is what produced the
 			// "bootstrap reports 682 indexed but the index holds 0" failure mode the slice fixes.
 			// Throwing lets the bootstrap dispatcher (and any other caller that cares about persistence
-			// accuracy) react: TypeBootstrapper.projectOne catches RuntimeException to skip the record,
-			// without incrementing documents_indexed, so the counter only reflects confirmed writes.
+			// accuracy) react: TypeBootstrapper.serializeAndEmbed catches RuntimeException to skip the
+			// record, so the batch's documents_indexed only reflects confirmed writes.
 			throw new IllegalStateException(
 			        "No BackendStore wired into QueryStoreServiceImpl; cannot index "
 			                + document.getResourceType() + "/" + document.getResourceUuid()
@@ -104,6 +105,48 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			                + "exercising the index path.");
 		}
 		return backend.upsert(document);
+	}
+
+	// Overrides the interface's per-doc default with a single batched backend round-trip — the
+	// commit-amortization win the bootstrap needs (ADR Decision 3).
+	@Override
+	public BulkWriteResult bulkIndex(List<QueryDocument> documents) {
+		if (documents == null || documents.isEmpty()) {
+			return new BulkWriteResult(0, 0, Collections.<DocFailure> emptyList());
+		}
+		if (backend == null) {
+			// Same misconfiguration guard as index() — throw rather than silently report success.
+			throw new IllegalStateException(
+			        "No BackendStore wired into QueryStoreServiceImpl; cannot bulkIndex "
+			                + documents.size() + " documents. Production: check wireBackend() in "
+			                + "QueryStoreActivator.started() and the querystore.backend GP value. "
+			                + "Tests: call setBackend() before exercising the index path.");
+		}
+		// Filter malformed docs into failures here rather than passing them to the backend, where a
+		// single invalid doc would abort the whole batch (BackendDocs.validate throws outside the
+		// backend's per-batch try/catch). Keeps one poison doc from sinking a good batch — the batched
+		// analogue of index()'s null/uuid guards.
+		List<QueryDocument> valid = new ArrayList<QueryDocument>(documents.size());
+		List<DocFailure> invalid = new ArrayList<DocFailure>();
+		for (QueryDocument doc : documents) {
+			if (doc == null) {
+				invalid.add(new DocFailure(null, null, "document was null", false));
+			} else if (doc.getResourceUuid() == null) {
+				invalid.add(new DocFailure(doc.getResourceType(), null, "document resource_uuid was null", false));
+			} else {
+				valid.add(doc);
+			}
+		}
+		if (valid.isEmpty()) {
+			return new BulkWriteResult(documents.size(), 0, invalid);
+		}
+		BulkWriteResult backendResult = backend.bulkUpsert(valid);
+		if (invalid.isEmpty()) {
+			return backendResult;
+		}
+		List<DocFailure> merged = new ArrayList<DocFailure>(backendResult.getFailures());
+		merged.addAll(invalid);
+		return new BulkWriteResult(documents.size(), backendResult.getSucceeded(), merged);
 	}
 
 	@Override

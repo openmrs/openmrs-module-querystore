@@ -15,6 +15,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -67,6 +68,96 @@ public class QueryStoreServiceImplTest {
 			assertTrue("error message should name the offending resource",
 			        expected.getMessage().contains("obs/obs-uuid"));
 		}
+	}
+
+	@Test
+	public void bulkIndex_delegatesToBackendInOneRoundTrip() {
+		// #1: the batched path is one backend.bulkUpsert call for the whole page, not N upserts —
+		// that's the per-doc-commit amortization the bootstrap throughput fix depends on.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		service.setBackend(backend);
+
+		BulkWriteResult result = service.bulkIndex(Arrays.asList(doc("obs", "u1"), doc("obs", "u2"),
+		        doc("condition", "u3")));
+
+		assertEquals("one backend round-trip for the whole batch", 1, backend.bulkUpsertCount.get());
+		assertEquals(3, backend.bulkUpserted.size());
+		assertEquals(3, result.getSucceeded());
+	}
+
+	@Test
+	public void bulkIndex_emptyOrNull_returnsEmptyWithoutTouchingBackend() {
+		FakeBackendStore backend = new FakeBackendStore(false);
+		service.setBackend(backend);
+
+		assertEquals(0, service.bulkIndex(Collections.<QueryDocument> emptyList()).getTotalRequested());
+		assertEquals(0, service.bulkIndex(null).getTotalRequested());
+		assertEquals("an empty/null batch never reaches the backend", 0, backend.bulkUpsertCount.get());
+	}
+
+	@Test
+	public void bulkIndex_filtersMalformedDocsIntoFailures_withoutAbortingTheBatch() {
+		// A null doc or a uuid-less doc would make backend.bulkUpsert's validate() throw and sink the
+		// whole batch; bulkIndex filters them into failures and still writes the valid ones.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		service.setBackend(backend);
+		QueryDocument noUuid = new QueryDocument();
+		noUuid.setResourceType("obs");
+
+		BulkWriteResult result = service.bulkIndex(Arrays.asList(doc("obs", "u1"), null, noUuid));
+
+		assertEquals("only the well-formed doc reaches the backend", 1, backend.bulkUpserted.size());
+		assertEquals(3, result.getTotalRequested());
+		assertEquals(1, result.getSucceeded());
+		assertEquals("the null and uuid-less docs are reported as failures", 2, result.getFailures().size());
+	}
+
+	@Test
+	public void bulkIndex_throwsWhenBackendNotWired() {
+		try {
+			service.bulkIndex(Arrays.asList(doc("obs", "u1")));
+			fail("expected IllegalStateException because backend was not wired");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue(expected.getMessage().contains("bulkIndex"));
+		}
+	}
+
+	@Test
+	public void defaultBulkIndex_countsNullWriteResultAsFailure_notSilentDrop() {
+		// The interface default loops index(); index() MUST return non-null, so a contract-violating
+		// null is counted as a failure rather than silently dropped — succeeded + failures == requested.
+		QueryStoreService viaDefault = new QueryStoreService() {
+
+			@Override public WriteResult index(QueryDocument document) { return null; }
+
+			@Override public void delete(String resourceType, String resourceUuid) { }
+
+			@Override public void bulkDeleteByPatient(String patientUuid) { }
+
+			@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
+
+			@Override public List<QueryDocument> search(String q, int l) { return Collections.emptyList(); }
+
+			@Override public List<QueryDocument> getPatientChart(String p) { return Collections.emptyList(); }
+
+			@Override public void onStartup() { }
+
+			@Override public void onShutdown() { }
+		};
+
+		BulkWriteResult result = viaDefault.bulkIndex(Arrays.asList(doc("obs", "u1"), doc("obs", "u2")));
+
+		assertEquals(2, result.getTotalRequested());
+		assertEquals(0, result.getSucceeded());
+		assertEquals("null results are counted as failures, not silently dropped", 2, result.getFailures().size());
+	}
+
+	private static QueryDocument doc(String resourceType, String resourceUuid) {
+		QueryDocument d = new QueryDocument();
+		d.setResourceType(resourceType);
+		d.setResourceUuid(resourceUuid);
+		return d;
 	}
 
 	@Test
@@ -433,7 +524,14 @@ public class QueryStoreServiceImplTest {
 			return upsertFailure != null ? upsertFailure : WriteResult.success();
 		}
 		@Override public WriteResult delete(String resourceType, String resourceUuid) { return null; }
-		@Override public BulkWriteResult bulkUpsert(List<QueryDocument> docs) { return null; }
+		final AtomicInteger bulkUpsertCount = new AtomicInteger();
+		final java.util.List<QueryDocument> bulkUpserted = new java.util.ArrayList<>();
+		@Override public BulkWriteResult bulkUpsert(List<QueryDocument> docs) {
+			bulkUpsertCount.incrementAndGet();
+			bulkUpserted.addAll(docs);
+			return new BulkWriteResult(docs.size(), docs.size(),
+			        Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList());
+		}
 		@Override public BulkWriteResult bulkDelete(String resourceType, List<String> uuids) { return null; }
 		@Override public BulkWriteResult bulkDeleteByPatient(String patientUuid) {
 			bulkDeleteByPatientCount.incrementAndGet();

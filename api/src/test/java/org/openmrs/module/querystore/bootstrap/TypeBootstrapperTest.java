@@ -224,6 +224,23 @@ public class TypeBootstrapperTest {
 		    embedder.inputs.get(0));
 	}
 
+	@Test
+	public void run_batchesWritesPerPage_oneBulkIndexCallEach() {
+		// #1: the scan writes one bulkIndex per page (amortizing the per-doc commit), not one index()
+		// per record. Two pages of (2, 1) records => two bulk calls of sizes [2, 1].
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("a", Instant.parse("2025-01-01T00:00:00Z")),
+		        entity("b", Instant.parse("2025-01-02T00:00:00Z")));
+		b.queuePage(entity("c", Instant.parse("2025-01-03T00:00:00Z")));
+		BootstrapProgress progress = new BootstrapProgress("test");
+
+		b.run(progress, service, embedder, progressDao);
+
+		assertEquals("one bulkIndex per page", Arrays.asList(2, 1), service.bulkBatchSizes);
+		assertEquals(3, progress.getDocumentsIndexed());
+		assertEquals(3, service.indexed.size());
+	}
+
 	// ---------- fakes ----------
 
 	private static TestEntity entity(String uuid, Instant ts) {
@@ -317,7 +334,17 @@ public class TypeBootstrapperTest {
 
 	private static final class RecordingQueryStoreService implements QueryStoreService {
 		final List<QueryDocument> indexed = new ArrayList<>();
+		final List<Integer> bulkBatchSizes = new ArrayList<>();
 		String failUuid;
+
+		// Record the batch size per call, then route to the interface default (which loops index())
+		// so `indexed` still captures every doc — lets a test assert "one bulkIndex per page" while
+		// keeping the per-doc recording the other tests rely on.
+		@Override
+		public org.openmrs.module.querystore.backend.BulkWriteResult bulkIndex(List<QueryDocument> documents) {
+			bulkBatchSizes.add(documents.size());
+			return QueryStoreService.super.bulkIndex(documents);
+		}
 
 		@Override
 		public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
