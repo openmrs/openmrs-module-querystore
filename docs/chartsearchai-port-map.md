@@ -37,7 +37,7 @@ Single shared table with `(resource_type, resource_id)` UNIQUE. `embedding mediu
 
 ## Coverage map: which OpenMRS services chartsearchai's AOP advises
 
-Useful as a checklist for events-first subscription coverage. Each service emits create/update/void/purge events that querystore needs to handle:
+Useful as a checklist for events-first subscription coverage. Under core's #6084 events, each service's lifecycle methods emit the typed events querystore handles — `SaveServiceEvent` (covers create + update), `VoidServiceEvent`, `UnvoidServiceEvent`, `RetireServiceEvent`, `UnretireServiceEvent`, `PurgeServiceEvent` (see [Decision 12](./adr.md#decision-12-sync-mechanism--events-first-aop-as-last-resort-gap-filler)):
 
 - `EncounterService` — encounters, plus encounter-scoped obs and diagnoses
 - `ObsService` — obs (incl. group flattening)
