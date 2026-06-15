@@ -24,21 +24,21 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * centralising them keeps each test class small and removes the clipboard-copy drift the prior
  * /harden cycle flagged.
  *
- * <p>Not promoted to a project-wide {@code testsupport} package because the existing bootstrap
- * tests have their own (subtly different) recording-service variants and unifying them is out of
- * this slice's scope.
+ * <p>Public so the events-consumer tests ({@code org.openmrs.module.querystore.events}) reuse the
+ * same recording pipeline as the bridge tests rather than cloning it. Not unified with the
+ * bootstrap tests' own (subtly different) recording-service variants — out of this slice's scope.
  */
-final class BridgeAdviceTestSupport {
+public final class BridgeAdviceTestSupport {
 
 	private BridgeAdviceTestSupport() {
 	}
 
-	static final class RecordingService implements QueryStoreService {
-		final List<QueryDocument> indexed = new ArrayList<>();
+	public static final class RecordingService implements QueryStoreService {
+		public final List<QueryDocument> indexed = new ArrayList<>();
 
-		final List<String[]> deleted = new ArrayList<>();
+		public final List<String[]> deleted = new ArrayList<>();
 
-		final List<String> bulkDeletedPatients = new ArrayList<>();
+		public final List<String> bulkDeletedPatients = new ArrayList<>();
 
 		@Override
 		public WriteResult index(QueryDocument document) {
@@ -69,7 +69,7 @@ final class BridgeAdviceTestSupport {
 		@Override public void onShutdown() { }
 	}
 
-	static final class ZeroEmbedder implements EmbeddingProvider {
+	public static final class ZeroEmbedder implements EmbeddingProvider {
 
 		@Override public int getDimensions() { return 8; }
 
@@ -81,11 +81,11 @@ final class BridgeAdviceTestSupport {
 	 * an after-commit callback. Keeps test assertions synchronous and counts dispatches so the
 	 * tests can pin "was the advice triggered?" without observing executor threads.
 	 */
-	static final class ImmediateDispatcher extends AfterCommitDispatcher {
+	public static final class ImmediateDispatcher extends AfterCommitDispatcher {
 
-		int count;
+		public int count;
 
-		ImmediateDispatcher() {
+		public ImmediateDispatcher() {
 			super(new BridgeExecutor());
 		}
 

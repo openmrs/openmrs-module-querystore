@@ -190,6 +190,15 @@
     <bean id="querystore.syncModeResolver"
           class="org.openmrs.module.querystore.bridge.SyncModeResolver"/>
 
+    <!-- Events-first sync (ADR Decision 12): the consumer subscribes to core's #6084 *ServiceEvents
+         and projects through the same RecordProjector as the bridge; the registry resolves the
+         per-type serializer by entity type. Active only when querystore.syncMode enables events. -->
+    <bean id="querystore.serializerRegistry"
+          class="org.openmrs.module.querystore.events.SerializerRegistry"/>
+
+    <bean id="querystore.events.listener"
+          class="org.openmrs.module.querystore.events.CoreServiceEventListener"/>
+
     <bean id="querystore.bootstrap.launcher"
           class="org.openmrs.module.querystore.bootstrap.BootstrapLauncher"/>
 

@@ -13,7 +13,7 @@
            http://www.springframework.org/schema/beans
            http://www.springframework.org/schema/beans/spring-beans-4.3.xsd">
 
-    <bean id="querystore.test.saveServiceEventProbe"
-          class="org.openmrs.module.querystore.events.SaveServiceEventProbe"/>
+    <bean id="querystore.test.serviceEventProbe"
+          class="org.openmrs.module.querystore.events.ServiceEventProbe"/>
 
 </beans>

@@ -9,31 +9,36 @@
  */
 package org.openmrs.module.querystore.events;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 import org.openmrs.Location;
+import org.openmrs.Patient;
 import org.openmrs.aop.event.SaveServiceEvent;
+import org.openmrs.aop.event.VoidServiceEvent;
 import org.openmrs.api.context.Context;
 import org.openmrs.test.BaseModuleContextSensitiveTest;
 
 /**
- * De-risks the events-consumer slice: confirms that a save through a core service publishes a
- * #6084 {@link SaveServiceEvent} AND that a bean in querystore's Spring context receives it via a
- * plain {@code @EventListener}. If this fails, the consumer must register listeners by another
- * mechanism (programmatic {@code ApplicationListener}) — so it is the first thing the slice settles.
+ * Context-sensitive checks that ground the events consumer against real core event publishing
+ * (in-memory context test DB, not {@code *IntegrationTest} / testcontainers):
  *
- * <p>Runs on the in-memory context test database (not {@code *IntegrationTest} / testcontainers).
- * {@link org.openmrs.api.LocationService} is wired via {@code TransactionProxyFactoryBean} in core,
- * the legacy shape the #6084 advice's {@code isAopProxy} guard de-duplicates rather than suppresses,
- * so this also exercises that the event fires for a legacy-wired core service.
+ * <ul>
+ *   <li>a bean in querystore's context receives {@link SaveServiceEvent} from a core service save
+ *       via a plain {@code @EventListener} — and for a legacy {@code TransactionProxyFactoryBean}
+ *       service ({@link org.openmrs.api.LocationService}), the shape the #6084 guard de-duplicates
+ *       rather than suppresses; and</li>
+ *   <li>the {@code voided} flag is already set when {@link VoidServiceEvent} publishes, which is
+ *       what lets the consumer route a void to a delete by reading the flag (purge=false).</li>
+ * </ul>
  */
 public class CoreServiceEventTest extends BaseModuleContextSensitiveTest {
 
 	@Test
 	public void coreServiceSave_isReceivedByAContextBeanEventListener() {
-		SaveServiceEventProbe probe = Context.getRegisteredComponent(
-		    "querystore.test.saveServiceEventProbe", SaveServiceEventProbe.class);
+		ServiceEventProbe probe = probe();
 		int before = probe.savedEntities().size();
 
 		Location location = new Location();
@@ -43,5 +48,24 @@ public class CoreServiceEventTest extends BaseModuleContextSensitiveTest {
 		assertTrue("a context bean's @EventListener should receive SaveServiceEvent from a core "
 		        + "service save (legacy TransactionProxyFactoryBean-wired LocationService)",
 		    probe.savedEntities().size() > before);
+	}
+
+	@Test
+	public void voidServiceEvent_entityIsAlreadyVoidedWhenPublished() {
+		ServiceEventProbe probe = probe();
+		Patient patient = Context.getPatientService().getPatient(2);
+		assertNotNull("standard test data should have patient 2", patient);
+
+		Context.getPatientService().voidPatient(patient, "querystore event-timing test");
+
+		assertFalse("voiding a patient should publish a VoidServiceEvent",
+		    probe.voidedFlagAtVoidEvent().isEmpty());
+		assertTrue("the entity must already be voided when VoidServiceEvent publishes, so the consumer "
+		        + "can route it to a delete by reading the flag",
+		    probe.voidedFlagAtVoidEvent().stream().allMatch(Boolean::booleanValue));
+	}
+
+	private static ServiceEventProbe probe() {
+		return Context.getRegisteredComponent("querystore.test.serviceEventProbe", ServiceEventProbe.class);
 	}
 }
