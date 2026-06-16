@@ -35,7 +35,10 @@ import org.openmrs.test.BaseModuleContextSensitiveTest;
  *       what lets the consumer route a void to a delete by reading the flag (purge=false); and</li>
  *   <li>a real {@code mergePatients} publishes a {@code SaveServiceEvent<PersonMergeLog>} carrying
  *       winner + loser — the sole signal the consumer's patient-merge reconciliation rides, since
- *       core fires no dedicated merge event.</li>
+ *       core fires no dedicated merge event; and</li>
+ *   <li>a real {@link CoreServiceEventListener} receiving that real event routes it to delete-loser
+ *       + reindex-winner with the correct uuids (via {@link RecordingMergeListener}'s capturing
+ *       doubles) — the event → routing → targets seam the unit test cannot reach.</li>
  * </ul>
  */
 public class CoreServiceEventTest extends BaseModuleContextSensitiveTest {
@@ -92,6 +95,33 @@ public class CoreServiceEventTest extends BaseModuleContextSensitiveTest {
 		        + "sole merge signal", merge);
 		assertNotNull("the merge event must carry the surviving person for reindex", merge.getWinner());
 		assertNotNull("the merge event must carry the merged-away person for the sweep", merge.getLoser());
+	}
+
+	@Test
+	public void mergePatients_realConsumerRoutesToReconcileWithCorrectTargets() throws Exception {
+		// The seam the unit test cannot reach: a real mergePatients publishes a real
+		// SaveServiceEvent<PersonMergeLog> that Spring delivers to a real CoreServiceEventListener,
+		// whose reconcileMerge must read winner/loser off the live payload and drive delete-loser +
+		// reindex-winner. RecordingMergeListener is that listener with capturing doubles (the backend
+		// effect is integration-tested separately); the production bean also receives the event, but
+		// its after-commit work rolls back with the test transaction.
+		RecordingMergeListener mergeListener = Context.getRegisteredComponent(
+		    "querystore.test.mergeListener", RecordingMergeListener.class);
+		mergeListener.reset();
+
+		Patient preferred = Context.getPatientService().getPatient(7);
+		Patient notPreferred = Context.getPatientService().getPatient(8);
+		assertNotNull("standard test data should have patient 7", preferred);
+		assertNotNull("standard test data should have patient 8", notPreferred);
+		String winnerUuid = preferred.getUuid();
+		String loserUuid = notPreferred.getUuid();
+
+		Context.getPatientService().mergePatients(preferred, notPreferred);
+
+		assertTrue("the merged-away patient's documents must be swept (bulkDeleteByPatient(loser))",
+		    mergeListener.sweptLoserUuids().contains(loserUuid));
+		assertTrue("the surviving patient's chart must be re-projected (reindexPatient(winner))",
+		    mergeListener.reindexedWinnerUuids().contains(winnerUuid));
 	}
 
 	private static ServiceEventProbe probe() {

@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
     Loaded into context-sensitive tests via BaseModuleContextSensitiveTest's
-    classpath*:TestingApplicationContext.xml location. Registers test-only probe beans into the same
+    classpath*:TestingApplicationContext.xml location. Registers test-only beans into the same
     Spring context the module beans load into, so a test can verify behaviour that depends on
-    context wiring (currently: that a context bean's @EventListener receives core's #6084
-    SaveServiceEvent). Bean ids are querystore.test.* to avoid collision with core's own
-    TestingApplicationContext.xml, which is also on the classpath under the same wildcard.
+    context wiring: serviceEventProbe observes that a context bean's @EventListener receives core's
+    #6084 SaveServiceEvent; mergeListener (a CoreServiceEventListener subclass with capturing
+    doubles) verifies the consumer routes a real mergePatients's PersonMergeLog event to its
+    reconcile. Both are inert for non-matching events. Bean ids are querystore.test.* to avoid
+    collision with core's own TestingApplicationContext.xml, which is also on the classpath under the
+    same wildcard.
 -->
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -15,5 +18,8 @@
 
     <bean id="querystore.test.serviceEventProbe"
           class="org.openmrs.module.querystore.events.ServiceEventProbe"/>
+
+    <bean id="querystore.test.mergeListener"
+          class="org.openmrs.module.querystore.events.RecordingMergeListener"/>
 
 </beans>
