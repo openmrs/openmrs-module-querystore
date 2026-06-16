@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -19,9 +19,9 @@ import org.junit.Test;
 import org.openmrs.Encounter;
 import org.openmrs.EncounterType;
 import org.openmrs.Patient;
-import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.ImmediateDispatcher;
-import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.RecordingService;
-import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.ZeroEmbedder;
+import org.openmrs.module.querystore.sync.SyncTestSupport.ImmediateDispatcher;
+import org.openmrs.module.querystore.sync.SyncTestSupport.RecordingService;
+import org.openmrs.module.querystore.sync.SyncTestSupport.ZeroEmbedder;
 import org.openmrs.module.querystore.serialization.EncounterRecordSerializer;
 import org.openmrs.module.querystore.serialization.PatientRecordSerializer;
 
@@ -34,14 +34,14 @@ public class RecordProjectorTest {
 
 	private RecordingService service;
 
-	private BridgeIndexer indexer;
+	private RecordIndexer indexer;
 
 	private ImmediateDispatcher dispatcher;
 
 	@Before
 	public void setUp() {
 		service = new RecordingService();
-		indexer = new BridgeIndexer(service, new ZeroEmbedder());
+		indexer = new RecordIndexer(service, new ZeroEmbedder());
 		dispatcher = new ImmediateDispatcher();
 	}
 

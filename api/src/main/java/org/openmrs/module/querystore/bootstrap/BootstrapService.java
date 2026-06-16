@@ -16,7 +16,7 @@ import org.openmrs.api.OpenmrsService;
 /**
  * Entry point for the initial-backfill path (ADR open question on bootstrap). Walks core's
  * transactional data per resource type and writes documents to the read store; concurrent steady-
- * state writes (AOP bridge or event handlers) are version-protected by the Decision 3 invariant
+ * state writes (the events sync pipeline) are version-protected by the Decision 3 invariant
  * so the freshest projection always wins. Invocation is admin-triggered; this service does not
  * auto-run from {@code QueryStoreActivator}.
  */
@@ -55,7 +55,7 @@ public interface BootstrapService extends OpenmrsService {
 	 * projection {@link #ensureIndexed(String)} uses, but <em>unconditional</em>. Unlike
 	 * {@code ensureIndexed} (which short-circuits when the patient already has any document), this
 	 * repairs a <em>partially</em>-indexed patient — e.g. one whose recent records were added by a
-	 * SQL dump that bypassed the live indexing bridge and which the lazy cold-touch path can
+	 * SQL dump that bypassed the live indexing path and which the lazy cold-touch path can
 	 * therefore never refresh.
 	 *
 	 * <p>Delete and re-projection run under the same per-patient lock as {@code ensureIndexed}, so

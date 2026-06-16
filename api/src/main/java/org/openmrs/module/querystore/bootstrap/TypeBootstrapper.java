@@ -31,7 +31,7 @@ import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
  * Walks core's transactional data ordered by effective dateChanged ascending, projects each
  * record through the type's {@link ClinicalRecordSerializer}, embeds the text, and writes each page
  * in one {@link QueryStoreService#bulkIndex} call — which honors the conditional-upsert-by-version
- * SPI invariant so a slow scan can't overwrite a fresher concurrent AOP / event write.
+ * SPI invariant so a slow scan can't overwrite a fresher concurrent sync write.
  *
  * <p>Subclasses implement {@link #fetchPage} and {@link #getSerializer} for their entity type;
  * {@link #getResourceType}, {@link #getDateChanged}, and {@link #getUuid} default off the serializer

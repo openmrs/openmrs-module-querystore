@@ -13,7 +13,7 @@ import org.openmrs.module.querystore.backend.DocFailure;
 
 /**
  * Single source of truth for the per-record skip log line emitted whenever a write does not land
- * (bootstrap and bridge alike). The line is grep-able by the {@code [querystore-skip]} token and
+ * (bootstrap and sync alike). The line is grep-able by the {@code [querystore-skip]} token and
  * carries {@code key=value} fields so an operator (or log-shipper) can extract the per-record
  * context — layer, resource type, resource uuid, retryable hint, and the backend's failure
  * message — without parsing prose.
@@ -45,7 +45,7 @@ public final class SkipLogFormat {
 	 * ternary pair. The catch-RuntimeException site has no DocFailure and uses the explicit-args
 	 * overload below.
 	 *
-	 * @param layer "bootstrap" or "bridge"
+	 * @param layer "bootstrap" or "sync"
 	 * @param f     the backend's per-doc failure; may be null when the WriteResult was failed but
 	 *              carried no DocFailure (the {@code WriteResult.failed(null)} edge case is
 	 *              theoretically possible per the API)
@@ -62,7 +62,7 @@ public final class SkipLogFormat {
 	 * Builds the skip-log message body. The returned string is intended to be passed verbatim to
 	 * {@code log.warn(...)}; the layout adds the timestamp and class context.
 	 *
-	 * @param layer "bootstrap" or "bridge" — names the write path that observed the failure
+	 * @param layer "bootstrap" or "sync" — names the write path that observed the failure
 	 * @param resourceType the document's resource type (e.g. "condition")
 	 * @param resourceUuid the document's resource uuid; may be null on degenerate inputs
 	 * @param retryable    the backend's retryable hint, or null when the path doesn't have one

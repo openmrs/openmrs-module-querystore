@@ -30,8 +30,8 @@ import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
  * ADR Decision 12). Whether a module's service emits #6084 events is conditional and must be
  * verified at runtime (ADR Decision 13 §3: it must be an {@code OpenmrsService} with {@code save*}/
  * {@code void*}/… methods taking an {@code OpenmrsObject}, called externally); a service that doesn't
- * qualify contributes its own event listener or AOP shim. The {@code querystore.bridge.indexer} and
- * {@code querystore.bridge.dispatcher} beans remain reachable via {@code Context.getRegisteredComponent(...)}
+ * qualify contributes its own event listener or AOP shim. The {@code querystore.sync.indexer} and
+ * {@code querystore.sync.dispatcher} beans remain reachable via {@code Context.getRegisteredComponent(...)}
  * for a provider that needs to drive the embed-then-upsert after-commit pipeline directly.
  *
  * <p><b>Name rule.</b> {@link #getResourceType()} must be {@code <moduleid>_<type>} per ADR

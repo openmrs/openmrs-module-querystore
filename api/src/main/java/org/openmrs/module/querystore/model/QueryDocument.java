@@ -31,7 +31,7 @@ import java.util.Map;
  *
  * <p>{@code lastModified} carries the source entity's "this projection is current as of" timestamp
  * (typically {@code dateChanged} falling back to {@code dateCreated}) so the backend can drop
- * stale writes when concurrent paths — bootstrap scan, AOP bridge, event handlers — race on the
+ * stale writes when concurrent paths — bootstrap scan and the events sync pipeline — race on the
  * same record. Optional: when null, the backend falls back to last-write-wins.
  */
 public class QueryDocument {
@@ -127,7 +127,7 @@ public class QueryDocument {
 	 * structured fields per ADR Decision 6's Synonyms-and-group-obs convention:
 	 * {@code embed = [obs_group_concept_name + " — "] + text + [" " + synonyms.join(" ")]}
 	 * (bracketed parts conditional on presence). Both write paths
-	 * ({@code BridgeIndexer}, {@code TypeBootstrapper}) call this so they produce identical vectors
+	 * ({@code RecordIndexer}, {@code TypeBootstrapper}) call this so they produce identical vectors
 	 * for the same source record, and so the embedding-input contract lives on the model rather
 	 * than being re-derived at each write site.
 	 *

@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import java.util.Objects;
 
@@ -30,15 +30,15 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * documents for the same source record — both delegate the embedding-input construction to
  * {@link QueryDocument#getEmbeddingInput()} so the rule lives on the model, not at the call sites.
  */
-public class BridgeIndexer {
+public class RecordIndexer {
 
-	private static final Log log = LogFactory.getLog(BridgeIndexer.class);
+	private static final Log log = LogFactory.getLog(RecordIndexer.class);
 
 	private final QueryStoreService queryStoreService;
 
 	private final EmbeddingProvider embeddingProvider;
 
-	public BridgeIndexer(QueryStoreService queryStoreService, EmbeddingProvider embeddingProvider) {
+	public RecordIndexer(QueryStoreService queryStoreService, EmbeddingProvider embeddingProvider) {
 		this.queryStoreService = queryStoreService;
 		this.embeddingProvider = embeddingProvider;
 	}
@@ -62,7 +62,7 @@ public class BridgeIndexer {
 		if (!result.isSucceeded()) {
 			// Grep-able by the [querystore-skip] tag SkipLogFormat owns. Same shape as the bootstrap
 			// path so an operator's grok pattern catches both layers with one rule.
-			log.warn(SkipLogFormat.format("bridge", result.getFailure()));
+			log.warn(SkipLogFormat.format("sync", result.getFailure()));
 		}
 	}
 

@@ -24,11 +24,11 @@ import org.openmrs.aop.event.PurgeServiceEvent;
 import org.openmrs.aop.event.SaveServiceEvent;
 import org.openmrs.aop.event.UnvoidServiceEvent;
 import org.openmrs.aop.event.VoidServiceEvent;
-import org.openmrs.module.querystore.bridge.AfterCommitDispatcher;
-import org.openmrs.module.querystore.bridge.BridgeIndexer;
-import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.ImmediateDispatcher;
-import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.RecordingService;
-import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.ZeroEmbedder;
+import org.openmrs.module.querystore.sync.AfterCommitDispatcher;
+import org.openmrs.module.querystore.sync.RecordIndexer;
+import org.openmrs.module.querystore.sync.SyncTestSupport.ImmediateDispatcher;
+import org.openmrs.module.querystore.sync.SyncTestSupport.RecordingService;
+import org.openmrs.module.querystore.sync.SyncTestSupport.ZeroEmbedder;
 import org.openmrs.module.querystore.serialization.EncounterRecordSerializer;
 
 /**
@@ -46,7 +46,7 @@ public class CoreServiceEventListenerTest {
 	@Before
 	public void setUp() {
 		service = new RecordingService();
-		BridgeIndexer indexer = new BridgeIndexer(service, new ZeroEmbedder());
+		RecordIndexer indexer = new RecordIndexer(service, new ZeroEmbedder());
 		listener = new TestableListener(indexer, new ImmediateDispatcher(),
 		    EventsTestSupport.registryOf(new EncounterRecordSerializer()));
 	}
@@ -122,13 +122,13 @@ public class CoreServiceEventListenerTest {
 
 	private static final class TestableListener extends CoreServiceEventListener {
 
-		private final BridgeIndexer indexer;
+		private final RecordIndexer indexer;
 
 		private final AfterCommitDispatcher dispatcher;
 
 		private final SerializerRegistry registry;
 
-		TestableListener(BridgeIndexer indexer, AfterCommitDispatcher dispatcher, SerializerRegistry registry) {
+		TestableListener(RecordIndexer indexer, AfterCommitDispatcher dispatcher, SerializerRegistry registry) {
 			this.indexer = indexer;
 			this.dispatcher = dispatcher;
 			this.registry = registry;
@@ -140,7 +140,7 @@ public class CoreServiceEventListenerTest {
 		}
 
 		@Override
-		BridgeIndexer indexer() {
+		RecordIndexer indexer() {
 			return indexer;
 		}
 

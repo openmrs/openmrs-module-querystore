@@ -55,8 +55,8 @@ public class SkipLogFormatTest {
 		// A backend that returned a failed WriteResult with no DocFailure (allowed by the WriteResult
 		// API) must still produce a complete reason= field so a grok pattern doesn't choke on the
 		// missing value at end-of-line.
-		String line = SkipLogFormat.format("bridge", "diagnosis", "u-2", Boolean.FALSE, null);
-		assertEquals("[querystore-skip] layer=bridge type=diagnosis uuid=u-2 "
+		String line = SkipLogFormat.format("sync", "diagnosis", "u-2", Boolean.FALSE, null);
+		assertEquals("[querystore-skip] layer=sync type=diagnosis uuid=u-2 "
 		        + "retryable=false reason=\"no failure detail\"",
 		        line);
 	}
@@ -90,7 +90,7 @@ public class SkipLogFormatTest {
 	public void format_docFailureOverloadProducesIdenticalLineToExplicitArgs() {
 		// The DocFailure overload exists to collapse the WriteResult-failed call sites; if it ever
 		// produced a different line shape than the explicit-args version for the same inputs, the
-		// two write paths (bootstrap and bridge) would emit subtly different formats and operators'
+		// two write paths (bootstrap and sync) would emit subtly different formats and operators'
 		// grok rules would break asymmetrically.
 		org.openmrs.module.querystore.backend.DocFailure f =
 		        new org.openmrs.module.querystore.backend.DocFailure(
@@ -106,8 +106,8 @@ public class SkipLogFormatTest {
 		// a parseable line (every field present) rather than NPE the caller. Exact-string assertion
 		// per the class-style note above — this pins the entire degenerate line shape, not a single
 		// field's behavior.
-		assertEquals("[querystore-skip] layer=bridge type=null uuid=null "
+		assertEquals("[querystore-skip] layer=sync type=null uuid=null "
 		        + "retryable=unknown reason=\"no failure detail\"",
-		        SkipLogFormat.format("bridge", (org.openmrs.module.querystore.backend.DocFailure) null));
+		        SkipLogFormat.format("sync", (org.openmrs.module.querystore.backend.DocFailure) null));
 	}
 }

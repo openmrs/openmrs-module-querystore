@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -30,29 +30,29 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * End-to-end test of the real chain: a live {@link BridgeExecutor} pool, a real
+ * End-to-end test of the real chain: a live {@link SyncExecutor} pool, a real
  * {@link AfterCommitDispatcher} hitting {@link TransactionSynchronizationManager}, and a real
- * {@link BridgeIndexer}. The per-class unit tests pin each component in isolation; this test
+ * {@link RecordIndexer}. The per-class unit tests pin each component in isolation; this test
  * catches wiring regressions between them — in particular the load-bearing claim that a
  * dispatched task does not run before {@code afterCommit} fires and does run after.
  */
-public class BridgeWiringTest {
+public class AfterCommitDispatcherWiringTest {
 
-	private BridgeExecutor executor;
+	private SyncExecutor executor;
 
 	private AfterCommitDispatcher dispatcher;
 
-	private BridgeIndexer indexer;
+	private RecordIndexer indexer;
 
 	private RecordingService service;
 
 	@Before
 	public void setUp() {
-		executor = new BridgeExecutor(2);
+		executor = new SyncExecutor(2);
 		executor.start();
 		dispatcher = new AfterCommitDispatcher(executor);
 		service = new RecordingService();
-		indexer = new BridgeIndexer(service, new ZeroEmbedder());
+		indexer = new RecordIndexer(service, new ZeroEmbedder());
 	}
 
 	@After

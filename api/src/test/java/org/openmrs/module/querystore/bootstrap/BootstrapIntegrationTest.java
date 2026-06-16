@@ -46,7 +46,7 @@ import org.testcontainers.containers.MySQLContainer;
 /**
  * End-to-end bootstrap exercised against a real MySQL via Testcontainers. Validates the
  * progress-DAO round-trip, multi-page scans, resume from a persisted cursor, and the key
- * race the version-protection invariant was added for: a concurrent AOP-style fresher write
+ * race the version-protection invariant was added for: a concurrent steady-state fresher write
  * during bootstrap must survive a slower bootstrap-projected write of the same record.
  */
 public class BootstrapIntegrationTest {
@@ -180,7 +180,7 @@ public class BootstrapIntegrationTest {
 
 	@Test
 	public void bootstrap_concurrentFresherWriteDuringBootstrap_isPreservedByVersionGuard() {
-		// Simulate the race: an AOP / event handler writes a fresher version of record "X" while
+		// Simulate the race: the events sync pipeline writes a fresher version of record "X" while
 		// bootstrap is still in flight. The bootstrap-projected doc carries the entity's older
 		// dateChanged, so the Decision 3 conditional-upsert guard must drop the bootstrap write.
 		Instant t1 = Instant.parse("2025-03-15T09:00:00Z");
@@ -196,7 +196,7 @@ public class BootstrapIntegrationTest {
 		SearchResult res = backend.bm25(SearchRequest.builder().resourceType("test").queryText("Glucose")
 		        .filter(Filter.patientScope("patient-A")).limit(10).build());
 		assertEquals(1, res.getHits().size());
-		assertEquals("AOP fresher write must survive — bootstrap's stale projection is dropped",
+		assertEquals("fresher steady-state write must survive — bootstrap's stale projection is dropped",
 		        "Glucose 8.1 (10:00 update)", res.getHits().get(0).getDocument().getText());
 	}
 

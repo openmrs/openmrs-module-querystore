@@ -204,7 +204,7 @@ public class TypeBootstrapperTest {
 
 		b.run(progress, service, embedder, progressDao);
 
-		assertEquals("bootstrap-projected docs must carry the entity timestamp so concurrent AOP "
+		assertEquals("bootstrap-projected docs must carry the entity timestamp so concurrent sync "
 		        + "writes can use the Decision 3 conditional-upsert guard",
 		        t, service.indexed.get(0).getLastModified());
 	}

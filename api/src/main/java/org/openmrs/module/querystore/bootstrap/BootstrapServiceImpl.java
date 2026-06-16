@@ -298,7 +298,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				//
 				// Caveat operators should know: this reset reconciles the historical corpus only.
 				// QueryStoreServiceImpl.backend is wired once in QueryStoreActivator.started(); a
-				// runtime GP flip without a module restart means AOP writes between flip and
+				// runtime GP flip without a module restart means steady-state sync writes between flip and
 				// restart still go to the previous backend and are lost to the new one. The reset
 				// path makes the static corpus correct on the next start but cannot recover those
 				// in-flight writes. If runtime backend swaps become a supported workflow, a
@@ -418,7 +418,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				if (ser != null && !name.equals(ser.getResourceType())) {
 					throw new IllegalStateException("Provider declares resource type '" + name
 					        + "' but its serializer reports '" + ser.getResourceType()
-					        + "' — names must match or routing drifts between bootstrap and bridge paths");
+					        + "' — names must match or routing drifts between bootstrap and sync paths");
 				}
 				accepted.put(name, p);
 			}

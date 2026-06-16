@@ -552,7 +552,7 @@ public class BootstrapServiceImplTest {
 	@Test
 	public void bootstrap_skipsProviderWithSerializerNameDrift() {
 		// Provider claims one resource type but its serializer reports another — bootstrap path and
-		// bridge path would route to different stores. Discovery rejects it.
+		// sync path would route to different stores. Discovery rejects it.
 		ClinicalRecordSerializer<Object> driftedSerializer = new ClinicalRecordSerializer<Object>() {
 			@Override public String getResourceType() { return "appointments_appointment"; }
 			@Override public Class<Object> getSupportedType() { return Object.class; }

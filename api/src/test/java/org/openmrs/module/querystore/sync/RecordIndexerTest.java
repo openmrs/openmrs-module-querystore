@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -25,13 +25,13 @@ import org.junit.Test;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.WriteResult;
-import org.openmrs.module.querystore.bridge.BridgeAdviceTestSupport.RecordingService;
+import org.openmrs.module.querystore.sync.SyncTestSupport.RecordingService;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
 
-public class BridgeIndexerTest {
+public class RecordIndexerTest {
 
-	private BridgeIndexer indexer;
+	private RecordIndexer indexer;
 
 	private RecordingService service;
 
@@ -41,7 +41,7 @@ public class BridgeIndexerTest {
 	public void setUp() {
 		service = new RecordingService();
 		embedder = new CountingEmbedder();
-		indexer = new BridgeIndexer(service, embedder);
+		indexer = new RecordIndexer(service, embedder);
 	}
 
 	@Test
@@ -96,9 +96,9 @@ public class BridgeIndexerTest {
 
 	@Test
 	public void index_swallowsServiceFailureSoAfterCommitDispatchSurvives() {
-		// The bridge runs from AfterCommitDispatcher, which catches per-task RuntimeException but
+		// The sync pipeline runs from AfterCommitDispatcher, which catches per-task RuntimeException but
 		// can't distinguish "the indexer's own logic broke" from "the backend dropped this write."
-		// Bridge writes failing must NOT propagate — they're logged at this layer with the offending
+		// Sync writes failing must NOT propagate — they're logged at this layer with the offending
 		// resource_uuid context, and the dispatcher continues with subsequent tasks. A future
 		// "simplification" that re-introduces propagation would surface every dropped write as a
 		// noisy after-commit failure, masking the per-doc context this layer's log line carries.
@@ -116,7 +116,7 @@ public class BridgeIndexerTest {
 			@Override public void onShutdown() { }
 		};
 		CountingEmbedder failingEmbedder = new CountingEmbedder();
-		BridgeIndexer failingIndexer = new BridgeIndexer(failingService, failingEmbedder);
+		RecordIndexer failingIndexer = new RecordIndexer(failingService, failingEmbedder);
 		QueryDocument doc = new QueryDocument();
 		doc.setResourceType("obs");
 		doc.setResourceUuid("u-fail");
@@ -127,7 +127,7 @@ public class BridgeIndexerTest {
 		failingIndexer.index(doc);
 
 		// Pin the embed-then-index ordering: a future "short-circuit on failing backend" refactor
-		// that skips the embed call when the service is unhealthy would change AOP semantics
+		// that skips the embed call when the service is unhealthy would change the indexer's semantics
 		// (downstream consumers of the document mutation depend on the embedding being populated
 		// before the write attempt). Verify the embed step still ran even though the write was
 		// reported as failed.

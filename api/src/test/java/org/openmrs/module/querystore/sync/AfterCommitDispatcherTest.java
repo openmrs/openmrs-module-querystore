@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -86,7 +86,7 @@ public class AfterCommitDispatcherTest {
 
 	@Test
 	public void wrapped_runnable_routesThroughDaemonContext_whenTokenWired() {
-		// Regression guard: before the fix, BridgeExecutor pool threads had no UserContext, so
+		// Regression guard: before the fix, SyncExecutor pool threads had no UserContext, so
 		// the dispatched embedder calls (which read global properties) blew up with
 		// "A user context must first be passed to setUserContext()". Setting a daemon token must
 		// force the wrapped runnable through runWithDaemonContext.
@@ -126,8 +126,8 @@ public class AfterCommitDispatcherTest {
 		// NOT surface daemon-thread exceptions (Future.get's ExecutionException is discarded on
 		// some platforms; thread.join only routes through UncaughtExceptionHandler on others).
 		// Without runWithDaemonContext's per-task capture-rethrow, the embedder's RuntimeException
-		// would be invisible to wrap()'s log-and-swallow guard — operators would lose the "Bridge
-		// skipping index for X" warn-log they rely on to spot poison documents.
+		// would be invisible to wrap()'s log-and-swallow guard — operators would lose the
+		// [querystore-skip] warn-log they rely on to spot poison documents.
 		//
 		// Inject a DaemonExecutor that mimics the platform's swallow (runs the task, discards any
 		// RuntimeException). The production runWithDaemonContext must STILL surface the failure
@@ -179,7 +179,7 @@ public class AfterCommitDispatcherTest {
 		executor.submitted.get(0).run();
 	}
 
-	private static final class RecordingExecutor extends BridgeExecutor {
+	private static final class RecordingExecutor extends SyncExecutor {
 		final List<Runnable> submitted = new ArrayList<>();
 
 		@Override

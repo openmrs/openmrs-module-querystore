@@ -22,7 +22,7 @@ What you _do not_ build: schema migrations, table/index creation, embedding, sea
 - **Cross-type search.** `QueryStoreService.search(...)` already enumerates every `querystore_*` store. The moment your provider's first document lands, it's part of the cross-type query surface.
 - **Patient-scoped retrieval.** `QueryStoreService.searchByPatient(uuid, q, limit)` filters by your documents' `patient_uuid` field uniformly.
 - **Patient cascade.** `BackendStore.bulkDeleteByPatient(uuid)` — used by void / merge paths — iterates every `querystore_*` store, including yours.
-- **Embedding.** `BridgeIndexer` (steady-state writes) and `BootstrapServiceImpl` (initial backfill) embed your documents' `text` field with the deployment-configured `EmbeddingProvider`.
+- **Embedding.** `RecordIndexer` (steady-state writes) and `BootstrapServiceImpl` (initial backfill) embed your documents' `text` field with the deployment-configured `EmbeddingProvider`.
 - **Authorization.** Consumer reads go through `QueryStoreService`'s `@Authorized(GET_PATIENTS)` surface. Your provider writes; you do not gate access.
 
 ## Prerequisite — confirm your type passes the indexing criterion
@@ -124,7 +124,7 @@ You no longer write an indexing advice — the AOP migration bridge was removed 
 
 It does, automatically, when your service meets core's #6084 pointcut ([Decision 13](./adr.md#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types) §3): it implements `org.openmrs.api.OpenmrsService`, the mutator is named `save* / create* / void* / unvoid* / retire* / unretire* / purge*`, `args[0]` is an `OpenmrsObject`, and the call is external (self-invocation bypasses the proxy). This is **opt-in by verification, not assumption** — confirm an event actually fires for your service at runtime (the default assumption is *no* coverage).
 
-If your service does not qualify (non-`OpenmrsService`, non-standard method names, or self-invocation), contribute your own listener: a Spring `@EventListener` for the relevant `*ServiceEvent`, or — for a service that doesn't emit at all — a small AOP `@Around` shim on your service that calls `RecordProjector.project(serializer, entity, isPurge, indexer, dispatcher)` (the `querystore.bridge.indexer` and `querystore.bridge.dispatcher` beans are reachable via `Context.getRegisteredComponent(...)`). Until then, the bootstrap (Step 2) is the only thing keeping your type current.
+If your service does not qualify (non-`OpenmrsService`, non-standard method names, or self-invocation), contribute your own listener: a Spring `@EventListener` for the relevant `*ServiceEvent`, or — for a service that doesn't emit at all — a small AOP `@Around` shim on your service that calls `RecordProjector.project(serializer, entity, isPurge, indexer, dispatcher)` (the `querystore.sync.indexer` and `querystore.sync.dispatcher` beans are reachable via `Context.getRegisteredComponent(...)`). Until then, the bootstrap (Step 2) is the only thing keeping your type current.
 
 ## Step 4 — provider bean
 

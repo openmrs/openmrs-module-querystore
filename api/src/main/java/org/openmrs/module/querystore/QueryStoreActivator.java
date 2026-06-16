@@ -21,7 +21,7 @@ import org.openmrs.module.querystore.api.impl.QueryStoreServiceImpl;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
-import org.openmrs.module.querystore.bridge.AfterCommitDispatcher;
+import org.openmrs.module.querystore.sync.AfterCommitDispatcher;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 
 public class QueryStoreActivator extends BaseModuleActivator implements DaemonTokenAware {
@@ -38,10 +38,10 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 		// lands on the dispatcher; the lookup is guarded for the case where Spring isn't up yet
 		// (in which case started() will redo the propagation once the context is refreshed).
 		try {
-			findBridgeDispatcher().setDaemonToken(token);
+			findSyncDispatcher().setDaemonToken(token);
 		}
 		catch (RuntimeException ex) {
-			log.debug("Deferring bridge daemon-token wiring until started(); Spring not ready yet", ex);
+			log.debug("Deferring sync daemon-token wiring until started(); Spring not ready yet", ex);
 		}
 		// Same eager-propagate-then-retry contract for the bootstrap launcher (autostart + the
 		// on-demand reindex endpoint). Separate try so a dispatcher-lookup failure does not skip
@@ -64,7 +64,7 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 		// global properties (provider bean, model/vocab paths) need one, so hand it the daemon token
 		// before the events consumer can dispatch an index. Activator owns the token (via
 		// DaemonTokenAware); the dispatcher is constructed by Spring without it, so propagation lives here.
-		wireBridgeDaemonToken();
+		wireSyncDaemonToken();
 		wireBootstrapLauncherToken();
 		warmupQueryEmbedder();
 		if (isAutostartEnabled(Context.getAdministrationService())) {
@@ -99,7 +99,7 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 		}, daemonToken);
 	}
 
-	void wireBridgeDaemonToken() {
+	void wireSyncDaemonToken() {
 		if (daemonToken == null) {
 			log.warn("Daemon token unavailable; the events consumer's after-commit projection will run"
 			        + " without a UserContext until the token is wired. Documents created in this window"
@@ -107,14 +107,14 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 			        + " bootstrap (or restart the module) once the token arrives to reconcile.");
 			return;
 		}
-		findBridgeDispatcher().setDaemonToken(daemonToken);
+		findSyncDispatcher().setDaemonToken(daemonToken);
 	}
 
 	/**
 	 * Hands the daemon token to the {@link BootstrapLauncher} so bootstrap autostart and the
 	 * on-demand reindex endpoint can launch the global scan on a daemon thread. Skips the lookup
 	 * when no token has arrived — installing a null token would mask the configuration miss behind
-	 * a launcher that silently refuses to run. Mirrors {@link #wireBridgeDaemonToken()}.
+	 * a launcher that silently refuses to run. Mirrors {@link #wireSyncDaemonToken()}.
 	 */
 	void wireBootstrapLauncherToken() {
 		if (daemonToken == null) {
@@ -135,13 +135,13 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 	 * move into {@code org.openmrs.module.querystore} or pull the substitution into a public
 	 * setter — do not widen visibility without that decision.
 	 */
-	AfterCommitDispatcher findBridgeDispatcher() {
+	AfterCommitDispatcher findSyncDispatcher() {
 		return Context.getRegisteredComponent(
-		    "querystore.bridge.dispatcher", AfterCommitDispatcher.class);
+		    "querystore.sync.dispatcher", AfterCommitDispatcher.class);
 	}
 
 	/** Visible-for-testing seam over {@link Context#getRegisteredComponent}, mirroring
-	 *  {@link #findBridgeDispatcher()} — see its note on the package-private contract. */
+	 *  {@link #findSyncDispatcher()} — see its note on the package-private contract. */
 	BootstrapLauncher findBootstrapLauncher() {
 		return Context.getRegisteredComponent(
 		    "querystore.bootstrap.launcher", BootstrapLauncher.class);

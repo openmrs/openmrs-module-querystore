@@ -95,8 +95,8 @@ public interface QueryStoreService extends OpenmrsService {
 
 	/**
 	 * Removes every document keyed by {@code patientUuid} across every per-type index. Internal:
-	 * invoked by the patient-purge bridge advice (and any future REST/admin caller) when a
-	 * patient is purged from core so the read-store doesn't retain PHI past the core deletion.
+	 * invoked by the events sync consumer on a patient {@code PurgeServiceEvent} (and any future
+	 * REST/admin caller) so the read store doesn't retain PHI past the core deletion.
 	 * Iterates the cross-session-merged set of indexes/tables on the configured backend, mirroring
 	 * the discovery contract of {@code searchByPatient} and {@code existsByPatient}.
 	 */

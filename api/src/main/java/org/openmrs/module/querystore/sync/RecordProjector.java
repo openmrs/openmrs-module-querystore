@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +49,7 @@ public final class RecordProjector {
 	}
 
 	public static <T extends BaseOpenmrsData> void project(ClinicalRecordSerializer<T> serializer, T root,
-	        boolean purge, BridgeIndexer indexer, AfterCommitDispatcher dispatcher) {
+	        boolean purge, RecordIndexer indexer, AfterCommitDispatcher dispatcher) {
 		List<T> tree = serializer.collectTree(root);
 		List<QueryDocument> toIndex = new ArrayList<>(tree.size());
 		List<String> toDelete = new ArrayList<>(purge ? tree.size() : 0);

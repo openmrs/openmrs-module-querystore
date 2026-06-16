@@ -16,8 +16,8 @@ import org.openmrs.api.context.Context;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 
 /**
- * Resolves the {@link ClinicalRecordSerializer} for a given entity by type, for the events consumer
- * (the AOP bridge resolves its serializer by a hard-coded bean id per advice instead). Matches on
+ * Resolves the {@link ClinicalRecordSerializer} for a given entity by type, for the events consumer.
+ * Matches on
  * {@link ClinicalRecordSerializer#getSupportedType()}{@code .isInstance(entity)} — robust to
  * Hibernate proxies, and unambiguous for the indexed type set (each serializer covers a concrete
  * type; an entity matches at most one). Picks up SPI-contributed serializers (ADR Decision 13) for
@@ -39,7 +39,7 @@ public class SerializerRegistry {
 	 * The serializer whose supported type the entity is an instance of, or {@code null} if no
 	 * registered serializer handles it (i.e. the entity's type is not indexed). Typed to
 	 * {@link BaseOpenmrsData} to fit
-	 * {@link org.openmrs.module.querystore.bridge.RecordProjector#project}; callers pass only
+	 * {@link org.openmrs.module.querystore.sync.RecordProjector#project}; callers pass only
 	 * {@code BaseOpenmrsData} entities (every indexed type is data, not metadata), so the cast holds.
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })

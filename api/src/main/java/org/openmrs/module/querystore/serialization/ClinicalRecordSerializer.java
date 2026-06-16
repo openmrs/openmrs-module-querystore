@@ -36,8 +36,8 @@ public interface ClinicalRecordSerializer<T> {
 
 	/**
 	 * The set of records to (re)project when {@code root} is saved — the type's projection scope,
-	 * shared by both sync paths ({@link org.openmrs.module.querystore.bridge.RecordProjector}) so AOP
-	 * and events produce identical documents. Defaults to just {@code root}; {@code Obs} overrides to
+	 * used by the sync pipeline ({@link org.openmrs.module.querystore.sync.RecordProjector}) to fan
+	 * out from the saved root. Defaults to just {@code root}; {@code Obs} overrides to
 	 * include its group members (ADR decision 6), so each member is projected (or deleted, if voided)
 	 * in its own right. Module-contributed serializers (ADR Decision 13) may override for their own
 	 * nested types.
@@ -51,7 +51,7 @@ public interface ClinicalRecordSerializer<T> {
 	 * be swept from the read store, or {@code null} for no cross-type sweep. Default {@code null}:
 	 * purging one record removes only its own document. {@code Patient} overrides to return its uuid,
 	 * so purging a patient erases their whole chart (ADR decisions 1 and 10 — purge is a deletion,
-	 * unlike void). Consulted by {@link org.openmrs.module.querystore.bridge.RecordProjector} only on
+	 * unlike void). Consulted by {@link org.openmrs.module.querystore.sync.RecordProjector} only on
 	 * purge.
 	 */
 	default String bulkDeletePatientUuidFor(T root) {

@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -19,16 +19,16 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Hands a projection task to the {@link BridgeExecutor} once the originating transaction has
+ * Hands a projection task to the {@link SyncExecutor} once the originating transaction has
  * committed, so indexing never runs against uncommitted state and never blocks the clinical
- * request thread (ADR Decision 12 "Migration bridge"). When no transaction is active the task is
+ * request thread (ADR Decision 12). When no transaction is active the task is
  * submitted immediately; at-least-once semantics still hold via the bootstrap reconciliation path.
  *
  * <p>Failures inside the dispatched task are caught and logged here. The aspect's contract per the
  * ADR is "log and swallow"; per-document failures must never bubble back to the clinical thread
  * (which has already returned anyway) and must not poison subsequent dispatches.
  *
- * <p><b>Thread context.</b> {@link BridgeExecutor}'s worker threads do not carry an OpenMRS
+ * <p><b>Thread context.</b> {@link SyncExecutor}'s worker threads do not carry an OpenMRS
  * {@code UserContext}, but the dispatched indexer transitively reads global properties (the
  * configured embedding provider bean, then its model/vocab paths) and so requires one. We resolve
  * that here by handing the actual task to {@link Daemon#runInDaemonThreadAndWait} from inside the
@@ -41,11 +41,11 @@ public class AfterCommitDispatcher {
 
 	private static final Log log = LogFactory.getLog(AfterCommitDispatcher.class);
 
-	private final BridgeExecutor executor;
+	private final SyncExecutor executor;
 
 	private volatile DaemonToken daemonToken;
 
-	public AfterCommitDispatcher(BridgeExecutor executor) {
+	public AfterCommitDispatcher(SyncExecutor executor) {
 		this.executor = executor;
 	}
 
@@ -87,7 +87,7 @@ public class AfterCommitDispatcher {
 	}
 
 	/**
-	 * Visible for testing. Production path: the dispatched task ran on a {@link BridgeExecutor}
+	 * Visible for testing. Production path: the dispatched task ran on a {@link SyncExecutor}
 	 * pool thread which has no OpenMRS Context, so we hand the actual work to
 	 * {@link Daemon#runInDaemonThreadAndWait} which sets up a daemon-user {@code UserContext} on
 	 * a fresh thread and joins. Tests that haven't wired a token (and don't need a Context for

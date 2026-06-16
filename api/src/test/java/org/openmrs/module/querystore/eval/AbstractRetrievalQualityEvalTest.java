@@ -149,7 +149,7 @@ public abstract class AbstractRetrievalQualityEvalTest {
 		}
 		// Order matters: synonyms must be on the document before this line, because
 		// getEmbeddingInput() reads the synonyms metadata and appends it to the embed input.
-		// Mirrors the production write path in BridgeIndexer / TypeBootstrapper — reorder and the
+		// Mirrors the production write path in RecordIndexer / TypeBootstrapper — reorder and the
 		// embedding silently drops the synonym signal without throwing.
 		doc.setEmbedding(provider.embed(doc.getEmbeddingInput()));
 		return doc;

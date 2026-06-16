@@ -19,9 +19,9 @@ import org.openmrs.aop.event.UnretireServiceEvent;
 import org.openmrs.aop.event.UnvoidServiceEvent;
 import org.openmrs.aop.event.VoidServiceEvent;
 import org.openmrs.api.context.Context;
-import org.openmrs.module.querystore.bridge.AfterCommitDispatcher;
-import org.openmrs.module.querystore.bridge.BridgeIndexer;
-import org.openmrs.module.querystore.bridge.RecordProjector;
+import org.openmrs.module.querystore.sync.AfterCommitDispatcher;
+import org.openmrs.module.querystore.sync.RecordIndexer;
+import org.openmrs.module.querystore.sync.RecordProjector;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 import org.springframework.context.event.EventListener;
 
@@ -97,7 +97,7 @@ public class CoreServiceEventListener {
 			RecordProjector.project(serializer, data, purge, indexer(), dispatcher());
 		}
 		catch (RuntimeException e) {
-			// Best-effort per ADR Decision 12, mirroring the bridge: a projection failure must not
+			// Best-effort per ADR Decision 12: a projection failure must not
 			// propagate back into the clinical transaction that published the event.
 			log.warn("Events consumer failed projecting " + data.getClass().getSimpleName()
 			        + "; swallowing per ADR Decision 12", e);
@@ -108,11 +108,11 @@ public class CoreServiceEventListener {
 		return Context.getRegisteredComponent("querystore.serializerRegistry", SerializerRegistry.class);
 	}
 
-	BridgeIndexer indexer() {
-		return Context.getRegisteredComponent("querystore.bridge.indexer", BridgeIndexer.class);
+	RecordIndexer indexer() {
+		return Context.getRegisteredComponent("querystore.sync.indexer", RecordIndexer.class);
 	}
 
 	AfterCommitDispatcher dispatcher() {
-		return Context.getRegisteredComponent("querystore.bridge.dispatcher", AfterCommitDispatcher.class);
+		return Context.getRegisteredComponent("querystore.sync.dispatcher", AfterCommitDispatcher.class);
 	}
 }

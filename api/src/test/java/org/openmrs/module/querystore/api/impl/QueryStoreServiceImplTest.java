@@ -184,7 +184,7 @@ public class QueryStoreServiceImplTest {
 
 	@Test
 	public void index_returnsBackendResult() {
-		// The service must surface the backend's WriteResult so callers (bootstrap counter, bridge
+		// The service must surface the backend's WriteResult so callers (bootstrap counter, sync
 		// logging) can react to per-doc failures the backend reports without swallowing.
 		FakeBackendStore backend = new FakeBackendStore(false);
 		backend.upsertFailure = WriteResult.failed(new org.openmrs.module.querystore.backend.DocFailure(

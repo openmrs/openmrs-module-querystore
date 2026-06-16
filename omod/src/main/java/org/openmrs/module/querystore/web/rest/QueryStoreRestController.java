@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 /**
  * REST surface for the query store. Currently exposes the bootstrap (initial-backfill) status so
  * operators and deploy pipelines can verify a deployment is <em>fully indexed</em> before trusting
- * its reads — a SQL-dump-seeded deployment bypasses the live indexing bridge and depends on the
+ * its reads — a SQL-dump-seeded deployment bypasses the live indexing path and depends on the
  * background bootstrap completing, and the lazy per-patient projection cannot repair an
  * already-partially-indexed patient.
  *

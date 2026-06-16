@@ -23,7 +23,7 @@ import java.util.Map;
  * {@code dateChanged}, resuming from a persisted cursor; until every type reaches
  * {@link BootstrapStatus#COMPLETED}, reads can return stale/partial data and the lazy per-patient
  * projection cannot repair an already-partially-indexed patient. This report exists so operators
- * (and deploy pipelines that seed via SQL dump, which bypasses the live indexing bridge) can verify
+ * (and deploy pipelines that seed via SQL dump, which bypasses the live indexing path) can verify
  * completion instead of guessing. The derivation lives in the api layer so it is unit-testable and
  * reusable; the omod REST controller is a thin adapter over {@link #from(List)}.
  */

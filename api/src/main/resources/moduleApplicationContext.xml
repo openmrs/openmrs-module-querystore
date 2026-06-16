@@ -170,17 +170,17 @@
         <constructor-arg ref="dbSessionFactory"/>
     </bean>
 
-    <bean id="querystore.bridge.executor"
-          class="org.openmrs.module.querystore.bridge.BridgeExecutor"
+    <bean id="querystore.sync.executor"
+          class="org.openmrs.module.querystore.sync.SyncExecutor"
           init-method="start" destroy-method="stop"/>
 
-    <bean id="querystore.bridge.dispatcher"
-          class="org.openmrs.module.querystore.bridge.AfterCommitDispatcher">
-        <constructor-arg ref="querystore.bridge.executor"/>
+    <bean id="querystore.sync.dispatcher"
+          class="org.openmrs.module.querystore.sync.AfterCommitDispatcher">
+        <constructor-arg ref="querystore.sync.executor"/>
     </bean>
 
-    <bean id="querystore.bridge.indexer"
-          class="org.openmrs.module.querystore.bridge.BridgeIndexer">
+    <bean id="querystore.sync.indexer"
+          class="org.openmrs.module.querystore.sync.RecordIndexer">
         <constructor-arg ref="queryStoreService"/>
         <constructor-arg ref="querystore.embedding.dispatcher"/>
     </bean>
@@ -237,7 +237,7 @@
         serviceInterceptors; we do the minimal equivalent here with just the authorizationInterceptor
         (the core AuthorizationAdvice bean, resolved from the parent context). No transaction/
         RequiredData advice is added, preserving the service's current behavior. Internal beans
-        (BridgeIndexer, BootstrapServiceImpl) keep injecting the bare queryStoreService, so indexing
+        (RecordIndexer, BootstrapServiceImpl) keep injecting the bare queryStoreService, so indexing
         is deliberately not subject to GET_PATIENTS.
     -->
     <bean id="queryStoreService.authorized"

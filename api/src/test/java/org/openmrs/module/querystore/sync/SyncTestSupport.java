@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,9 +27,9 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * <p>Public for cross-package reuse by the events tests. Not unified with the bootstrap tests' own
  * (subtly different) recording-service variants — out of scope.
  */
-public final class BridgeAdviceTestSupport {
+public final class SyncTestSupport {
 
-	private BridgeAdviceTestSupport() {
+	private SyncTestSupport() {
 	}
 
 	public static final class RecordingService implements QueryStoreService {
@@ -85,7 +85,7 @@ public final class BridgeAdviceTestSupport {
 		public int count;
 
 		public ImmediateDispatcher() {
-			super(new BridgeExecutor());
+			super(new SyncExecutor());
 		}
 
 		@Override

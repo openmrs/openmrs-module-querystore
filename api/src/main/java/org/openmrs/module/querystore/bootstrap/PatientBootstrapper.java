@@ -23,7 +23,7 @@ import org.openmrs.module.querystore.serialization.PatientRecordSerializer;
  * current state (Hibernate loads the live entity), so initial scans are correct. The gap shows up
  * on incremental top-up of a {@code COMPLETED} progress row: Person-only edits between completion
  * and re-run aren't re-projected here. {@link org.openmrs.module.querystore.api.QueryStoreService}
- * AOP / event handlers (Decision 12) catch those edits in steady state.
+ * event handlers (Decision 12) catch those edits in steady state.
  */
 public class PatientBootstrapper extends HibernateTypeBootstrapper<Patient> {
 

@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import static org.junit.Assert.assertTrue;
 
@@ -17,9 +17,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
 
-public class BridgeExecutorTest {
+public class SyncExecutorTest {
 
-	private BridgeExecutor executor;
+	private SyncExecutor executor;
 
 	@After
 	public void tearDown() {
@@ -30,7 +30,7 @@ public class BridgeExecutorTest {
 
 	@Test
 	public void submit_runsTaskOnPool() throws InterruptedException {
-		executor = new BridgeExecutor(1);
+		executor = new SyncExecutor(1);
 		executor.start();
 		CountDownLatch ran = new CountDownLatch(1);
 		executor.submit(ran::countDown);
@@ -41,7 +41,7 @@ public class BridgeExecutorTest {
 	public void submit_afterStop_isDroppedNotThrown() {
 		// Dropping is fine: the bootstrap re-projection path catches up missed writes per ADR
 		// Decision 12, and silently dropping in shutdown beats raising into the clinical thread.
-		executor = new BridgeExecutor(1);
+		executor = new SyncExecutor(1);
 		executor.start();
 		executor.stop();
 		executor.submit(() -> {

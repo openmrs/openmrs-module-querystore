@@ -78,7 +78,7 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 	/**
 	 * Returns the source-entity timestamp the backend uses as a write-version: any concurrent write
 	 * carrying an older value is dropped so a slow bootstrap projection can't overwrite a fresher
-	 * AOP / event projection (see the QueryDocument javadoc). The default reads
+	 * sync projection (see the QueryDocument javadoc). The default reads
 	 * {@code dateChanged ?? dateCreated} from any {@link BaseOpenmrsData} record and falls back to
 	 * {@code null} (last-write-wins) for sources without audit timestamps; subclasses override only
 	 * when their version source lives elsewhere.

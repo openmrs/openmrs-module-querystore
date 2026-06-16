@@ -29,9 +29,9 @@ import org.openmrs.module.DaemonToken;
  * {@code false}) rather than spawning a context-less thread that would silently misbehave — the
  * caller surfaces that to its own caller (the activator logs and skips; the endpoint returns 503).
  *
- * <p>The token is wired by the activator the same way the bridge dispatcher's is (eagerly from
+ * <p>The token is wired by the activator the same way the sync dispatcher's is (eagerly from
  * {@code setDaemonToken} and again from {@code started()}), mirroring
- * {@link org.openmrs.module.querystore.bridge.AfterCommitDispatcher}. The {@link DaemonExecutor} seam
+ * {@link org.openmrs.module.querystore.sync.AfterCommitDispatcher}. The {@link DaemonExecutor} seam
  * over the static {@link Daemon#runInDaemonThread} call lets tests verify the launch handoff without
  * spawning a real thread, again mirroring the dispatcher.
  */
@@ -111,7 +111,7 @@ public class BootstrapLauncher {
 	/**
 	 * Test seam over {@link Daemon#runInDaemonThread}: the static call cannot be stubbed, so the
 	 * launch handoff (task + token) is verified through this indirection. Mirrors
-	 * {@link org.openmrs.module.querystore.bridge.AfterCommitDispatcher}'s executor seam.
+	 * {@link org.openmrs.module.querystore.sync.AfterCommitDispatcher}'s executor seam.
 	 */
 	interface DaemonExecutor {
 

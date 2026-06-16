@@ -7,7 +7,7 @@
  * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
  * graphic logo is a trademark of OpenMRS Inc.
  */
-package org.openmrs.module.querystore.bridge;
+package org.openmrs.module.querystore.sync;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,9 +30,9 @@ import org.apache.commons.logging.LogFactory;
  * the executor's lifecycle tracks the module's. Failures inside submitted tasks are caught and
  * logged at the dispatcher, never here — this class is a plain executor wrapper.
  */
-public class BridgeExecutor {
+public class SyncExecutor {
 
-	private static final Log log = LogFactory.getLog(BridgeExecutor.class);
+	private static final Log log = LogFactory.getLog(SyncExecutor.class);
 
 	/** Drain timeout on shutdown. Indexing tasks are short (one embed + one upsert, < 1s under the
 	 *  default ONNX embedder); 30s tolerates an in-flight task without stalling module unload more
@@ -44,11 +44,11 @@ public class BridgeExecutor {
 
 	private ExecutorService executor;
 
-	public BridgeExecutor() {
+	public SyncExecutor() {
 		this(2);
 	}
 
-	BridgeExecutor(int poolSize) {
+	SyncExecutor(int poolSize) {
 		this.poolSize = poolSize;
 	}
 
@@ -58,7 +58,7 @@ public class BridgeExecutor {
 
 			@Override
 			public Thread newThread(Runnable r) {
-				Thread t = new Thread(r, "querystore-bridge-" + n.getAndIncrement());
+				Thread t = new Thread(r, "querystore-sync-" + n.getAndIncrement());
 				t.setDaemon(true);
 				return t;
 			}
@@ -74,7 +74,7 @@ public class BridgeExecutor {
 	 * {@code AlreadyClosedException}, and on a Tomcat redeploy the leaked daemon thread holds the
 	 * old classloader until it exits naturally. The window is bounded by SHUTDOWN_TIMEOUT_SECONDS;
 	 * proper interrupt-propagation to the daemon thread is a follow-up tied to the broader
-	 * bridge-shutdown coordination (ADR Decision 12 open).
+	 * sync-shutdown coordination (ADR Decision 12 open).
 	 */
 	public void stop() {
 		if (executor == null) {
@@ -83,7 +83,7 @@ public class BridgeExecutor {
 		executor.shutdown();
 		try {
 			if (!executor.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-				log.warn("BridgeExecutor did not drain within " + SHUTDOWN_TIMEOUT_SECONDS
+				log.warn("SyncExecutor did not drain within " + SHUTDOWN_TIMEOUT_SECONDS
 				        + "s; outstanding tasks are dropped and any in-flight daemon thread will"
 				        + " continue against potentially-closing writers (see stop() javadoc)");
 				executor.shutdownNow();
@@ -97,7 +97,7 @@ public class BridgeExecutor {
 
 	public void submit(Runnable task) {
 		if (executor.isShutdown()) {
-			log.warn("BridgeExecutor is shut down; dropping projection task");
+			log.warn("SyncExecutor is shut down; dropping projection task");
 			return;
 		}
 		executor.submit(task);
