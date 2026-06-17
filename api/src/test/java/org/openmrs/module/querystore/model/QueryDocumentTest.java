@@ -11,9 +11,11 @@ package org.openmrs.module.querystore.model;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DESCRIPTION;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_NAMES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_CONCEPT_NAME;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 
 import java.util.Arrays;
@@ -126,5 +128,34 @@ public class QueryDocumentTest {
 		assertEquals("Condition: Chronic kidney insufficiency. Status: ACTIVE", embedded);
 		assertFalse("mapping_names list must not feed the embedding input",
 				embedded.contains("Heparins") || embedded.contains("unspecified"));
+	}
+
+	@Test
+	public void obsGroupAccessors_returnTrimmedValuesForAMemberDocument() {
+		QueryDocument doc = new QueryDocument();
+		doc.putMetadata(FIELD_OBS_GROUP_UUID, "group-uuid-123");
+		doc.putMetadata(FIELD_OBS_GROUP_CONCEPT_NAME, "  Vital signs  ");
+		assertEquals("group-uuid-123", doc.getObsGroupUuid());
+		assertEquals("a clean (trimmed) String view of the group concept name", "Vital signs",
+				doc.getObsGroupConceptName());
+	}
+
+	@Test
+	public void obsGroupAccessors_returnNullForANonMemberDocument() {
+		QueryDocument doc = new QueryDocument();
+		assertNull("a non-group-member document has no obs_group_uuid", doc.getObsGroupUuid());
+		assertNull("a non-group-member document has no obs_group_concept_name", doc.getObsGroupConceptName());
+	}
+
+	@Test
+	public void obsGroupAccessors_normalizeBlankToNull() {
+		// Identity-field contract: blank normalizes to null (distinct from the BM25-text getXxxText
+		// accessors, which return ""). A blank cluster key would otherwise collapse non-member and
+		// empty-name documents together.
+		QueryDocument doc = new QueryDocument();
+		doc.putMetadata(FIELD_OBS_GROUP_UUID, "   ");
+		doc.putMetadata(FIELD_OBS_GROUP_CONCEPT_NAME, "");
+		assertNull("blank obs_group_uuid normalizes to null, not the blank string", doc.getObsGroupUuid());
+		assertNull("empty obs_group_concept_name normalizes to null", doc.getObsGroupConceptName());
 	}
 }

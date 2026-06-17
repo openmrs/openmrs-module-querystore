@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.model;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DESCRIPTION;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_NAMES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_CONCEPT_NAME;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 
 import java.time.Instant;
@@ -194,6 +195,28 @@ public class QueryDocument {
 	}
 
 	/**
+	 * The obs-group parent's uuid for a group-member document, or {@code null} when this document is
+	 * not a group member (or the field is absent/blank). Consumers cluster atomic hits by this value
+	 * (ADR Decision 6). Mirrors the sibling {@code getXxxText()} accessors by centralizing the
+	 * metadata-as-String read on the model, but returns {@code null} rather than the empty string: this
+	 * is a group-identity key, not a BM25 text companion, so "not a member" is a distinct value from
+	 * "member with empty name" and must not collapse to {@code ""}. Written by
+	 * {@code ObsRecordSerializer.putGroupFields}.
+	 */
+	public String getObsGroupUuid() {
+		return metadataString(FIELD_OBS_GROUP_UUID);
+	}
+
+	/**
+	 * The obs-group parent's concept name for a group-member document, or {@code null} when absent/blank
+	 * (a non-member document, or a group whose parent concept has no name in the serialized locale).
+	 * Same null-not-empty contract as {@link #getObsGroupUuid()}.
+	 */
+	public String getObsGroupConceptName() {
+		return metadataString(FIELD_OBS_GROUP_CONCEPT_NAME);
+	}
+
+	/**
 	 * Shared join behavior for the two BM25-companion list metadata fields ({@link #FIELD_SYNONYMS}
 	 * and {@link #FIELD_MAPPING_NAMES}). Returns empty string when the field is absent or not a
 	 * List; otherwise space-joins the contained Strings, skipping null and empty entries. Centralised
@@ -215,5 +238,22 @@ public class QueryDocument {
 			}
 		}
 		return sb.toString();
+	}
+
+	/**
+	 * Clean-String view of a single metadata field: the trimmed value when present as a non-blank
+	 * String, else {@code null}. Centralizes the obs-group identity reads ({@link #getObsGroupUuid()}
+	 * and {@link #getObsGroupConceptName()}) so consumers need not re-implement {@code get(key)} +
+	 * {@code instanceof}/blank handling at each call site. Returns {@code null} (not {@code ""}) —
+	 * unlike the BM25-text {@code getXxxText()} accessors — because for an identity field absence is
+	 * meaningfully distinct from emptiness.
+	 */
+	private String metadataString(String metadataKey) {
+		Object value = metadata.get(metadataKey);
+		if (!(value instanceof String)) {
+			return null;
+		}
+		String trimmed = ((String) value).trim();
+		return trimmed.isEmpty() ? null : trimmed;
 	}
 }
