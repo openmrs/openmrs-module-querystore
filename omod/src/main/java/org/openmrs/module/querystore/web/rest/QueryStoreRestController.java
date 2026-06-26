@@ -9,18 +9,23 @@
  */
 package org.openmrs.module.querystore.web.rest;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
 import org.openmrs.api.APIAuthenticationException;
 import org.openmrs.api.APIException;
+import org.openmrs.api.PatientService;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.context.ContextAuthenticationException;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
+import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.util.PrivilegeConstants;
 import org.slf4j.Logger;
@@ -33,6 +38,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 /**
@@ -79,6 +85,98 @@ public class QueryStoreRestController {
 		// Response shape (keys + values) is produced and unit-tested in BootstrapStatusReport.toMap();
 		// the controller stays a thin adapter so the JSON contract isn't hand-typed untested here.
 		return new ResponseEntity<Object>(report.toMap(), HttpStatus.OK);
+	}
+
+	private static final int DEFAULT_LIMIT = 50;
+
+	/**
+	 * Read endpoint over the query store's three read methods (ADR Decision 16):
+	 *
+	 * <pre>
+	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;            -&gt; full chart (getPatientChart), date desc, paged
+	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;q=&lt;text&gt; -&gt; hybrid-ranked top-K (searchByPatient)
+	 * GET /ws/rest/v1/querystore/patientrecord?q=&lt;text&gt;                  -&gt; cross-patient ranked top-K (search; coarse gate)
+	 * </pre>
+	 *
+	 * <p>Gated by {@code Get Patients} — the same privilege the read methods carry. The {@code embedding}
+	 * vector is never returned, and no {@code score} is emitted (relevance is list order plus a 1-based
+	 * {@code rank}). A full chart carries a true {@code totalCount} and pages in memory; ranked results are
+	 * a top-K window (null totalCount). The JSON shape is produced and unit-tested in {@link PatientRecordView}.
+	 */
+	@RequestMapping(value = "/patientrecord", method = RequestMethod.GET)
+	@ResponseBody
+	public ResponseEntity<Object> getPatientRecords(
+	        @RequestParam(value = "patient", required = false) String patient,
+	        @RequestParam(value = "q", required = false) String q,
+	        @RequestParam(value = "limit", required = false) Integer limit,
+	        @RequestParam(value = "startIndex", required = false) Integer startIndex) {
+		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
+
+		String patientUuid = StringUtils.trimToNull(patient);
+		String query = StringUtils.trimToNull(q);
+		int from = startIndex == null ? 0 : startIndex.intValue();
+		int size = limit == null ? DEFAULT_LIMIT : limit.intValue();
+		if (size <= 0 || from < 0) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "limit must be > 0 and startIndex >= 0");
+		}
+		if (patientUuid == null && query == null) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "patient or q is required");
+		}
+		// 404 a bogus patient up front — correct status, and it avoids a wasted cold-touch projection.
+		if (patientUuid != null && patientService().getPatientByUuid(patientUuid) == null) {
+			return errorResponse(HttpStatus.NOT_FOUND, "No patient with uuid '" + patientUuid + "'");
+		}
+
+		StringBuilder baseParams = new StringBuilder();
+		if (patientUuid != null) {
+			baseParams.append("patient=").append(PatientRecordView.encode(patientUuid)).append('&');
+		}
+		if (query != null) {
+			baseParams.append("q=").append(PatientRecordView.encode(query)).append('&');
+		}
+
+		boolean ranked = query != null;
+		List<QueryDocument> page;
+		Integer totalCount;
+		if (patientUuid != null && query == null) {
+			// Full chart: enumerate (Decision 15 returns the whole set), then page in memory.
+			List<QueryDocument> all = queryStoreService().getPatientChart(patientUuid);
+			totalCount = Integer.valueOf(all.size());
+			page = slice(all, from, size);
+		} else {
+			// Ranked top-K: the service has no offset, so fetch from+size and drop the prefix. A ranked
+			// query is top-K, not a browseable collection — there is no true total, so totalCount is null.
+			List<QueryDocument> top = (patientUuid != null)
+			        ? queryStoreService().searchByPatient(patientUuid, query, from + size)
+			        : queryStoreService().search(query, from + size);
+			page = slice(top, from, size);
+			totalCount = null;
+		}
+
+		return new ResponseEntity<Object>(
+		        PatientRecordView.page(page, ranked, from, size, totalCount, baseParams.toString()),
+		        HttpStatus.OK);
+	}
+
+	/** The sublist [from, from+size) clamped to the list bounds; empty when {@code from} is past the end. */
+	private static List<QueryDocument> slice(List<QueryDocument> list, int from, int size) {
+		if (from >= list.size()) {
+			return Collections.emptyList();
+		}
+		return new ArrayList<QueryDocument>(list.subList(from, Math.min(from + size, list.size())));
+	}
+
+	/** Non-null only when a test injects it; production resolves core's PatientService per call. */
+	private PatientService injectedPatientService;
+
+	private PatientService patientService() {
+		return injectedPatientService != null ? injectedPatientService : Context.getPatientService();
+	}
+
+	/** Visible-for-testing seam: lets the POJO controller test stub patient existence (the 404 path)
+	 *  without a Spring context. Production resolves the PatientService via {@link Context}. */
+	void setPatientService(PatientService patientService) {
+		this.injectedPatientService = patientService;
 	}
 
 	/**
