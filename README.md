@@ -150,10 +150,13 @@ Duration: 30 Day(s). Quantity: 60.0 Tablet(s). Action: NEW. Urgency: ROUTINE
 
 ## REST API
 
-The query store's primary consumer surface is the in-process `QueryStoreService`. It also exposes
-**operational** REST endpoints (under `/ws/rest/v1/querystore/`, requires the `webservices.rest`
-module) for observing and repairing index state on a live server:
+The query store's primary in-JVM consumer surface is `QueryStoreService`. It also exposes a thin
+read-only HTTP adapter and operational endpoints under `/ws/rest/v1/querystore/` (requires the
+`webservices.rest` module):
 
+- `GET /patientrecord` — expose the existing `getPatientChart`, `searchByPatient`, and `search`
+  service methods to authorized non-JVM clients. The endpoint adds reachability, paging, and JSON
+  serialization; it does not reconcile or rebuild the index on each read.
 - `GET /indexingstatus` — per-resource-type bootstrap status and a derived `complete` flag ("is this
   deployment fully indexed?").
 - `POST /reindex` `{"patient":"<uuid>"}` — force a full re-projection of one patient without a

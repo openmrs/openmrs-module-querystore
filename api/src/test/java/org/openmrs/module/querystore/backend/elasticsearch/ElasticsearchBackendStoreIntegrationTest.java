@@ -482,8 +482,10 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		// v1 ships the default-method shape: backend.hybrid() runs bm25 + knn + RRF on the JVM
 		// side. ES is permitted to override with native RRF when measurable benefit justifies it
 		// (Decision 3 SPI sub-point 2). Empty corpus + no matches → empty result, no throw.
+		float[] queryVector = new float[8];
+		queryVector[0] = 1.0f; // cosine similarity rejects a zero-magnitude query vector
 		SearchResult result = backend.hybrid(
-		    SearchRequest.builder().queryText("anything").queryVector(new float[8]).limit(5).build());
+		    SearchRequest.builder().queryText("anything").queryVector(queryVector).limit(5).build());
 		assertEquals(0, result.getHits().size());
 	}
 

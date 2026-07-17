@@ -1,12 +1,13 @@
 # Query Store REST API
 
-The query store's primary consumer surface is the in-process Java service
-(`QueryStoreService`); see [ADR Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface).
-These REST endpoints are **operational tooling, not the query surface** — an *observability* read
-(is this deployment fully indexed?) and *administrative maintenance* triggers (re-index one patient,
-or kick off the full backfill, without a restart). They exist because a deployment seeded by a SQL
-dump bypasses the live indexing bridge and depends on the background bootstrap completing, and that
-completion was otherwise unobservable and unrepairable on a live instance.
+The query store's primary in-JVM consumer surface is the Java `QueryStoreService`; see
+[ADR Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface). The REST API adds:
+
+- a thin read adapter for authorized non-JVM clients and external services such as med-agent-hub; and
+- operational endpoints for observing and repairing index state.
+
+The read adapter delegates to the existing service methods. It does not add per-request
+reconciliation, completeness claims, or a second read policy.
 
 All endpoints are served under the OpenMRS REST namespace (the module requires the
 `webservices.rest` module):
@@ -16,6 +17,38 @@ All endpoints are served under the OpenMRS REST namespace (the module requires t
 ```
 
 Authenticate with any OpenMRS REST mechanism (HTTP Basic shown below).
+
+---
+
+## GET `/ws/rest/v1/querystore/patientrecord`
+
+Returns query-store records through the existing `QueryStoreService` behavior:
+
+| Parameters | Service method | Ordering |
+|---|---|---|
+| `patient=<uuid>` | `getPatientChart(patient)` | Full materialized patient chart, newest first |
+| `patient=<uuid>&q=<text>` | `searchByPatient(patient, q, k)` | Ranked patient results |
+| `q=<text>` | `search(q, k)` | Ranked cross-patient results |
+
+- **Privilege:** `Get Patients`.
+- **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`.
+- **Shape:** `results`, `totalCount`, and `links`. Full-chart reads carry the materialized result
+  count. Ranked top-K reads use `null` because the service does not expose a browseable total.
+- **Records:** `resourceType`, `resourceUuid`, ISO `date`, `text`, and `metadata`. Ranked records
+  also carry a 1-based `rank`.
+- **Excluded:** embeddings and backend scores are never returned.
+
+The endpoint intentionally does not report a snapshot or `complete` flag. Index readiness and
+repair remain the responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do
+not trigger a full patient rebuild.
+
+```bash
+curl -s -u patient-reader:secret \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&limit=500'
+```
+
+**Errors:** missing `patient` and `q`, invalid paging, or malformed parameters return `400`; an
+unknown patient returns `404`; failed authentication/authorization returns `401`/`403`.
 
 ---
 
@@ -116,6 +149,8 @@ instance; previously it could only start at module startup. Poll
   Accepted` and the work proceeds in the background. Overlapping `scope:"all"` requests collapse to
   a single in-flight run via an in-flight guard in the launcher; even if two runs did overlap, the
   per-resource-type locks keep the progress bookkeeping safe.
+- **Idempotent overlap:** if a Querystore reindex is already running, another `scope:"all"` request
+  is accepted without launching a second worker.
 - **Opt-in by design:** the global scope is requested *explicitly* with `scope:"all"` (matched
   case-insensitively), never by omitting `patient` — an absent field overlaps with a malformed
   request, and the global scan is the most expensive operation in the module.
@@ -185,6 +220,6 @@ curl -s -X POST -u admin:Admin123 -H 'Content-Type: application/json' \
   triggering a reindex during active charting on that patient.
 - **Concurrent bridge writes converge.** A live `saveObs` (etc.) during either scope's reindex is
   reconciled by the version-protection invariant (newer write wins, older dropped) — no corruption.
-- **Single-type backfill.** To advance just one resource type in-process (e.g. retry a `FAILED`
-  type after fixing its data), `BootstrapService.bootstrap(resourceType)` is available on the Java
-  service; only the per-patient and `scope:"all"` triggers are exposed over REST.
+- **Single-type backfill.** To advance just one resource type in-process, call
+  `BootstrapService.bootstrap(resourceType)`; external operators use the REST `scope:"type"` trigger
+  documented above.
