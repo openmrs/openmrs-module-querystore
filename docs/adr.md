@@ -28,6 +28,7 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 13. [Module Extension SPI (Service Provider Interface) for Custom Resource Types](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types)
 14. [Authorization and Consumer API Surface](#decision-14-authorization-and-consumer-api-surface)
 15. [Full-Chart Retrieval — Unfiltered Per-Patient Enumeration](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration)
+16. [REST Read API — `patientrecord` Resource](#decision-16-rest-read-api--patientrecord-resource)
 
 [Open Questions](#open-questions)
 
@@ -1322,6 +1323,39 @@ Now that querystore serializes every clinical record into per-type indices via t
 
 ---
 
+## Decision 16: REST Read API — `patientrecord` Resource
+
+### Status
+Accepted
+
+### Context
+[Decision 14](#decision-14-authorization-and-consumer-api-surface) made the in-process `QueryStoreService` the v1 surface and deferred REST/FHIR as "explicitly additive — they layer on top of the same Java service." [Decision 15](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration) reaffirmed that "any future surface (REST/FHIR) wraps all three methods uniformly." A concrete need now forces that additive layer: non-JVM consumers, including med-agent-hub, need an authorized HTTP entry point to the same read behavior. This decision promotes a REST **read** surface for the existing read methods to v1. It deliberately mirrors today's capabilities only — there is no per-read reconciliation, question-conditioned budget-aware retrieval, FHIR shaping, or separate external-consumer read policy.
+
+### Decision
+1. **A read-only REST endpoint at `GET /ws/rest/v1/querystore/patientrecord`, a plain Spring `@Controller`** mirroring the module's existing operational endpoints (`indexingstatus`/`reindex`/`drift`). It wraps `QueryStoreService` and applies its `@Authorized(GET_PATIENTS)` gate at the service call: `?patient={uuid}` → `getPatientChart`; `?patient={uuid}&q={text}` → `searchByPatient`; `?q={text}` (no patient) → cross-patient `search` (Decision 14's coarse-gate caveat applies).
+
+2. **A paged JSON envelope** — `{ results: [...], totalCount, links: [prev/next] }` honoring `limit`/`startIndex` (the OpenMRS `PageableResult` shape, hand-rolled). Each record serializes via a unit-tested mapper (the `BootstrapStatusReport.toMap()` convention): `resourceType`, `resourceUuid` (core cross-walk key), `date` (ISO), `text`, `metadata`. **`embedding` is never exposed** ([Decision 3](#decision-3-pluggable-backend-spi-with-three-reference-implementations)). Ranked results convey relevance by **list order** (optional 1-based `rank`); there is **no `score`** — `searchByPatient` returns `List<QueryDocument>` and discards the backend's per-hit score.
+
+3. **Authorization is Decision 14's, unchanged** — `@Authorized(GET_PATIENTS)` fires at the service call; the controller also issues an explicit `Context.requirePrivilege(GET_PATIENTS)` mirroring its siblings. An unknown `patient` uuid → `404` (validated via `PatientService.getPatientByUuid` first, avoiding a wasted cold-touch projection on a bogus id); `limit <= 0` / malformed params → `400` via the shared `@ExceptionHandler`.
+
+4. **In-JVM consumers keep using the Java service.** This endpoint is the additive HTTP layer for external/non-JVM consumers, not a replacement for Decision 14's in-process surface. med-agent-hub uses this endpoint under a configured OpenMRS service account; ChartSearchAI relays inference requests to the hub and does not implement a second QueryStore client.
+
+### Rationale
+1. **Mirror the closest sibling.** The module's REST endpoints are plain `@Controller`s; a read endpoint in the same shape avoids inventing a divergent mechanism. The `webservices.rest` framework's value — uuid CRUD, self-links, auto-representations, Swagger — assumes an `OpenmrsObject`; `QueryDocument` is a plain read-DTO, so the framework adds friction (stubbed CRUD, no canonical self-link) without proportional benefit for a read projection. The framework remains a clean upgrade path if Swagger discoverability is later required.
+2. **Mirroring the three Java methods keeps the surface honest** — the REST layer adds reachability, not capability. Budget-aware retrieval, FHIR, and ordering/aggregation params are separate decisions.
+3. **No fabricated score** respects what the service returns (list order is the real signal); **embedding exclusion** follows Decision 3.
+4. **In-process for in-JVM callers** preserves auth identity and byte-stability — an HTTP loopback would run under a service account (weakening Decision 14's "no result a core API would refuse *for this caller*") and risk chart byte-drift through JSON round-tripping.
+
+### Consequences
+- **The endpoint is NOT in the OpenMRS Swagger spec** (plain controllers aren't, unlike framework resources); it is documented in [`rest-api.md`](./rest-api.md) alongside the operational endpoints. Promoting it to a framework resource for Swagger discoverability is a deferred follow-up.
+- **The ES 10 000-hit cap (Decision 15) is surfaced via `totalCount`** (it plateaus at 10000) but not lifted; `search_after` remains the deferred v1.1 item.
+- **First REST touch on a never-indexed patient pays the Decision-15 cold-touch cost**; the 404 validation guards only bogus uuids.
+- **Ordinary reads do not prove index completeness or trigger reconciliation.** Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to observe and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
+- **The endpoint is read-only** — indexing stays unexposed (Decision 14).
+- **Budget-aware retrieval, FHIR shaping, and a general non-AI read breadth remain deferred** — explicitly the next iteration.
+
+---
+
 ## Open Questions
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.
@@ -1498,4 +1532,3 @@ A `PatientProgram` can have multiple workflows ([`ProgramWorkflow`](https://open
 
 ### ServiceOrder frequency / numberOfRepeats / location surfacing
 `ServiceOrder` (parent of `TestOrder` and `ReferralOrder`) declares three fields beyond what the v1 serializers surface: `frequency` (`OrderFrequency` — repeat schedule), `numberOfRepeats` (`Integer` — bounded repeat count), and `location` (`Concept` — the service-performance location, *distinct* from the encounter's `Location` already captured by `putEncounterContext`). The v1 serializer ignores all three. The gap was inherited from the original TestOrder implementation and codified across both subtypes when populate logic was promoted to `AbstractServiceOrderRecordSerializer` (rule-of-two promotion). The miss is more visible for referrals than for lab tests: a referral expressing "weekly cardiology visits for 6 weeks at Karen Hospital" loses the cadence (`frequency`/`numberOfRepeats`) and the destination (`ServiceOrder.location`) in the projected document. Decision needed on whether to: (a) surface `frequency_uuid` / `frequency` + `number_of_repeats` + `service_location_uuid` / `service_location_name` for both subtypes (consistent with `drug_order`'s frequency treatment); (b) surface them only for `referral_order` where the clinical use case is strongest, leaving `test_order` unchanged; or (c) ratify the omission as out-of-scope for v1 and document the gap in the field-descriptions table. Affects retrieval quality for repeat-scheduled lab orders and any referral query touching cadence or destination. Surfacing is additive — pure serializer change plus a one-time re-projection per [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database).
-
