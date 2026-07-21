@@ -14,6 +14,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -21,6 +23,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -93,6 +96,72 @@ public class PatientRecordEndpointTest {
 		assertFalse("full-chart rows carry no rank", first.containsKey("rank"));
 		verify(queryStore).getPatientChart(PATIENT);
 		verify(queryStore, never()).searchByPatient(anyString(), anyString(), anyInt());
+	}
+
+	@Test
+	public void fullChart_exposesExplicitClinicalDateFreshnessAndConditionalSnapshot() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument first = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		first.putMetadata(FIELD_CLINICAL_DATE, "2026-01-15");
+		first.putMetadata(FIELD_DATE_KIND, "clinical_event");
+		first.setLastModified(Instant.parse("2026-01-16T12:00:00Z"));
+		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(first));
+
+		ResponseEntity<Object> firstResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
+
+		assertEquals(HttpStatus.OK, firstResponse.getStatusCode());
+		Map<?, ?> firstRow = (Map<?, ?>) ((List<?>) body(firstResponse).get("results")).get(0);
+		assertEquals("2026-01-15", firstRow.get("clinicalDate"));
+		assertEquals("clinical_event", firstRow.get("dateKind"));
+		assertEquals("2026-01-16T12:00:00Z", firstRow.get("lastModified"));
+		assertNotNull("a full chart identifies the exact materialized snapshot", body(firstResponse).get("snapshotId"));
+		assertNotNull("a full chart has a strong revalidation token", firstResponse.getHeaders().getETag());
+		assertEquals("private, no-cache, must-revalidate", firstResponse.getHeaders().getCacheControl());
+
+		ResponseEntity<Object> notModified = controller.getPatientRecords(
+		        PATIENT, null, null, null, firstResponse.getHeaders().getETag());
+		assertEquals(HttpStatus.NOT_MODIFIED, notModified.getStatusCode());
+		assertNull("a 304 response must not repeat PHI-bearing chart content", notModified.getBody());
+	}
+
+	@Test
+	public void fullChart_snapshotChangesWhenARecordRepresentationChanges() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument before = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		QueryDocument after = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 59 kg");
+		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(before), Arrays.asList(after));
+
+		ResponseEntity<Object> beforeResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
+		ResponseEntity<Object> afterResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
+
+		assertFalse("a changed record must invalidate the chart identity",
+		        body(beforeResponse).get("snapshotId").equals(body(afterResponse).get("snapshotId")));
+		assertFalse("the page revalidation token must also change",
+		        beforeResponse.getHeaders().getETag().equals(afterResponse.getHeaders().getETag()));
+	}
+
+	@Test
+	public void fullChart_etagIsSpecificToTheRequestedPageOfOneSnapshot() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
+		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg")));
+
+		ResponseEntity<Object> firstPage = controller.getPatientRecords(PATIENT, null, Integer.valueOf(1),
+		        Integer.valueOf(0), null);
+		ResponseEntity<Object> secondPage = controller.getPatientRecords(PATIENT, null, Integer.valueOf(1),
+		        Integer.valueOf(1), null);
+
+		assertEquals("the same materialized chart has one snapshot identity",
+		        body(firstPage).get("snapshotId"), body(secondPage).get("snapshotId"));
+		assertFalse("conditional tokens must not validate a different page",
+		        firstPage.getHeaders().getETag().equals(secondPage.getHeaders().getETag()));
 	}
 
 	@Test

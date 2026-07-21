@@ -39,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 /**
@@ -109,7 +110,8 @@ public class QueryStoreRestController {
 	        @RequestParam(value = "patient", required = false) String patient,
 	        @RequestParam(value = "q", required = false) String q,
 	        @RequestParam(value = "limit", required = false) Integer limit,
-	        @RequestParam(value = "startIndex", required = false) Integer startIndex) {
+	        @RequestParam(value = "startIndex", required = false) Integer startIndex,
+	        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
 		String patientUuid = StringUtils.trimToNull(patient);
@@ -138,11 +140,21 @@ public class QueryStoreRestController {
 		boolean ranked = query != null;
 		List<QueryDocument> page;
 		Integer totalCount;
+		String snapshotId = null;
+		String pageEtag = null;
 		if (patientUuid != null && query == null) {
 			// Full chart: enumerate (Decision 15 returns the whole set), then page in memory.
 			List<QueryDocument> all = queryStoreService().getPatientChart(patientUuid);
 			totalCount = Integer.valueOf(all.size());
 			page = slice(all, from, size);
+			snapshotId = PatientRecordView.snapshotId(all);
+			pageEtag = PatientRecordView.pageEtag(snapshotId, from, size);
+			if (etagMatches(ifNoneMatch, pageEtag)) {
+				return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+				        .eTag(pageEtag)
+				        .header("Cache-Control", "private, no-cache, must-revalidate")
+				        .build();
+			}
 		} else {
 			// Ranked top-K: the service has no offset, so fetch from+size and drop the prefix. A ranked
 			// query is top-K, not a browseable collection — there is no true total, so totalCount is null.
@@ -153,9 +165,33 @@ public class QueryStoreRestController {
 			totalCount = null;
 		}
 
-		return new ResponseEntity<Object>(
-		        PatientRecordView.page(page, ranked, from, size, totalCount, baseParams.toString()),
-		        HttpStatus.OK);
+		Map<String, Object> body = PatientRecordView.page(page, ranked, from, size, totalCount,
+		        baseParams.toString(), snapshotId);
+		if (pageEtag != null) {
+			return ResponseEntity.ok()
+			        .eTag(pageEtag)
+			        .header("Cache-Control", "private, no-cache, must-revalidate")
+			        .body(body);
+		}
+		return new ResponseEntity<Object>(body, HttpStatus.OK);
+	}
+
+	/** Convenience seam retained for existing direct controller tests. */
+	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex) {
+		return getPatientRecords(patient, q, limit, startIndex, null);
+	}
+
+	private static boolean etagMatches(String ifNoneMatch, String pageEtag) {
+		if (ifNoneMatch == null || pageEtag == null) {
+			return false;
+		}
+		for (String candidate : ifNoneMatch.split(",")) {
+			String trimmed = candidate.trim();
+			if ("*".equals(trimmed) || pageEtag.equals(trimmed)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** The sublist [from, from+size) clamped to the list bounds; empty when {@code from} is past the end. */

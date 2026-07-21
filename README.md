@@ -155,8 +155,9 @@ read-only HTTP adapter and operational endpoints under `/ws/rest/v1/querystore/`
 `webservices.rest` module):
 
 - `GET /patientrecord` — expose the existing `getPatientChart`, `searchByPatient`, and `search`
-  service methods to authorized non-JVM clients. The endpoint adds reachability, paging, and JSON
-  serialization; it does not reconcile or rebuild the index on each read.
+  service methods to authorized non-JVM clients. Full-chart pages include a materialized
+  `snapshotId`, strong conditional `ETag`, explicit clinical-date semantics, paging, and JSON
+  serialization; the endpoint does not reconcile or rebuild the index on each read.
 - `GET /indexingstatus` — per-resource-type bootstrap status and a derived `complete` flag ("is this
   deployment fully indexed?").
 - `POST /reindex` `{"patient":"<uuid>"}` — force a full re-projection of one patient without a
