@@ -32,15 +32,25 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 
 - **Privilege:** `Get Patients`.
 - **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`.
-- **Shape:** `results`, `totalCount`, and `links`. Full-chart reads carry the materialized result
+- **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also carry a stable
+  `snapshotId` for the complete materialized chart. Full-chart reads carry the materialized result
   count. Ranked top-K reads use `null` because the service does not expose a browseable total.
-- **Records:** `resourceType`, `resourceUuid`, ISO `date`, `text`, and `metadata`. Ranked records
-  also carry a 1-based `rank`.
+- **Records:** `resourceType`, `resourceUuid`, ISO `date` (the record's sort date),
+  `clinicalDate` (the event date safe for temporal use, or `null`), `dateKind`
+  (`clinical_event`, `administrative`, or `unknown`), `lastModified`, `text`, and `metadata`.
+  Consumers must not treat `date` as a clinical event date when `dateKind` is not
+  `clinical_event`. Ranked records also carry a 1-based `rank`.
 - **Excluded:** embeddings and backend scores are never returned.
 
-The endpoint intentionally does not report a snapshot or `complete` flag. Index readiness and
-repair remain the responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do
-not trigger a full patient rebuild.
+For a full-chart page, the response has a strong page-specific `ETag` and
+`Cache-Control: private, no-cache, must-revalidate`. Send that token as `If-None-Match` on the
+same page request: an unchanged page returns `304 Not Modified` with no clinical payload. The
+`snapshotId` covers the complete chart, so a multi-page consumer rejects pages whose snapshot does
+not match the first page. Ranked searches are intentionally uncached windows.
+
+The endpoint does not claim index completeness. Index readiness and repair remain the
+responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do not trigger a full
+patient rebuild.
 
 ```bash
 curl -s -u patient-reader:secret \

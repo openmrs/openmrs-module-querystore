@@ -10,6 +10,8 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_HANDED_OVER;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_CLINICAL_EVENT;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DISPENSER_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DISPENSER_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DOSE;
@@ -84,6 +86,17 @@ public class MedicationDispenseRecordSerializer extends AbstractRecordSerializer
 	protected LocalDate getDate(MedicationDispense dispense) {
 		Date handed = dispense.getDateHandedOver();
 		return DateFormatUtil.toLocalDate(handed != null ? handed : dispense.getDateCreated());
+	}
+
+	@Override
+	protected LocalDate getClinicalDate(MedicationDispense dispense) {
+		return DateFormatUtil.toLocalDate(dispense.getDateHandedOver());
+	}
+
+	@Override
+	protected String getDateKind(MedicationDispense dispense) {
+		return dispense.getDateHandedOver() == null
+		        ? DATE_KIND_ADMINISTRATIVE : DATE_KIND_CLINICAL_EVENT;
 	}
 
 	@Override

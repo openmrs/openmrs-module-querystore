@@ -9,12 +9,22 @@
  */
 package org.openmrs.module.querystore.web.rest;
 
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_UNKNOWN;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
+
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
@@ -40,6 +50,9 @@ final class PatientRecordView {
 		m.put("resourceType", doc.getResourceType());
 		m.put("resourceUuid", doc.getResourceUuid());
 		m.put("date", doc.getDate() == null ? null : doc.getDate().toString());
+		m.put("clinicalDate", metadataString(doc, FIELD_CLINICAL_DATE));
+		m.put("dateKind", dateKind(doc));
+		m.put("lastModified", doc.getLastModified() == null ? null : doc.getLastModified().toString());
 		m.put("text", doc.getText());
 		m.put("metadata", doc.getMetadata());
 		if (rank != null) {
@@ -59,6 +72,11 @@ final class PatientRecordView {
 	 */
 	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
 	        Integer totalCount, String baseParams) {
+		return page(docs, ranked, startIndex, limit, totalCount, baseParams, null);
+	}
+
+	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
+	        Integer totalCount, String baseParams, String snapshotId) {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>(docs.size());
 		for (int i = 0; i < docs.size(); i++) {
 			results.add(toMap(docs.get(i), ranked ? Integer.valueOf(startIndex + i + 1) : null));
@@ -66,6 +84,9 @@ final class PatientRecordView {
 		Map<String, Object> env = new LinkedHashMap<String, Object>();
 		env.put("results", results);
 		env.put("totalCount", totalCount);
+		if (snapshotId != null) {
+			env.put("snapshotId", snapshotId);
+		}
 
 		List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
 		if (startIndex > 0) {
@@ -78,6 +99,95 @@ final class PatientRecordView {
 			env.put("links", links);
 		}
 		return env;
+	}
+
+	/** Stable identity for an entire ordered chart, including date semantics and canonical metadata. */
+	static String snapshotId(List<QueryDocument> docs) {
+		StringBuilder canonical = new StringBuilder();
+		for (QueryDocument doc : docs) {
+			appendValue(canonical, doc.getResourceType());
+			appendValue(canonical, doc.getResourceUuid());
+			appendValue(canonical, doc.getDate() == null ? null : doc.getDate().toString());
+			appendValue(canonical, metadataString(doc, FIELD_CLINICAL_DATE));
+			appendValue(canonical, dateKind(doc));
+			appendValue(canonical, doc.getText());
+			appendValue(canonical, doc.getLastModified() == null ? null : doc.getLastModified().toString());
+			appendValue(canonical, doc.getMetadata());
+		}
+		return sha256(canonical.toString());
+	}
+
+	/** A page-specific strong ETag, derived from the complete snapshot and paging parameters. */
+	static String pageEtag(String snapshotId, int startIndex, int limit) {
+		return "\"" + sha256(snapshotId + "|" + startIndex + "|" + limit) + "\"";
+	}
+
+	private static String metadataString(QueryDocument doc, String key) {
+		Object value = doc.getMetadata().get(key);
+		return value instanceof String ? (String) value : null;
+	}
+
+	private static String dateKind(QueryDocument doc) {
+		String value = metadataString(doc, FIELD_DATE_KIND);
+		return value == null ? DATE_KIND_UNKNOWN : value;
+	}
+
+	private static String sha256(String value) {
+		try {
+			byte[] digest = MessageDigest.getInstance("SHA-256")
+			        .digest(value.getBytes(StandardCharsets.UTF_8));
+			StringBuilder hex = new StringBuilder(digest.length * 2);
+			for (byte b : digest) {
+				int unsignedByte = b & 0xff;
+				hex.append(Character.forDigit(unsignedByte >>> 4, 16));
+				hex.append(Character.forDigit(unsignedByte & 0x0f, 16));
+			}
+			return hex.toString();
+		}
+		catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-256 is unavailable", e);
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void appendValue(StringBuilder out, Object value) {
+		if (value == null) {
+			out.append("-1:");
+			return;
+		}
+		if (value instanceof Map) {
+			out.append("{");
+			Map<String, Object> sorted = new TreeMap<String, Object>();
+			for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+				sorted.put(String.valueOf(entry.getKey()), entry.getValue());
+			}
+			for (Map.Entry<String, Object> entry : sorted.entrySet()) {
+				appendValue(out, entry.getKey());
+				appendValue(out, entry.getValue());
+			}
+			out.append("}");
+			return;
+		}
+		if (value instanceof Collection) {
+			out.append("[");
+			List<Object> items = new ArrayList<Object>((Collection<Object>) value);
+			if (!(value instanceof List)) {
+				Collections.sort(items, (left, right) -> canonicalValue(left).compareTo(canonicalValue(right)));
+			}
+			for (Object item : items) {
+				appendValue(out, item);
+			}
+			out.append("]");
+			return;
+		}
+		String text = String.valueOf(value);
+		out.append(text.length()).append(':').append(text);
+	}
+
+	private static String canonicalValue(Object value) {
+		StringBuilder out = new StringBuilder();
+		appendValue(out, value);
+		return out.toString();
 	}
 
 	private static Map<String, Object> link(String rel, String baseParams, int startIndex, int limit) {
