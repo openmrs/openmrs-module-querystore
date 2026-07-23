@@ -1434,6 +1434,48 @@ prompt composition, token budgeting, and question interpretation.
 
 ---
 
+## Decision 18: Context-Slice Question Interpretation and Retrieval Preprocessing
+
+### Status
+Accepted
+
+### Context
+[Decision 17](#decision-17-context-slice-read--tiered-record-selection) kept question
+interpretation caller-side: each consumer derived the typed scope and the temporal flag itself and
+passed them as request parameters. The harness engine-parity instrument then measured the expected
+consequence: the two consumers' interpreters and their retrieval preprocessing drifted (bundled
+sent a stopword-stripped, panel-expanded question with its own topK; the hub sent the raw question
+with the server default), producing systematically different similarity tiers for identical
+questions. Query normalization is retrieval quality, which this module owns.
+
+### Decision
+1. **`ContextSliceRequest.interpretQuestion`**: when set, querystore derives the typed scope and
+   temporal flag from the question via conservative word-boundary cues (mechanical matching, not
+   NLU), UNIONs the caller's `types` (module-contributed scopes survive), and ORs the caller's
+   `temporal`. The REST twin exposes `interpret=true`. Explicit caller parameters remain fully
+   supported — interpretation is opt-in, additive, and overridable.
+2. **The slice's similarity leg preprocesses the question server-side** (lab-panel abbreviation
+   expansion, then stopword stripping via the bundled `context-query-stopwords.txt` resource) —
+   always, idempotently, so a caller that still preprocesses loses nothing and a caller that sends
+   the raw question gets the same retrieval text.
+3. **`ContextSlice` traces the effective interpretation** (`effectiveTypes`, `temporalApplied`)
+   so consumers can log and audit what the selection actually used.
+
+### Rationale
+1. **Interpretation duplicated in two engines measurably drifted; one implementation cannot.**
+2. **Preprocessing is embedder-facing** — the same argument that placed the e5 pipeline here.
+3. **Opt-in keeps Decision 17's contract intact** for callers with their own interpretation.
+
+### Consequences
+- Both AI consumers switch to `interpretQuestion` + raw questions; their local cue routers and
+  query preprocessing become unused on the slice path (retained for their non-slice paths).
+- The cue tables live here now; extending a question class (new cue, new typed scope) is a
+  querystore change verified by its own tests, visible to every consumer at once.
+- Interpretation stays deliberately mechanical; upgrading it to anything smarter is a future
+  decision with its own evaluation, not an incremental edit.
+
+---
+
 ## Open Questions
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.

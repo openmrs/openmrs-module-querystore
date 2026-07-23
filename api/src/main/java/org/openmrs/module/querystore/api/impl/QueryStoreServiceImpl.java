@@ -314,12 +314,27 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		// identically (Decision 17 §3): the chart IS getPatientChart's view.
 		List<QueryDocument> chart = getPatientChart(patientUuid);
 
-		// Ranked-search hits are the semantic catch-all tier. A failure degrades to the policy
-		// tiers alone — selection must never block on the ranking layer.
+		// Server-side interpretation (ADR Decision 18): derived types UNION the caller's,
+		// derived temporal ORs the caller's — module-contributed additions always survive.
+		Set<String> effectiveTypes = new HashSet<>(request.getTypes());
+		boolean temporal = request.isTemporal();
+		if (request.isInterpretQuestion()) {
+			ContextQuestionInterpreter.Interpretation interpreted =
+			        ContextQuestionInterpreter.interpret(question);
+			effectiveTypes.addAll(interpreted.types);
+			temporal = temporal || interpreted.temporal;
+		}
+
+		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (panel
+		// expansion + stopword stripping) runs HERE, at the owner of the embedder — idempotent
+		// for callers that still preprocess. A failure degrades to the policy tiers alone —
+		// selection must never block on the ranking layer.
 		Set<String> similarityUuids = new HashSet<>();
 		if (StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
 			try {
-				for (QueryDocument hit : searchByPatient(patientUuid, question, request.getSimilarityLimit())) {
+				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
+				for (QueryDocument hit : searchByPatient(patientUuid, retrievalQuestion,
+				        request.getSimilarityLimit())) {
 					if (hit != null && hit.getResourceUuid() != null) {
 						similarityUuids.add(hit.getResourceUuid());
 					}
@@ -331,7 +346,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			}
 		}
 
-		int anchor = request.isTemporal() ? request.getRecencyAnchorSize() : 0;
+		int anchor = temporal ? request.getRecencyAnchorSize() : 0;
 		List<ContextSliceRecord> selected = new ArrayList<>();
 		Set<String> selectedUuids = new HashSet<>();
 		for (int i = 0; i < chart.size(); i++) {
@@ -344,7 +359,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 				tier = QueryStoreConstants.TIER_MANDATORY;
 			} else if (i < anchor) {
 				tier = QueryStoreConstants.TIER_RECENCY_ANCHOR;
-			} else if (doc.getResourceType() != null && request.getTypes().contains(doc.getResourceType())) {
+			} else if (doc.getResourceType() != null && effectiveTypes.contains(doc.getResourceType())) {
 				tier = QueryStoreConstants.TIER_TYPED;
 			} else if (similarityUuids.contains(doc.getResourceUuid())) {
 				tier = QueryStoreConstants.TIER_SIMILARITY;
@@ -356,7 +371,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		selected = completePanelFamilies(chart, selected, selectedUuids);
 
 		boolean truncated = chart.size() >= QueryStoreConstants.CONTEXT_CHART_CAP;
-		return new ContextSlice(selected, chart.size(), truncated);
+		return new ContextSlice(selected, chart.size(), truncated, effectiveTypes, temporal);
 	}
 
 	/**

@@ -241,6 +241,59 @@ public class ContextSliceTest {
 		        "an uncapped chart is not flagged");
 	}
 
+	@Test
+	public void interpretMode_derivesTypesAndTemporalServerSide() {
+		// ADR Decision 18: with interpretQuestion, querystore derives the typed scope and the
+		// temporal flag from the RAW question — both engines stop duplicating cue routing, so
+		// interpretation cannot drift between them.
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setInterpretQuestion(true);
+		request.setRecencyAnchorSize(3);
+
+		ContextSlice slice = service.getContextSlice(PATIENT,
+		        "What medications is the patient currently on?", request);
+
+		Map<String, String> tiers = tiersByUuid(slice);
+		assertEquals(QueryStoreConstants.TIER_TYPED, tiers.get("med-1"));
+		assertEquals(QueryStoreConstants.TIER_TYPED, tiers.get("med-2"));
+		assertEquals(QueryStoreConstants.TIER_RECENCY_ANCHOR, tiers.get("recent-1"),
+		        "\"currently\" is a temporal cue — the anchor applies; got " + tiers);
+		assertTrue(slice.getEffectiveTypes().contains("drug_order"),
+		        "the derived interpretation is traced on the slice; got " + slice.getEffectiveTypes());
+		assertTrue(slice.isTemporalApplied());
+	}
+
+	@Test
+	public void interpretMode_unionsCallerTypes_withDerivedOnes() {
+		// Module-contributed scopes (chartsearchai QueryScopeContributor SPI) remain caller
+		// additions — unioned with the derived types, never replaced.
+		ContextSliceRequest request = new ContextSliceRequest(
+		        new HashSet<String>(Collections.singletonList("billing_record")), false);
+		request.setInterpretQuestion(true);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "What medications is the patient on?", request);
+
+		assertTrue(slice.getEffectiveTypes().contains("billing_record"),
+		        "caller types survive; got " + slice.getEffectiveTypes());
+		assertTrue(slice.getEffectiveTypes().contains("drug_order"),
+		        "derived types join; got " + slice.getEffectiveTypes());
+	}
+
+	@Test
+	public void similarityLeg_preprocessesTheQuestion_ownedByTheRetrievalStore() {
+		// Retrieval-quality preprocessing (lab-panel expansion + stopword stripping) runs HERE,
+		// at the owner of the index and embedder — callers send the raw question. Idempotent for
+		// a caller that still preprocesses client-side.
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		service.getContextSlice(PATIENT, "results of the last BMP?", request);
+
+		assertTrue(backend.lastQueryText.contains("basic metabolic panel"),
+		        "the panel abbreviation must be expanded for retrieval; got " + backend.lastQueryText);
+		assertFalse(backend.lastQueryText.contains("the "),
+		        "stopwords must be stripped; got " + backend.lastQueryText);
+	}
+
 	/** Scripted backend: canned chart + canned similarity hits, everything else inert. */
 	private static final class FakeBackendStore implements BackendStore {
 
@@ -262,9 +315,12 @@ public class ContextSliceTest {
 			return chart;
 		}
 
+		volatile String lastQueryText;
+
 		@Override
 		public SearchResult hybrid(SearchRequest req) {
 			hybridCount.incrementAndGet();
+			lastQueryText = req.getQueryText();
 			if (throwOnSearch) {
 				throw new RuntimeException("simulated backend search failure");
 			}
