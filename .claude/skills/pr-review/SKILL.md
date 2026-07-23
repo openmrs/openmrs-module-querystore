@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request with empirical verification and clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.9.5
+version: 0.11.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -50,6 +50,17 @@ For each behavior change the PR introduces, name the test that exercises it — 
 ### Convergence
 
 A pass that surfaced a substantive finding cannot be your last pass: one real find is evidence of unexplored ground, so sweep again until a pass turns up nothing substantive. The converse also holds — don't invent findings to fill a quota; a clean PR earns a short review.
+
+### When an adversarial refutation pass is worth it
+
+The verification above is the default and is usually enough. A heavier technique — challenging each candidate from an independent context (a separate reader per finding, told to *refute* it, and for a high-stakes blocker more than one from distinct angles: does it reproduce, is the mechanism right, does the named consumer actually break; refuted-but-unproven becomes a `question:`, not an `issue`) — pays for its cost only when a single reasoning context's blind spots would otherwise go uncaught. Reach for it when **two or more** of these hold, not by default:
+
+- the finding is a **judgment call, not a mechanical fact** — "is this actually a race?", "does this design break the consumer's contract?" rather than "does `from + size` overflow?" A second context re-tracing a deterministic claim reaches the same answer, so independence adds nothing there; it earns its keep only where reasonable reviewers could differ.
+- you are reviewing **solo in one pass, without a fan-out of independent finders** — the independence a refutation pass buys is already present when several finders disagree and hedge their own confidence.
+- the pass is **rushed or low-effort**, where the "verify before asserting" discipline is the thing most likely to be skipped — here the refutation raises the floor rather than the ceiling.
+- the **cost of a false positive is high** — a blocking `issue` on a `--post` round, or a request-changes verdict, where a wrong call burns author trust.
+
+When none of these hold — mechanically checkable findings, already fanned out, careful effort — the pass is redundant with the discipline above: it re-runs verification you already did and catches nothing new. It was tried as a mandatory always-on stage and reverted after a real-PR test showed exactly that, so keep it a conditional escalation, never a default step.
 
 Verify thoroughly — but the evidence belongs *inside the finding it supports*, not in a standalone recap, and a cleared concern usually needs no words at all (see Step 3).
 
