@@ -1,6 +1,6 @@
 ---
 name: verify-frontend-change
-description: Verify an OpenMRS module UI change end-to-end before declaring it done — build the .omod, deploy it into a local OpenMRS standalone, (re)start the server, then drive the actual page in a browser. Use for any backend module that renders a UI (legacy/refapp web pages, HTML Form Entry, etc.) — e.g. htmlformentry's date-widget clear button. Trigger phrases: "verify this UI change", "test the module in the browser", "does this render/work in OpenMRS", "verify frontend change".
+description: Verify an OpenMRS module UI change end-to-end before declaring it done — build the .omod, deploy it into a local OpenMRS standalone, (re)start the server, then drive the actual page in a browser. Use for any backend module that renders a UI (legacy/refapp web pages, HTML Form Entry, etc.) — e.g. htmlformentry's date-widget clear button. Trigger phrases include "verify this UI change", "test the module in the browser", "does this render/work in OpenMRS", "verify frontend change".
 version: 0.1.0
 ---
 
