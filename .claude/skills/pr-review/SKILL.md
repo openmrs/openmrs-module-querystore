@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request with empirical verification and clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.9.5
+version: 0.10.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -53,6 +53,21 @@ A pass that surfaced a substantive finding cannot be your last pass: one real fi
 
 Verify thoroughly — but the evidence belongs *inside the finding it supports*, not in a standalone recap, and a cleared concern usually needs no words at all (see Step 3).
 
+## Step 2.5 — Adversarially verify the surviving findings
+
+Verification in Step 2 proves the *mechanism* — that the code does what you claim. This step tests something different: whether the finding is *real and worth the author's attention*, by having it challenged from a context that did not produce it. Self-review inside the same reasoning that generated a finding shares that finding's blind spots; an independent challenge is what actually kills the plausible-but-wrong `issue` and the invented-to-look-thorough concern — the noise PR authors complain about most.
+
+Run this gate on the candidate findings before composing. For each candidate that carries any inferential weight — anything you did not directly observe the mechanism of in Step 2 — mount an adversarial challenge whose default is *refuted*:
+
+- **Challenge to refute, not to confirm.** The judge's job is to construct the case that the finding is wrong: that the failure mode can't actually occur, that a guard upstream already prevents it, that the consumer doesn't depend on what changed, that the "missing" test exists elsewhere. A finding survives only when that case fails. Uncertainty resolves *against* the finding — if the judge can't establish the finding is real, it is not a real `issue`.
+- **Independence is the point.** When the effort/tooling allows it (a `--post` round, or high effort), spawn the challenge as a separate subagent per finding so it reasons from a clean context rather than re-reading your own justification. Give the subagent the finding, the diff, and the branch, and ask it to refute. When fanning out isn't warranted (a small PR, conversation-only), at minimum re-derive each finding's refutation from scratch — state the strongest case *against* it in writing before you keep it — but treat this in-context form as the weaker substitute it is.
+- **Diverse lenses, not identical skeptics.** For a finding that could fail in more than one way, challenge it from distinct angles — *does it actually reproduce* (construct the concrete input/state), *is the mechanism correct* (re-trace the code path), *does the named consumer actually break* (check the contract at the consumer) — rather than three copies of the same doubt. Redundant skeptics kill the same real findings together; diverse ones each catch a different way of being wrong. A finding that clears two or more independent lenses is CONFIRMED.
+- **Refuted downgrades, it does not silently vanish.** A finding the challenge defeats outright is dropped. A finding that survives as *plausible but unproven* — the challenge couldn't confirm it, but couldn't rule it out either — is **not** posted as an `issue`; it becomes a `question:` (Step 3's category for exactly this), so the author with more context gets the signal without you asserting a false blocker. Only CONFIRMED findings may be posted as `issue`/blocking. This is what keeps the gate from trading the noise problem for a missed-bug problem: precision goes up, real signal is preserved as a question rather than deleted.
+
+Scale it to the round, matching Step 2's effort rule: a small clean PR needs the in-context form or nothing; a `--post` or high-effort review of a substantive change earns per-finding subagent challenges, and the highest-stakes blocking findings earn a multi-lens panel. Record nothing about this pass in the review itself — a surviving finding's evidence is its own failure-mode sentence (Step 3), never "this was adversarially confirmed."
+
+This gate feeds the convergence rule, it doesn't replace it: if the challenge round *itself* surfaces new ground (a refutation that reveals the real bug is elsewhere), that is a substantive find, so sweep again per Step 2's Convergence note before composing.
+
 ## Step 3 — Compose the review
 
 The review's job is to surface what needs action. Reviewer and author attention is the scarce resource — PR review is a bottleneck, and every line that doesn't change what the author does is pure cost. Lead with action.
@@ -99,7 +114,7 @@ Posting publishes under the user's own GitHub account. Post only when the user p
 
 **Pre-posting gate** — before presenting, staging, or posting, write these four as four explicit, standalone lines in your report to the user — verbatim, not paraphrased, not woven into prose narration. If any cannot be said truthfully, go back and fix the review first:
 
-> "Every finding was verified by [building / running / tracing / upstream check], not just read off the diff."
+> "Every finding was verified by [building / running / tracing / upstream check], not just read off the diff, and survived the Step 2.5 adversarial challenge — every finding posted as an `issue`/blocking cleared its refutation (CONFIRMED); anything that survived only as plausible-but-unproven is a `question:`, not an `issue`."
 
 > "Neither the summary verdict nor any inline comment's first line leads with a stamped label — not `issue:` / `suggestion:` / `nit:`, not the em-dash/colon variants (`Disposition: merge`, `Question — …`, `Non-blocking suggestion: …`), and not their casually-worded cousins (`Naming trivia, take or leave: …`, `Tiny style thing: …`); each says in plain language what it is and what the author must do, and either requests an action or asks a question. Every blocking comment contains its failure-mode sentence; and no comment — fresh or threaded reply — exists merely to acknowledge a fix or credit resolved work."
 
