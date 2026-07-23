@@ -17,6 +17,8 @@ import org.openmrs.api.OpenmrsService;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.WriteResult;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.util.PrivilegeConstants;
 
@@ -162,4 +164,25 @@ public interface QueryStoreService extends OpenmrsService {
 	 */
 	@Authorized(PrivilegeConstants.GET_PATIENTS)
 	List<QueryDocument> getPatientChart(String patientUuid);
+
+	/**
+	 * Returns the tier-tagged context slice for one patient and question — the single
+	 * implementation of the provider-neutral context-selection invariants (ADR Decision 17;
+	 * conformance family {@code context_policy} in dual-provider-conformance.v1). Selection
+	 * tiers, by priority: {@code mandatory} (patient record, allergies, active conditions),
+	 * {@code recency_anchor} (newest chart records, only when {@code request.temporal}),
+	 * {@code typed} (caller-declared typed-complete resource types), {@code similarity}
+	 * (ranked-search hits for {@code question}), {@code panel} (obs-group family completion).
+	 * Records keep {@link #getPatientChart}'s {@code record_date}-desc order, each appearing
+	 * once under its highest tier.
+	 *
+	 * <p>Question interpretation (which types, whether temporal) is the CALLER's job — this
+	 * method performs mechanical selection only. Prompt composition and token budgeting stay in
+	 * the consumer; {@code mandatory} records are never droppable there. A ranked-search
+	 * failure or blank question degrades to the policy tiers alone; cold-patient lazy bootstrap
+	 * and the ES full-chart cap behave exactly as {@link #getPatientChart} (a capped chart is
+	 * surfaced via {@link org.openmrs.module.querystore.model.ContextSlice#isChartTruncated}).
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request);
 }

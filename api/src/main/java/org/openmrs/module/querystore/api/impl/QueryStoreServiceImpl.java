@@ -11,15 +11,18 @@ package org.openmrs.module.querystore.api.impl;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
+import org.openmrs.module.querystore.QueryStoreConstants;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
@@ -30,6 +33,9 @@ import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRecord;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 /**
@@ -297,5 +303,126 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		List<QueryDocument> out = new ArrayList<>(result.getHits().size());
 		result.getHits().forEach(h -> out.add(h.getDocument()));
 		return out;
+	}
+
+	@Override
+	public ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request) {
+		if (request == null) {
+			request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		}
+		// Composed over the sibling reads so cold-bootstrap, ordering, and the ES cap behave
+		// identically (Decision 17 §3): the chart IS getPatientChart's view.
+		List<QueryDocument> chart = getPatientChart(patientUuid);
+
+		// Ranked-search hits are the semantic catch-all tier. A failure degrades to the policy
+		// tiers alone — selection must never block on the ranking layer.
+		Set<String> similarityUuids = new HashSet<>();
+		if (StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
+			try {
+				for (QueryDocument hit : searchByPatient(patientUuid, question, request.getSimilarityLimit())) {
+					if (hit != null && hit.getResourceUuid() != null) {
+						similarityUuids.add(hit.getResourceUuid());
+					}
+				}
+			}
+			catch (RuntimeException e) {
+				log.warn("Context-slice ranked search failed for patient " + patientUuid
+				        + " — proceeding with policy tiers only", e);
+			}
+		}
+
+		int anchor = request.isTemporal() ? request.getRecencyAnchorSize() : 0;
+		List<ContextSliceRecord> selected = new ArrayList<>();
+		Set<String> selectedUuids = new HashSet<>();
+		for (int i = 0; i < chart.size(); i++) {
+			QueryDocument doc = chart.get(i);
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			String tier = null;
+			if (isMandatoryCore(doc)) {
+				tier = QueryStoreConstants.TIER_MANDATORY;
+			} else if (i < anchor) {
+				tier = QueryStoreConstants.TIER_RECENCY_ANCHOR;
+			} else if (doc.getResourceType() != null && request.getTypes().contains(doc.getResourceType())) {
+				tier = QueryStoreConstants.TIER_TYPED;
+			} else if (similarityUuids.contains(doc.getResourceUuid())) {
+				tier = QueryStoreConstants.TIER_SIMILARITY;
+			}
+			if (tier != null && selectedUuids.add(doc.getResourceUuid())) {
+				selected.add(new ContextSliceRecord(doc, tier));
+			}
+		}
+		selected = completePanelFamilies(chart, selected, selectedUuids);
+
+		boolean truncated = chart.size() >= QueryStoreConstants.CONTEXT_CHART_CAP;
+		return new ContextSlice(selected, chart.size(), truncated);
+	}
+
+	/**
+	 * The mandatory clinical core (Decision 17 tier 1): the patient demographics record, every
+	 * allergy, and every condition/diagnosis whose {@code clinical_status} metadata is ACTIVE.
+	 * Safety context every slice carries regardless of the caller's typed scope.
+	 */
+	private static boolean isMandatoryCore(QueryDocument doc) {
+		String type = doc.getResourceType();
+		if ("patient".equals(type) || "allergy".equals(type)) {
+			return true;
+		}
+		if ("condition".equals(type) || "diagnosis".equals(type)) {
+			Object status = doc.getMetadata().get(QueryStoreConstants.FIELD_CLINICAL_STATUS);
+			return status != null && "ACTIVE".equalsIgnoreCase(status.toString());
+		}
+		return false;
+	}
+
+	/**
+	 * Obs-group family completion (Decision 17 tier {@code panel}): when a group parent or any
+	 * member is already selected, the whole family joins — panel values live in member obs whose
+	 * text carries no panel name, so ranking can match the parent and miss every value. Returns a
+	 * REBUILT list scanned from the chart so joined members keep chart order instead of being
+	 * appended after unrelated newer records.
+	 */
+	private static List<ContextSliceRecord> completePanelFamilies(List<QueryDocument> chart,
+	        List<ContextSliceRecord> selected, Set<String> selectedUuids) {
+		Set<String> families = new HashSet<>();
+		for (QueryDocument doc : chart) {
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			Object group = doc.getMetadata().get(QueryStoreConstants.FIELD_OBS_GROUP_UUID);
+			if (group == null) {
+				continue;
+			}
+			String groupUuid = group.toString();
+			if (selectedUuids.contains(doc.getResourceUuid()) || selectedUuids.contains(groupUuid)) {
+				families.add(groupUuid);
+			}
+		}
+		if (families.isEmpty()) {
+			return selected;
+		}
+		Map<String, ContextSliceRecord> byUuid = new LinkedHashMap<>();
+		for (ContextSliceRecord record : selected) {
+			byUuid.put(record.getDocument().getResourceUuid(), record);
+		}
+		List<ContextSliceRecord> completed = new ArrayList<>();
+		for (QueryDocument doc : chart) {
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			ContextSliceRecord already = byUuid.get(doc.getResourceUuid());
+			if (already != null) {
+				completed.add(already);
+				continue;
+			}
+			Object group = doc.getMetadata().get(QueryStoreConstants.FIELD_OBS_GROUP_UUID);
+			boolean inFamily = (group != null && families.contains(group.toString()))
+			        || families.contains(doc.getResourceUuid());
+			if (inFamily) {
+				completed.add(new ContextSliceRecord(doc, QueryStoreConstants.TIER_PANEL));
+			}
+		}
+		return completed;
 	}
 }

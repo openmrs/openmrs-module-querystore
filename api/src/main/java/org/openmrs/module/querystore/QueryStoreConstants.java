@@ -104,6 +104,32 @@ public final class QueryStoreConstants {
 	public static final String FIELD_OBS_GROUP_UUID = "obs_group_uuid";
 	public static final String FIELD_OBS_GROUP_CONCEPT_NAME = "obs_group_concept_name";
 
+	/**
+	 * Context-slice selection tiers (ADR Decision 17): why a record made the slice, tagged by
+	 * priority — {@code mandatory} is never droppable by a budget-constrained consumer.
+	 */
+	public static final String TIER_MANDATORY = "mandatory";
+
+	public static final String TIER_RECENCY_ANCHOR = "recency_anchor";
+
+	public static final String TIER_TYPED = "typed";
+
+	public static final String TIER_SIMILARITY = "similarity";
+
+	public static final String TIER_PANEL = "panel";
+
+	/** Default recency-anchor window for temporal context slices (ADR Decision 17). */
+	public static final int CONTEXT_RECENCY_ANCHOR_DEFAULT = 15;
+
+	/** Default similarity top-K unioned into a context slice (ADR Decision 17). */
+	public static final int CONTEXT_SIMILARITY_LIMIT_DEFAULT = 30;
+
+	/**
+	 * The Elasticsearch tier's single-call full-chart cap (Decision 15) — a context slice built
+	 * on a chart of this size flags {@code chartTruncated} rather than silently absorbing it.
+	 */
+	public static final int CONTEXT_CHART_CAP = 10_000;
+
 	public static final String FIELD_NON_CODED = "non_coded";
 	public static final String FIELD_CLINICAL_STATUS = "clinical_status";
 	public static final String FIELD_VERIFICATION_STATUS = "verification_status";

@@ -101,6 +101,28 @@ final class PatientRecordView {
 		return env;
 	}
 
+	/**
+	 * The context-slice envelope (ADR Decision 17 §4): {@code {results (each with tier),
+	 * totalCount, chartSize, chartTruncated}}, paged in memory. Slices claim no stable chart
+	 * snapshot, so there is no {@code snapshotId} and no ETag participation.
+	 */
+	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
+	        int startIndex, int limit) {
+		List<org.openmrs.module.querystore.model.ContextSliceRecord> all = slice.getRecords();
+		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
+		for (int i = startIndex; i < all.size() && i < startIndex + limit; i++) {
+			Map<String, Object> m = toMap(all.get(i).getDocument(), null);
+			m.put("tier", all.get(i).getTier());
+			results.add(m);
+		}
+		Map<String, Object> env = new LinkedHashMap<String, Object>();
+		env.put("results", results);
+		env.put("totalCount", Integer.valueOf(all.size()));
+		env.put("chartSize", Integer.valueOf(slice.getChartSize()));
+		env.put("chartTruncated", Boolean.valueOf(slice.isChartTruncated()));
+		return env;
+	}
+
 	/** Stable identity for an entire ordered chart, including date semantics and canonical metadata. */
 	static String snapshotId(List<QueryDocument> docs) {
 		StringBuilder canonical = new StringBuilder();
