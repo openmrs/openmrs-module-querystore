@@ -1363,6 +1363,77 @@ Accepted
 
 ---
 
+## Decision 17: Context-Slice Read — Tiered Record Selection
+
+### Status
+Accepted
+
+### Context
+Two AI consumers assemble question-scoped context from this read store today — bundled
+ChartSearchAI in-process (`QueryStoreChartBuilder.buildScoped`) and med-agent-hub over the
+Decision 16 REST surface (`context_sources.py`) — and each implements its own selection policy
+over the same indexed documents. A measured comparison (harness engine-parity instrument,
+2026-07-22) showed the two policies drifting symmetrically: bundled lacked the mandatory clinical
+core (allergies + active conditions) the hub always includes, the hub lacks the obs-group panel
+completion bundled performs, and both re-derive semantics this store already owns (clinical-date
+kinds, group metadata, ranked search). The parity roadmap's shared context-selection amendment
+(2026-07-22, `clinical-ai-validation-harness` `openmrs-dual-provider-parity-roadmap-status.md`)
+directs consolidating the selection invariants here, at the data owner, while each engine keeps
+prompt composition, token budgeting, and question interpretation.
+
+### Decision
+1. **A fourth v1 read method returns a tier-tagged record selection**:
+   `ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request)`.
+   The request carries the caller's question interpretation — `types` (resource types whose
+   records must be typed-complete) and `temporal` (whether a recency anchor applies), plus
+   bounded knobs `recencyAnchorSize` (default 15) and `similarityLimit` (default 30). Querystore
+   performs **mechanical selection only**; it does not interpret the question.
+2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
+   highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
+   `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `recency_anchor`
+   (the first `recencyAnchorSize` chart documents, only when `temporal`) → `typed` (resource
+   type ∈ `types`) → `similarity` (uuid ∈ the `searchByPatient(question, similarityLimit)`
+   hits) → `panel` (obs-group family completion: when a group parent or any member is selected,
+   the whole family joins). Output preserves Decision 15's `record_date`-desc chart order.
+3. **Degradation and edges follow the sibling reads**: blank question or `similarityLimit <= 0`
+   skips the search RPC; a search failure degrades to the policy tiers alone (never blocks);
+   cold-patient lazy bootstrap is inherited from `getPatientChart`. `ContextSlice` surfaces
+   `chartSize` and `chartTruncated` (true when the chart hit the Decision 15 ES cap) so a
+   capped chart is never silently absorbed into a "complete" slice.
+4. **Explicit non-goals, unchanged from Decisions 14/15/16**: no prompt composition, no token
+   or model awareness, no question NLU, no result the caller could not read via
+   `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling
+   reads. The REST surface (Decision 16) exposes the slice additively via
+   `patientrecord?...&mode=context&types=...&temporal=...`, with each record carrying its
+   `tier`; like ranked windows, slices claim no stable complete-chart snapshot.
+
+### Rationale
+1. **Selection is retrieval.** The tiers are query semantics over fields this store owns
+   (`clinical_status`, `obs_group_uuid`, `record_date`, the ranked search) — a smarter read,
+   not a prompt service. Decision 16 already deferred "budget-aware retrieval" as the next
+   iteration; this lands its selection half while budgets stay engine-side.
+2. **One implementation ends structural drift.** Safety-relevant invariants (mandatory core,
+   panel completion) implemented twice measurably diverged; conformance fixtures caught it
+   after the fact. A single implementation makes the shared `context_policy` fixture family
+   (dual-provider-conformance.v1) this module's own red-first test suite.
+3. **Consumers stay thin and source-neutral.** Engines pass their interpretation flags and
+   compose prompts from tagged records; the hub keeps its local policy for non-querystore
+   sources. `mandatory` tags tell a budget-constrained consumer what is never droppable.
+
+### Consequences
+- The v1 read surface grows to four methods; REST wraps all four uniformly (Decision 16 shape).
+- ChartSearchAI's `buildScoped` and the hub's querystore source become thin adapters over this
+  method (harness plan `querystore-context-slice-plan.md`, CP2/CP3); their intent-routing and
+  temporal detection remain caller-side, so interpretation drift between engines is still
+  possible and remains measured by the harness parity instrument.
+- Active-condition detection reads the `clinical_status` metadata the condition serializer
+  already emits; `diagnosis` documents without that metadata simply never match the mandatory
+  tier (no text sniffing).
+- The `panel` tier is additive beyond the four tiers the harness plan sketched; it makes family
+  completion honest instead of mislabeling joined members as `typed`.
+
+---
+
 ## Open Questions
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.

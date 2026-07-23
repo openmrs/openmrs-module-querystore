@@ -261,6 +261,79 @@ public class PatientRecordEndpointTest {
 		controller.getPatientRecords(PATIENT, null, null, null);
 	}
 
+	@Test
+	public void contextMode_dispatchesToTheSliceAndEachRecordCarriesItsTier() {
+		// ADR Decision 17 §4: mode=context serves the tiered selection; the caller's question
+		// interpretation (types, temporal) rides as request params and each record says WHY it
+		// was selected. Slices claim no snapshot/ETag (like ranked windows).
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		org.openmrs.module.querystore.model.ContextSlice slice =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("allergy", "a-1", LocalDate.of(2024, 4, 1), "Allergy: Penicillin"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
+		                2, false);
+		org.mockito.ArgumentCaptor<org.openmrs.module.querystore.model.ContextSliceRequest> captor =
+		        org.mockito.ArgumentCaptor.forClass(org.openmrs.module.querystore.model.ContextSliceRequest.class);
+		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT),
+		        org.mockito.ArgumentMatchers.eq("current meds?"), captor.capture())).thenReturn(slice);
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "current meds?", null, null,
+		        "context", "drug_order,allergy", Boolean.TRUE, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		org.openmrs.module.querystore.model.ContextSliceRequest sent = captor.getValue();
+		assertTrue("caller types parsed", sent.getTypes().contains("drug_order"));
+		assertTrue("caller types parsed", sent.getTypes().contains("allergy"));
+		assertTrue("temporal flag parsed", sent.isTemporal());
+		Map<?, ?> body = body(response);
+		List<?> results = (List<?>) body.get("results");
+		assertEquals(2, results.size());
+		assertEquals(org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY,
+		        ((Map<?, ?>) results.get(0)).get("tier"));
+		assertEquals(org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED,
+		        ((Map<?, ?>) results.get(1)).get("tier"));
+		assertEquals("the slice's chart size is surfaced", Integer.valueOf(2), body.get("chartSize"));
+		assertEquals(Boolean.FALSE, body.get("chartTruncated"));
+		assertNull("no embedding ever", ((Map<?, ?>) results.get(0)).get("embedding"));
+		assertNull("slices claim no snapshot", body.get("snapshotId"));
+	}
+
+	@Test
+	public void contextMode_requiresAPatient() {
+		authenticate();
+		wire();
+
+		ResponseEntity<Object> response = controller.getPatientRecords(null, "meds?", null, null,
+		        "context", "drug_order", Boolean.FALSE, null);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+	}
+
+	@Test
+	public void contextMode_surfacesChartTruncation() {
+		// Explicit-overflow invariant: a slice built on a backend-capped chart says so.
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT),
+		        org.mockito.ArgumentMatchers.eq("meds?"),
+		        org.mockito.ArgumentMatchers.any(org.openmrs.module.querystore.model.ContextSliceRequest.class)))
+		                .thenReturn(new org.openmrs.module.querystore.model.ContextSlice(
+		                        new ArrayList<org.openmrs.module.querystore.model.ContextSliceRecord>(), 10000, true));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "meds?", null, null,
+		        "context", null, Boolean.FALSE, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(Boolean.TRUE, body(response).get("chartTruncated"));
+	}
+
 	private static QueryDocument doc(String type, String uuid, LocalDate date, String text) {
 		QueryDocument d = new QueryDocument();
 		d.setResourceType(type);

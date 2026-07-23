@@ -12,8 +12,10 @@ package org.openmrs.module.querystore.web.rest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
 import org.openmrs.api.APIAuthenticationException;
@@ -25,6 +27,8 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.util.PrivilegeConstants;
@@ -111,6 +115,9 @@ public class QueryStoreRestController {
 	        @RequestParam(value = "q", required = false) String q,
 	        @RequestParam(value = "limit", required = false) Integer limit,
 	        @RequestParam(value = "startIndex", required = false) Integer startIndex,
+	        @RequestParam(value = "mode", required = false) String mode,
+	        @RequestParam(value = "types", required = false) String types,
+	        @RequestParam(value = "temporal", required = false) Boolean temporal,
 	        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
@@ -121,12 +128,33 @@ public class QueryStoreRestController {
 		if (size <= 0 || from < 0) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "limit must be > 0 and startIndex >= 0");
 		}
+		boolean contextMode = "context".equals(StringUtils.trimToNull(mode));
+		if (contextMode && patientUuid == null) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "mode=context requires a patient");
+		}
 		if (patientUuid == null && query == null) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "patient or q is required");
 		}
 		// 404 a bogus patient up front — correct status, and it avoids a wasted cold-touch projection.
 		if (patientUuid != null && patientService().getPatientByUuid(patientUuid) == null) {
 			return errorResponse(HttpStatus.NOT_FOUND, "No patient with uuid '" + patientUuid + "'");
+		}
+		if (contextMode) {
+			// Tiered context slice (ADR Decision 17 §4): the caller's question interpretation
+			// rides as params; each record carries its selection tier. Like ranked windows,
+			// slices claim no stable snapshot — no ETag participation.
+			Set<String> typeSet = new HashSet<String>();
+			if (StringUtils.isNotBlank(types)) {
+				for (String type : types.split(",")) {
+					if (StringUtils.isNotBlank(type)) {
+						typeSet.add(type.trim());
+					}
+				}
+			}
+			ContextSliceRequest sliceRequest = new ContextSliceRequest(typeSet, Boolean.TRUE.equals(temporal));
+			ContextSlice slice = queryStoreService().getContextSlice(patientUuid, query, sliceRequest);
+			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size);
+			return new ResponseEntity<Object>(sliceBody, HttpStatus.OK);
 		}
 
 		StringBuilder baseParams = new StringBuilder();
@@ -178,7 +206,13 @@ public class QueryStoreRestController {
 
 	/** Convenience seam retained for existing direct controller tests. */
 	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex) {
-		return getPatientRecords(patient, q, limit, startIndex, null);
+		return getPatientRecords(patient, q, limit, startIndex, null, null, null, null);
+	}
+
+	/** Convenience seam retained for existing conditional-read controller tests. */
+	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex,
+	        String ifNoneMatch) {
+		return getPatientRecords(patient, q, limit, startIndex, null, null, null, ifNoneMatch);
 	}
 
 	private static boolean etagMatches(String ifNoneMatch, String pageEtag) {
