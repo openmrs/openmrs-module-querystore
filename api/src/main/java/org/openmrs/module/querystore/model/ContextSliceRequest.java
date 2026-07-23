@@ -31,6 +31,8 @@ public final class ContextSliceRequest {
 
 	private int similarityLimit = QueryStoreConstants.CONTEXT_SIMILARITY_LIMIT_DEFAULT;
 
+	private boolean interpretQuestion;
+
 	public ContextSliceRequest(Set<String> types, boolean temporal) {
 		this.types = types == null ? Collections.<String> emptySet()
 		        : Collections.unmodifiableSet(new HashSet<String>(types));
@@ -59,5 +61,19 @@ public final class ContextSliceRequest {
 
 	public void setSimilarityLimit(int similarityLimit) {
 		this.similarityLimit = similarityLimit;
+	}
+
+	/**
+	 * When set, querystore derives the typed scope and the temporal flag from the question
+	 * itself (ADR Decision 18) and UNIONs the caller's {@link #getTypes types} / ORs the
+	 * caller's temporal flag — so consumers stop duplicating cue routing while retaining
+	 * module-contributed additions.
+	 */
+	public boolean isInterpretQuestion() {
+		return interpretQuestion;
+	}
+
+	public void setInterpretQuestion(boolean interpretQuestion) {
+		this.interpretQuestion = interpretQuestion;
 	}
 }

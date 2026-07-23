@@ -118,6 +118,7 @@ public class QueryStoreRestController {
 	        @RequestParam(value = "mode", required = false) String mode,
 	        @RequestParam(value = "types", required = false) String types,
 	        @RequestParam(value = "temporal", required = false) Boolean temporal,
+	        @RequestParam(value = "interpret", required = false) Boolean interpret,
 	        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
@@ -152,6 +153,7 @@ public class QueryStoreRestController {
 				}
 			}
 			ContextSliceRequest sliceRequest = new ContextSliceRequest(typeSet, Boolean.TRUE.equals(temporal));
+			sliceRequest.setInterpretQuestion(Boolean.TRUE.equals(interpret));
 			ContextSlice slice = queryStoreService().getContextSlice(patientUuid, query, sliceRequest);
 			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size);
 			return new ResponseEntity<Object>(sliceBody, HttpStatus.OK);
@@ -206,13 +208,19 @@ public class QueryStoreRestController {
 
 	/** Convenience seam retained for existing direct controller tests. */
 	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex) {
-		return getPatientRecords(patient, q, limit, startIndex, null, null, null, null);
+		return getPatientRecords(patient, q, limit, startIndex, null, null, null, null, null);
 	}
 
 	/** Convenience seam retained for existing conditional-read controller tests. */
 	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex,
 	        String ifNoneMatch) {
-		return getPatientRecords(patient, q, limit, startIndex, null, null, null, ifNoneMatch);
+		return getPatientRecords(patient, q, limit, startIndex, null, null, null, null, ifNoneMatch);
+	}
+
+	/** Convenience seam for the context-mode controller tests (no interpret flag). */
+	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex,
+	        String mode, String types, Boolean temporal, String ifNoneMatch) {
+		return getPatientRecords(patient, q, limit, startIndex, mode, types, temporal, null, ifNoneMatch);
 	}
 
 	private static boolean etagMatches(String ifNoneMatch, String pageEtag) {
