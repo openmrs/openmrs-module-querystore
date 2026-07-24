@@ -61,6 +61,8 @@ public class EncounterRecordSerializerTest {
 
 		assertEquals("encounter", doc.getResourceType());
 		assertEquals("encounter-uuid", doc.getResourceUuid());
+		assertEquals("2025-03-15", doc.getMetadata().get("clinical_date"));
+		assertEquals("clinical_event", doc.getMetadata().get("date_kind"));
 		assertEquals("Encounter: Adult Outpatient Visit at Kenyatta National Hospital."
 		        + " Provider: Dr. Ochieng (Clinician). Form: Adult Outpatient Form", doc.getText());
 		assertEquals("encounter-type-uuid", doc.getMetadata().get("encounter_type_uuid"));

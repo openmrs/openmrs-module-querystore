@@ -54,7 +54,7 @@ Implement `ClinicalRecordSerializer<YourEntity>`. Populate the cross-cutting fie
 | `resource_uuid` | yes | Your entity's UUID. |
 | `patient_uuid` | yes if the record is patient-scoped | Skip only for non-patient resources (e.g., a knowledge-base type). |
 | `last_modified` | yes | `dateChanged ?? dateCreated`. Used by the backend's conditional-upsert race guard. |
-| `record_date` | yes | The record's effective clinical date (not the modification timestamp). |
+| `record_date` | yes | Deterministic sort/filter date. It may be an administrative creation date when no clinical event date exists. The base serializer emits `clinical_date` (the temporally safe event date, absent when the record has none) and `date_kind` (what `record_date` means); temporal consumers use `clinical_date` and never reinterpret an administrative `record_date` as a clinical event. |
 | `text` | yes | Labeled prose; this is what gets indexed for BM25 and embedded for kNN. |
 | `embedding` | leave unset | Querystore embeds at write time. |
 

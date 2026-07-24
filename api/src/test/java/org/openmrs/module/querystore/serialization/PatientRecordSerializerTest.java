@@ -72,6 +72,9 @@ public class PatientRecordSerializerTest {
 		assertEquals("8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d", doc.getResourceUuid());
 		assertEquals("8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d", doc.getPatientUuid());
 		assertEquals("2018-04-22", doc.getDate().toString());
+		assertNull("patient creation is administrative, not a clinical event",
+		        doc.getMetadata().get("clinical_date"));
+		assertEquals("administrative", doc.getMetadata().get("date_kind"));
 		assertEquals("Patient: Achieng Otieno. Female. Born 1982-07-14."
 		        + " Address: Kibera, Nairobi, Kenya."
 		        + " Identifiers: MRN 100023, National ID 12345678", doc.getText());
