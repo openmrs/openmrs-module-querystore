@@ -13,16 +13,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openmrs.module.querystore.QueryStoreConstants;
@@ -45,15 +52,65 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * {@link QueryStoreServiceImpl#getContextSlice} — the tiered record-selection contract (ADR
  * Decision 17). One implementation of the provider-neutral {@code context_policy} selection
  * invariants (dual-provider-conformance.v1), tested through the real composed service path
- * with a scripted backend. Fixture ids from the conformance manifest are cited per test.
+ * with a scripted backend. Each test loads its case directly from the local fixture copy
+ * (src/test/resources/conformance) and asserts against the fixture's own declared ids and
+ * expected tiers — not hand-duplicated literals — so a fixture edit or a selection regression
+ * shows up here. {@code context.mandatory-overflow-abstains} is intentionally not covered:
+ * token-budget enforcement is the answer engine's responsibility (see
+ * {@link org.openmrs.module.querystore.model.ContextSliceRecord}), not querystore's.
  */
 public class ContextSliceTest {
 
 	private static final String PATIENT = "pat-1";
 
+	private static JsonNode fixture;
+
 	private FakeBackendStore backend;
 
 	private QueryStoreServiceImpl service;
+
+	private static synchronized JsonNode fixtureCase(String family, String id) {
+		if (fixture == null) {
+			try (InputStream is = ContextSliceTest.class
+			        .getResourceAsStream("/conformance/dual-provider-conformance.v1.json")) {
+				fixture = new ObjectMapper().readTree(is);
+			}
+			catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		}
+		for (JsonNode candidate : fixture.path(family)) {
+			if (id.equals(candidate.path("id").asText())) {
+				return candidate;
+			}
+		}
+		throw new IllegalArgumentException("No " + family + " fixture case '" + id + "'");
+	}
+
+	private static List<String> idList(JsonNode caseNode, String field) {
+		List<String> out = new ArrayList<String>();
+		for (JsonNode n : caseNode.path(field)) {
+			out.add(n.asText());
+		}
+		return out;
+	}
+
+	private static String resourceTypeOf(List<QueryDocument> chart, String uuid) {
+		for (QueryDocument d : chart) {
+			if (uuid.equals(d.getResourceUuid())) {
+				return d.getResourceType();
+			}
+		}
+		throw new IllegalStateException("No chart document with uuid " + uuid);
+	}
+
+	private Set<String> resourceTypesOf(List<String> uuids) {
+		Set<String> types = new HashSet<String>();
+		for (String uuid : uuids) {
+			types.add(resourceTypeOf(backend.chart, uuid));
+		}
+		return types;
+	}
 
 	private static QueryDocument doc(String type, String uuid, String text, LocalDate date) {
 		QueryDocument d = new QueryDocument();
@@ -99,39 +156,49 @@ public class ContextSliceTest {
 
 	@Test
 	public void mandatoryCore_ridesEverySlice_regardlessOfTypesAndSimilarity() {
-		// Fixture context.enumerated-medications-are-complete: mandatory_ids [patient, allergy-1]
-		// plus typed_complete_ids [med-1, med-2] for a medication question — with NO similarity
-		// signal, so mandatory/typed status is the only way in.
-		ContextSliceRequest request = new ContextSliceRequest(
-		        new HashSet<String>(Collections.singletonList("drug_order")), false);
+		JsonNode fixtureCase = fixtureCase("context_policy", "context.enumerated-medications-are-complete");
+		// The fixture's typed_complete_ids has a 3rd medication the shared setUp() chart doesn't
+		// carry — add it here so the slice this test drives actually matches the fixture's claim.
+		backend.chart.add(5, doc("drug_order", "med-3", "Drug order: Atorvastatin 20 mg", LocalDate.of(2026, 6, 5)));
+		List<String> typedIds = idList(fixtureCase, "typed_complete_ids");
+		ContextSliceRequest request = new ContextSliceRequest(resourceTypesOf(typedIds), false);
 
 		ContextSlice slice = service.getContextSlice(PATIENT, "What medications is the patient on?", request);
 
 		Map<String, String> tiers = tiersByUuid(slice);
-		assertEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("p-1"));
-		assertEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("allergy-1"));
-		assertEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("cond-active"));
-		assertEquals(QueryStoreConstants.TIER_TYPED, tiers.get("med-1"));
-		assertEquals(QueryStoreConstants.TIER_TYPED, tiers.get("med-2"));
-		assertFalse(tiers.containsKey("cond-old"),
-		        "an INACTIVE condition is not mandatory core; got " + tiers);
-		assertFalse(tiers.containsKey("noise-1"),
-		        "records outside every tier stay excluded; got " + tiers);
+		for (String id : idList(fixtureCase, "mandatory_ids")) {
+			assertEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get(id),
+			        "fixture mandatory_ids: " + id + " must be mandatory; got " + tiers);
+		}
+		for (String id : typedIds) {
+			assertEquals(QueryStoreConstants.TIER_TYPED, tiers.get(id),
+			        "fixture typed_complete_ids: " + id + " must be typed; got " + tiers);
+		}
+		List<String> expectedIncluded = idList(fixtureCase, "expected_included");
+		for (QueryDocument chartDoc : backend.chart) {
+			String id = chartDoc.getResourceUuid();
+			if (expectedIncluded.contains(id)) {
+				assertTrue(tiers.containsKey(id), "fixture expected_included: " + id + " missing; got " + tiers);
+			} else {
+				assertFalse(tiers.containsKey(id),
+				        "fixture expected_included excludes " + id + " but it was selected; got " + tiers);
+			}
+		}
 	}
 
 	@Test
 	public void temporalRequest_addsTheRecencyAnchor() {
-		// Fixture context.temporal-adds-recency-anchor: recency_anchor_ids [visit-1] must be
-		// included for a temporal question even with no types and no similarity signal.
+		JsonNode fixtureCase = fixtureCase("context_policy", "context.temporal-adds-recency-anchor");
 		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), true);
 		request.setRecencyAnchorSize(3);
 
 		ContextSlice slice = service.getContextSlice(PATIENT, "When was the most recent visit?", request);
 
 		Map<String, String> tiers = tiersByUuid(slice);
-		assertTrue(tiers.containsKey("visit-1"),
-		        "the recent visit rides the recency anchor; got " + tiers);
-		assertEquals(QueryStoreConstants.TIER_RECENCY_ANCHOR, tiers.get("visit-1"));
+		for (String id : idList(fixtureCase, "recency_anchor_ids")) {
+			assertTrue(tiers.containsKey(id), "fixture recency_anchor_ids: " + id + " missing; got " + tiers);
+			assertEquals(QueryStoreConstants.TIER_RECENCY_ANCHOR, tiers.get(id));
+		}
 		assertEquals(QueryStoreConstants.TIER_RECENCY_ANCHOR, tiers.get("recent-1"));
 		// The patient record is inside the anchor window but mandatory wins tier priority.
 		assertEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("p-1"));
@@ -139,17 +206,17 @@ public class ContextSliceTest {
 
 	@Test
 	public void nonTemporalRequest_addsNoAnchorRecords() {
-		// Fixture context.non-temporal-does-not-fill-budget: a non-temporal question must not
-		// pull recent-but-unrelated records into the slice just because they are recent.
+		JsonNode fixtureCase = fixtureCase("context_policy", "context.non-temporal-does-not-fill-budget");
 		ContextSliceRequest request = new ContextSliceRequest(
 		        new HashSet<String>(Collections.singletonList("drug_order")), false);
 
 		ContextSlice slice = service.getContextSlice(PATIENT, "What medications is the patient on?", request);
 
 		Map<String, String> tiers = tiersByUuid(slice);
-		assertFalse(tiers.containsKey("recent-1"),
-		        "no anchor for non-temporal questions — recency is not a fill signal; got " + tiers);
-		assertFalse(tiers.containsKey("visit-1"), "unrelated recent visit stays out; got " + tiers);
+		for (String id : idList(fixtureCase, "must_exclude_ids")) {
+			assertFalse(tiers.containsKey(id),
+			        "no anchor for non-temporal questions — recency is not a fill signal; got " + tiers);
+		}
 	}
 
 	@Test
@@ -180,44 +247,59 @@ public class ContextSliceTest {
 
 	@Test
 	public void obsGroupFamilies_completeWholePanels() {
-		// Panel-completion invariant (context_policy): when similarity lands the PANEL PARENT,
-		// every member obs joins — the values live in members whose text has no panel name.
-		QueryDocument parent = doc("obs", "panel-1", "Basic metabolic panel", LocalDate.of(2026, 6, 15));
-		QueryDocument member1 = doc("obs", "member-1", "Serum sodium: 140 mmol/L", LocalDate.of(2026, 6, 15));
-		member1.putMetadata(QueryStoreConstants.FIELD_OBS_GROUP_UUID, "panel-1");
-		QueryDocument member2 = doc("obs", "member-2", "Serum potassium: 4.1 mmol/L", LocalDate.of(2026, 6, 15));
-		member2.putMetadata(QueryStoreConstants.FIELD_OBS_GROUP_UUID, "panel-1");
-		backend.chart.addAll(Arrays.asList(parent, member1, member2));
+		JsonNode fixtureCase = fixtureCase("context_policy", "context.panel-completion-includes-all-members");
+		String parentId = idList(fixtureCase, "similarity_matched_ids").get(0);
+		QueryDocument parent = doc("obs", parentId, "Basic metabolic panel", LocalDate.of(2026, 6, 15));
+		backend.chart.add(parent);
+		for (JsonNode memberIdNode : fixtureCase.path("panel_members").path(parentId)) {
+			QueryDocument member = doc("obs", memberIdNode.asText(), "Serum value: " + memberIdNode.asText(),
+			        LocalDate.of(2026, 6, 15));
+			member.putMetadata(QueryStoreConstants.FIELD_OBS_GROUP_UUID, parentId);
+			backend.chart.add(member);
+		}
 		backend.hits = Collections.singletonList(parent);
 		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
 
 		ContextSlice slice = service.getContextSlice(PATIENT, "results of the last BMP?", request);
 
 		Map<String, String> tiers = tiersByUuid(slice);
-		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("panel-1"));
-		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("member-1"));
-		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("member-2"));
+		JsonNode expectedTier = fixtureCase.path("expected_tier");
+		for (String id : idList(fixtureCase, "expected_included")) {
+			assertTrue(tiers.containsKey(id), "fixture expected_included: " + id + " missing; got " + tiers);
+			assertEquals(expectedTier.path(id).asText(), tiers.get(id), "tier mismatch for " + id + "; got " + tiers);
+		}
 	}
 
 	@Test
 	public void sliceKeepsChartOrder_andEachRecordAppearsOnce() {
-		// Stable-ordering invariant (context_policy): chart record_date-desc order, dedup by
-		// uuid, tier = highest-priority match (mandatory > anchor > typed > similarity).
+		JsonNode fixtureCase = fixtureCase("context_policy",
+		        "context.stable-ordering-preserves-chart-order-and-highest-tier-wins");
+		String matchedId = idList(fixtureCase, "similarity_matched_ids").get(0);
 		backend.hits = Collections.singletonList(
-		        doc("allergy", "allergy-1", "Allergy: Penicillin. Reaction: rash", LocalDate.of(2024, 4, 1)));
+		        doc("allergy", matchedId, "Allergy: Penicillin. Reaction: rash", LocalDate.of(2024, 4, 1)));
 		ContextSliceRequest request = new ContextSliceRequest(
-		        new HashSet<String>(Collections.singletonList("allergy")), true);
+		        resourceTypesOf(idList(fixtureCase, "typed_complete_ids")), true);
 		request.setRecencyAnchorSize(2);
 
 		ContextSlice slice = service.getContextSlice(PATIENT, "most recent allergy reactions?", request);
 
-		List<String> uuids = new ArrayList<String>(tiersByUuid(slice).keySet());
-		assertEquals(new HashSet<String>(uuids).size(), uuids.size(), "no duplicates: " + uuids);
-		// Chart order: p-1 (7/1) before recent-1 (6/30) before cond-active (5/1) before allergy-1 (4/2).
-		assertTrue(uuids.indexOf("p-1") < uuids.indexOf("recent-1"), "chart order kept: " + uuids);
-		assertTrue(uuids.indexOf("recent-1") < uuids.indexOf("allergy-1"), "chart order kept: " + uuids);
-		// allergy-1 matched mandatory AND typed AND similarity — the highest priority wins.
-		assertEquals(QueryStoreConstants.TIER_MANDATORY, tiersByUuid(slice).get("allergy-1"));
+		Map<String, String> tiers = tiersByUuid(slice);
+		List<String> uuids = new ArrayList<String>(tiers.keySet());
+		if (fixtureCase.path("expected_no_duplicates").asBoolean(false)) {
+			assertEquals(new HashSet<String>(uuids).size(), uuids.size(), "no duplicates: " + uuids);
+		}
+		for (JsonNode pair : fixtureCase.path("expected_order_precedes")) {
+			String before = pair.get(0).asText();
+			String after = pair.get(1).asText();
+			assertTrue(uuids.indexOf(before) < uuids.indexOf(after),
+			        "chart order kept: " + before + " before " + after + "; got " + uuids);
+		}
+		JsonNode expectedTier = fixtureCase.path("expected_tier");
+		Iterator<String> tierIds = expectedTier.fieldNames();
+		while (tierIds.hasNext()) {
+			String id = tierIds.next();
+			assertEquals(expectedTier.path(id).asText(), tiers.get(id), "tier mismatch for " + id + "; got " + tiers);
+		}
 	}
 
 	@Test
