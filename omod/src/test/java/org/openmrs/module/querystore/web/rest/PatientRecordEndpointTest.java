@@ -324,7 +324,9 @@ public class PatientRecordEndpointTest {
 		                new org.openmrs.module.querystore.model.ContextSliceRecord(
 		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
 		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
-		                2, false);
+		                2, false,
+		                new java.util.LinkedHashSet<String>(Arrays.asList("allergy", "drug_order")),
+		                true);
 		org.mockito.ArgumentCaptor<org.openmrs.module.querystore.model.ContextSliceRequest> captor =
 		        org.mockito.ArgumentCaptor.forClass(org.openmrs.module.querystore.model.ContextSliceRequest.class);
 		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT),
@@ -348,8 +350,36 @@ public class PatientRecordEndpointTest {
 		        ((Map<?, ?>) results.get(1)).get("tier"));
 		assertEquals("the slice's chart size is surfaced", Integer.valueOf(2), body.get("chartSize"));
 		assertEquals(Boolean.FALSE, body.get("chartTruncated"));
+		assertEquals(Arrays.asList("allergy", "drug_order"), body.get("effectiveTypes"));
+		assertEquals(Boolean.TRUE, body.get("temporalApplied"));
+		assertNotNull("every context page carries a whole-slice consistency id", body.get("sliceId"));
 		assertNull("no embedding ever", ((Map<?, ?>) results.get(0)).get("embedding"));
-		assertNull("slices claim no snapshot", body.get("snapshotId"));
+		assertNull("slice consistency is not a full-chart snapshot", body.get("snapshotId"));
+	}
+
+	@Test
+	public void contextPagesShareAWholeSliceIdentityAndExposeTheSameSelectionMetadata() {
+		org.openmrs.module.querystore.model.ContextSlice slice =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("allergy", "a-1", LocalDate.of(2024, 4, 1), "Allergy: Penicillin"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
+		                365, true,
+		                new java.util.LinkedHashSet<String>(Arrays.asList("drug_order", "allergy")),
+		                true);
+
+		Map<String, Object> first = PatientRecordView.contextPage(slice, 0, 1);
+		Map<String, Object> second = PatientRecordView.contextPage(slice, 1, 1);
+
+		assertEquals(first.get("sliceId"), second.get("sliceId"));
+		assertEquals(Arrays.asList("allergy", "drug_order"), first.get("effectiveTypes"));
+		assertEquals(first.get("effectiveTypes"), second.get("effectiveTypes"));
+		assertEquals(Boolean.TRUE, first.get("temporalApplied"));
+		assertEquals(Integer.valueOf(365), first.get("chartSize"));
+		assertEquals(Boolean.TRUE, first.get("chartTruncated"));
 	}
 
 	@Test

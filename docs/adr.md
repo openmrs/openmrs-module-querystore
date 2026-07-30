@@ -1405,7 +1405,10 @@ prompt composition, token budgeting, and question interpretation.
    `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling
    reads. The REST surface (Decision 16) exposes the slice additively via
    `patientrecord?...&mode=context&types=...&temporal=...`, with each record carrying its
-   `tier`; like ranked windows, slices claim no stable complete-chart snapshot.
+   `tier`. Like ranked windows, slices claim no stable complete-chart snapshot. Every context page
+   carries a deterministic `sliceId` over the complete ordered selection and effective
+   interpretation so external clients can reject mixed pages without mistaking that identifier
+   for a chart snapshot or cache validator.
 
 ### Rationale
 1. **Selection is retrieval.** The tiers are query semantics over fields this store owns
@@ -1459,7 +1462,8 @@ questions. Query normalization is retrieval quality, which this module owns.
    always, idempotently, so a caller that still preprocesses loses nothing and a caller that sends
    the raw question gets the same retrieval text.
 3. **`ContextSlice` traces the effective interpretation** (`effectiveTypes`, `temporalApplied`)
-   so consumers can log and audit what the selection actually used.
+   so consumers can log and audit what the selection actually used. The REST envelope repeats
+   those fields on every page together with `sliceId`, `chartSize`, and `chartTruncated`.
 
 ### Rationale
 1. **Interpretation duplicated in two engines measurably drifted; one implementation cannot.**

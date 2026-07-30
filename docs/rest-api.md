@@ -29,6 +29,7 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 | `patient=<uuid>` | `getPatientChart(patient)` | Full materialized patient chart, newest first |
 | `patient=<uuid>&q=<text>` | `searchByPatient(patient, q, k)` | Ranked patient results |
 | `q=<text>` | `search(q, k)` | Ranked cross-patient results |
+| `patient=<uuid>&mode=context&q=<text>&interpret=true` | `getContextSlice(patient, q, request)` | Tiered question context in chart order |
 
 - **Privilege:** `Get Patients`.
 - **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`.
@@ -41,6 +42,12 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   Consumers must not treat `date` as a clinical event date when `dateKind` is not
   `clinical_event`. Ranked records also carry a 1-based `rank`.
 - **Excluded:** embeddings and backend scores are never returned.
+
+Context mode adds a `tier` to every record and returns `chartSize`, `chartTruncated`,
+`effectiveTypes`, `temporalApplied`, and `sliceId`. The `sliceId` fingerprints the complete ordered
+selection and its effective interpretation, so an external client can reject pages from different
+context slices. It is not a full-chart snapshot, an HTTP cache validator, or a promise that the
+underlying chart is complete. Context pages are question-dependent and are not cached.
 
 For a full-chart page, the response has a strong page-specific `ETag` and
 `Cache-Control: private, no-cache, must-revalidate`. Send that token as `If-None-Match` on the
@@ -55,6 +62,9 @@ patient rebuild.
 ```bash
 curl -s -u patient-reader:secret \
   'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&limit=500'
+
+curl -s -u patient-reader:secret \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&mode=context&q=current%20medications&interpret=true&limit=100'
 ```
 
 **Errors:** missing `patient` and `q`, invalid paging, or malformed parameters return `400`; an

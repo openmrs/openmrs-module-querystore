@@ -103,8 +103,9 @@ final class PatientRecordView {
 
 	/**
 	 * The context-slice envelope (ADR Decision 17 §4): {@code {results (each with tier),
-	 * totalCount, chartSize, chartTruncated}}, paged in memory. Slices claim no stable chart
-	 * snapshot, so there is no {@code snapshotId} and no ETag participation.
+	 * totalCount, chartSize, chartTruncated, effectiveTypes, temporalApplied, sliceId}}, paged
+	 * in memory. {@code sliceId} fingerprints the complete ordered selection so an external
+	 * client can reject mixed pages; it is not a stable full-chart snapshot or an HTTP ETag.
 	 */
 	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
 	        int startIndex, int limit) {
@@ -121,7 +122,37 @@ final class PatientRecordView {
 		env.put("totalCount", Integer.valueOf(all.size()));
 		env.put("chartSize", Integer.valueOf(slice.getChartSize()));
 		env.put("chartTruncated", Boolean.valueOf(slice.isChartTruncated()));
+		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
+		Collections.sort(effectiveTypes);
+		env.put("effectiveTypes", effectiveTypes);
+		env.put("temporalApplied", Boolean.valueOf(slice.isTemporalApplied()));
+		env.put("sliceId", contextSliceId(slice));
 		return env;
+	}
+
+	/** Fingerprint the complete ordered context selection, including every selection input/result. */
+	static String contextSliceId(org.openmrs.module.querystore.model.ContextSlice slice) {
+		StringBuilder canonical = new StringBuilder();
+		appendValue(canonical, Integer.valueOf(slice.getChartSize()));
+		appendValue(canonical, Boolean.valueOf(slice.isChartTruncated()));
+		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
+		Collections.sort(effectiveTypes);
+		appendValue(canonical, effectiveTypes);
+		appendValue(canonical, Boolean.valueOf(slice.isTemporalApplied()));
+		for (org.openmrs.module.querystore.model.ContextSliceRecord record : slice.getRecords()) {
+			appendValue(canonical, record.getTier());
+			QueryDocument doc = record.getDocument();
+			appendValue(canonical, doc.getResourceType());
+			appendValue(canonical, doc.getResourceUuid());
+			appendValue(canonical, doc.getDate() == null ? null : doc.getDate().toString());
+			appendValue(canonical, metadataString(doc, FIELD_CLINICAL_DATE));
+			appendValue(canonical, dateKind(doc));
+			appendValue(canonical, doc.getText());
+			appendValue(canonical,
+					doc.getLastModified() == null ? null : doc.getLastModified().toString());
+			appendValue(canonical, doc.getMetadata());
+		}
+		return sha256(canonical.toString());
 	}
 
 	/** Stable identity for an entire ordered chart, including date semantics and canonical metadata. */
