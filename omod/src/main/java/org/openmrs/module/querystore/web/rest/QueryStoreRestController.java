@@ -94,6 +94,8 @@ public class QueryStoreRestController {
 
 	private static final int DEFAULT_LIMIT = 50;
 
+	private Integer injectedMaximumPageSize;
+
 	/**
 	 * Read endpoint over the query store's three read methods (ADR Decision 16):
 	 *
@@ -125,10 +127,11 @@ public class QueryStoreRestController {
 		String patientUuid = StringUtils.trimToNull(patient);
 		String query = StringUtils.trimToNull(q);
 		int from = startIndex == null ? 0 : startIndex.intValue();
-		int size = limit == null ? DEFAULT_LIMIT : limit.intValue();
-		if (size <= 0 || from < 0) {
+		int requestedSize = limit == null ? DEFAULT_LIMIT : limit.intValue();
+		if (requestedSize <= 0 || from < 0) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "limit must be > 0 and startIndex >= 0");
 		}
+		int size = Math.min(requestedSize, maximumPageSize());
 		boolean contextMode = "context".equals(StringUtils.trimToNull(mode));
 		if (contextMode && patientUuid == null) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "mode=context requires a patient");
@@ -168,6 +171,10 @@ public class QueryStoreRestController {
 		}
 
 		boolean ranked = query != null;
+		if (ranked && from > maximumPageSize() - size) {
+			return errorResponse(HttpStatus.BAD_REQUEST,
+			        "ranked result window must not exceed the OpenMRS maximum result count");
+		}
 		List<QueryDocument> page;
 		Integer totalCount;
 		String snapshotId = null;
@@ -241,7 +248,22 @@ public class QueryStoreRestController {
 		if (from >= list.size()) {
 			return Collections.emptyList();
 		}
-		return new ArrayList<QueryDocument>(list.subList(from, Math.min(from + size, list.size())));
+		int available = list.size() - from;
+		return new ArrayList<QueryDocument>(list.subList(from, from + Math.min(size, available)));
+	}
+
+	private int maximumPageSize() {
+		if (injectedMaximumPageSize != null) {
+			return injectedMaximumPageSize.intValue();
+		}
+		Integer configuredMaximum = RestConstants.MAX_RESULTS_ABSOLUTE;
+		return configuredMaximum != null && configuredMaximum.intValue() > 0
+		        ? configuredMaximum.intValue() : DEFAULT_LIMIT;
+	}
+
+	/** Test seam: POJO tests intentionally run without the core AdministrationService RestConstants needs. */
+	void setMaximumPageSize(Integer maximumPageSize) {
+		this.injectedMaximumPageSize = maximumPageSize;
 	}
 
 	/** Non-null only when a test injects it; production resolves core's PatientService per call. */

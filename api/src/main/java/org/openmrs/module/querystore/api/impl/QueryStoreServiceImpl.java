@@ -28,6 +28,7 @@ import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.Filter;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
@@ -249,8 +250,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 	@Override
 	public List<QueryDocument> getPatientChart(String patientUuid) {
+		return readPatientChart(patientUuid).getDocuments();
+	}
+
+	private PatientChartRead readPatientChart(String patientUuid) {
 		if (backend == null || patientUuid == null) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		// Same cold-bootstrap protocol as searchByPatient: probe existsByPatient, lazy-project on
 		// miss, then read. Decision 15 explicitly mirrors searchByPatient's behaviour here so the
@@ -260,7 +265,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (!backend.existsByPatient(patientUuid)) {
 			ensureIndexedSafely(patientUuid);
 		}
-		return backend.findAllByPatient(patientUuid);
+		return backend.findPatientChart(patientUuid);
 	}
 
 	private List<QueryDocument> runHybrid(String query, int limit, Filter scope) {
@@ -310,9 +315,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (request == null) {
 			request = new ContextSliceRequest(Collections.<String> emptySet(), false);
 		}
-		// Composed over the sibling reads so cold-bootstrap, ordering, and the ES cap behave
-		// identically (Decision 17 §3): the chart IS getPatientChart's view.
-		List<QueryDocument> chart = getPatientChart(patientUuid);
+		// Composed over the sibling complete-chart read so cold-bootstrap, ordering, and any
+		// backend-documented cap behave identically (Decision 17 §3).
+		PatientChartRead chartRead = readPatientChart(patientUuid);
+		List<QueryDocument> chart = chartRead.getDocuments();
 
 		// Server-side interpretation (ADR Decision 18): derived types UNION the caller's,
 		// derived temporal ORs the caller's — module-contributed additions always survive.
@@ -370,8 +376,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 		selected = completePanelFamilies(chart, selected, selectedUuids);
 
-		boolean truncated = chart.size() >= QueryStoreConstants.CONTEXT_CHART_CAP;
-		return new ContextSlice(selected, chart.size(), truncated, effectiveTypes, temporal);
+		return new ContextSlice(selected, chart.size(), chartRead.isTruncated(), effectiveTypes, temporal);
 	}
 
 	/**

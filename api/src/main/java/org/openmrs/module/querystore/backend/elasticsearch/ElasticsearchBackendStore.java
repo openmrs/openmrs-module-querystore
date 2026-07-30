@@ -33,6 +33,7 @@ import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.HealthStatus;
 import org.openmrs.module.querystore.backend.Hit;
 import org.openmrs.module.querystore.backend.MetadataCodec;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -258,8 +259,13 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public List<QueryDocument> findAllByPatient(String patientUuid) {
+		return findPatientChart(patientUuid).getDocuments();
+	}
+
+	@Override
+	public PatientChartRead findPatientChart(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		Query filter = Query.of(q -> q
 		        .term(t -> t.field(ElasticsearchFieldNames.PATIENT_UUID).value(patientUuid)));
@@ -267,7 +273,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			SearchResponse<Map> resp = client().search(s -> s
 			        .index(ALL_INDICES_PATTERN)
 			        .size(FULL_CHART_MAX_HITS)
-			        .trackTotalHits(t -> t.enabled(false))
+			        .trackTotalHits(t -> t.enabled(true))
 			        .allowNoIndices(true)
 			        .ignoreUnavailable(true)
 			        .query(filter)
@@ -298,7 +304,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			                .order(SortOrder.Asc)))),
 			        Map.class);
 			List<co.elastic.clients.elasticsearch.core.search.Hit<Map>> hits = resp.hits().hits();
-			if (hits.size() >= FULL_CHART_MAX_HITS) {
+			long total = resp.hits().total() == null ? hits.size() : resp.hits().total().value();
+			boolean truncated = total > hits.size();
+			if (truncated) {
 				// Hitting the cap is a v1 quirk of the ES tier: single-search size is bounded by
 				// max_result_window (default 10k). MySQL and Lucene have no equivalent cap because
 				// they stream from JDBC/Lucene directly. PIT+search_after pagination is the v1.1
@@ -313,7 +321,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				all.add(readDocument(h.index(), h.source()));
 			}
 			all.sort(BackendDocs.CHART_ORDER);
-			return all;
+			return new PatientChartRead(all, truncated);
 		}
 		catch (ElasticsearchException | IOException e) {
 			// Mirror existsByPatient's stance: log + return empty rather than throwing. The service
@@ -322,7 +330,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			// specific divergence from the MySQL/Lucene "partial-per-store" tolerance — see the SPI
 			// Javadoc on {@link BackendStore#findAllByPatient} for the contract that pins both shapes.
 			log.warn("findAllByPatient failed for " + patientUuid, e);
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 	}
 

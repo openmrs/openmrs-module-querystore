@@ -92,7 +92,7 @@ final class PatientRecordView {
 		if (startIndex > 0) {
 			links.add(link("prev", baseParams, Math.max(0, startIndex - limit), limit));
 		}
-		if (docs.size() == limit) {
+		if (docs.size() == limit && startIndex <= Integer.MAX_VALUE - limit) {
 			links.add(link("next", baseParams, startIndex + limit, limit));
 		}
 		if (!links.isEmpty()) {
@@ -110,7 +110,8 @@ final class PatientRecordView {
 	        int startIndex, int limit) {
 		List<org.openmrs.module.querystore.model.ContextSliceRecord> all = slice.getRecords();
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
-		for (int i = startIndex; i < all.size() && i < startIndex + limit; i++) {
+		int pageSize = startIndex >= all.size() ? 0 : Math.min(limit, all.size() - startIndex);
+		for (int i = startIndex; i < startIndex + pageSize; i++) {
 			Map<String, Object> m = toMap(all.get(i).getDocument(), null);
 			m.put("tier", all.get(i).getTier());
 			results.add(m);

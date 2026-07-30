@@ -104,15 +104,20 @@ final class ContextQuestionInterpreter {
 	private static final Map<Pattern, String> LAB_PANEL_ABBREVIATIONS;
 	static {
 		Map<Pattern, String> m = new LinkedHashMap<Pattern, String>();
-		m.put(Pattern.compile("\\bBMP\\b", Pattern.CASE_INSENSITIVE), "basic metabolic panel");
-		m.put(Pattern.compile("\\bCMP\\b", Pattern.CASE_INSENSITIVE), "comprehensive metabolic panel");
-		m.put(Pattern.compile("\\bCBC\\b", Pattern.CASE_INSENSITIVE), "complete blood count");
-		m.put(Pattern.compile("\\bLFTs?\\b", Pattern.CASE_INSENSITIVE), "liver function tests");
-		m.put(Pattern.compile("\\bRFTs?\\b", Pattern.CASE_INSENSITIVE), "renal function tests");
-		m.put(Pattern.compile("\\bABG\\b", Pattern.CASE_INSENSITIVE), "arterial blood gas");
-		m.put(Pattern.compile("\\bESR\\b", Pattern.CASE_INSENSITIVE), "erythrocyte sedimentation rate");
-		m.put(Pattern.compile("\\bCRP\\b", Pattern.CASE_INSENSITIVE), "C-reactive protein");
+		m.put(panelAbbreviation("BMP", "basic metabolic panel"), "basic metabolic panel");
+		m.put(panelAbbreviation("CMP", "comprehensive metabolic panel"), "comprehensive metabolic panel");
+		m.put(panelAbbreviation("CBC", "complete blood count"), "complete blood count");
+		m.put(panelAbbreviation("LFTs?", "liver function tests"), "liver function tests");
+		m.put(panelAbbreviation("RFTs?", "renal function tests"), "renal function tests");
+		m.put(panelAbbreviation("ABG", "arterial blood gas"), "arterial blood gas");
+		m.put(panelAbbreviation("ESR", "erythrocyte sedimentation rate"), "erythrocyte sedimentation rate");
+		m.put(panelAbbreviation("CRP", "C-reactive protein"), "C-reactive protein");
 		LAB_PANEL_ABBREVIATIONS = Collections.unmodifiableMap(m);
+	}
+
+	private static Pattern panelAbbreviation(String abbreviation, String expansion) {
+		return Pattern.compile("\\b(?:" + abbreviation + ")\\b(?!\\s+" + Pattern.quote(expansion) + "\\b)",
+		        Pattern.CASE_INSENSITIVE);
 	}
 
 	private static final Set<String> QUERY_STOPWORDS = loadStopwords("context-query-stopwords.txt");

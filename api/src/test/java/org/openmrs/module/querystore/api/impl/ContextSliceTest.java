@@ -303,9 +303,10 @@ public class ContextSliceTest {
 	}
 
 	@Test
-	public void chartTruncationAtTheBackendCap_isSurfacedNotSilent() {
-		// Explicit-overflow invariant: the ES tier caps getPatientChart at its most-recent
-		// 10 000 documents — a slice built on a capped chart must say so.
+	public void chartAtTheBackendCap_isNotClaimedTruncatedWithoutBackendEvidence() {
+		// A size equal to the ES cap is not itself evidence of lost data: MySQL and Lucene can
+		// legitimately return an exact 10 000-record chart. Only a backend that knows it dropped
+		// records may set the explicit-overflow flag.
 		List<QueryDocument> big = new ArrayList<QueryDocument>();
 		for (int i = 0; i < QueryStoreConstants.CONTEXT_CHART_CAP; i++) {
 			big.add(doc("obs", "o-" + i, "Obs " + i, LocalDate.of(2026, 1, 1)));
@@ -315,12 +316,22 @@ public class ContextSliceTest {
 
 		ContextSlice slice = service.getContextSlice(PATIENT, "anything?", request);
 
-		assertTrue(slice.isChartTruncated(), "a capped chart must be flagged");
+		assertFalse(slice.isChartTruncated(), "an exact-cap complete chart is not truncated");
 		assertEquals(QueryStoreConstants.CONTEXT_CHART_CAP, slice.getChartSize());
 
 		backend.chart = backend.chart.subList(0, 100);
 		assertFalse(service.getContextSlice(PATIENT, "anything?", request).isChartTruncated(),
 		        "an uncapped chart is not flagged");
+	}
+
+	@Test
+	public void chartTruncation_comesFromTheBackendReadNotTheReturnedCount() {
+		backend.chartTruncated = true;
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "anything?", request);
+
+		assertTrue(slice.isChartTruncated(), "a backend-reported incomplete chart must be surfaced");
 	}
 
 	@Test
@@ -385,6 +396,8 @@ public class ContextSliceTest {
 
 		boolean throwOnSearch;
 
+		boolean chartTruncated;
+
 		final AtomicInteger hybridCount = new AtomicInteger();
 
 		@Override
@@ -395,6 +408,11 @@ public class ContextSliceTest {
 		@Override
 		public List<QueryDocument> findAllByPatient(String patientUuid) {
 			return chart;
+		}
+
+		@Override
+		public org.openmrs.module.querystore.backend.PatientChartRead findPatientChart(String patientUuid) {
+			return new org.openmrs.module.querystore.backend.PatientChartRead(chart, chartTruncated);
 		}
 
 		volatile String lastQueryText;

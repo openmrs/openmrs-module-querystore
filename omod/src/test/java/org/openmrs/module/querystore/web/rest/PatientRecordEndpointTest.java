@@ -54,6 +54,8 @@ public class PatientRecordEndpointTest {
 
 	private static final String PATIENT = "patient-uuid";
 
+	private static final int TEST_MAXIMUM_PAGE_SIZE = 1000;
+
 	private final QueryStoreRestController controller = new QueryStoreRestController();
 
 	private final QueryStoreService queryStore = mock(QueryStoreService.class);
@@ -63,6 +65,7 @@ public class PatientRecordEndpointTest {
 	private void wire() {
 		controller.setQueryStoreService(queryStore);
 		controller.setPatientService(patients);
+		controller.setMaximumPageSize(Integer.valueOf(TEST_MAXIMUM_PAGE_SIZE));
 	}
 
 	@After
@@ -184,6 +187,50 @@ public class PatientRecordEndpointTest {
 	}
 
 	@Test
+	public void rankedSearch_clampsLimitToOpenMrsAbsoluteMaximum() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE))
+		        .thenReturn(new ArrayList<QueryDocument>());
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "glucose",
+		        Integer.valueOf(Integer.MAX_VALUE), Integer.valueOf(0));
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		verify(queryStore).searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE);
+	}
+
+	@Test
+	public void fullChart_hugeLimitDoesNotOverflowThePageEnd() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
+		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg")));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null,
+		        Integer.valueOf(Integer.MAX_VALUE), Integer.valueOf(1));
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(1, ((List<?>) body(response).get("results")).size());
+	}
+
+	@Test
+	public void rankedSearch_rejectsAnOffsetBeyondTheBoundedResultWindow() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "glucose", Integer.valueOf(1),
+		        Integer.valueOf(TEST_MAXIMUM_PAGE_SIZE));
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		verify(queryStore, never()).searchByPatient(anyString(), anyString(), anyInt());
+	}
+
+	@Test
 	public void queryOnly_dispatchesToCrossPatientSearch() {
 		authenticate();
 		wire();
@@ -284,13 +331,14 @@ public class PatientRecordEndpointTest {
 		        org.mockito.ArgumentMatchers.eq("current meds?"), captor.capture())).thenReturn(slice);
 
 		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "current meds?", null, null,
-		        "context", "drug_order,allergy", Boolean.TRUE, null);
+		        "context", "drug_order,allergy", Boolean.TRUE, Boolean.TRUE, null);
 
 		assertEquals(HttpStatus.OK, response.getStatusCode());
 		org.openmrs.module.querystore.model.ContextSliceRequest sent = captor.getValue();
 		assertTrue("caller types parsed", sent.getTypes().contains("drug_order"));
 		assertTrue("caller types parsed", sent.getTypes().contains("allergy"));
 		assertTrue("temporal flag parsed", sent.isTemporal());
+		assertTrue("interpret flag reaches the service", sent.isInterpretQuestion());
 		Map<?, ?> body = body(response);
 		List<?> results = (List<?>) body.get("results");
 		assertEquals(2, results.size());
