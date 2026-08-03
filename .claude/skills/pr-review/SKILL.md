@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request with empirical verification and clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.12.0
+version: 0.13.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -21,15 +21,17 @@ Arguments: `$ARGUMENTS` — a PR number or URL (if omitted, run `gh pr list` and
 
 ## Step 2 — Verify, don't just read
 
-Findings must be grounded in evidence, scaled to what the change touches:
+Findings must be grounded in evidence, scaled to what the change touches. **The same bar applies to thread replies and design answers, not only to findings.** A sentence answering "is this approach OK?" or "what happens if X?" asserts behavior exactly as hard as an `issue:` does, and the author acts on it just as hard — harder, because it arrives as the answer to their own question. It is also the likeliest place for the discipline to lapse, since a reply feels like conversation rather than a claim. If a reply asserts what the code or framework does, run it before posting.
 
 - Always read the full files being changed (not just the hunks), and `git grep` the whole tree for symbols/properties the PR renames or removes — silent breakage hides outside the diff (e.g. filtered resources referencing a renamed Maven property).
 - Build-config changes (pom.xml, Gradle, CI): build both the base branch and the PR branch in throwaway worktrees (`git worktree add --detach /tmp/<name> <ref>`), then compare: test counts per module, produced and installed artifacts (watch for attached artifacts like `-tests.jar` that downstream consumers depend on), `mvn dependency:tree` diffs, and packaged-archive entry lists plus filtered resources (`unzip -Z1`, `unzip -p ... | diff`). Remove the worktrees afterwards (`git worktree remove --force`).
 - Parent-POM or dependency upgrades: download the new parent/dependency POM and confirm that everything deleted locally is actually provided upstream (dependencies vs dependencyManagement, plugin executions, properties, distributionManagement). Check published artifacts on the repository (e.g. `curl -sL .../maven-metadata.xml`) when removal of an attached artifact would break consumers.
 - Claims about runtime behavior: run the relevant tests instead of asserting from code.
+- A search hit inside a method proves the call exists *somewhere* in it, never that it is on the path you care about. Before asserting what a framework does for a given call, read the enclosing method top to bottom and name the branch your path actually takes; sibling branches routinely disagree. (OpenMRS `RequiredDataAdvice.before` calls `ValidateUtil.validate` on the `save*`/`create*` branch and not on the `void`/`unvoid`/`retire`/`unretire` branch, so "the advice validates" is true or false purely by method name. A `-A 6` grep window shows you the first fact and hides the second.)
 - Absence claims ("nothing registers X", "the framework never does Y") must be positively verified against the dependency's **sources** — a local checkout of the dependency (check sibling directories of the repo) or its upstream repo at the ref the project actually builds against — never inferred from jar scans or config-file greps alone: annotation-registered/component-scanned beans are invisible to XML inspection, and installed SNAPSHOT artifacts can lag or lead the sources.
 - A zero-hit search is evidence only after a positive control: before trusting "no matches", prove the same pipeline finds a string you know is present (e.g. `java/lang/Object` in a class file). Shell `grep` may be shadowed by an alias/function (ugrep shims silently skip binary-ish input, e.g. `strings` output of class files) — for evidence-grade searches use `command grep`, `git grep`, or the dedicated search tools, and never add `2>/dev/null` to an evidence-gathering command.
 - When the one experiment that could falsify a finding can't run (build stopped, environment unavailable), the finding ships as a `question:`, not a fact — and a "confirmation" that structurally cannot fail (a standalone repro that omits the very component in question) is not verification.
+- Before posting, re-read every claim against the facts you already gathered this session and hunt for the one that contradicts it. The cheapest false claim to catch is the one whose refutation is already on your screen — citing an upstream precedent whose own schema makes the cited behavior unreachable, while having read that schema an hour earlier. A claim that survives only because you never connected it to something you already know has not been verified. This applies with most force to a precedent cited *in support of* a recommendation: check that the precedent actually reaches the state you are claiming it demonstrates.
 
 ### Dimensions to sweep
 
