@@ -107,8 +107,9 @@ public class QueryStoreRestController {
 	 *
 	 * <p>Gated by {@code Get Patients} — the same privilege the read methods carry. The {@code embedding}
 	 * vector is never returned, and no {@code score} is emitted (relevance is list order plus a 1-based
-	 * {@code rank}). A full chart carries a true {@code totalCount} and pages in memory; ranked results are
-	 * a top-K window (null totalCount). The JSON shape is produced and unit-tested in {@link PatientRecordView}.
+	 * {@code rank}). A full chart carries the materialized record count and pages in memory; a
+	 * backend-documented cap may omit older records. Ranked results are a top-K window (null totalCount).
+	 * The JSON shape is produced and unit-tested in {@link PatientRecordView}.
 	 */
 	@RequestMapping(value = "/patientrecord", method = RequestMethod.GET)
 	@ResponseBody

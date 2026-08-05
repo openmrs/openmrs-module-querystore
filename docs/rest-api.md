@@ -33,9 +33,11 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 
 - **Privilege:** `Get Patients`.
 - **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`.
-- **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also carry a stable
-  `snapshotId` for the complete materialized chart. Full-chart reads carry the materialized result
-  count. Ranked top-K reads use `null` because the service does not expose a browseable total.
+- **Shape:** `results`, `totalCount`, and `links`. For full-chart reads, `totalCount` is the
+  number of records materialized by the configured backend; the Elasticsearch v1 cap described
+  in ADR Decision 15 can omit older records. Full-chart reads also carry a stable
+  `snapshotId` for the complete materialized chart. Ranked top-K reads use `null` because the
+  service does not expose a browseable total.
 - **Records:** `resourceType`, `resourceUuid`, ISO `date` (the record's sort date),
   `clinicalDate` (the event date safe for temporal use, or `null`), `dateKind`
   (`clinical_event`, `administrative`, or `unknown`), `lastModified`, `text`, and `metadata`.

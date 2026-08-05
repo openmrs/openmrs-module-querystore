@@ -63,9 +63,10 @@ final class PatientRecordView {
 
 	/**
 	 * The paged envelope {@code {results, totalCount, links}}, mirroring the OpenMRS {@code PageableResult}
-	 * shape by hand. {@code totalCount} is the true count for a full chart; it is {@code null} for ranked
-	 * (q-present) results, which are a top-K window with no browseable total. A {@code next} link is emitted
-	 * when the page is full (possibly more); a {@code prev} link when {@code startIndex > 0}.
+	 * shape by hand. {@code totalCount} is the materialized count for a full-chart read; a backend-documented
+	 * cap may omit older records. It is {@code null} for ranked (q-present) results, which are a top-K window
+	 * with no browseable total. A {@code next} link is emitted when a known total has more records, or when an
+	 * unknown-total page is full; a {@code prev} link is emitted when {@code startIndex > 0}.
 	 *
 	 * @param ranked whether these are q-ranked results (drives the per-row {@code rank} and the null totalCount)
 	 * @param baseParams the non-paging query params, already URL-encoded, ending in {@code &} (e.g. {@code "patient=x&q=y&"})
@@ -92,7 +93,11 @@ final class PatientRecordView {
 		if (startIndex > 0) {
 			links.add(link("prev", baseParams, Math.max(0, startIndex - limit), limit));
 		}
-		if (docs.size() == limit && startIndex <= Integer.MAX_VALUE - limit) {
+		boolean canAdvance = startIndex <= Integer.MAX_VALUE - limit;
+		boolean hasNext = canAdvance && (totalCount != null
+		        ? startIndex + docs.size() < totalCount.intValue()
+		        : docs.size() == limit);
+		if (hasNext) {
 			links.add(link("next", baseParams, startIndex + limit, limit));
 		}
 		if (!links.isEmpty()) {

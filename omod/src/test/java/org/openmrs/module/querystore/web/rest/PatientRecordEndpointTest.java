@@ -74,7 +74,7 @@ public class PatientRecordEndpointTest {
 	}
 
 	@Test
-	public void fullChart_returnsAllRecordsPagedWithTrueTotal_andNoEmbedding() {
+	public void fullChart_returnsAllMaterializedRecordsPaged_andNoEmbedding() {
 		authenticate();
 		wire();
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
@@ -86,7 +86,7 @@ public class PatientRecordEndpointTest {
 
 		assertEquals(HttpStatus.OK, response.getStatusCode());
 		Map<?, ?> body = body(response);
-		assertEquals("a full chart carries the true total", Integer.valueOf(2), body.get("totalCount"));
+		assertEquals("a full chart carries the materialized count", Integer.valueOf(2), body.get("totalCount"));
 		List<?> results = (List<?>) body.get("results");
 		assertEquals(2, results.size());
 		Map<?, ?> first = (Map<?, ?>) results.get(0);
@@ -265,6 +265,27 @@ public class PatientRecordEndpointTest {
 		List<?> links = (List<?>) body.get("links");
 		assertNotNull("a middle page carries prev + next links", links);
 		assertEquals(2, links.size());
+	}
+
+	@Test
+	public void fullChart_exactFinalPageDoesNotEmitEmptyNextPageLink() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		List<QueryDocument> four = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 4; i++) {
+			four.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "rec " + i));
+		}
+		when(queryStore.getPatientChart(PATIENT)).thenReturn(four);
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, 2, 2);
+
+		Map<?, ?> body = body(response);
+		assertEquals(Integer.valueOf(4), body.get("totalCount"));
+		List<?> links = (List<?>) body.get("links");
+		assertNotNull("the final page still links to the preceding page", links);
+		assertEquals("the exact final page must not link to an empty page", 1, links.size());
+		assertEquals("prev", ((Map<?, ?>) links.get(0)).get("rel"));
 	}
 
 	@Test
