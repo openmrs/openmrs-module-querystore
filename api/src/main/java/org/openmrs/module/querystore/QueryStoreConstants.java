@@ -110,6 +110,8 @@ public final class QueryStoreConstants {
 	 */
 	public static final String TIER_MANDATORY = "mandatory";
 
+	public static final String TIER_EXACT = "exact";
+
 	public static final String TIER_RECENCY_ANCHOR = "recency_anchor";
 
 	public static final String TIER_TYPED = "typed";

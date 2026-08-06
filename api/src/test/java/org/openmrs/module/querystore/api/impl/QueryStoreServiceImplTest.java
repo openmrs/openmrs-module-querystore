@@ -29,12 +29,14 @@ import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.HealthStatus;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapProgress;
+import org.openmrs.module.querystore.bootstrap.BootstrapStatus;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
 
@@ -327,6 +329,17 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void completenessAwareChartReadFailsWhenBackendIsUnavailable() {
+		try {
+			service.getPatientChartRead("patient-uuid");
+			fail("expected an explicit failure because completeness cannot be established");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue(expected.getMessage().contains("cannot determine whether the patient chart is complete"));
+		}
+	}
+
+	@Test
 	public void getPatientChart_returnsEmptyForNullPatientUuid() {
 		FakeBackendStore backend = new FakeBackendStore(true);
 		service.setBackend(backend);
@@ -440,6 +453,37 @@ public class QueryStoreServiceImplTest {
 		assertEquals(1, bootstrap.ensureIndexedCalls.size());
 		assertEquals(1, backend.existsByPatientCount.get());
 		assertEquals(1, backend.findAllByPatientCount.get());
+	}
+
+	@Test
+	public void getPatientChartRead_marksExistingPartialProjectionIncomplete() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Collections.singletonList(doc("obs", "obs-1"));
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		BootstrapProgress running = new BootstrapProgress("obs");
+		running.setStatus(BootstrapStatus.RUNNING);
+		bootstrap.status = Collections.singletonList(running);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		PatientChartRead chart = service.getPatientChartRead("patient-uuid");
+
+		assertEquals(1, chart.getDocuments().size());
+		assertFalse("a fully paged partial projection is not a complete patient ledger",
+		        chart.isProjectionComplete());
+	}
+
+	@Test
+	public void getPatientChartRead_marksCompletedProjectionComplete() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		bootstrap.status = Collections.singletonList(completed);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		assertTrue(service.getPatientChartRead("patient-uuid").isProjectionComplete());
 	}
 
 	// ---------- query-embedding cache ----------
@@ -587,6 +631,7 @@ public class QueryStoreServiceImplTest {
 		final java.util.List<String> ensureIndexedCalls = new java.util.ArrayList<>();
 
 		java.util.function.Consumer<String> onEnsureIndexed;
+		List<BootstrapProgress> status = Collections.emptyList();
 
 		@Override public void bootstrap() { }
 		@Override public void bootstrap(String resourceType) { }
@@ -599,7 +644,7 @@ public class QueryStoreServiceImplTest {
 			}
 		}
 		@Override public void reindexPatient(String patientUuid) { }
-		@Override public List<BootstrapProgress> getStatus() { return Collections.emptyList(); }
+		@Override public List<BootstrapProgress> getStatus() { return status; }
 		@Override public BootstrapProgress getStatus(String resourceType) { return null; }
 		@Override public org.openmrs.module.querystore.bootstrap.DriftReport getDrift() { return null; }
 		@Override public void onStartup() { }

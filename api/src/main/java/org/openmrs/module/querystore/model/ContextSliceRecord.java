@@ -12,8 +12,9 @@ package org.openmrs.module.querystore.model;
 /**
  * One selected record in a context slice (ADR Decision 17): the document plus the
  * highest-priority selection tier that admitted it — see the
- * {@code QueryStoreConstants.TIER_*} constants. {@code mandatory} records are never droppable
- * by a budget-constrained consumer.
+ * {@code QueryStoreConstants.TIER_*} constants. Mandatory, exact, typed-complete, and panel
+ * records are protected by budget-constrained clinical consumers. Similarity records also retain
+ * their original retrieval rank even though the complete slice remains in chart order.
  */
 public final class ContextSliceRecord {
 
@@ -21,9 +22,16 @@ public final class ContextSliceRecord {
 
 	private final String tier;
 
+	private final Integer rank;
+
 	public ContextSliceRecord(QueryDocument document, String tier) {
+		this(document, tier, null);
+	}
+
+	public ContextSliceRecord(QueryDocument document, String tier, Integer rank) {
 		this.document = document;
 		this.tier = tier;
+		this.rank = rank;
 	}
 
 	public QueryDocument getDocument() {
@@ -32,5 +40,13 @@ public final class ContextSliceRecord {
 
 	public String getTier() {
 		return tier;
+	}
+
+	/**
+	 * The original 1-based retrieval position for a {@code similarity} record, or
+	 * {@code null} for policy-selected records.
+	 */
+	public Integer getRank() {
+		return rank;
 	}
 }

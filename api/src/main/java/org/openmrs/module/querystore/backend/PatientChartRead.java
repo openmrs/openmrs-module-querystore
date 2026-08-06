@@ -23,10 +23,17 @@ public final class PatientChartRead {
 
 	private final boolean truncated;
 
+	private final boolean projectionComplete;
+
 	public PatientChartRead(List<QueryDocument> documents, boolean truncated) {
+		this(documents, truncated, true);
+	}
+
+	public PatientChartRead(List<QueryDocument> documents, boolean truncated, boolean projectionComplete) {
 		this.documents = documents == null ? Collections.<QueryDocument> emptyList()
 		        : Collections.unmodifiableList(new ArrayList<QueryDocument>(documents));
 		this.truncated = truncated;
+		this.projectionComplete = projectionComplete;
 	}
 
 	public static PatientChartRead complete(List<QueryDocument> documents) {
@@ -39,5 +46,10 @@ public final class PatientChartRead {
 
 	public boolean isTruncated() {
 		return truncated;
+	}
+
+	/** Whether the source projection reports every configured resource type fully indexed. */
+	public boolean isProjectionComplete() {
+		return projectionComplete;
 	}
 }

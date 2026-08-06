@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.openmrs.module.querystore.model.PatientChartFingerprint;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 
 /**
@@ -72,17 +73,8 @@ final class PatientRecordView {
 	 * @param baseParams the non-paging query params, already URL-encoded, ending in {@code &} (e.g. {@code "patient=x&q=y&"})
 	 */
 	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
-	        Integer totalCount, String baseParams) {
-		return page(docs, ranked, startIndex, limit, totalCount, baseParams, null);
-	}
-
-	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
-	        Integer totalCount, String baseParams, String snapshotId) {
-		return page(docs, ranked, startIndex, limit, totalCount, baseParams, snapshotId, null);
-	}
-
-	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
-	        Integer totalCount, String baseParams, String snapshotId, Boolean chartTruncated) {
+	        Integer totalCount, String baseParams, String snapshotId, Boolean chartTruncated,
+	        Boolean projectionComplete) {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>(docs.size());
 		for (int i = 0; i < docs.size(); i++) {
 			results.add(toMap(docs.get(i), ranked ? Integer.valueOf(startIndex + i + 1) : null));
@@ -95,6 +87,9 @@ final class PatientRecordView {
 		}
 		if (chartTruncated != null) {
 			env.put("chartTruncated", chartTruncated);
+		}
+		if (projectionComplete != null) {
+			env.put("projectionComplete", projectionComplete);
 		}
 
 		List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
@@ -116,9 +111,11 @@ final class PatientRecordView {
 
 	/**
 	 * The context-slice envelope (ADR Decision 17 §4): {@code {results (each with tier),
-	 * totalCount, chartSize, chartTruncated, effectiveTypes, temporalApplied, sliceId}}, paged
+	 * totalCount, chartSize, chartTruncated, projectionComplete, effectiveTypes, temporalApplied, chartSnapshotId,
+	 * sliceId}}, paged
 	 * in memory. {@code sliceId} fingerprints the complete ordered selection so an external
-	 * client can reject mixed pages; it is not a stable full-chart snapshot or an HTTP ETag.
+	 * client can reject mixed pages. {@code chartSnapshotId} identifies the complete source-chart
+	 * materialization; context pages themselves do not use it as an HTTP ETag.
 	 */
 	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
 	        int startIndex, int limit) {
@@ -126,8 +123,12 @@ final class PatientRecordView {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
 		int pageSize = startIndex >= all.size() ? 0 : Math.min(limit, all.size() - startIndex);
 		for (int i = startIndex; i < startIndex + pageSize; i++) {
-			Map<String, Object> m = toMap(all.get(i).getDocument(), null);
-			m.put("tier", all.get(i).getTier());
+			org.openmrs.module.querystore.model.ContextSliceRecord record = all.get(i);
+			Map<String, Object> m = toMap(record.getDocument(), null);
+			m.put("tier", record.getTier());
+			if (record.getRank() != null) {
+				m.put("rank", record.getRank());
+			}
 			results.add(m);
 		}
 		Map<String, Object> env = new LinkedHashMap<String, Object>();
@@ -135,10 +136,12 @@ final class PatientRecordView {
 		env.put("totalCount", Integer.valueOf(all.size()));
 		env.put("chartSize", Integer.valueOf(slice.getChartSize()));
 		env.put("chartTruncated", Boolean.valueOf(slice.isChartTruncated()));
+		env.put("projectionComplete", Boolean.valueOf(slice.isProjectionComplete()));
 		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
 		Collections.sort(effectiveTypes);
 		env.put("effectiveTypes", effectiveTypes);
 		env.put("temporalApplied", Boolean.valueOf(slice.isTemporalApplied()));
+		env.put("chartSnapshotId", slice.getChartSnapshotId());
 		env.put("sliceId", contextSliceId(slice));
 		return env;
 	}
@@ -148,12 +151,14 @@ final class PatientRecordView {
 		StringBuilder canonical = new StringBuilder();
 		appendValue(canonical, Integer.valueOf(slice.getChartSize()));
 		appendValue(canonical, Boolean.valueOf(slice.isChartTruncated()));
+		appendValue(canonical, Boolean.valueOf(slice.isProjectionComplete()));
 		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
 		Collections.sort(effectiveTypes);
 		appendValue(canonical, effectiveTypes);
 		appendValue(canonical, Boolean.valueOf(slice.isTemporalApplied()));
 		for (org.openmrs.module.querystore.model.ContextSliceRecord record : slice.getRecords()) {
 			appendValue(canonical, record.getTier());
+			appendValue(canonical, record.getRank());
 			QueryDocument doc = record.getDocument();
 			appendValue(canonical, doc.getResourceType());
 			appendValue(canonical, doc.getResourceUuid());
@@ -169,24 +174,12 @@ final class PatientRecordView {
 	}
 
 	/** Stable identity for an entire ordered chart, including completeness and canonical metadata. */
-	static String snapshotId(List<QueryDocument> docs) {
-		return snapshotId(docs, false);
+	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated) {
+		return PatientChartFingerprint.snapshotId(docs, chartTruncated);
 	}
 
-	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated) {
-		StringBuilder canonical = new StringBuilder();
-		appendValue(canonical, Boolean.valueOf(chartTruncated));
-		for (QueryDocument doc : docs) {
-			appendValue(canonical, doc.getResourceType());
-			appendValue(canonical, doc.getResourceUuid());
-			appendValue(canonical, doc.getDate() == null ? null : doc.getDate().toString());
-			appendValue(canonical, metadataString(doc, FIELD_CLINICAL_DATE));
-			appendValue(canonical, dateKind(doc));
-			appendValue(canonical, doc.getText());
-			appendValue(canonical, doc.getLastModified() == null ? null : doc.getLastModified().toString());
-			appendValue(canonical, doc.getMetadata());
-		}
-		return sha256(canonical.toString());
+	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated, boolean projectionComplete) {
+		return PatientChartFingerprint.snapshotId(docs, chartTruncated, projectionComplete);
 	}
 
 	/** A page-specific strong ETag, derived from the complete snapshot and paging parameters. */

@@ -16,10 +16,9 @@ import java.util.Set;
 import org.openmrs.module.querystore.QueryStoreConstants;
 
 /**
- * The caller's question interpretation for a context slice (ADR Decision 17): which resource
- * types must be typed-complete and whether the question is temporal (recency anchor applies).
- * Querystore performs mechanical selection only — interpreting the question into these flags
- * is the consumer's job.
+ * Selection inputs for a context slice (ADR Decisions 17 and 18): explicit resource types,
+ * temporal intent, selection limits, and whether QueryStore should derive additional scope from
+ * the raw question. Derived scope is unioned with the caller's explicit additions.
  */
 public final class ContextSliceRequest {
 
@@ -66,7 +65,7 @@ public final class ContextSliceRequest {
 	/**
 	 * When set, querystore derives the typed scope and the temporal flag from the question
 	 * itself (ADR Decision 18) and UNIONs the caller's {@link #getTypes types} / ORs the
-	 * caller's temporal flag — so consumers stop duplicating cue routing while retaining
+	 * caller's temporal flag. This keeps QueryStore's cue routing authoritative while retaining
 	 * module-contributed additions.
 	 */
 	public boolean isInterpretQuestion() {

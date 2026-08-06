@@ -8,6 +8,7 @@ package org.openmrs.module.querystore.api;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,6 +19,7 @@ import java.util.List;
 import org.junit.Test;
 import org.mockito.Answers;
 import org.openmrs.module.querystore.backend.PatientChartRead;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 public class QueryStoreServiceCompatibilityTest {
@@ -33,5 +35,14 @@ public class QueryStoreServiceCompatibilityTest {
 		assertSame(records.get(0), read.getDocuments().get(0));
 		assertFalse(read.isTruncated());
 		verify(legacy).getPatientChart("patient-1");
+	}
+
+	@Test
+	public void defaultContextSliceFailsExplicitlyForImplementationsWithoutSliceSupport() {
+		QueryStoreService legacy = mock(QueryStoreService.class, Answers.CALLS_REAL_METHODS);
+
+		assertThrows(UnsupportedOperationException.class,
+		        () -> legacy.getContextSlice("patient-1", "question",
+		                new ContextSliceRequest(Collections.<String> emptySet(), false)));
 	}
 }

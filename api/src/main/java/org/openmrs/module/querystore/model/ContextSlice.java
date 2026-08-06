@@ -27,23 +27,40 @@ public final class ContextSlice {
 
 	private final boolean chartTruncated;
 
+	private final boolean projectionComplete;
+
 	private final Set<String> effectiveTypes;
 
 	private final boolean temporalApplied;
 
+	private final String chartSnapshotId;
+
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated) {
-		this(records, chartSize, chartTruncated, Collections.<String> emptySet(), false);
+		this(records, chartSize, chartTruncated, true, Collections.<String> emptySet(), false, null);
 	}
 
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
 	        Set<String> effectiveTypes, boolean temporalApplied) {
+		this(records, chartSize, chartTruncated, true, effectiveTypes, temporalApplied, null);
+	}
+
+	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
+	        Set<String> effectiveTypes, boolean temporalApplied, String chartSnapshotId) {
+		this(records, chartSize, chartTruncated, true, effectiveTypes, temporalApplied, chartSnapshotId);
+	}
+
+	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
+	        boolean projectionComplete, Set<String> effectiveTypes, boolean temporalApplied,
+	        String chartSnapshotId) {
 		this.records = records == null ? Collections.<ContextSliceRecord> emptyList()
 		        : Collections.unmodifiableList(records);
 		this.chartSize = chartSize;
 		this.chartTruncated = chartTruncated;
+		this.projectionComplete = projectionComplete;
 		this.effectiveTypes = effectiveTypes == null ? Collections.<String> emptySet()
 		        : Collections.unmodifiableSet(new HashSet<String>(effectiveTypes));
 		this.temporalApplied = temporalApplied;
+		this.chartSnapshotId = chartSnapshotId;
 	}
 
 	public List<ContextSliceRecord> getRecords() {
@@ -59,6 +76,11 @@ public final class ContextSlice {
 		return chartTruncated;
 	}
 
+	/** Whether every configured source resource type was fully projected before selection. */
+	public boolean isProjectionComplete() {
+		return projectionComplete;
+	}
+
 	/** The typed-complete scope this slice was SELECTED with — caller types unioned with any
 	 *  server-derived interpretation (ADR Decision 18); the selection trace for consumers. */
 	public Set<String> getEffectiveTypes() {
@@ -68,5 +90,10 @@ public final class ContextSlice {
 	/** Whether the recency anchor applied to this slice (caller flag OR derived interpretation). */
 	public boolean isTemporalApplied() {
 		return temporalApplied;
+	}
+
+	/** Fingerprint of the complete chart materialization from which this slice was selected. */
+	public String getChartSnapshotId() {
+		return chartSnapshotId;
 	}
 }

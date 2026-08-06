@@ -153,8 +153,9 @@ public class QueryStoreRestController {
 		}
 		if (contextMode) {
 			// Tiered context slice (ADR Decision 17 §4): the caller's question interpretation
-			// rides as params; each record carries its selection tier. Like ranked windows,
-			// slices claim no stable snapshot — no ETag participation.
+			// rides as params; each record carries its selection tier. chartSnapshotId binds the
+			// selection to its complete source chart, while sliceId identifies the ordered selection;
+			// context pages do not participate in HTTP ETag revalidation.
 			Set<String> typeSet = new HashSet<String>();
 			if (StringUtils.isNotBlank(types)) {
 				for (String type : types.split(",")) {
@@ -188,14 +189,17 @@ public class QueryStoreRestController {
 		String snapshotId = null;
 		String pageEtag = null;
 		Boolean chartTruncated = null;
+		Boolean projectionComplete = null;
 		if (patientUuid != null && query == null) {
 			// Full chart: enumerate (Decision 15 returns the whole set), then page in memory.
 			PatientChartRead chartRead = queryStoreService().getPatientChartRead(patientUuid);
 			List<QueryDocument> all = chartRead.getDocuments();
 			totalCount = Integer.valueOf(all.size());
 			chartTruncated = Boolean.valueOf(chartRead.isTruncated());
+			projectionComplete = Boolean.valueOf(chartRead.isProjectionComplete());
 			page = slice(all, from, size);
-			snapshotId = PatientRecordView.snapshotId(all, chartRead.isTruncated());
+			snapshotId = PatientRecordView.snapshotId(all, chartRead.isTruncated(),
+			        chartRead.isProjectionComplete());
 			pageEtag = PatientRecordView.pageEtag(snapshotId, from, size);
 			if (etagMatches(ifNoneMatch, pageEtag)) {
 				return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
@@ -214,7 +218,7 @@ public class QueryStoreRestController {
 		}
 
 		Map<String, Object> body = PatientRecordView.page(page, ranked, from, size, totalCount,
-		        baseParams.toString(), snapshotId, chartTruncated);
+		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete);
 		if (pageEtag != null) {
 			return ResponseEntity.ok()
 			        .eTag(pageEtag)

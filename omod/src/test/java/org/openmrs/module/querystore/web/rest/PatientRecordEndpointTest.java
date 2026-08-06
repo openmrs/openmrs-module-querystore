@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.web.rest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
@@ -89,6 +90,7 @@ public class PatientRecordEndpointTest {
 		Map<?, ?> body = body(response);
 		assertEquals("a full chart carries the materialized count", Integer.valueOf(2), body.get("totalCount"));
 		assertEquals(Boolean.FALSE, body.get("chartTruncated"));
+		assertEquals(Boolean.TRUE, body.get("projectionComplete"));
 		List<?> results = (List<?>) body.get("results");
 		assertEquals(2, results.size());
 		Map<?, ?> first = (Map<?, ?>) results.get(0);
@@ -172,6 +174,27 @@ public class PatientRecordEndpointTest {
 		        body(complete).get("snapshotId").equals(body(incomplete).get("snapshotId")));
 		assertFalse("completeness is part of the page revalidation token",
 		        complete.getHeaders().getETag().equals(incomplete.getHeaders().getETag()));
+	}
+
+	@Test
+	public void fullChart_snapshotChangesWhenProjectionCompletenessChanges() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument record = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
+		        new PatientChartRead(Arrays.asList(record), false, false),
+		        new PatientChartRead(Arrays.asList(record), false, true));
+
+		ResponseEntity<Object> incomplete = controller.getPatientRecords(PATIENT, null, null, null, null);
+		ResponseEntity<Object> complete = controller.getPatientRecords(
+		        PATIENT, null, null, null, incomplete.getHeaders().getETag());
+
+		assertEquals(HttpStatus.OK, complete.getStatusCode());
+		assertEquals(Boolean.FALSE, body(incomplete).get("projectionComplete"));
+		assertEquals(Boolean.TRUE, body(complete).get("projectionComplete"));
+		assertFalse(body(incomplete).get("snapshotId").equals(body(complete).get("snapshotId")));
+		assertFalse(incomplete.getHeaders().getETag().equals(complete.getHeaders().getETag()));
 	}
 
 	@Test
@@ -375,7 +398,7 @@ public class PatientRecordEndpointTest {
 	public void contextMode_dispatchesToTheSliceAndEachRecordCarriesItsTier() {
 		// ADR Decision 17 §4: mode=context serves the tiered selection; the caller's question
 		// interpretation (types, temporal) rides as request params and each record says WHY it
-		// was selected. Slices claim no snapshot/ETag (like ranked windows).
+		// was selected. Slices carry the source chart identity but do not use HTTP ETags.
 		authenticate();
 		wire();
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
@@ -389,7 +412,7 @@ public class PatientRecordEndpointTest {
 		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
 		                2, false,
 		                new java.util.LinkedHashSet<String>(Arrays.asList("allergy", "drug_order")),
-		                true);
+		                true, "chart-snapshot-1");
 		org.mockito.ArgumentCaptor<org.openmrs.module.querystore.model.ContextSliceRequest> captor =
 		        org.mockito.ArgumentCaptor.forClass(org.openmrs.module.querystore.model.ContextSliceRequest.class);
 		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT),
@@ -413,11 +436,13 @@ public class PatientRecordEndpointTest {
 		        ((Map<?, ?>) results.get(1)).get("tier"));
 		assertEquals("the slice's chart size is surfaced", Integer.valueOf(2), body.get("chartSize"));
 		assertEquals(Boolean.FALSE, body.get("chartTruncated"));
+		assertEquals(Boolean.TRUE, body.get("projectionComplete"));
 		assertEquals(Arrays.asList("allergy", "drug_order"), body.get("effectiveTypes"));
 		assertEquals(Boolean.TRUE, body.get("temporalApplied"));
+		assertEquals("chart-snapshot-1", body.get("chartSnapshotId"));
 		assertNotNull("every context page carries a whole-slice consistency id", body.get("sliceId"));
 		assertNull("no embedding ever", ((Map<?, ?>) results.get(0)).get("embedding"));
-		assertNull("slice consistency is not a full-chart snapshot", body.get("snapshotId"));
+		assertNull("chartSnapshotId is not an HTTP page snapshot", body.get("snapshotId"));
 	}
 
 	@Test
@@ -432,7 +457,7 @@ public class PatientRecordEndpointTest {
 		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
 		                365, true,
 		                new java.util.LinkedHashSet<String>(Arrays.asList("drug_order", "allergy")),
-		                true);
+		                true, "chart-snapshot-2");
 
 		Map<String, Object> first = PatientRecordView.contextPage(slice, 0, 1);
 		Map<String, Object> second = PatientRecordView.contextPage(slice, 1, 1);
@@ -443,6 +468,62 @@ public class PatientRecordEndpointTest {
 		assertEquals(Boolean.TRUE, first.get("temporalApplied"));
 		assertEquals(Integer.valueOf(365), first.get("chartSize"));
 		assertEquals(Boolean.TRUE, first.get("chartTruncated"));
+		assertEquals("chart-snapshot-2", first.get("chartSnapshotId"));
+		assertEquals(first.get("chartSnapshotId"), second.get("chartSnapshotId"));
+	}
+
+	@Test
+	public void contextPagesExposeStableSimilarityRankWithoutAnotherSearch() {
+		org.openmrs.module.querystore.model.ContextSlice slice =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("allergy", "a-1", LocalDate.of(2024, 4, 1), "Allergy: Penicillin"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("obs", "s-1", LocalDate.of(2025, 1, 1), "First semantic hit"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(2)),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("obs", "s-2", LocalDate.of(2024, 1, 1), "Second semantic hit"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(1))),
+		                3, false);
+
+		Map<String, Object> firstPage = PatientRecordView.contextPage(slice, 0, 2);
+		Map<String, Object> secondPage = PatientRecordView.contextPage(slice, 2, 2);
+		List<?> firstResults = (List<?>) firstPage.get("results");
+		List<?> secondResults = (List<?>) secondPage.get("results");
+
+		assertNull("non-similarity rows have no relevance rank",
+		        ((Map<?, ?>) firstResults.get(0)).get("rank"));
+		assertEquals("rank is the original search position, not chart order",
+		        Integer.valueOf(2), ((Map<?, ?>) firstResults.get(1)).get("rank"));
+		assertEquals(Integer.valueOf(1), ((Map<?, ?>) secondResults.get(0)).get("rank"));
+	}
+
+	@Test
+	public void contextSliceIdentityChangesWhenSimilarityRanksChange() {
+		QueryDocument first = doc("obs", "s-1", LocalDate.of(2025, 1, 1), "First semantic hit");
+		QueryDocument second = doc("obs", "s-2", LocalDate.of(2024, 1, 1), "Second semantic hit");
+		org.openmrs.module.querystore.model.ContextSlice original =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(first,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(1)),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(second,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(2))), 2, false);
+		org.openmrs.module.querystore.model.ContextSlice reranked =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(first,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(2)),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(second,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(1))), 2, false);
+
+		assertNotEquals(PatientRecordView.contextPage(original, 0, 1).get("sliceId"),
+		        PatientRecordView.contextPage(reranked, 0, 1).get("sliceId"));
 	}
 
 	@Test

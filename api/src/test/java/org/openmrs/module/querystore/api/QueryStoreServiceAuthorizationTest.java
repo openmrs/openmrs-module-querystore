@@ -19,15 +19,9 @@ import org.openmrs.test.BaseModuleContextSensitiveTest;
 
 /**
  * Verifies that the {@code @Authorized(GET_PATIENTS)} annotations on {@link QueryStoreService} are
- * actually enforced at runtime — i.e. that the externally-resolved service is registered behind an
- * authorization-advised proxy (moduleApplicationContext.xml).
- *
- * <p>Regression guard for a real gap: {@code ServiceContext.setService} wraps a <em>bare</em> service
- * bean in an advice-free proxy, so registering the raw {@code QueryStoreServiceImpl} left every
- * {@code @Authorized} annotation decorative — a caller without {@code GET_PATIENTS} could read
- * patient-scoped data. The fix registers the service behind a {@code ProxyFactoryBean} carrying the
- * core {@code authorizationInterceptor}. With the bare-bean wiring these tests fail (no exception is
- * thrown); with the proxy they pass.
+ * actually enforced at runtime. The externally resolved service must be registered behind the
+ * authorization-advised proxy in {@code moduleApplicationContext.xml}; annotations on an unadvised
+ * service bean do not enforce privileges.
  *
  * <p>The authorization advice runs before the method body, so enforcement is asserted independently
  * of whether an index backend is wired in the test context.

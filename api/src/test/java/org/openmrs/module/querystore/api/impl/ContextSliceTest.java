@@ -54,8 +54,8 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * invariants (dual-provider-conformance.v1), tested through the real composed service path
  * with a scripted backend. Each test loads its case directly from the local fixture copy
  * (src/test/resources/conformance) and asserts against the fixture's own declared ids and
- * expected tiers — not hand-duplicated literals — so a fixture edit or a selection regression
- * shows up here. {@code context.mandatory-overflow-abstains} is intentionally not covered:
+ * expected tiers — not hand-duplicated literals — so fixture and selector changes remain visible
+ * here. {@code context.mandatory-overflow-abstains} is intentionally not covered:
  * token-budget enforcement is the answer engine's responsibility (see
  * {@link org.openmrs.module.querystore.model.ContextSliceRecord}), not querystore's.
  */
@@ -220,6 +220,56 @@ public class ContextSliceTest {
 	}
 
 	@Test
+	public void explicitIdentifiersDatesCodesAndQuotedPhrasesAreRetained() {
+		JsonNode fixtureCase = fixtureCase("context_policy", "context.explicit-signals-are-retained");
+		QueryDocument identified = doc("visit", "11111111-1111-4111-8111-111111111111",
+		        "Visit: historical review", LocalDate.of(2022, 2, 2));
+		QueryDocument coded = doc("obs", "coded-1", "Laboratory result", LocalDate.of(2022, 1, 1));
+		coded.putMetadata(QueryStoreConstants.FIELD_MAPPING_NAMES,
+		        Collections.singletonList("CIEL:12345"));
+		backend.chart.add(identified);
+		backend.chart.add(coded);
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, fixtureCase.path("question").asText(), request);
+
+		Map<String, String> tiers = tiersByUuid(slice);
+		for (String id : idList(fixtureCase, "exact_match_ids")) {
+			assertEquals(fixtureCase.path("expected_tier").asText(), tiers.get(id),
+			        "exact signal must retain " + id);
+		}
+	}
+
+	@Test
+	public void naturalLanguageCodeQuestionDoesNotInventAnExactIdentifier() {
+		QueryDocument incidental = doc("obs", "incidental-1",
+		        "Instructions for specimen collection", LocalDate.of(2022, 1, 1));
+		backend.chart.add(incidental);
+
+		ContextSlice slice = service.getContextSlice(PATIENT,
+		        "What is the code for hemoglobin?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		assertFalse(tiersByUuid(slice).containsKey("incidental-1"),
+		        "the word after an unlabeled natural-language 'code' question is not an identifier");
+	}
+
+	@Test
+	public void labeledIdentifiersAreRetainedAsExactEvidence() {
+		QueryDocument identified = doc("patient_identifier", "identifier-1",
+		        "Patient identifier: ABC-123", LocalDate.of(2022, 1, 1));
+		backend.chart.add(identified);
+
+		ContextSlice colon = service.getContextSlice(PATIENT, "Find MRN: ABC-123",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+		ContextSlice sentence = service.getContextSlice(PATIENT, "The identifier is ABC-123",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(colon).get("identifier-1"));
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(sentence).get("identifier-1"));
+	}
+
+	@Test
 	public void similarityHits_joinTheSlice_andFailureDegradesToPolicyTiers() {
 		backend.hits = Collections.singletonList(
 		        doc("obs", "noise-1", "Shoe size: 42", LocalDate.of(2023, 1, 1)));
@@ -234,6 +284,29 @@ public class ContextSliceTest {
 		assertFalse(tiers.containsKey("noise-1"), "similarity failure drops only that tier");
 		assertTrue(tiers.containsKey("allergy-1"),
 		        "policy tiers survive a similarity failure; got " + tiers);
+	}
+
+	@Test
+	public void similarityRankPreservesSearchOrderWhileSlicePreservesChartOrder() {
+		QueryDocument olderFirstHit = backend.chart.get(8); // noise-1
+		QueryDocument newerSecondHit = backend.chart.get(6); // cond-old
+		backend.hits = Arrays.asList(olderFirstHit, newerSecondHit);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "ankle and shoe history?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		List<ContextSliceRecord> similarity = new ArrayList<ContextSliceRecord>();
+		for (ContextSliceRecord record : slice.getRecords()) {
+			if (QueryStoreConstants.TIER_SIMILARITY.equals(record.getTier())) {
+				similarity.add(record);
+			}
+		}
+		assertEquals("cond-old", similarity.get(0).getDocument().getResourceUuid(),
+		        "slice output stays in chart chronology");
+		assertEquals(Integer.valueOf(2), similarity.get(0).getRank());
+		assertEquals("noise-1", similarity.get(1).getDocument().getResourceUuid());
+		assertEquals(Integer.valueOf(1), similarity.get(1).getRank(),
+		        "the original best-hit rank survives the chronology reorder");
 	}
 
 	@Test
@@ -268,6 +341,48 @@ public class ContextSliceTest {
 			assertTrue(tiers.containsKey(id), "fixture expected_included: " + id + " missing; got " + tiers);
 			assertEquals(expectedTier.path(id).asText(), tiers.get(id), "tier mismatch for " + id + "; got " + tiers);
 		}
+	}
+
+	@Test
+	public void obsGroupCompletionProtectsTheRecordThatTriggeredTheFamily() {
+		QueryDocument parent = doc("obs", "panel-parent", "Basic metabolic panel",
+		        LocalDate.of(2026, 6, 15));
+		QueryDocument member = doc("obs", "panel-member", "Serum sodium: 140 mmol/L",
+		        LocalDate.of(2026, 6, 15));
+		member.putMetadata(QueryStoreConstants.FIELD_OBS_GROUP_UUID, "panel-parent");
+		backend.chart.add(parent);
+		backend.chart.add(member);
+		backend.hits = Collections.singletonList(parent);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "results of the BMP?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+		Map<String, String> tiers = tiersByUuid(slice);
+
+		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("panel-parent"),
+		        "the triggering record must not remain budget-droppable similarity evidence");
+		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("panel-member"));
+	}
+
+	@Test
+	public void contextSliceCarriesTheSnapshotOfItsCompleteChartRead() {
+		ContextSlice slice = service.getContextSlice(PATIENT, "medications?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		assertEquals(org.openmrs.module.querystore.model.PatientChartFingerprint.snapshotId(
+		        backend.chart, false, false), slice.getChartSnapshotId());
+		assertFalse(slice.isProjectionComplete());
+	}
+
+	@Test
+	public void typedCompleteTierWinsWhenTheSameRecordIsInsideTheRecencyAnchor() {
+		ContextSliceRequest request = new ContextSliceRequest(
+		        Collections.singleton("drug_order"), true);
+		request.setRecencyAnchorSize(backend.chart.size());
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "current medications?", request);
+
+		assertEquals(QueryStoreConstants.TIER_TYPED, tiersByUuid(slice).get("med-1"));
+		assertEquals(QueryStoreConstants.TIER_TYPED, tiersByUuid(slice).get("med-2"));
 	}
 
 	@Test
@@ -337,9 +452,8 @@ public class ContextSliceTest {
 
 	@Test
 	public void interpretMode_derivesTypesAndTemporalServerSide() {
-		// ADR Decision 18: with interpretQuestion, querystore derives the typed scope and the
-		// temporal flag from the RAW question — both engines stop duplicating cue routing, so
-		// interpretation cannot drift between them.
+		// ADR Decision 18: interpretQuestion makes QueryStore authoritative for the typed scope
+		// and temporal flag while preserving the caller's explicit additions.
 		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
 		request.setInterpretQuestion(true);
 		request.setRecencyAnchorSize(3);

@@ -305,7 +305,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			        Map.class);
 			List<co.elastic.clients.elasticsearch.core.search.Hit<Map>> hits = resp.hits().hits();
 			long total = resp.hits().total() == null ? hits.size() : resp.hits().total().value();
-			boolean truncated = total > hits.size();
+			boolean shardFailure = resp.shards() != null && resp.shards().failed().intValue() > 0;
+			boolean truncated = total > hits.size() || shardFailure || resp.timedOut()
+					|| Boolean.TRUE.equals(resp.terminatedEarly());
 			if (truncated) {
 				// Hitting the cap is a v1 quirk of the ES tier: single-search size is bounded by
 				// max_result_window (default 10k). MySQL and Lucene have no equivalent cap because

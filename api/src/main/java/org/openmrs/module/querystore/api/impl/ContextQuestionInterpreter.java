@@ -29,10 +29,9 @@ import org.apache.commons.logging.LogFactory;
 
 /**
  * Server-side question interpretation and retrieval preprocessing for context slices (ADR
- * Decision 18). Consolidated here — at the owner of the index and the embedder — so the two AI
- * consumers stop duplicating cue routing and query normalization (both had drifted; measured by
- * the harness engine-parity instrument). Interpretation is deliberately mechanical cue matching,
- * not NLU: conservative word-boundary cues, unioned when they co-occur.
+ * Decision 18). QueryStore owns this behavior alongside the index and embedder so every consumer
+ * uses the same cue routing and query normalization. Interpretation is deliberately mechanical
+ * cue matching, not NLU: conservative word-boundary cues, unioned when they co-occur.
  */
 final class ContextQuestionInterpreter {
 
