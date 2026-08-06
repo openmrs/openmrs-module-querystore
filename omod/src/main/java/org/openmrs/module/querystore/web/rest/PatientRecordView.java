@@ -78,6 +78,11 @@ final class PatientRecordView {
 
 	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
 	        Integer totalCount, String baseParams, String snapshotId) {
+		return page(docs, ranked, startIndex, limit, totalCount, baseParams, snapshotId, null);
+	}
+
+	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
+	        Integer totalCount, String baseParams, String snapshotId, Boolean chartTruncated) {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>(docs.size());
 		for (int i = 0; i < docs.size(); i++) {
 			results.add(toMap(docs.get(i), ranked ? Integer.valueOf(startIndex + i + 1) : null));
@@ -87,6 +92,9 @@ final class PatientRecordView {
 		env.put("totalCount", totalCount);
 		if (snapshotId != null) {
 			env.put("snapshotId", snapshotId);
+		}
+		if (chartTruncated != null) {
+			env.put("chartTruncated", chartTruncated);
 		}
 
 		List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
@@ -160,9 +168,14 @@ final class PatientRecordView {
 		return sha256(canonical.toString());
 	}
 
-	/** Stable identity for an entire ordered chart, including date semantics and canonical metadata. */
+	/** Stable identity for an entire ordered chart, including completeness and canonical metadata. */
 	static String snapshotId(List<QueryDocument> docs) {
+		return snapshotId(docs, false);
+	}
+
+	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated) {
 		StringBuilder canonical = new StringBuilder();
+		appendValue(canonical, Boolean.valueOf(chartTruncated));
 		for (QueryDocument doc : docs) {
 			appendValue(canonical, doc.getResourceType());
 			appendValue(canonical, doc.getResourceUuid());

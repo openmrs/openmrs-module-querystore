@@ -307,8 +307,9 @@ public class ContextSliceTest {
 		// A size equal to the ES cap is not itself evidence of lost data: MySQL and Lucene can
 		// legitimately return an exact 10 000-record chart. Only a backend that knows it dropped
 		// records may set the explicit-overflow flag.
+		int backendCapExample = 10_000;
 		List<QueryDocument> big = new ArrayList<QueryDocument>();
-		for (int i = 0; i < QueryStoreConstants.CONTEXT_CHART_CAP; i++) {
+		for (int i = 0; i < backendCapExample; i++) {
 			big.add(doc("obs", "o-" + i, "Obs " + i, LocalDate.of(2026, 1, 1)));
 		}
 		backend.chart = big;
@@ -317,7 +318,7 @@ public class ContextSliceTest {
 		ContextSlice slice = service.getContextSlice(PATIENT, "anything?", request);
 
 		assertFalse(slice.isChartTruncated(), "an exact-cap complete chart is not truncated");
-		assertEquals(QueryStoreConstants.CONTEXT_CHART_CAP, slice.getChartSize());
+		assertEquals(backendCapExample, slice.getChartSize());
 
 		backend.chart = backend.chart.subList(0, 100);
 		assertFalse(service.getContextSlice(PATIENT, "anything?", request).isChartTruncated(),

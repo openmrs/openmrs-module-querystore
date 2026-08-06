@@ -24,6 +24,7 @@ import org.openmrs.api.PatientService;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.context.ContextAuthenticationException;
 import org.openmrs.module.querystore.api.QueryStoreService;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
@@ -34,6 +35,7 @@ import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.util.PrivilegeConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -133,7 +135,12 @@ public class QueryStoreRestController {
 			return errorResponse(HttpStatus.BAD_REQUEST, "limit must be > 0 and startIndex >= 0");
 		}
 		int size = Math.min(requestedSize, maximumPageSize());
-		boolean contextMode = "context".equals(StringUtils.trimToNull(mode));
+		String requestedMode = StringUtils.trimToNull(mode);
+		boolean contextMode = "context".equals(requestedMode);
+		if (requestedMode != null && !contextMode) {
+			return errorResponse(HttpStatus.BAD_REQUEST,
+			        "Unknown mode '" + requestedMode + "'; the only supported mode is \"context\"");
+		}
 		if (contextMode && patientUuid == null) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "mode=context requires a patient");
 		}
@@ -180,12 +187,15 @@ public class QueryStoreRestController {
 		Integer totalCount;
 		String snapshotId = null;
 		String pageEtag = null;
+		Boolean chartTruncated = null;
 		if (patientUuid != null && query == null) {
 			// Full chart: enumerate (Decision 15 returns the whole set), then page in memory.
-			List<QueryDocument> all = queryStoreService().getPatientChart(patientUuid);
+			PatientChartRead chartRead = queryStoreService().getPatientChartRead(patientUuid);
+			List<QueryDocument> all = chartRead.getDocuments();
 			totalCount = Integer.valueOf(all.size());
+			chartTruncated = Boolean.valueOf(chartRead.isTruncated());
 			page = slice(all, from, size);
-			snapshotId = PatientRecordView.snapshotId(all);
+			snapshotId = PatientRecordView.snapshotId(all, chartRead.isTruncated());
 			pageEtag = PatientRecordView.pageEtag(snapshotId, from, size);
 			if (etagMatches(ifNoneMatch, pageEtag)) {
 				return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
@@ -204,7 +214,7 @@ public class QueryStoreRestController {
 		}
 
 		Map<String, Object> body = PatientRecordView.page(page, ranked, from, size, totalCount,
-		        baseParams.toString(), snapshotId);
+		        baseParams.toString(), snapshotId, chartTruncated);
 		if (pageEtag != null) {
 			return ResponseEntity.ok()
 			        .eTag(pageEtag)
@@ -477,6 +487,13 @@ public class QueryStoreRestController {
 	@ResponseBody
 	public ResponseEntity<Object> handleMalformedBody(HttpMessageNotReadableException e) {
 		return errorResponse(HttpStatus.BAD_REQUEST, "Malformed request body");
+	}
+
+	/** Typed query-parameter binding failures are client errors, not internal failures. */
+	@ExceptionHandler(TypeMismatchException.class)
+	@ResponseBody
+	public ResponseEntity<Object> handleBadParameter(TypeMismatchException e) {
+		return errorResponse(HttpStatus.BAD_REQUEST, "Malformed request parameter");
 	}
 
 	/**

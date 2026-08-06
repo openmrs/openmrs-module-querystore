@@ -33,9 +33,12 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 
 - **Privilege:** `Get Patients`.
 - **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`.
-- **Shape:** `results`, `totalCount`, and `links`. For full-chart reads, `totalCount` is the
-  number of records materialized by the configured backend; the Elasticsearch v1 cap described
-  in ADR Decision 15 can omit older records. Full-chart reads also carry a stable
+- **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also include
+  `chartTruncated`, set only from the backend's explicit completeness signal. It is `true` when a
+  documented cap or handled backend read failure may have omitted records. For full-chart reads,
+  `totalCount` is the number of records materialized by the configured backend, so clients must not
+  infer completeness from the count.
+  Full-chart reads also carry a stable
   `snapshotId` for the complete materialized chart. Ranked top-K reads use `null` because the
   service does not expose a browseable total.
 - **Records:** `resourceType`, `resourceUuid`, ISO `date` (the record's sort date),
@@ -54,8 +57,9 @@ underlying chart is complete. Context pages are question-dependent and are not c
 For a full-chart page, the response has a strong page-specific `ETag` and
 `Cache-Control: private, no-cache, must-revalidate`. Send that token as `If-None-Match` on the
 same page request: an unchanged page returns `304 Not Modified` with no clinical payload. The
-`snapshotId` covers the complete chart, so a multi-page consumer rejects pages whose snapshot does
-not match the first page. Ranked searches are intentionally uncached windows.
+`snapshotId` covers the materialized records and their completeness state, so a multi-page consumer
+rejects pages whose snapshot does not match the first page. Ranked searches are intentionally
+uncached windows.
 
 The endpoint does not claim index completeness. Index readiness and repair remain the
 responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do not trigger a full

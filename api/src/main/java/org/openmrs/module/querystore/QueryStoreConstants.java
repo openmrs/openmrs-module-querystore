@@ -124,12 +124,6 @@ public final class QueryStoreConstants {
 	/** Default similarity top-K unioned into a context slice (ADR Decision 17). */
 	public static final int CONTEXT_SIMILARITY_LIMIT_DEFAULT = 30;
 
-	/**
-	 * The Elasticsearch tier's single-call full-chart cap (Decision 15) — a context slice built
-	 * on a chart of this size flags {@code chartTruncated} rather than silently absorbing it.
-	 */
-	public static final int CONTEXT_CHART_CAP = 10_000;
-
 	public static final String FIELD_NON_CODED = "non_coded";
 	public static final String FIELD_CLINICAL_STATUS = "clinical_status";
 	public static final String FIELD_VERIFICATION_STATUS = "verification_status";

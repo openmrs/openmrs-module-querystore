@@ -324,13 +324,10 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			return new PatientChartRead(all, truncated);
 		}
 		catch (ElasticsearchException | IOException e) {
-			// Mirror existsByPatient's stance: log + return empty rather than throwing. The service
-			// layer's caller is the LLM full-chart path; a thrown call strands a prompt mid-assembly,
-			// while an empty list lets the prompt fall back to its own absent-data handling. Tier-
-			// specific divergence from the MySQL/Lucene "partial-per-store" tolerance — see the SPI
-			// Javadoc on {@link BackendStore#findAllByPatient} for the contract that pins both shapes.
+			// Preserve the legacy non-throwing read contract, but never describe a backend failure as a
+			// complete empty chart. External consumers fail closed on the explicit incompleteness bit.
 			log.warn("findAllByPatient failed for " + patientUuid, e);
-			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
+			return new PatientChartRead(Collections.<QueryDocument> emptyList(), true);
 		}
 	}
 

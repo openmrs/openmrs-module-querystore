@@ -29,6 +29,8 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 14. [Authorization and Consumer API Surface](#decision-14-authorization-and-consumer-api-surface)
 15. [Full-Chart Retrieval — Unfiltered Per-Patient Enumeration](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration)
 16. [REST Read API — `patientrecord` Resource](#decision-16-rest-read-api--patientrecord-resource)
+17. [Context-Slice Read — Tiered Record Selection](#decision-17-context-slice-read--tiered-record-selection)
+18. [Context-Slice Question Interpretation and Retrieval Preprocessing](#decision-18-context-slice-question-interpretation-and-retrieval-preprocessing)
 
 [Open Questions](#open-questions)
 
@@ -1354,7 +1356,7 @@ Accepted
 
 ### Consequences
 - **The endpoint is NOT in the OpenMRS Swagger spec** (plain controllers aren't, unlike framework resources); it is documented in [`rest-api.md`](./rest-api.md) alongside the operational endpoints. Promoting it to a framework resource for Swagger discoverability is a deferred follow-up.
-- **The ES 10 000-hit cap (Decision 15) is surfaced via `totalCount`** (it plateaus at 10000) but not lifted; `search_after` remains the deferred v1.1 item.
+- **The ES 10 000-hit cap (Decision 15) is surfaced explicitly via `chartTruncated`;** `totalCount` remains the number of records materialized by the backend and must not be used to infer completeness. The cap is not lifted; `search_after` remains the deferred v1.1 item.
 - **First REST touch on a never-indexed patient pays the Decision-15 cold-touch cost**; the 404 validation guards only bogus uuids.
 - **Ordinary reads do not prove index completeness or trigger reconciliation.** Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to observe and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
 - **External clients can cache only in private memory.** The response is revalidated on use rather than given a shared-cache lifetime; a client treats an ETag/snapshot mismatch as a fresh chart and never serves the stale clinical payload.

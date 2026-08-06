@@ -16,6 +16,7 @@ import org.openmrs.annotation.Authorized;
 import org.openmrs.api.OpenmrsService;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.model.ContextSlice;
 import org.openmrs.module.querystore.model.ContextSliceRequest;
@@ -155,15 +156,22 @@ public interface QueryStoreService extends OpenmrsService {
 	 *
 	 * <p><b>ES tier caveat (v1):</b> the Elasticsearch backend issues a single wildcard search
 	 * with {@code size = 10 000} (the default {@code max_result_window}); patients with more
-	 * documents see the most-recent slice and the older tail is silently dropped at the backend
-	 * with a WARN log. MySQL and Lucene are unbounded. Tier-agnostic consumers should expect
-	 * truncation above ~10 000 docs on ES until PIT + {@code search_after} pagination lifts the cap
-	 * (deferred to v1.1). The LLM full-chart consumer that motivates this method tops out at
-	 * context-window size well below 10 000 documents, so the cap is operationally invisible to
-	 * the documented use case.
+	 * documents receive the most-recent slice and the backend emits a WARN. This legacy list-only
+	 * method cannot expose that loss; completeness-sensitive consumers must use
+	 * {@link #getPatientChartRead(String)}. MySQL and Lucene are unbounded. PIT plus
+	 * {@code search_after} pagination remains deferred to v1.1.
 	 */
 	@Authorized(PrivilegeConstants.GET_PATIENTS)
 	List<QueryDocument> getPatientChart(String patientUuid);
+
+	/**
+	 * Full patient-chart read with an explicit backend completeness signal. Existing in-JVM
+	 * consumers that only need records may continue to use {@link #getPatientChart(String)}.
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default PatientChartRead getPatientChartRead(String patientUuid) {
+		return PatientChartRead.complete(getPatientChart(patientUuid));
+	}
 
 	/**
 	 * Returns the tier-tagged context slice for one patient and question — the single

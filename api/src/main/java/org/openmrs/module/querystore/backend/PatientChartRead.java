@@ -13,9 +13,9 @@ import java.util.List;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 /**
- * One complete-chart backend read and whether that backend actually omitted records because of a
- * documented result cap. A result count equal to a cap is not sufficient evidence: an uncapped
- * backend can legitimately return exactly that many records.
+ * One full-chart backend read and whether the backend knows records may be missing. This includes
+ * documented result caps and handled backend failures. A result count alone is not sufficient
+ * evidence: an uncapped backend can legitimately return exactly the configured cap.
  */
 public final class PatientChartRead {
 

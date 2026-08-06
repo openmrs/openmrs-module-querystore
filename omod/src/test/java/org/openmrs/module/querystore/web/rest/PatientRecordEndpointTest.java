@@ -39,6 +39,7 @@ import org.openmrs.api.context.Context;
 import org.openmrs.api.context.ContextAuthenticationException;
 import org.openmrs.api.context.UserContext;
 import org.openmrs.module.querystore.api.QueryStoreService;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -78,15 +79,16 @@ public class PatientRecordEndpointTest {
 		authenticate();
 		wire();
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
-		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L"),
-		        doc("condition", "r2", LocalDate.of(2025, 12, 1), "Condition: Type 2 Diabetes. Status: ACTIVE")));
+		        doc("condition", "r2", LocalDate.of(2025, 12, 1), "Condition: Type 2 Diabetes. Status: ACTIVE"))));
 
 		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, null, null);
 
 		assertEquals(HttpStatus.OK, response.getStatusCode());
 		Map<?, ?> body = body(response);
 		assertEquals("a full chart carries the materialized count", Integer.valueOf(2), body.get("totalCount"));
+		assertEquals(Boolean.FALSE, body.get("chartTruncated"));
 		List<?> results = (List<?>) body.get("results");
 		assertEquals(2, results.size());
 		Map<?, ?> first = (Map<?, ?>) results.get(0);
@@ -97,7 +99,7 @@ public class PatientRecordEndpointTest {
 		assertTrue("metadata passes through", ((Map<?, ?>) first.get("metadata")).containsKey("obs_group_uuid"));
 		assertFalse("the embedding vector must never be exposed", first.containsKey("embedding"));
 		assertFalse("full-chart rows carry no rank", first.containsKey("rank"));
-		verify(queryStore).getPatientChart(PATIENT);
+		verify(queryStore).getPatientChartRead(PATIENT);
 		verify(queryStore, never()).searchByPatient(anyString(), anyString(), anyInt());
 	}
 
@@ -110,7 +112,7 @@ public class PatientRecordEndpointTest {
 		first.putMetadata(FIELD_CLINICAL_DATE, "2026-01-15");
 		first.putMetadata(FIELD_DATE_KIND, "clinical_event");
 		first.setLastModified(Instant.parse("2026-01-16T12:00:00Z"));
-		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(first));
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(first)));
 
 		ResponseEntity<Object> firstResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
 
@@ -136,7 +138,9 @@ public class PatientRecordEndpointTest {
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
 		QueryDocument before = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
 		QueryDocument after = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 59 kg");
-		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(before), Arrays.asList(after));
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
+		        PatientChartRead.complete(Arrays.asList(before)),
+		        PatientChartRead.complete(Arrays.asList(after)));
 
 		ResponseEntity<Object> beforeResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
 		ResponseEntity<Object> afterResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
@@ -148,13 +152,36 @@ public class PatientRecordEndpointTest {
 	}
 
 	@Test
+	public void fullChart_snapshotChangesWhenCompletenessChanges() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument record = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
+		        PatientChartRead.complete(Arrays.asList(record)),
+		        new PatientChartRead(Arrays.asList(record), true));
+
+		ResponseEntity<Object> complete = controller.getPatientRecords(PATIENT, null, null, null, null);
+		ResponseEntity<Object> incomplete = controller.getPatientRecords(
+		        PATIENT, null, null, null, complete.getHeaders().getETag());
+
+		assertEquals("a completeness change must not produce a stale 304", HttpStatus.OK,
+		        incomplete.getStatusCode());
+		assertEquals(Boolean.TRUE, body(incomplete).get("chartTruncated"));
+		assertFalse("completeness is part of the chart snapshot identity",
+		        body(complete).get("snapshotId").equals(body(incomplete).get("snapshotId")));
+		assertFalse("completeness is part of the page revalidation token",
+		        complete.getHeaders().getETag().equals(incomplete.getHeaders().getETag()));
+	}
+
+	@Test
 	public void fullChart_etagIsSpecificToTheRequestedPageOfOneSnapshot() {
 		authenticate();
 		wire();
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
-		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
-		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg")));
+		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg"))));
 
 		ResponseEntity<Object> firstPage = controller.getPatientRecords(PATIENT, null, Integer.valueOf(1),
 		        Integer.valueOf(0), null);
@@ -206,9 +233,9 @@ public class PatientRecordEndpointTest {
 		authenticate();
 		wire();
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
-		when(queryStore.getPatientChart(PATIENT)).thenReturn(Arrays.asList(
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
-		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg")));
+		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg"))));
 
 		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null,
 		        Integer.valueOf(Integer.MAX_VALUE), Integer.valueOf(1));
@@ -253,7 +280,7 @@ public class PatientRecordEndpointTest {
 		for (int i = 0; i < 5; i++) {
 			five.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "rec " + i));
 		}
-		when(queryStore.getPatientChart(PATIENT)).thenReturn(five);
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(five));
 
 		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, 2, 2); // limit=2, startIndex=2
 
@@ -276,7 +303,7 @@ public class PatientRecordEndpointTest {
 		for (int i = 0; i < 4; i++) {
 			four.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "rec " + i));
 		}
-		when(queryStore.getPatientChart(PATIENT)).thenReturn(four);
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(four));
 
 		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, 2, 2);
 
@@ -286,6 +313,21 @@ public class PatientRecordEndpointTest {
 		assertNotNull("the final page still links to the preceding page", links);
 		assertEquals("the exact final page must not link to an empty page", 1, links.size());
 		assertEquals("prev", ((Map<?, ?>) links.get(0)).get("rel"));
+	}
+
+	@Test
+	public void fullChart_surfacesBackendConfirmedTruncation() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(new PatientChartRead(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg")), true));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, null, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(Boolean.TRUE, body(response).get("chartTruncated"));
+		assertEquals(Integer.valueOf(1), body(response).get("totalCount"));
 	}
 
 	@Test
@@ -412,6 +454,21 @@ public class PatientRecordEndpointTest {
 		        "context", "drug_order", Boolean.FALSE, null);
 
 		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+	}
+
+	@Test
+	public void unknownModeIsRejectedInsteadOfFallingThroughToRankedRead() {
+		authenticate();
+		wire();
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "meds?", null, null,
+		        "Context", null, Boolean.FALSE, null);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertEquals("Unknown mode 'Context'; the only supported mode is \"context\"",
+		        body(response).get("error"));
+		verify(patients, never()).getPatientByUuid(anyString());
+		verify(queryStore, never()).searchByPatient(anyString(), anyString(), anyInt());
 	}
 
 	@Test

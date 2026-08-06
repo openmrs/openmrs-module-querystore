@@ -250,10 +250,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 	@Override
 	public List<QueryDocument> getPatientChart(String patientUuid) {
-		return readPatientChart(patientUuid).getDocuments();
+		return getPatientChartRead(patientUuid).getDocuments();
 	}
 
-	private PatientChartRead readPatientChart(String patientUuid) {
+	@Override
+	public PatientChartRead getPatientChartRead(String patientUuid) {
 		if (backend == null || patientUuid == null) {
 			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
@@ -317,7 +318,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 		// Composed over the sibling complete-chart read so cold-bootstrap, ordering, and any
 		// backend-documented cap behave identically (Decision 17 §3).
-		PatientChartRead chartRead = readPatientChart(patientUuid);
+		PatientChartRead chartRead = getPatientChartRead(patientUuid);
 		List<QueryDocument> chart = chartRead.getDocuments();
 
 		// Server-side interpretation (ADR Decision 18): derived types UNION the caller's,

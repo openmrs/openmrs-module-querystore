@@ -32,6 +32,7 @@ import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.DriftReport;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -85,6 +86,14 @@ public class QueryStoreRestControllerTest {
 		        new HttpMessageNotReadableException("bad json"));
 		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
 		assertEquals("Malformed request body", errorOf(response));
+	}
+
+	@Test
+	public void handleMalformedQueryParameter_shouldReturn400() {
+		ResponseEntity<Object> response = controller.handleBadParameter(
+		        new TypeMismatchException("abc", Integer.class));
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertEquals("Malformed request parameter", errorOf(response));
 	}
 
 	@Test
