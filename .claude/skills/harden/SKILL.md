@@ -1,7 +1,7 @@
 ---
 name: harden
-description: Run iterative /review and /simplify passes on the current slice in two phases until both converge. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.7.0
+description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
+version: 0.8.0
 ---
 
 # Harden
@@ -54,7 +54,7 @@ A behavior change without a named test is a Phase 1 finding — even when the co
 
 **Transition gate** (forcing function — say BOTH out loud in the report before moving to Phase 2):
 
-> "Phase 1 stopping condition met: [last pass returned no further review value | last two consecutive passes returned only cosmetic items | last pass started re-flagging prior items]."
+> "Phase 1 stopping condition met: [last pass returned no further review value | last two consecutive passes returned only cosmetic items | last pass started re-flagging prior items]. Edits made by that last pass: [N]."
 
 > "Integration questions answered: what happens to this slice when {an upstream service mutates without notifying me / an optional dependency is absent at runtime / a consumer scans before I register / a sibling service silently changes shared state / an unchanged neighbor's documented invariant is now falsified by my change / two separately-added mechanisms compose into a race or contradiction}? Answer: [concrete behaviors observed or verified, one line each]."
 
@@ -81,9 +81,27 @@ Run simplify passes until polish opportunities converge. Each pass:
 
 **Stopping gate** (say this out loud in the final report before declaring `/harden` done):
 
-> "Phase 2 stopping condition met: [last two consecutive passes returned nothing actionable / only sub-noise-floor items | agents re-flagging prior items | all remaining findings below the noise floor]."
+> "Phase 2 stopping condition met: [last two consecutive passes returned nothing actionable / only sub-noise-floor items | agents re-flagging prior items | all remaining findings below the noise floor]. Edits made by that last pass: [N]."
 
-If you cannot truthfully complete that sentence, run another Phase 2 pass. Same rule as Phase 1: pass count is not the threshold; convergence is.
+If you cannot truthfully complete that sentence, run another Phase 2 pass. Same rule as Phase 1, and state it the same way: **a pass that itself changed something cannot be the last pass**, because applying a fix is evidence the slice was not fully explored — convergence requires a *subsequent* pass that changes nothing. Pass count is not the threshold; convergence is.
+
+## Termination: keep cycling until a whole cycle changes nothing
+
+The two gates above end a *phase*. They do not end the run, and this is the rule the skill most often loses. Both gates are finding-based — "no further review value", "nothing actionable" — so the obvious reading is: fix what this pass found, declare the pass returned nothing further, stop. That ends the invocation **with changes in it**, and the next `/harden` then finds more, which is how a slice gets re-hardened five times and yields something real every time.
+
+So the run has its own condition, and it is a fact rather than a judgment:
+
+> **`/harden` is complete when one full Phase 1 + Phase 2 cycle produces zero edits.** If the cycle changed anything — a line of code, a comment, a test, a doc — that cycle was not the last one. Start another. Do not hand back to the user in between.
+
+Check it, do not estimate it. At the end of a cycle run `git status --porcelain` and count the commits the cycle made; report both. "I think it has converged" is not the condition; "this cycle made 0 edits" is.
+
+This is deliberately cheap to satisfy and expensive to fake, which is the point — but it cuts both ways, so:
+
+- **Do not manufacture a change to look thorough.** An empty cycle is the goal, not a failure. If a cycle finds nothing, say so and stop; padding it with a comment tweak just buys another mandatory cycle.
+- **Do not withhold a warranted change to end sooner.** If you find something real on what you hoped was the final cycle, fix it and run another. The rule exists precisely to stop "it's basically converged" from ending a run that still had a finding in it.
+- Every applied change still needs its evidence: verified by build or test, and where it fixes a behavior, checked by reverting it and confirming the failure.
+
+If the user has also set a goal or Stop hook to the same effect, it is enforcing this rule from outside; nothing changes about how you run.
 
 ## Re-entry
 
@@ -92,8 +110,9 @@ If Phase 2 surfaces a *structural* concern (not polish — e.g., a real correctn
 ## Reporting
 
 After stopping, summarize:
-- Total passes per phase.
-- What was changed across them (one bullet per real fix, separated by phase).
+- Total cycles, and passes per phase within them.
+- **The terminating cycle's edit count, as measured** — `git status --porcelain` clean and 0 commits — so the reader can see the run ended on an empty cycle rather than on a judgment that it had converged.
+- What was changed across them (one bullet per real fix, separated by phase). If earlier cycles made changes and the last did not, say which cycle each fix landed in; that is what shows the run converged rather than ran out of patience.
 - **For every deferred item, a concrete failure-mode sentence in the form "if we ship without this, X breaks because Y."** A deferral without that sentence is not a deferral — it is an unanalyzed item. Re-read and either apply or write the sentence. Group sentences by item; do not collapse multiple deferrals into a single label like "remaining items below noise floor."
 - Current build / test status.
 - Recommended next action (commit + push, or move on).
@@ -102,8 +121,9 @@ After stopping, summarize:
 
 - **Don't invent concerns** to justify another pass — diminishing returns are real signals.
 - **Don't re-litigate** decisions from prior passes (e.g., "we deferred test fixture unification — should we revisit?" — no, ship).
-- **Don't run another pass** if the only items are below the noise floor or the agents start agreeing on "nothing actionable."
-- **Don't pause for user input between passes** unless something is genuinely ambiguous. The skill is meant to converge autonomously up to the stopping rules.
+- **Don't run another pass** if the only items are below the noise floor or the agents start agreeing on "nothing actionable." This governs passes *within* a phase; it is not licence to skip the confirming cycle that Termination requires after a cycle that changed something. That cycle is expected to be empty — running it is how you prove it.
+- **Don't end a cycle that changed something.** "It's basically converged, and the last fix was small" is the single most common way this skill stops early, because both phase gates are about findings and neither asks whether you just edited a file. If the cycle made an edit, it was not the last cycle — see Termination.
+- **Don't pause for user input between passes** unless something is genuinely ambiguous. The skill is meant to converge autonomously up to the stopping rules — including across cycles, not just across passes within a cycle.
 - **Don't promote architectural concerns** into in-pass fixes. Items like "this Hibernate proxy hits the DB at backfill scale" are real but belong in the indexer/sync layer, not in the slice being polished — flag and defer.
 - **Don't review the slice in isolation.** Integration bugs hide outside the file diff — at trigger boundaries (a sibling service mutates state without notifying you), classloader boundaries (an optional dep's absence breaks static class resolution), and lifecycle boundaries (a consumer scans before you register). Every Phase 1 pass MUST trace at least one level out on each integration thread (trigger paths, optional deps, lifecycle order, state propagation, invalidated invariants in unchanged neighbors, and re-deriving the merged result from scratch). The slice's correctness contract spans its boundaries — a fix that lives in a sibling service, or in an unchanged neighbor your edit falsified, is still a Phase 1 finding when the slice surfaces or depends on the bug. See "Trace outward" in Phase 1.
 - **Don't batch-defer "Minor" items by severity label.** Severity labels are an agent's guess, not a verdict. Before deferring any finding, write the concrete failure mode out loud: "if we ship without this, X breaks because Y." If you can't complete that sentence, you don't yet understand the severity — re-read the finding, trace its consequence, and either apply the fix or write down what you'd need to know to defer it. This rule is load-bearing: agents routinely under-label correctness fixes as Minor (e.g. unclosed `AutoCloseable`s, leaked test state) because the code-pattern looks small.
