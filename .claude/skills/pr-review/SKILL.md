@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request — check that the change actually resolves the issue it claims to and by the best approach available rather than merely one that works, verify every finding empirically, and write clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.14.0
+version: 0.15.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -38,6 +38,10 @@ Ways a technically-correct change misses:
 - it resolves part of a multi-part ticket and closes the whole thing.
 
 A change that doesn't resolve the issue it closes is blocking, and it's the finding most often missed, precisely because everything at the line level checks out.
+
+**Does it do only that?** The mirror of the question above, and the easier one to skip, because every extra hunk is by construction something that works. Account for each hunk as required by the ticket or not, and treat what isn't as something to take out: a format-on-save sweep over untouched code, a drive-by rename, a cleanup spotted in passing. Verifying that such a change is harmless is not a reason to let it merge — it is the reason it sails through, and the proof cost has already landed on the reviewer. That cost is the point: on append-only files above all (migrations, changelogs, generated resources), a diff that only ever grows lets the next reviewer see at a glance that nothing already shipped was disturbed, and once old entries have been rewritten somebody has to establish that separately, which is the first thing dropped under time pressure.
+
+Quantify before commenting, because the size is the argument: `--stat` on the diff against the same diff with `--ignore-all-space` isolates whitespace-only churn, and a per-block text compare names which entries were touched. Then say plainly what you confirmed is safe, so the author doesn't hunt for damage that isn't there, and name the cost as review time instead of manufacturing a failure mode. Absent a failure mode this isn't blocking, but not blocking is not the same as not worth raising: this is the one class of finding where a clean verification result argues *for* the comment rather than against it. It does not contradict the anti-pattern about critiquing an inflated version of the PR — that one stops you demanding the PR deliver *more*, this one stops it shipping *extra*.
 
 **Is it the best available fix, or just one that works?** Working is the floor, not the bar — a change can resolve the issue, pass CI, and still be the wrong way to have got there. This is also the judgment the author is least able to make for themselves: by the time they open a PR they've stopped seeing the approaches they didn't take. So make the comparison explicit rather than scanning for smells. **Name the one or two approaches a maintainer of *this* codebase would have weighed, and say what makes the chosen one better or worse than each.** If you can't name a single alternative, you haven't reviewed the approach yet — you've only checked it against a list.
 
@@ -167,7 +171,7 @@ Posting publishes under the user's own GitHub account. Post only when the user p
 
 **Pre-posting gate** — before presenting, staging, or posting, write these five as five explicit, standalone lines in your report to the user — verbatim, not paraphrased, not woven into prose narration. If any cannot be said truthfully, go back and fix the review first:
 
-> "I identified the problem this PR is meant to solve — linked issue, tracker ticket, or description — and checked that the change actually resolves it; where I couldn't reach the ticket, I said so, and where the description states the PR's own guarantees I tested them one at a time instead of taking them as given. I went past 'it works' to whether it is the best fix available, naming the alternatives a maintainer of this codebase would have weighed. Any approach objection I raise names both a concrete alternative and the concrete cost of the approach taken — maintenance cost counts, 'this feels hacky' does not — and where I would merely have done it differently, I wrote nothing."
+> "I identified the problem this PR is meant to solve — linked issue, tracker ticket, or description — and checked that the change actually resolves it; where I couldn't reach the ticket, I said so, and where the description states the PR's own guarantees I tested them one at a time instead of taking them as given. I went past 'it works' to whether it is the best fix available, naming the alternatives a maintainer of this codebase would have weighed. Any approach objection I raise names both a concrete alternative and the concrete cost of the approach taken — maintenance cost counts, 'this feels hacky' does not — and where I would merely have done it differently, I wrote nothing. I accounted for every hunk as required by the ticket or not, and asked for the removal of what was not, including changes I had verified to be harmless."
 
 > "Every finding was verified by [building / running / tracing / upstream check], not just read off the diff."
 
