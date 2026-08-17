@@ -1,0 +1,609 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License,
+ * v. 2.0. If a copy of the MPL was not distributed with this file, You can
+ * obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+ * the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+ *
+ * Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+ * graphic logo is a trademark of OpenMRS Inc.
+ */
+package org.openmrs.module.querystore.web.rest;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.After;
+import org.junit.Test;
+import org.openmrs.Patient;
+import org.openmrs.User;
+import org.openmrs.api.PatientService;
+import org.openmrs.api.context.Context;
+import org.openmrs.api.context.ContextAuthenticationException;
+import org.openmrs.api.context.UserContext;
+import org.openmrs.module.querystore.api.QueryStoreService;
+import org.openmrs.module.querystore.backend.PatientChartRead;
+import org.openmrs.module.querystore.model.QueryDocument;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+/**
+ * POJO tests for the {@code /querystore/patientrecord} read endpoint (ADR Decision 16): dispatch across
+ * the three read methods, the embedding-exclusion + paging response shape, and the 400/404/privilege
+ * guards. Like {@link QueryStoreRestControllerTest}, the controller is instantiated directly with its
+ * services stubbed (the omod has no DB-backed context-test harness); HTTP routing is verified against a
+ * live server.
+ */
+public class PatientRecordEndpointTest {
+
+	private static final String PATIENT = "patient-uuid";
+
+	private static final int TEST_MAXIMUM_PAGE_SIZE = 1000;
+
+	private final QueryStoreRestController controller = new QueryStoreRestController();
+
+	private final QueryStoreService queryStore = mock(QueryStoreService.class);
+
+	private final PatientService patients = mock(PatientService.class);
+
+	private void wire() {
+		controller.setQueryStoreService(queryStore);
+		controller.setPatientService(patients);
+		controller.setMaximumPageSize(Integer.valueOf(TEST_MAXIMUM_PAGE_SIZE));
+	}
+
+	@After
+	public void clearContext() {
+		Context.clearUserContext();
+	}
+
+	@Test
+	public void fullChart_returnsAllMaterializedRecordsPaged_andNoEmbedding() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L"),
+		        doc("condition", "r2", LocalDate.of(2025, 12, 1), "Condition: Type 2 Diabetes. Status: ACTIVE"))));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, null, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		Map<?, ?> body = body(response);
+		assertEquals("a full chart carries the materialized count", Integer.valueOf(2), body.get("totalCount"));
+		assertEquals(Boolean.FALSE, body.get("chartTruncated"));
+		assertEquals(Boolean.TRUE, body.get("projectionComplete"));
+		List<?> results = (List<?>) body.get("results");
+		assertEquals(2, results.size());
+		Map<?, ?> first = (Map<?, ?>) results.get(0);
+		assertEquals("obs", first.get("resourceType"));
+		assertEquals("r1", first.get("resourceUuid"));
+		assertEquals("2026-01-15", first.get("date"));
+		assertEquals("Fasting blood glucose: 11.2 mmol/L", first.get("text"));
+		assertTrue("metadata passes through", ((Map<?, ?>) first.get("metadata")).containsKey("obs_group_uuid"));
+		assertFalse("the embedding vector must never be exposed", first.containsKey("embedding"));
+		assertFalse("full-chart rows carry no rank", first.containsKey("rank"));
+		verify(queryStore).getPatientChartRead(PATIENT);
+		verify(queryStore, never()).searchByPatient(anyString(), anyString(), anyInt());
+	}
+
+	@Test
+	public void fullChart_exposesExplicitClinicalDateFreshnessAndConditionalSnapshot() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument first = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		first.putMetadata(FIELD_CLINICAL_DATE, "2026-01-15");
+		first.putMetadata(FIELD_DATE_KIND, "clinical_event");
+		first.setLastModified(Instant.parse("2026-01-16T12:00:00Z"));
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(first)));
+
+		ResponseEntity<Object> firstResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
+
+		assertEquals(HttpStatus.OK, firstResponse.getStatusCode());
+		Map<?, ?> firstRow = (Map<?, ?>) ((List<?>) body(firstResponse).get("results")).get(0);
+		assertEquals("2026-01-15", firstRow.get("clinicalDate"));
+		assertEquals("clinical_event", firstRow.get("dateKind"));
+		assertEquals("2026-01-16T12:00:00Z", firstRow.get("lastModified"));
+		assertNotNull("a full chart identifies the exact materialized snapshot", body(firstResponse).get("snapshotId"));
+		assertNotNull("a full chart has a strong revalidation token", firstResponse.getHeaders().getETag());
+		assertEquals("private, no-cache, must-revalidate", firstResponse.getHeaders().getCacheControl());
+
+		ResponseEntity<Object> notModified = controller.getPatientRecords(
+		        PATIENT, null, null, null, firstResponse.getHeaders().getETag());
+		assertEquals(HttpStatus.NOT_MODIFIED, notModified.getStatusCode());
+		assertNull("a 304 response must not repeat PHI-bearing chart content", notModified.getBody());
+	}
+
+	@Test
+	public void fullChart_snapshotChangesWhenARecordRepresentationChanges() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument before = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		QueryDocument after = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 59 kg");
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
+		        PatientChartRead.complete(Arrays.asList(before)),
+		        PatientChartRead.complete(Arrays.asList(after)));
+
+		ResponseEntity<Object> beforeResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
+		ResponseEntity<Object> afterResponse = controller.getPatientRecords(PATIENT, null, null, null, null);
+
+		assertFalse("a changed record must invalidate the chart identity",
+		        body(beforeResponse).get("snapshotId").equals(body(afterResponse).get("snapshotId")));
+		assertFalse("the page revalidation token must also change",
+		        beforeResponse.getHeaders().getETag().equals(afterResponse.getHeaders().getETag()));
+	}
+
+	@Test
+	public void fullChart_snapshotChangesWhenCompletenessChanges() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument record = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
+		        PatientChartRead.complete(Arrays.asList(record)),
+		        new PatientChartRead(Arrays.asList(record), true));
+
+		ResponseEntity<Object> complete = controller.getPatientRecords(PATIENT, null, null, null, null);
+		ResponseEntity<Object> incomplete = controller.getPatientRecords(
+		        PATIENT, null, null, null, complete.getHeaders().getETag());
+
+		assertEquals("a completeness change must not produce a stale 304", HttpStatus.OK,
+		        incomplete.getStatusCode());
+		assertEquals(Boolean.TRUE, body(incomplete).get("chartTruncated"));
+		assertFalse("completeness is part of the chart snapshot identity",
+		        body(complete).get("snapshotId").equals(body(incomplete).get("snapshotId")));
+		assertFalse("completeness is part of the page revalidation token",
+		        complete.getHeaders().getETag().equals(incomplete.getHeaders().getETag()));
+	}
+
+	@Test
+	public void fullChart_snapshotChangesWhenProjectionCompletenessChanges() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument record = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
+		        new PatientChartRead(Arrays.asList(record), false, false),
+		        new PatientChartRead(Arrays.asList(record), false, true));
+
+		ResponseEntity<Object> incomplete = controller.getPatientRecords(PATIENT, null, null, null, null);
+		ResponseEntity<Object> complete = controller.getPatientRecords(
+		        PATIENT, null, null, null, incomplete.getHeaders().getETag());
+
+		assertEquals(HttpStatus.OK, complete.getStatusCode());
+		assertEquals(Boolean.FALSE, body(incomplete).get("projectionComplete"));
+		assertEquals(Boolean.TRUE, body(complete).get("projectionComplete"));
+		assertFalse(body(incomplete).get("snapshotId").equals(body(complete).get("snapshotId")));
+		assertFalse(incomplete.getHeaders().getETag().equals(complete.getHeaders().getETag()));
+	}
+
+	@Test
+	public void fullChart_etagIsSpecificToTheRequestedPageOfOneSnapshot() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
+		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg"))));
+
+		ResponseEntity<Object> firstPage = controller.getPatientRecords(PATIENT, null, Integer.valueOf(1),
+		        Integer.valueOf(0), null);
+		ResponseEntity<Object> secondPage = controller.getPatientRecords(PATIENT, null, Integer.valueOf(1),
+		        Integer.valueOf(1), null);
+
+		assertEquals("the same materialized chart has one snapshot identity",
+		        body(firstPage).get("snapshotId"), body(secondPage).get("snapshotId"));
+		assertFalse("conditional tokens must not validate a different page",
+		        firstPage.getHeaders().getETag().equals(secondPage.getHeaders().getETag()));
+	}
+
+	@Test
+	public void patientAndQuery_dispatchesToRankedSearch_withRankAndNullTotal() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.searchByPatient(PATIENT, "glucose", 50)).thenReturn(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L"),
+		        doc("obs", "r2", LocalDate.of(2025, 6, 1), "Random glucose: 9.0 mmol/L")));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "glucose", null, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		Map<?, ?> body = body(response);
+		assertNull("a ranked top-K window has no browseable total", body.get("totalCount"));
+		List<?> results = (List<?>) body.get("results");
+		assertEquals(Integer.valueOf(1), ((Map<?, ?>) results.get(0)).get("rank"));
+		assertEquals(Integer.valueOf(2), ((Map<?, ?>) results.get(1)).get("rank"));
+	}
+
+	@Test
+	public void rankedSearch_clampsLimitToOpenMrsAbsoluteMaximum() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE))
+		        .thenReturn(new ArrayList<QueryDocument>());
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "glucose",
+		        Integer.valueOf(Integer.MAX_VALUE), Integer.valueOf(0));
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		verify(queryStore).searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE);
+	}
+
+	@Test
+	public void fullChart_hugeLimitDoesNotOverflowThePageEnd() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
+		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg"))));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null,
+		        Integer.valueOf(Integer.MAX_VALUE), Integer.valueOf(1));
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(1, ((List<?>) body(response).get("results")).size());
+	}
+
+	@Test
+	public void rankedSearch_rejectsAnOffsetBeyondTheBoundedResultWindow() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "glucose", Integer.valueOf(1),
+		        Integer.valueOf(TEST_MAXIMUM_PAGE_SIZE));
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		verify(queryStore, never()).searchByPatient(anyString(), anyString(), anyInt());
+	}
+
+	@Test
+	public void queryOnly_dispatchesToCrossPatientSearch() {
+		authenticate();
+		wire();
+		when(queryStore.search("glucose", 50)).thenReturn(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L")));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(null, "glucose", null, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(1, ((List<?>) body(response).get("results")).size());
+		verify(patients, never()).getPatientByUuid(anyString());
+	}
+
+	@Test
+	public void fullChart_pagesWithStartIndexAndEmitsPrevNextLinks() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		List<QueryDocument> five = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 5; i++) {
+			five.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "rec " + i));
+		}
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(five));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, 2, 2); // limit=2, startIndex=2
+
+		Map<?, ?> body = body(response);
+		assertEquals(Integer.valueOf(5), body.get("totalCount"));
+		List<?> results = (List<?>) body.get("results");
+		assertEquals("the middle page holds records 2 and 3", 2, results.size());
+		assertEquals("r2", ((Map<?, ?>) results.get(0)).get("resourceUuid"));
+		List<?> links = (List<?>) body.get("links");
+		assertNotNull("a middle page carries prev + next links", links);
+		assertEquals(2, links.size());
+	}
+
+	@Test
+	public void fullChart_exactFinalPageDoesNotEmitEmptyNextPageLink() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		List<QueryDocument> four = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 4; i++) {
+			four.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "rec " + i));
+		}
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(four));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, 2, 2);
+
+		Map<?, ?> body = body(response);
+		assertEquals(Integer.valueOf(4), body.get("totalCount"));
+		List<?> links = (List<?>) body.get("links");
+		assertNotNull("the final page still links to the preceding page", links);
+		assertEquals("the exact final page must not link to an empty page", 1, links.size());
+		assertEquals("prev", ((Map<?, ?>) links.get(0)).get("rel"));
+	}
+
+	@Test
+	public void fullChart_surfacesBackendConfirmedTruncation() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(new PatientChartRead(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg")), true));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, null, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(Boolean.TRUE, body(response).get("chartTruncated"));
+		assertEquals(Integer.valueOf(1), body(response).get("totalCount"));
+	}
+
+	@Test
+	public void returns400_whenNeitherPatientNorQuery() {
+		authenticate();
+		wire();
+		ResponseEntity<Object> response = controller.getPatientRecords(null, null, null, null);
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+	}
+
+	@Test
+	public void returns400_whenLimitNonPositive() {
+		authenticate();
+		wire();
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, null, 0, null);
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		verify(patients, never()).getPatientByUuid(anyString());
+	}
+
+	@Test
+	public void returns404_whenPatientUnknown() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid("ghost")).thenReturn(null);
+		ResponseEntity<Object> response = controller.getPatientRecords("ghost", null, null, null);
+		assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+		// a bogus patient must not reach the read store (avoids a wasted cold-touch projection)
+		verify(queryStore, never()).getPatientChart(anyString());
+	}
+
+	@Test(expected = ContextAuthenticationException.class)
+	public void requiresGetPatientsPrivilege() {
+		// The endpoint reads patient data; a caller lacking Get Patients must be rejected up front.
+		Context.setUserContext(new UserContext(null) {
+
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return false;
+			}
+		});
+		controller.getPatientRecords(PATIENT, null, null, null);
+	}
+
+	@Test
+	public void contextMode_dispatchesToTheSliceAndEachRecordCarriesItsTier() {
+		// ADR Decision 17 §4: mode=context serves the tiered selection; the caller's question
+		// interpretation (types, temporal) rides as request params and each record says WHY it
+		// was selected. Slices carry the source chart identity but do not use HTTP ETags.
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		org.openmrs.module.querystore.model.ContextSlice slice =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("allergy", "a-1", LocalDate.of(2024, 4, 1), "Allergy: Penicillin"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
+		                2, false,
+		                new java.util.LinkedHashSet<String>(Arrays.asList("allergy", "drug_order")),
+		                true, "chart-snapshot-1");
+		org.mockito.ArgumentCaptor<org.openmrs.module.querystore.model.ContextSliceRequest> captor =
+		        org.mockito.ArgumentCaptor.forClass(org.openmrs.module.querystore.model.ContextSliceRequest.class);
+		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT),
+		        org.mockito.ArgumentMatchers.eq("current meds?"), captor.capture())).thenReturn(slice);
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "current meds?", null, null,
+		        "context", "drug_order,allergy", Boolean.TRUE, Boolean.TRUE, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		org.openmrs.module.querystore.model.ContextSliceRequest sent = captor.getValue();
+		assertTrue("caller types parsed", sent.getTypes().contains("drug_order"));
+		assertTrue("caller types parsed", sent.getTypes().contains("allergy"));
+		assertTrue("temporal flag parsed", sent.isTemporal());
+		assertTrue("interpret flag reaches the service", sent.isInterpretQuestion());
+		Map<?, ?> body = body(response);
+		List<?> results = (List<?>) body.get("results");
+		assertEquals(2, results.size());
+		assertEquals(org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY,
+		        ((Map<?, ?>) results.get(0)).get("tier"));
+		assertEquals(org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED,
+		        ((Map<?, ?>) results.get(1)).get("tier"));
+		assertEquals("the slice's chart size is surfaced", Integer.valueOf(2), body.get("chartSize"));
+		assertEquals(Boolean.FALSE, body.get("chartTruncated"));
+		assertEquals(Boolean.TRUE, body.get("projectionComplete"));
+		assertEquals(Arrays.asList("allergy", "drug_order"), body.get("effectiveTypes"));
+		assertEquals(Boolean.TRUE, body.get("temporalApplied"));
+		assertEquals("chart-snapshot-1", body.get("chartSnapshotId"));
+		assertNotNull("every context page carries a whole-slice consistency id", body.get("sliceId"));
+		assertNull("no embedding ever", ((Map<?, ?>) results.get(0)).get("embedding"));
+		assertNull("chartSnapshotId is not an HTTP page snapshot", body.get("snapshotId"));
+	}
+
+	@Test
+	public void contextPagesShareAWholeSliceIdentityAndExposeTheSameSelectionMetadata() {
+		org.openmrs.module.querystore.model.ContextSlice slice =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("allergy", "a-1", LocalDate.of(2024, 4, 1), "Allergy: Penicillin"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
+		                365, true,
+		                new java.util.LinkedHashSet<String>(Arrays.asList("drug_order", "allergy")),
+		                true, "chart-snapshot-2");
+
+		Map<String, Object> first = PatientRecordView.contextPage(slice, 0, 1);
+		Map<String, Object> second = PatientRecordView.contextPage(slice, 1, 1);
+
+		assertEquals(first.get("sliceId"), second.get("sliceId"));
+		assertEquals(Arrays.asList("allergy", "drug_order"), first.get("effectiveTypes"));
+		assertEquals(first.get("effectiveTypes"), second.get("effectiveTypes"));
+		assertEquals(Boolean.TRUE, first.get("temporalApplied"));
+		assertEquals(Integer.valueOf(365), first.get("chartSize"));
+		assertEquals(Boolean.TRUE, first.get("chartTruncated"));
+		assertEquals("chart-snapshot-2", first.get("chartSnapshotId"));
+		assertEquals(first.get("chartSnapshotId"), second.get("chartSnapshotId"));
+	}
+
+	@Test
+	public void contextPagesExposeStableSimilarityRankWithoutAnotherSearch() {
+		org.openmrs.module.querystore.model.ContextSlice slice =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("allergy", "a-1", LocalDate.of(2024, 4, 1), "Allergy: Penicillin"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("obs", "s-1", LocalDate.of(2025, 1, 1), "First semantic hit"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(2)),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("obs", "s-2", LocalDate.of(2024, 1, 1), "Second semantic hit"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(1))),
+		                3, false);
+
+		Map<String, Object> firstPage = PatientRecordView.contextPage(slice, 0, 2);
+		Map<String, Object> secondPage = PatientRecordView.contextPage(slice, 2, 2);
+		List<?> firstResults = (List<?>) firstPage.get("results");
+		List<?> secondResults = (List<?>) secondPage.get("results");
+
+		assertNull("non-similarity rows have no relevance rank",
+		        ((Map<?, ?>) firstResults.get(0)).get("rank"));
+		assertEquals("rank is the original search position, not chart order",
+		        Integer.valueOf(2), ((Map<?, ?>) firstResults.get(1)).get("rank"));
+		assertEquals(Integer.valueOf(1), ((Map<?, ?>) secondResults.get(0)).get("rank"));
+	}
+
+	@Test
+	public void contextSliceIdentityChangesWhenSimilarityRanksChange() {
+		QueryDocument first = doc("obs", "s-1", LocalDate.of(2025, 1, 1), "First semantic hit");
+		QueryDocument second = doc("obs", "s-2", LocalDate.of(2024, 1, 1), "Second semantic hit");
+		org.openmrs.module.querystore.model.ContextSlice original =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(first,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(1)),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(second,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(2))), 2, false);
+		org.openmrs.module.querystore.model.ContextSlice reranked =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(first,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(2)),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(second,
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_SIMILARITY,
+		                        Integer.valueOf(1))), 2, false);
+
+		assertNotEquals(PatientRecordView.contextPage(original, 0, 1).get("sliceId"),
+		        PatientRecordView.contextPage(reranked, 0, 1).get("sliceId"));
+	}
+
+	@Test
+	public void contextMode_requiresAPatient() {
+		authenticate();
+		wire();
+
+		ResponseEntity<Object> response = controller.getPatientRecords(null, "meds?", null, null,
+		        "context", "drug_order", Boolean.FALSE, null);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+	}
+
+	@Test
+	public void unknownModeIsRejectedInsteadOfFallingThroughToRankedRead() {
+		authenticate();
+		wire();
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "meds?", null, null,
+		        "Context", null, Boolean.FALSE, null);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertEquals("Unknown mode 'Context'; the only supported mode is \"context\"",
+		        body(response).get("error"));
+		verify(patients, never()).getPatientByUuid(anyString());
+		verify(queryStore, never()).searchByPatient(anyString(), anyString(), anyInt());
+	}
+
+	@Test
+	public void contextMode_surfacesChartTruncation() {
+		// Explicit-overflow invariant: a slice built on a backend-capped chart says so.
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT),
+		        org.mockito.ArgumentMatchers.eq("meds?"),
+		        org.mockito.ArgumentMatchers.any(org.openmrs.module.querystore.model.ContextSliceRequest.class)))
+		                .thenReturn(new org.openmrs.module.querystore.model.ContextSlice(
+		                        new ArrayList<org.openmrs.module.querystore.model.ContextSliceRecord>(), 10000, true));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "meds?", null, null,
+		        "context", null, Boolean.FALSE, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(Boolean.TRUE, body(response).get("chartTruncated"));
+	}
+
+	private static QueryDocument doc(String type, String uuid, LocalDate date, String text) {
+		QueryDocument d = new QueryDocument();
+		d.setResourceType(type);
+		d.setResourceUuid(uuid);
+		d.setDate(date);
+		d.setText(text);
+		d.setEmbedding(new float[] { 0.1f, 0.2f, 0.3f }); // present so the exclusion assertion is meaningful
+		d.putMetadata("obs_group_uuid", "grp-" + uuid);
+		return d;
+	}
+
+	private static Map<?, ?> body(ResponseEntity<Object> response) {
+		return (Map<?, ?>) response.getBody();
+	}
+
+	/** Authenticates the thread with an all-privileges user so the up-front requirePrivilege gate passes. */
+	private static void authenticate() {
+		Context.setUserContext(new UserContext(null) {
+
+			@Override
+			public User getAuthenticatedUser() {
+				return new User();
+			}
+
+			@Override
+			public boolean isAuthenticated() {
+				return true;
+			}
+
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return true;
+			}
+		});
+	}
+}

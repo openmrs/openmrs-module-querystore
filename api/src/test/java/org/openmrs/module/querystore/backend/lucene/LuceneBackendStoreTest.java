@@ -33,12 +33,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.lucene.search.TermQuery;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.openmrs.module.querystore.backend.BackendCapabilities;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.Filter;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -232,6 +234,33 @@ public class LuceneBackendStoreTest {
 	public void findAllByPatient_returnsEmptyForNullOrBlankUuid() {
 		assertTrue(backend.findAllByPatient(null).isEmpty());
 		assertTrue(backend.findAllByPatient("").isEmpty());
+	}
+
+	@Test
+	public void findPatientChart_marksAHandledPerIndexFailureIncomplete() throws Exception {
+		QueryDocument obs = doc("obs", "patient-A", "Retained observation", null);
+		QueryDocument condition = doc("condition", "patient-A", "Unavailable condition", null);
+		backend.upsert(obs);
+		backend.upsert(condition);
+		backend.close();
+
+		backend = new LuceneBackendStore(indexRoot) {
+
+			@Override
+			protected void collectAllByPatient(String resourceType, TermQuery patientQuery,
+			        List<QueryDocument> sink) throws IOException {
+				if ("condition".equals(resourceType)) {
+					throw new IOException("simulated index read failure");
+				}
+				super.collectAllByPatient(resourceType, patientQuery, sink);
+			}
+		};
+
+		PatientChartRead read = backend.findPatientChart("patient-A");
+
+		assertTrue("a handled per-index failure must be disclosed", read.isTruncated());
+		assertEquals(1, read.getDocuments().size());
+		assertEquals(obs.getResourceUuid(), read.getDocuments().get(0).getResourceUuid());
 	}
 
 	@Test
