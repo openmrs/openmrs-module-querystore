@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.2.0
+version: 0.2.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -88,6 +88,7 @@ neither `--post` nor `--stage`, and tell the reviewer explicitly that its output
 not to the PR.
 
 Record the await before spawning the reviewer, and clear it when its JSON arrives — see **State**.
+Snapshot the worktree hash first, and tell the reviewer to restore any mutation **before** it reports.
 
 **Tell it not to spawn subagents of its own.** `pr-review` Step 3 asks for an adversarial refutation
 pass, which reads as an instruction to delegate; nested delegation is what killed the first reviewer
@@ -161,7 +162,9 @@ separating the fixer's scope from the exit condition. Go to step 7.
 
 ### 4 — FIX
 
-Record the await before spawning, clear it on the result — see **State**.
+Record the await before spawning, clear it on the result — see **State**. Snapshot the worktree hash
+first, and tell the fixer to restore any measurement mutation **before** it reports; a fixer's intended
+edits stay, its measurement scaffolding does not.
 
 Spawn a fresh fixer. It implements **every finding it agrees with, blocking and non-blocking alike**,
 and declines the rest on the record. Its brief carries harden's Phase 1 discipline:
@@ -263,6 +266,10 @@ Its procedure, and each step is where a specific mistake gets made:
 
 Where the repo ships a per-module playbook for driving its UI, follow it — but the procedure above is
 the contract, and a missing playbook is not a reason to skip the step.
+
+**Restore before reporting, like every other agent here** — a verifier mutates less often than a
+reviewer but it writes to the standalone, and the same snapshot-and-compare applies to the repo it
+built from.
 
 **It owns the environment and repairs it.** Kill the orphaned `llama-server` holding the port, delete
 the stale omod and redeploy from the root install, set `log.level`, allow for cold load on the first
@@ -429,7 +436,30 @@ result arrives.** A non-empty, fresh `awaiting` lets the gate allow the yield �
 because the harness re-invokes the orchestrator when the agent completes, so yielding mid-await is
 how the run proceeds rather than how it ends.
 
-**Clear it on ANY terminal outcome — completed, failed, stalled, killed — not on a result arriving.**
+**Snapshot the worktree before every delegation and compare it after — on ANY terminal outcome.**
+`git diff | shasum` before you spawn; the same after the agent returns, fails, stalls or is killed. On a
+mismatch, restore from the snapshot and treat it as the agent's residue, never as a finding.
+
+This is not defensive habit, it is the one guard the rest of this skill actively needs. Every reviewer,
+fixer and verifier brief here tells the agent to **mutate the production code, run it, restore it**,
+because that is the strongest evidence available and it has produced most of the real findings in both
+runs of this loop. So the risk is created by the instruction. Measured on the second run: a confirming
+agent died mid-response having changed `DrugReference.strictlyContains` from
+`start <= other.start && end >= other.end` to `start <= other.start`, and the mutation was still in the
+worktree when the notification arrived. It compiled. It read plausibly. Most tests passed. The agent
+never got to report, so nothing said it had happened, and it would have gone into the round's commit —
+where it silences overdose warnings. It was caught on a hunch about how that agent died, not by any
+rule.
+
+Death is not the only path: an agent that simply forgets to restore looks identical from here. And a
+hash comparison costs nothing, which is the whole argument for doing it every time rather than when
+something feels wrong.
+
+**Tell every agent to restore BEFORE it reports, not after** — a mutation restored late is a mutation
+that ships if the agent dies mid-sentence. On the second run, the eleven agents briefed that way all
+restored cleanly, verified by hash rather than trusted.
+
+**Clear the await on ANY terminal outcome — completed, failed, stalled, killed — not on a result arriving.**
 "The moment the result arrives" says nothing about a result that never will, and agents die: on this
 loop's first run six did, to a network drop, two stall watchdogs and a nested-spawn timeout. Four dead
 agents left four fresh awaits, and the gate honoured them — measured, it would have licensed a yield
