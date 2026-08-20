@@ -74,7 +74,8 @@ override is taken.
 5  GREEN     mvn -o clean install, from the ROOT
 6  VERIFY?   runtime-visible change → fresh verifier on the standalone
    COMMIT    one commit, push · round++ → step 1
-7  FINISH    apply the final round's non-blocking findings, green, commit, push
+7  FINISH    apply the final round's non-blocking findings, green, commit, push,
+             VERIFY the merging head if nothing has, then mark ready
 ```
 
 ### 1 — REVIEW
@@ -249,8 +250,17 @@ The reviewer found nothing blocking. Apply that round's non-blocking findings un
 rules, prove green, commit and push. The run ends here: those edits carry no blocking finding by
 construction, so no further round is owed.
 
-Mark the PR ready for review if this run opened it as a draft (`gh pr ready <n>`), and say in the
-report that it is now ready.
+**A runtime-visible change is not ready until a verifier has run against the head that will merge.**
+Step 6 sits on the fix path, so without this a PR whose round 1 found nothing blocking would reach
+`gh pr ready` with the standalone never started — and this step's own non-blocking edits are pushed
+*after* the last verifier run in every case, so they are unverified even when a round did verify. So
+before marking ready: if the change is runtime-visible and no verifier run covers the current head,
+run one now. It is the same verifier under the same rules — it repairs the environment, never the
+artifact — and `unrepairable` aborts the run here exactly as it does inside a round. **A PR that
+could not be verified is not marked ready**; report it as converged-but-unverified and stop.
+
+Then mark the PR ready for review if this run opened it as a draft (`gh pr ready <n>`), and say in the
+report that it is now ready, naming the sha the verifier covered.
 
 If applying them turns up something blocking — it happens; a nit's fix exposes a real defect — that
 is a new blocking finding: record it, and the loop continues from step 4.
@@ -390,6 +400,8 @@ at the two ends instead:
   a broken standalone until the cap and call it review.
 - **Don't repair the artifact to get a green verifier run.** Reverting the round, redeploying the last
   working omod, or flipping a GP to route around the failure is a green report on a broken build.
+- **Don't mark a PR ready on an unverified head.** The exit path skips step 6 and the FINISH commit
+  lands after it, so "no blocking findings" is not "somebody ran it".
 - **Don't skip the verifier on a streaming or timing change** because the tests are green. Those are
   the changes tests structurally cannot answer.
 - **Don't amend or force-push a round.** The chain of rounds is the artifact; a rewritten sha is a

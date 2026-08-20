@@ -236,7 +236,10 @@ review the PR yourself while it runs, and do not pre-empt round 1 by fixing what
 find — you hold the writing context, which is exactly the disqualification the loop is built around.
 Anything you can already see belongs in Step 7, before the PR existed.
 
-When it converges, the PR is marked ready (`gh pr ready`) and the run is done.
+When it converges, `pr-harden` verifies the merging head if no round already did — a runtime-visible
+change is not ready until something has run it, and the loop's per-round verifier sits on the fix
+path, which the exit path skips. Then the PR is marked ready (`gh pr ready`) and the run is done. A
+head that cannot be verified ends the run as converged-but-unverified, not as ready.
 
 ## Reporting — once, at the end
 
