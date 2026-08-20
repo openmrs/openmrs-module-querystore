@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.3.0
+version: 0.3.1
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -157,6 +157,11 @@ largely a catalogue of changes that looked obviously right and measured wrong �
 re-ranking by longest alias, identity keyed on `rxcui`, tightening `hasAllergyToken`. Catching one at
 plan time costs one agent and no code. Catching it in round 3 costs three rounds of implementation
 plus the rounds spent polishing the wrong fix.
+
+Snapshot the worktree hash before spawning and compare it after — the refutation gate is read-only by
+instruction, but "read-only by instruction" is not a guarantee, and `pr-harden`'s **State** section
+carries the measurement of what an agent that dies mid-mutation leaves behind. Tell it to restore
+anything it changed **before** it reports.
 
 Record the await — append to the entry's `awaiting` list — before spawning it, and clear that list
 on ANY terminal outcome: a result, or the harness reporting the agent failed, stalled or was killed.
