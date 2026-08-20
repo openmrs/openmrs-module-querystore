@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.1.2
+version: 0.1.3
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -87,6 +87,8 @@ is worth it. Nothing is posted to GitHub. `pr-review`'s default is already conse
 neither `--post` nor `--stage`, and tell the reviewer explicitly that its output goes to a machine,
 not to the PR.
 
+Record the await before spawning the reviewer, and clear it when its JSON arrives — see **State**.
+
 Fetch and review the **pushed** head, not the local worktree:
 `git fetch origin 'pull/<n>/head:pr-<n>-r<round>'`. Record the sha.
 
@@ -143,6 +145,8 @@ belongs to the agent whose work is not being judged.
 separating the fixer's scope from the exit condition. Go to step 7.
 
 ### 4 — FIX
+
+Record the await before spawning, clear it on the result — see **State**.
 
 Spawn a fresh fixer. It implements **every finding it agrees with, blocking and non-blocking alike**,
 and declines the rest on the record. Its brief carries harden's Phase 1 discipline:
@@ -356,6 +360,7 @@ into the round's own commit.
 { "/abs/path/to/repo": {
     "pr": 93, "round": 2, "blocking": 1, "phase": "reviewed",
     "ts": 1755400000, "override": false,
+    "awaiting": [ { "agent": "fix r2", "since": 1755400000 } ],
     "reviewed_shas": ["<r1 sha>", "<r2 sha>"],
     "declined": [ { "round": 1, "id": "r1-2", "finding": "…", "reason": "…" } ] } }
 ```
@@ -366,6 +371,19 @@ into the round's own commit.
 record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts` and `override`; `declined` and
 `reviewed_shas` are the orchestrator's own ledger, carried in the same entry so one write keeps both
 in step.
+
+**`awaiting` is not optional bookkeeping — without it an unattended run cannot proceed at all.**
+Every phase here delegates to a background subagent, and while one is outstanding the orchestrator
+has nothing to do but yield. The gate blocks yields, so a run waiting correctly looks exactly like a
+run that quit. So: **record the await immediately before spawning, and clear it the moment the
+result arrives.** A non-empty, fresh `awaiting` lets the gate allow the yield — not a loophole,
+because the harness re-invokes the orchestrator when the agent completes, so yielding mid-await is
+how the run proceeds rather than how it ends.
+
+Clearing it is what keeps the gate honest: an entry left behind would let the run stop for real. The
+gate bounds the allow at one hour per await as a backstop (an agent that has not returned by then is
+treated as dead, not running), and an await carrying no `since` reads as dead immediately — but the
+backstop is not a substitute for clearing it.
 
 Write it at every transition:
 
@@ -383,6 +401,21 @@ s[os.getcwd()] = e
 p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(s, indent=2))
 print(f"round {ROUND}: phase={PHASE} blocking={BLOCKING}")
 PY
+```
+
+Recording and clearing an await is its own one-liner, kept apart from the transition write above so
+that a spawn never has to restate the phase:
+
+```bash
+# usage:  awaiting.py await "review r3"   |   awaiting.py clear
+import json, os, sys, time, pathlib
+p = pathlib.Path.home()/".claude/pr-harden-state.json"
+s = json.loads(p.read_text()); e = s[os.getcwd()]
+if sys.argv[1] == "await":
+    e.setdefault("awaiting", []).append({"agent": sys.argv[2], "since": int(time.time())})
+else:
+    e["awaiting"] = []
+e["ts"] = int(time.time()); p.write_text(json.dumps(s, indent=2))
 ```
 
 When the run finishes — converged or overridden — the entry must say so (`blocking: 0`, or
@@ -438,6 +471,9 @@ at the two ends instead:
   lands after it, so "no blocking findings" is not "somebody ran it".
 - **Don't skip the verifier on a streaming or timing change** because the tests are green. Those are
   the changes tests structurally cannot answer.
+- **Don't spawn a subagent without recording the await,** and don't leave one recorded after its
+  result arrives. The first blocks the run's own next yield; the second holds the gate open for a
+  run that has actually stopped.
 - **Don't amend or force-push a round.** The chain of rounds is the artifact; a rewritten sha is a
   round reviewing code that no longer exists.
 - **Don't implement a finding `CLAUDE.md` has measured and rejected.** A clean reviewer will propose

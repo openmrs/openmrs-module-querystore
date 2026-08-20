@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.2.1
+version: 0.2.2
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -143,6 +143,10 @@ largely a catalogue of changes that looked obviously right and measured wrong �
 re-ranking by longest alias, identity keyed on `rxcui`, tightening `hasAllergyToken`. Catching one at
 plan time costs one agent and no code. Catching it in round 3 costs three rounds of implementation
 plus the rounds spent polishing the wrong fix.
+
+Record the await — append to the entry's `awaiting` list — before spawning it, and clear that list
+when its JSON arrives (see **State** in `pr-harden`, which owns the field and ships the snippet). The gate blocks a yield while the run is mid-flight and this agent runs in
+the background, so without the await recorded the run cannot even wait for its own gate.
 
 Spawn it as a new subagent — **never `subagent_type: "fork"`**, which would inherit the reasoning that
 produced the plan and defeat the point. Give it the ticket as read (with its comments), the plan
@@ -306,6 +310,9 @@ One report for the whole run, in this order:
 - **Don't let the refutation gate become a loop,** and don't argue the plan's case to the refuter — an
   agent primed with your reasoning agrees, which is the one outcome that gate cannot use.
 - **Don't review your own PR after Step 8,** and don't pre-empt round 1.
+- **Don't spawn a subagent without recording the await.** Every phase of this skill and of the loop
+  delegates, and the gate cannot tell a run waiting on an agent from a run that quit unless the
+  entry says so.
 - **Don't leave the state entry behind on an abort.** Record the override and its reason, or the next
   turn in this repo is blocked until the 6-hour expiry.
 - **Don't reinvent a `CLAUDE.md` entry point** — `buildPrefixedText`, `cosineSimilarity`,

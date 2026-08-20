@@ -11,8 +11,24 @@
 # Contract with the skill: it writes an entry keyed by the repo it is working in:
 #
 #   { "/abs/path/to/repo": { "pr": 93, "round": 3, "blocking": 2, "phase": "reviewed",
-#                            "ts": 1755400000, "override": false } }
+#                            "ts": 1755400000, "override": false,
+#                            "awaiting": [ { "agent": "review r3", "since": 1755400000 } ] } }
 #
+# `awaiting` is what makes an unattended run possible at all. Every phase of this pipeline delegates
+# to a background subagent — the refutation gate, and each round's reviewer, fixer and verifier — and
+# while one is outstanding the orchestrator has NOTHING to do but yield. Without this field a run
+# waiting correctly is indistinguishable from a run that quit, and the gate blocks the former: the
+# design assumed synchronous phases and every real phase is asynchronous. So a non-empty, fresh
+# `awaiting` allows the yield. That is not a concession — the harness re-invokes the orchestrator when
+# the agent completes, so yielding mid-await does not end the run, it is how the run proceeds.
+#
+# The obligation this puts on the skill: CLEAR `awaiting` the moment a result arrives. An entry left
+# behind would let the run stop for real, which is the one thing this hook exists to prevent — so the
+# allow is bounded by AWAIT_TTL as well, and an agent that has not returned within it is treated as
+# dead rather than outstanding.
+#
+# awaiting non-empty, fresh -> a background agent this run delegated to is outstanding; ALLOW the
+#                              yield, whatever the phase says. Bounded by AWAIT_TTL.
 # phase "building"      -> a resolve-ticket run is in flight and has not opened its PR yet; block.
 # phase "init"/"fixing" -> a run is in flight and no clean review has been recorded yet; block.
 # phase "reviewed", blocking > 0  -> another round is required; block.
@@ -34,6 +50,10 @@ set -uo pipefail
 
 STATE="$HOME/.claude/pr-harden-state.json"
 STALE_AFTER=21600   # 6h; a pr-harden run older than this is abandoned, not in flight
+AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long is dead, not running.
+                    # Generous on purpose: a fixer runs a full root `mvn -o clean install` and a
+                    # verifier restarts a standalone and drives a real query. Still far under
+                    # STALE_AFTER, so a forgotten `awaiting` cannot outlive the run that wrote it.
 
 allow() { exit 0; }
 
@@ -52,6 +72,18 @@ TS=$(jq -r '.ts // 0' <<<"$ENTRY" 2>/dev/null) || allow
 case "$TS" in ''|*[!0-9]*) allow ;; esac
 NOW=$(date +%s)
 [ "$((NOW - TS))" -lt "$STALE_AFTER" ] || allow
+
+# A background agent this run is waiting on. Checked before the phase switch on purpose: a yield is
+# equally correct whether the awaited agent is the refutation gate (phase "building"), a reviewer
+# (phase "init"/"fixing") or a fixer spawned after a review that found something (phase "reviewed",
+# blocking > 0). Fail open on anything unparseable, like every other check here.
+AWAITING=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | length' <<<"$ENTRY" 2>/dev/null) || allow
+case "$AWAITING" in ''|*[!0-9]*) AWAITING=0 ;; esac
+if [ "$AWAITING" -gt 0 ]; then
+  NEWEST=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | max' <<<"$ENTRY" 2>/dev/null) || allow
+  case "$NEWEST" in ''|*[!0-9]*) NEWEST=0 ;; esac
+  [ "$((NOW - NEWEST))" -lt "$AWAIT_TTL" ] && allow
+fi
 
 PHASE=$(jq -r '.phase // empty' <<<"$ENTRY" 2>/dev/null) || allow
 PR=$(jq -r '.pr // "?"' <<<"$ENTRY" 2>/dev/null)
