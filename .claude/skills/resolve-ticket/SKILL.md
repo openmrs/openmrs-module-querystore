@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.2.2
+version: 0.2.3
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -62,6 +62,13 @@ Read this before Step 1, because most of the ways this run fails are ways it sto
 
 Everything else is a decision, not a question. In particular: cost, elapsed time and turn length are
 not abort conditions and appear nowhere on that list.
+
+**A partial mode is a TERMINUS, not an abort.** `--plan-only` is defined to stop at the end of Step 3,
+and no gate condition can ever be satisfied by a run that opens no PR and runs no round — so such a
+run **clears its own state entry** at its terminus, and must not reach for the override to escape a
+gate that was never going to release. The distinction matters because the override is the record of a
+deviation: one taken on every partial run means nothing, and the time it records a real deviation
+nobody will notice.
 
 **The Stop gate covers the whole run, not just the loop.** Write the state entry at Step 1, before any
 work — see **State** in `pr-harden`, which owns the format. From that moment `pr-harden-gate.sh`
@@ -189,6 +196,18 @@ the plan, so that is a revision, not a debate. Only when the second blocking obj
 the ticket means** rather than whether the plan is sound do you abort (condition 3) — no citation can
 settle what the ticket did not say. Non-blocking objections are recorded in the plan and carried into
 the report; they do not hold the run.
+
+**`--plan-only` ends here**, and ending means clearing the entry this run wrote — the whole entry for
+this repo, not merely its `awaiting` list — so the next turn in this directory is ungated:
+
+```bash
+python3 -c "import json,os,pathlib; p=pathlib.Path.home()/'.claude/pr-harden-state.json'; \
+s=json.loads(p.read_text()); s.pop(os.getcwd(), None); p.write_text(json.dumps(s, indent=2))"
+```
+
+Then report: the plan, every assumption taken, and what the gate checked and objected to. A
+`--plan-only` report is not a partial version of the full one — it is complete for what it covers,
+and it says plainly that no code was written.
 
 ## Step 4 — Branch
 

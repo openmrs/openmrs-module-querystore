@@ -91,6 +91,21 @@ ROUND=$(jq -r '.round // "?"' <<<"$ENTRY" 2>/dev/null)
 
 case "$PHASE" in
   building)
+    # A partial mode's remaining phases are not the full pipeline's, so naming the full list would
+    # instruct the run to do work its own mode excludes. `mode` is whatever the skill recorded.
+    MODE=$(jq -r '.mode // empty' <<<"$ENTRY" 2>/dev/null) || allow
+    if [ "$MODE" = "--plan-only" ]; then
+      jq -n '{
+        decision: "block",
+        reason: ("resolve-ticket is mid-run in --plan-only, which ends at the close of Step 3. Finish "
+          + "the plan and the refutation gate, then take the terminus the skill defines for a partial "
+          + "mode: CLEAR this repo'"'"'s entry from ~/.claude/pr-harden-state.json and report. Do not "
+          + "reach for override:true — the override records a deviation, and a partial mode reaching "
+          + "its own defined terminus is not one. Do NOT hand back before the gate has returned."),
+        systemMessage: "resolve-ticket (--plan-only): plan or refutation gate still owed"
+      }'
+      exit 0
+    fi
     jq -n --arg r "$ROUND" '{
       decision: "block",
       reason: ("resolve-ticket is mid-run and has not opened its pull request yet, so no review round "
