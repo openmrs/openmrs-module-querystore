@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.2.0
+version: 0.2.1
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -18,6 +18,22 @@ skill: the loop is `pr-harden`, and Step 9 *invokes* it rather than handing it b
 The one asymmetry the whole design rests on: **implementation happens in this session, where the user
 can steer it if they choose to watch — and every review happens in a fresh agent that has never seen
 it.** So never spawn a subagent to write the implementation, and never review your own work here.
+
+## What this depends on
+
+Two skills, one transitively, and a hook. Nothing else — the verifier carries its own deploy
+procedure and delegates to no skill.
+
+| dependency | where | required |
+|---|---|---|
+| `pr-harden` | Step 9 invokes it — the entire review loop | yes |
+| `harden` | Step 7 runs it once, with context | yes |
+| `pr-review` | inside `pr-harden`'s reviewer, every round | yes, transitively |
+| `pr-harden-gate.sh` | Stop hook, one-time install per machine | yes — without it the termination rules are prose |
+| `Explore` agent type | Step 2, delegating broad searches | no; convenience |
+
+A missing dependency is an abort, not a degradation: without `pr-harden` there is no loop and the run
+would end at a draft PR nobody reviewed, which is the outcome the whole pipeline exists to prevent.
 
 ## The autonomy contract
 
@@ -203,6 +219,13 @@ changes nothing) and let its own Stop gate do its job.
 Do not skip it on the grounds that the loop will review anyway. The two are not substitutes: polish
 with context first, adversarial review without it second. Skipping this hands the first clean reviewer
 a pile of nits and spends a whole round on them.
+
+**Then confirm `harden` left its own state entry finished**, because two Stop gates are now live in
+this run and both must allow the turn to end. `~/.claude/harden-state.json` must say `edits: 0` for
+this repo, or `override: true` if it took the labelled override. A `harden` run that was interrupted
+leaves `edits > 0` there, and that entry then blocks the end of *this* run even after the review loop
+has converged — a wedge with nothing wrong with the PR, cleared only by the 6-hour expiry. Check it
+here, where it is one line, rather than discovering it after the loop.
 
 ## Step 8 — Draft PR
 
