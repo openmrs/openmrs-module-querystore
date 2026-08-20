@@ -201,10 +201,44 @@ observable at runtime does — and where tests structurally cannot answer the qu
 SSE timing, wire serialisation, prompt or latency behaviour) the verifier is not optional: skip it
 there and the loop converges on code nobody ran.
 
-The verifier is a fresh subagent invoking the repo's `verify` skill (or `verify-frontend-change` for
-UI). It is **not** the reviewer, and for a specific reason: a reviewer that deploys is grading its own
-deploy, so when it hits the stale-omod trap or an orphaned server, that surfaces as a *finding about
-the code* — and a wrong blocking finding is what the loop cannot escape.
+The verifier is a fresh subagent that **does the work itself** — it does not delegate to another
+skill, and nothing about it depends on one being installed. It is **not** the reviewer, for a specific
+reason: a reviewer that deploys is grading its own deploy, so when it hits the stale-omod trap or an
+orphaned server, that surfaces as a *finding about the code* — and a wrong blocking finding is what
+the loop cannot escape.
+
+Its procedure, and each step is where a specific mistake gets made:
+
+1. **Resolve the target.** Module `id` and `version` from `omod/src/main/resources/config.xml`.
+   Standalone home from `$OPENMRS_STANDALONE_HOME`, else the directory holding
+   `openmrs-standalone.jar` — never a hardcoded path, since more than one standalone usually exists.
+   Port from `<standalone>/openmrs-runtime.properties` (`tomcatport`), which is **not always 8080**.
+   State all three before doing anything.
+2. **Build.** The round's root `mvn -o clean install` already produced
+   `omod/target/<id>-<version>.omod`; note its timestamp. Build under the JDK the pom targets — a
+   module on Java 1.8 fails its test gate under a newer default JDK, and the signature is a wall of
+   `MockitoException: cannot mock this class … Java: 21` across unrelated tests. That is an
+   environment problem: find a matching JDK (`/usr/libexec/java_home -v 1.8`) and rebuild. Never
+   "fix" it by skipping tests — that is repairing the artifact, which is forbidden below.
+3. **Deploy.** Copy the `.omod` into `<standalone>/appdata/modules/`, overwriting the same name, and
+   **remove any other `.omod` of the same module** — the loader reads every `*.omod` and two versions
+   of one module is a startup failure, not a warning. `*.omod.bak-*` files are not loaded and are
+   harmless clutter, so deleting one never fixes a startup failure; find the rogue `.omod` instead.
+4. **Restart.** Modules load at startup, so a running instance picks up nothing until restarted.
+   Find the listener with `lsof -iTCP:<port> -sTCP:LISTEN -n -P` and confirm it is not a server the
+   user is actively on before stopping it; then launch from the standalone directory, backgrounded,
+   teeing to a log you can tail: `java -jar openmrs-standalone.jar -commandline`.
+5. **Confirm you are testing this build.** The deployed file's timestamp must match the build from
+   step 2. Verifying against a stale `.omod` is the single most common way this step reports on the
+   wrong bytes.
+6. **Drive the actual behaviour** — the REST call, the query, the page — and capture what came back,
+   not that it "looked right". Where the change touches saved data, read the value back out (REST or
+   SQL against the bundled DB, creds in `openmrs-runtime.properties`) rather than trusting the
+   on-screen state. Prefer the module's own preview/dev endpoints and existing demo data over
+   standing up fixtures.
+
+Where the repo ships a per-module playbook for driving its UI, follow it — but the procedure above is
+the contract, and a missing playbook is not a reason to skip the step.
 
 **It owns the environment and repairs it.** Kill the orphaned `llama-server` holding the port, delete
 the stale omod and redeploy from the root install, set `log.level`, allow for cold load on the first
