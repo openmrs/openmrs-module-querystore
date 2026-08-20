@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.1.4
+version: 0.2.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -89,8 +89,23 @@ not to the PR.
 
 Record the await before spawning the reviewer, and clear it when its JSON arrives — see **State**.
 
+**Tell it not to spawn subagents of its own.** `pr-review` Step 3 asks for an adversarial refutation
+pass, which reads as an instruction to delegate; nested delegation is what killed the first reviewer
+on this loop's first run, mid-refutation. The independence is already supplied one level up — the
+reviewer IS the independent agent — so a second layer buys a failure mode and nothing else. Have it
+argue both sides in its own reasoning, or mark the finding non-blocking.
+
 Fetch and review the **pushed** head, not the local worktree:
 `git fetch origin 'pull/<n>/head:pr-<n>-r<round>'`. Record the sha.
+
+**Tell the reviewer what to diff against, and never let it be a local branch name.** Fetch the base
+too and name it explicitly: `git fetch origin main` then `git diff origin/main...pr-<n>-r<round>` — or
+better, the PR's own base from `gh pr view <n> --json baseRefName`. A local `main` is stale on any
+machine that has not pulled, and the merge base then reaches back to whenever it last did. Measured
+on this loop's first real run: `main...` produced **13,602 lines against an 864-line change**, most of
+it other people's commits. That is the worst failure this design has produced, because it is silent —
+the reviewer returns well-formed JSON with a legitimate-looking blocking count, about code the PR
+never touched, and a fixer then acts on it.
 
 What the reviewer is given, and nothing more:
 
@@ -228,10 +243,15 @@ Its procedure, and each step is where a specific mistake gets made:
    **remove any other `.omod` of the same module** — the loader reads every `*.omod` and two versions
    of one module is a startup failure, not a warning. `*.omod.bak-*` files are not loaded and are
    harmless clutter, so deleting one never fixes a startup failure; find the rogue `.omod` instead.
-4. **Restart.** Modules load at startup, so a running instance picks up nothing until restarted.
-   Find the listener with `lsof -iTCP:<port> -sTCP:LISTEN -n -P` and confirm it is not a server the
-   user is actively on before stopping it; then launch from the standalone directory, backgrounded,
-   teeing to a log you can tail: `java -jar openmrs-standalone.jar -commandline`.
+4. **Restart — and never a server that was already running when the run began.** Modules load at
+   startup, so a running instance picks up nothing until restarted. **"Confirm with the user that it
+   is not their active session" is not available to an unattended verifier**, so the rule cannot be
+   that: enumerate the standalones on disk, pick one with nothing listening on its port, and if every
+   candidate is in use, report `unrepairable` rather than taking one. On this loop's first run the
+   only listener was the user's own server with a module deployed into it that morning; left to the
+   procedure as previously written, the verifier would have attributed the process and killed it.
+   Then launch from the standalone directory, backgrounded, teeing to a log you can tail:
+   `java -jar openmrs-standalone.jar -commandline`.
 5. **Confirm you are testing this build.** The deployed file's timestamp must match the build from
    step 2. Verifying against a stale `.omod` is the single most common way this step reports on the
    wrong bytes.
@@ -256,9 +276,26 @@ reviewer as one. This line exists because the failure it prevents is silent and 
 that throws on startup looks exactly like a broken environment from outside, and a verifier allowed
 to put the last working omod back reports green on a build that does not boot.
 
+**Prefer a repair you can undo, and report rather than perform an irreversible one.** The
+environment/artifact line says what a repair may touch; it says nothing about whether it can be taken
+back. On this loop's first run a verifier raised a standalone's platform from 2.8.7 to 2.9.0-SNAPSHOT
+to satisfy the module's require-version — which ran core liquibase against that install's database.
+The webapp was backed up; a schema migration is not undone by moving a directory back. So: a
+filesystem swap with a kept backup, a process restart, a log level, a copied dependency are all fair.
+A schema migration, a destructive DB statement, or anything else you cannot put back is reported as
+the reason the environment is unusable, not performed to get a green run.
+
 Bounds: **two attempts per distinct named cause**, then the run aborts and hands back. Kill only
 processes it can attribute (`java -jar openmrs-standalone`, `llama-server`) — never a blind kill on
 whatever holds a port; the user's own work may be there.
+
+**Repairs PERSIST, so say which of your observations rest on someone else's.** A repair made in
+round 1 is still there in round 3, and a verifier that measures a property the repaired environment
+has — rather than the one a stock install has — reports it in good faith and is wrong. On this loop's
+first run, round 1 added a `log4j2.xml` logger entry to see an INFO line at all; two commits of that
+same PR exist because the line is invisible at stock levels, so a later round reporting "present in
+the log" would have reintroduced the very claim those commits removed. Hence `inherited_environment`:
+name the observations that depend on an earlier round's repairs, separately from your own.
 
 It returns JSON, and every repair is in it even when it worked, because a repair can itself be
 evidence — an orphaned server on the port is what confounds a latency comparison:
@@ -268,6 +305,7 @@ evidence — an orphaned server on the port is what confounds a latency comparis
   "repairs": [ { "cause": "port 8081 held by orphaned standalone (pid 4127)",
                  "action": "killed, restarted", "attempts": 1 } ],
   "classification": "repaired | not-the-environment | unrepairable",
+  "inherited_environment": "which observations depend on repairs an EARLIER round made, not this one",
   "observed": "…", "verdict": "works at runtime | does not | could not determine" }
 ```
 
@@ -277,6 +315,17 @@ orchestrator: **an environmental failure is not a review finding**, and if the l
 treat one as blocking it will grind rounds against a broken standalone until the cap.
 
 ### COMMIT
+
+**Re-check the branch immediately before committing.** Step 0's check happens once; agents share
+this worktree and one of them running `git checkout` silently redirects everything after it. That
+happened on this loop's first run: a reviewer checked out the review branch, the fixer edited files
+there, and the round's commit landed on it. Every local signal was green — build passed, tests passed,
+the commit existed — and it surfaced only because the push had no upstream. With
+`push.autoSetupRemote` enabled it would have pushed a stray branch, the PR would never have received
+the fix, and the next round would have reviewed the un-fixed head and re-raised the same blocking
+finding until the cap. So: `git branch --show-current` must equal the PR's head ref before `git
+commit`, and if it does not, fast-forward the head ref onto the work (append only — never reset,
+never force) rather than committing where you stand.
 
 One commit per round, in the repo's existing voice (see `git log`), pushed to the PR head branch.
 **Append only — never amend, never force-push.** A reviewer must be able to see the chain of rounds,
@@ -380,10 +429,22 @@ result arrives.** A non-empty, fresh `awaiting` lets the gate allow the yield �
 because the harness re-invokes the orchestrator when the agent completes, so yielding mid-await is
 how the run proceeds rather than how it ends.
 
-Clearing it is what keeps the gate honest: an entry left behind would let the run stop for real. The
-gate bounds the allow at one hour per await as a backstop (an agent that has not returned by then is
-treated as dead, not running), and an await carrying no `since` reads as dead immediately — but the
-backstop is not a substitute for clearing it.
+**Clear it on ANY terminal outcome — completed, failed, stalled, killed — not on a result arriving.**
+"The moment the result arrives" says nothing about a result that never will, and agents die: on this
+loop's first run six did, to a network drop, two stall watchdogs and a nested-spawn timeout. Four dead
+agents left four fresh awaits, and the gate honoured them — measured, it would have licensed a yield
+for another 36 minutes with nothing whatsoever running. The harness reports the death, so there is no
+excuse for waiting out a timeout. The one-hour bound and the no-`since`-reads-as-dead rule are
+backstops, not the mechanism.
+
+**And a dead delegated phase needs a contract, because it is neither an abort condition nor a
+finding.** Left undefined, an unattended run ends on the first agent death. The contract: clear the
+await, retry the phase **twice**, and change something between attempts — an agent that stalled on
+volume gets a leaner brief, one that stalled on nesting is told not to delegate. After the second
+retry, stop with the labelled deviation naming the phase and the failure mode, exactly as the round
+cap does. A retry is not free of consequence either: on the first run, retrying a reviewer twice is
+what exposed the stale-diff-base defect above, because the third brief had to state the base
+explicitly.
 
 Write it at every transition:
 

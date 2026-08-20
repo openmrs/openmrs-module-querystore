@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.2.4
+version: 0.3.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -122,10 +122,14 @@ remaining steps, rather than telling you to spawn a reviewer for code that does 
 ## Step 2 — Plan before code
 
 `CLAUDE.md` requires it, and this is where the run is most often lost: the ticket names a symptom and
-the plan is where you decide whether you have found the cause. Read the relevant code first — delegate
-the *searching* to an `Explore` agent where it is broad ("every call site of X", "which of these
-classes touches the wire format") so the conclusions come back instead of the file dumps, but keep the
-judgement here. Then write down:
+the plan is where you decide whether you have found the cause. Read the relevant code first.
+
+Delegate the *searching* only when the question is **broad and of unknown shape** — "where does X
+live, across conventions I cannot guess", "every call site of Y". When it is narrow and the target is
+named — what does this class expose, where is this global property read — grep it yourself. Measured
+on this skill's first run: four targeted greps answered every planning question while a dispatched
+`Explore` agent was still working, so the delegation duplicated the work rather than saving context.
+Either way the judgement stays here. Then write down:
 
 - **What the ticket actually asks for**, in your words, and what it does not. The ticket defines the
   scope; do not widen it because adjacent code looks wrong. Note the adjacent thing and leave it.
@@ -155,8 +159,15 @@ plan time costs one agent and no code. Catching it in round 3 costs three rounds
 plus the rounds spent polishing the wrong fix.
 
 Record the await — append to the entry's `awaiting` list — before spawning it, and clear that list
-when its JSON arrives (see **State** in `pr-harden`, which owns the field and ships the snippet). The gate blocks a yield while the run is mid-flight and this agent runs in
-the background, so without the await recorded the run cannot even wait for its own gate.
+on ANY terminal outcome: a result, or the harness reporting the agent failed, stalled or was killed.
+A death leaves a fresh await that the gate honours for the full hour, which is a licence to stop the
+run with nothing running. Tell the refuter **not to spawn subagents of its own** — nested delegation
+killed an agent on this skill's first run — and if it dies, retry twice with something changed between
+attempts before taking the labelled deviation (`pr-harden`'s **State** section carries the contract).
+
+The field and its snippet live in `pr-harden`'s **State** section. The gate blocks a yield while the
+run is mid-flight and this agent runs in the background, so without the await recorded the run cannot
+even wait for its own gate.
 
 Spawn it as a new subagent — **never `subagent_type: "fork"`**, which would inherit the reasoning that
 produced the plan and defeat the point. Give it the ticket as read (with its comments), the plan
