@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.2.3
+version: 0.2.4
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -52,8 +52,11 @@ Read this before Step 1, because most of the ways this run fails are ways it sto
 
 1. The ticket names a repository other than the one this session is in.
 2. The change cannot be pushed (no rights, or a cross-repository PR with `maintainerCanModify` false).
-3. The refutation gate's second blocking objection is about **the ticket's own meaning** rather than
-   the plan's soundness — no citation can settle what the ticket did not say.
+3. The refutation gate's second blocking objection **leaves the question open** — two defensible
+   readings with no citation deciding between them. Usually that is an objection about the ticket's
+   own meaning, since no citation can settle what the ticket did not say; but a soundness objection
+   can deadlock the same way when the repo genuinely does not decide between two designs. What does
+   NOT abort is a second blocking objection that **settles** the question — see Step 3.
 4. The verifier reports `unrepairable` after its bounded attempts: a broken environment is not
    something more rounds fix.
 5. The round cap is reached without convergence.
@@ -190,12 +193,33 @@ risk is sharper here than in the review loop, because there is no code yet to ch
 against. A plan it cannot fault gets an explicit empty `objections` list, and the `checked` array is
 what stops silence being mistaken for coverage.
 
-**This is a gate, not a loop, and it does not stop the run.** A blocking objection whose citation
-settles it: revise the plan and re-run the gate once. `CLAUDE.md` and a recorded measurement outrank
-the plan, so that is a revision, not a debate. Only when the second blocking objection is about **what
-the ticket means** rather than whether the plan is sound do you abort (condition 3) — no citation can
-settle what the ticket did not say. Non-blocking objections are recorded in the plan and carried into
-the report; they do not hold the run.
+**This is a gate, not a loop.** A blocking objection whose citation settles it: revise the plan and
+re-run the gate **once**. `CLAUDE.md` and a recorded measurement outrank the plan, so that is a
+revision, not a debate. Non-blocking objections are recorded in the plan and carried into the report;
+they do not hold the run.
+
+After that one re-run there are **three** outcomes, and the discriminator is not how many objections
+have been raised but **whether the objection's citation determines the answer**:
+
+1. **No blocking objection.** The plan stands. Proceed.
+2. **A blocking objection that SETTLES the question** — its citation names the answer, including when
+   the answer is "the previous revision was right". Apply it and proceed. This is convergence, not
+   iteration, so there is **no third gate pass**: the objection did not open a question, it closed
+   one, and re-gating a plan the gate has just told you the shape of is the loop this section forbids.
+3. **A blocking objection that leaves the question OPEN** — two defensible readings and no citation
+   deciding between them. That is abort condition 3: hand back with both readings, do not pick one.
+
+The distinction is the same one that governs objections in the first place. "An objection without a
+citation is not an objection"; by the same rule, an objection whose citation *determines* the answer
+is a resolution, and one that merely disputes the plan without deciding it is a deadlock. Count
+citations that decide, not objections raised.
+
+Measured on the first real run of this skill, against issue #285: pass 1 refuted the plan's stated
+reason and left its conclusion intact; the revision reversed the conclusion; pass 2 refuted **that**,
+citing three existing tests, and in doing so named the answer — the original conclusion, on new
+grounds. Two blocking objections, no deadlock, and a third pass would have re-gated a settled
+question. Four false justifications died before any code existed, one of them on its way into a PR
+body.
 
 **`--plan-only` ends here**, and ending means clearing the entry this run wrote — the whole entry for
 this repo, not merely its `awaiting` list — so the next turn in this directory is ungated:
@@ -326,8 +350,11 @@ One report for the whole run, in this order:
 - **Don't spawn a subagent to write the implementation.** Then nobody holds the writing context, the
   judgement calls get made by an agent nobody can steer, and Step 7's harden loses the one advantage
   it has over the review loop. `Explore` for searching is fine; the judgement stays here.
-- **Don't let the refutation gate become a loop,** and don't argue the plan's case to the refuter — an
-  agent primed with your reasoning agrees, which is the one outcome that gate cannot use.
+- **Don't let the refutation gate become a loop.** The loop is a *third gate pass*, not a second
+  revision: two blocking objections are fine when the second one settles the question, and a third
+  pass re-gates something already decided. Step 3's three outcomes are the rule. And don't argue the
+  plan's case to the refuter — an agent primed with your reasoning agrees, which is the one outcome
+  that gate cannot use.
 - **Don't review your own PR after Step 8,** and don't pre-empt round 1.
 - **Don't spawn a subagent without recording the await.** Every phase of this skill and of the loop
   delegates, and the gate cannot tell a run waiting on an agent from a run that quit unless the
