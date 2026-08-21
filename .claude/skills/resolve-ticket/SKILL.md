@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.3.1
+version: 0.4.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -265,6 +265,16 @@ it doesn't fail, tighten it until it does.
 Then make it pass by changing production code. Never by changing the test, the expected values, or the
 test data — that is changing the specification, and on a failing test the pipeline is what is wrong.
 
+**Edits made by script need three guards, because all three failures are silent.** You will edit by
+running short scripts rather than by hand; measured on this skill's third run, each of these cost a
+cycle or a review round. `str.replace` returns the string unchanged when it matches nothing and the
+script prints success anyway — so **assert the target text is present before replacing**, and let the
+assert stop the script rather than falling through to the next edit. A replacement bounded by
+"from here to the next method" can span further than you meant — so after any multi-line edit, **count
+what should still be there** (test methods, symbols) against what you expected; one such slice deleted a
+whole test method and everything still compiled. And **verify by reading the file back**, because the
+script's own report is not evidence: the other two both announced success.
+
 ## Step 6 — Green
 
 `mvn -o clean install` from the **repository root**. Not `-pl api`, not `-pl omod`: the omod unpacks
@@ -307,7 +317,17 @@ Link the ticket so it is machine-readable, because every round's reviewer resolv
   `pr-review` and `pr-harden` both look for a key in the title or branch name.
 
 The body says what the ticket asked, what the change does, and how it was verified. It does not grade
-the design or tour the alternatives. Record the new PR number in the state entry.
+the design or tour the alternatives.
+
+**Treat the body as part of the change, not as a summary of it.** It is the durable public rationale
+attached to the closing of the ticket, no test can fail on a false sentence in it, and a repo-wide grep
+for a claim you later correct will never reach it. Two consequences, both measured on this skill's third
+run. Every figure in it carries the dataset it was measured over — a chip count taken against a
+four-entry fixture is not a claim about the shipped knowledge base, and stating it without its base is
+how the same sentence became a blocking finding twice. And when a later round corrects a claim anywhere
+in the repo, **re-read the body for the same claim**: round 2 of that run found its only blocking
+finding here, the sixth home of something already fixed in five files, still standing because the
+orchestrator had edited the body for an unrelated reason without re-reading the paragraph above. Record the new PR number in the state entry.
 
 ## Step 9 — Run the loop, here, now
 
