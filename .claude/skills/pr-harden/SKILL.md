@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.2.1
+version: 0.3.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -177,7 +177,12 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   after, verifying the runtime effect rather than a proxy for it. Where a path is genuinely blocked,
   split the blocked sub-path from the runnable one and sketch the contract for what stays blocked.
 - **Don't rewrite prose faster than you verify it.** When a finding is about text an earlier round
-  wrote, delete the unsupported clause rather than replacing it with a better-sounding one.
+  wrote, delete the unsupported clause rather than replacing it with a better-sounding one. That is not
+  a counsel of caution — measured on this loop's second run, a correction of a false claim introduced a
+  DIFFERENT false claim, which the next round then had to catch.
+- **Fix every home of a corrected claim, not the one the reviewer named** — see *Correcting a claim
+  means finding every home of it*. And edit by script under the rules in *Editing by script*: assert
+  before replacing, count neighbours after, verify by reading back.
 
 **Declining is governed by harden's deferral rules, in full.** A declined finding needs the
 failure-mode sentence — *"if we ship without this, X breaks because Y"* — and without that sentence it
@@ -202,6 +207,15 @@ It returns JSON:
                   "failure_mode_of_declining": "…" } ],
   "runtime_visible": true, "green": "…", "commit": "<sha>" }
 ```
+
+**A finding may name the PR DESCRIPTION rather than a file, and it can be blocking.** The fixer cannot
+edit the description, so the orchestrator applies that one and says which it applied; it still counts as
+the round's fix and the round proceeds normally. Do not wave it through as cosmetic: the description is
+the durable public rationale attached to the closing of the ticket, no test can fail on a false sentence
+in it, and a repo-wide grep for a corrected claim will never reach it. On this loop's second run, round
+2's ONLY blocking finding was exactly this — the sixth home of a claim that had just been corrected in
+five files, left standing in the body because the fixer had no access and the orchestrator had edited
+that same body for something else without re-reading it.
 
 A declined **blocking** finding does not end the loop quietly — see **Termination**.
 
@@ -316,6 +330,13 @@ evidence — an orphaned server on the port is what confounds a latency comparis
   "observed": "…", "verdict": "works at runtime | does not | could not determine" }
 ```
 
+**A verifier's observations can falsify a claim the PR makes in prose, and that is a finding rather
+than a footnote.** It is running the code, so it sees the units the documentation guessed at. On this
+loop's second run the final verifier's live output corrected the ADR's own benefit bullet: "one chip per
+prescription" is really one per `orderCarrying` pick, because two orders sharing an unnameable code
+collapse onto one partner — visible in a live chip and in no test. Read the `observed` field for what it
+contradicts as well as for what it confirms.
+
 `classification: "not-the-environment"` is a verification result and a candidate finding for the next
 reviewer. `"unrepairable"` aborts the run. Neither is ever recorded as a blocking finding by the
 orchestrator: **an environmental failure is not a review finding**, and if the loop is allowed to
@@ -358,6 +379,43 @@ report that it is now ready, naming the sha the verifier covered.
 
 If applying them turns up something blocking — it happens; a nit's fix exposes a real defect — that
 is a new blocking finding: record it, and the loop continues from step 4.
+
+## Editing by script, which is how edits get silently lost
+
+Every role here edits files by running a short script rather than by hand, because the edits are
+precise and the files are large. Three failure modes follow, all silent, all measured on this loop's
+second run, and all cheap to close:
+
+- **A replacement that matches nothing reports success.** `str.replace` returns the string unchanged
+  and the script prints whatever you told it to. One claim survived five hardening cycles that way —
+  the script said it had fixed it, and it had not, because the target text wrapped differently than the
+  script assumed. So: **assert the target is present before replacing**, and let the assert kill the
+  script rather than continuing to the next edit.
+- **A slice can span further than you meant and take a neighbour with it.** A replacement bounded by
+  "from this javadoc to the next method" deleted a whole test method that sat between them; it compiled
+  and the remaining tests passed. So: after any multi-line replacement, **count what should still be
+  there** — test methods, symbols, bullet points — and compare against what you expected.
+- **A script's own report is not evidence.** Verify by reading the file back, with a grep for the text
+  you believe you wrote. The three defects above all announced success.
+
+None of this is optional politeness. Each of the three cost a round or a cycle on the run that found
+them, and the third is what caught the other two.
+
+## Correcting a claim means finding every home of it
+
+When a finding is that some statement is false, the statement is rarely in one place. Measured on this
+loop's second run: a correction reached one of seven homes, then five of six, then five of six again —
+and once, both halves of a single paragraph disagreed with each other after one half was fixed.
+
+So a correction is not finished when the named site is fixed. **Grep the repository for the claim's
+distinctive phrasing and fix every hit**, including the ones a reviewer did not name; then grep again
+for the phrasing you just wrote, to see how many places now say it. Two homes are easy to forget: the
+project's own instruction file, which outranks the code and is the worst place for a half-true rule,
+and the **pull request description**, which no repo-wide grep will ever reach.
+
+And a positional cross-reference — "the bullet above", "the section below" — is a claim about layout
+that any insertion falsifies. On that same run, inserting a bullet silently re-pointed a neighbouring
+bullet's "see the bullet above" at the new text. **Name the target instead of locating it.**
 
 ## Termination
 
@@ -454,6 +512,17 @@ rule.
 Death is not the only path: an agent that simply forgets to restore looks identical from here. And a
 hash comparison costs nothing, which is the whole argument for doing it every time rather than when
 something feels wrong.
+
+**And the snapshot cannot see the third path, so a rule has to: DO NOT EDIT THE WORKTREE WHILE A
+DELEGATED AGENT IS RUNNING.** Commit first, or wait. An agent told to mutate-and-restore restores from
+what it READ, so an edit that lands after it read and before it restores is silently reverted — and the
+hash comparison is blind to it, because your own concurrent edits make the hash differ legitimately.
+Measured on the second run of this loop: a reviewer mutated `orderPartners` to test a hypothesis, put
+the file back from its remembered copy, and reverted a guard the orchestrator had added in between. It
+compiled, the whole suite passed, and it surfaced only because a test written later failed for a reason
+that made no sense. Two consequences: commit before you delegate — a commit is the only thing a
+remembered restore cannot undo — and tell agents to restore with `git checkout -- <path>`, never by
+rewriting content they remember.
 
 **Tell every agent to restore BEFORE it reports, not after** — a mutation restored late is a mutation
 that ships if the agent dies mid-sentence. On the second run, the eleven agents briefed that way all
