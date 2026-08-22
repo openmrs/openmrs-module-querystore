@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.3.0
+version: 0.4.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -180,6 +180,15 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   wrote, delete the unsupported clause rather than replacing it with a better-sounding one. That is not
   a counsel of caution — measured on this loop's second run, a correction of a false claim introduced a
   DIFFERENT false claim, which the next round then had to catch.
+- **Don't write a tally a later round will have to re-measure; write the method.** Every count published
+  on the fourth run went stale, several twice, and each recurrence cost a round because the next reviewer
+  re-measures what a comment asserts: "negating it reddens exactly two" became three in the very round
+  that added the third observer, and "the three sites that quoted it" became four in the round that found
+  the fourth. Both had a sentence beside them claiming they had just been re-measured. The recurrence
+  stopped only when the enumeration was deleted in favour of *"mutate the line and read the failures"* —
+  so prefer that form, and treat an exhaustive list as worse than none, since it invites the next reader
+  to treat the extra failure as a regression they caused. If a count really is load-bearing, name the
+  head it was measured on.
 - **Fix every home of a corrected claim, not the one the reviewer named** — see *Correcting a claim
   means finding every home of it*. And edit by script under the rules in *Editing by script*: assert
   before replacing, count neighbours after, verify by reading back.
@@ -344,6 +353,14 @@ treat one as blocking it will grind rounds against a broken standalone until the
 
 ### COMMIT
 
+**Check the branch before you EDIT, and again before you commit.** The commit-time check below is
+necessary and not sufficient: by then a wrong-tree edit has already happened, and the only reason it is
+recoverable is that nothing was committed yet. Measured on the fourth run of the pipeline that calls this
+skill: an agent left the worktree on `main`, four orchestrator edits landed there, and it surfaced only
+because the test count dropped by exactly the size of the PR's new test file — a `git branch
+--show-current` before the first edit would have caught it immediately, and a commit in between would
+have put the work on `main`.
+
 **Re-check the branch immediately before committing.** Step 0's check happens once; agents share
 this worktree and one of them running `git checkout` silently redirects everything after it. That
 happened on this loop's first run: a reviewer checked out the review branch, the fixer edited files
@@ -364,6 +381,13 @@ and rewriting history under one that is mid-flight is how a round reviews a sha 
 The reviewer found nothing blocking. Apply that round's non-blocking findings under the same fixer
 rules, prove green, commit and push. The run ends here: those edits carry no blocking finding by
 construction, so no further round is owed.
+
+**Re-derive the PR description against the merging head before marking ready.** Across rounds the body
+describes code that later rounds change under it, so the patches this loop applies to it accumulate into
+something false: on the fourth run, four consecutive rounds had their top finding in the description, one
+of them a sentence an earlier round had itself added. Patching mid-loop is right when a finding names the
+body; leaving those patches as the final text is not. Rewrite it whole here, re-measuring every figure in
+it rather than carrying one forward.
 
 **A runtime-visible change is not ready until a verifier has run against the head that will merge.**
 Step 6 sits on the fix path, so without this a PR whose round 1 found nothing blocking would reach

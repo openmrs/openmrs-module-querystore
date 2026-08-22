@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -105,6 +105,16 @@ session is in, abort (condition 1) — say which repo the ticket belongs to and 
 no repo, so it is assumed to be this one; if the ticket's text plainly describes another module, that
 is also condition 1.
 
+**Pre-flight the verifier here, not at the end.** This pipeline's terminal state is a PR marked ready,
+and `pr-harden` will not mark one ready that no verifier could run — so an unavailable standalone blocks
+the whole run's finish line, and finding that out in the last round wastes the chance to fix it. One
+command: enumerate the standalones (a directory holding `openmrs-standalone.jar`), read each one's
+`tomcatport` from its `openmrs-runtime.properties`, and check whether anything is listening there. If no
+candidate is free, say so NOW — the loop's own rule forbids a verifier taking a server it did not start,
+so this is the moment the user can free one while the work proceeds. Measured on this skill's fourth run:
+both standalones were held by pre-existing processes, discovered at round 2, and the run reached its
+final round unable to mark the PR ready for a reason that had nothing to do with the code.
+
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names. If a PR exists, this is the wrong entry point — run `pr-harden <that PR>` on it
 instead, and say so.
@@ -179,7 +189,7 @@ produced the plan and defeat the point. Give it the ticket as read (with its com
 verbatim, and the repo. Do **not** give it your argument for why the plan is right: advocacy primes it
 to agree, and agreement is the one thing this agent is not for.
 
-Five questions, and it must say which it actually checked:
+Six questions, and it must say which it actually checked:
 
 1. **Does the plan bypass or reimplement a documented entry point?** `CLAUDE.md`'s API-surface rules
    name the only correct callers for their operations. Name the method and the rule.
@@ -191,11 +201,22 @@ Five questions, and it must say which it actually checked:
    would pass on the pre-change code proves nothing.
 5. **Does the scope match the ticket** — neither wider (an adjacent defect smuggled in) nor narrower
    (part of the ask quietly dropped)?
+6. **Does the plan rest on a claim about the DATA that nobody has measured?** Name the claim, and name
+   what would measure it. This is the question the other five cannot reach: they test the plan against
+   the repo's recorded decisions, and a premise about the *dataset* can be unrecorded and still false.
+   Measured on this skill's fourth run, against #292: a plan whose whole gate was a name-identity test
+   (`DrugReference.isNamed`, the accessor `CLAUDE.md` itself names for that question) survived TWO gate
+   passes and a full `/harden` cycle before a review agent measured it — the `ddinter` parser writes
+   each entry's aliases from its name AND its `rxnorm_name`, and the shipped KB has a row named
+   `Omeprazole` carrying `rxnorm_name: esomeprazole`, so the test was true of exactly the pair the gate
+   was written to refuse. Two cycles of implementing, documenting and testing the wrong predicate. The
+   tell is a plan that says "X names Y" or "X and Y are the same substance" and cites a method rather
+   than a count: ask for the count.
 
 It returns JSON:
 
 ```json
-{ "checked": [1, 2, 3, 4, 5],
+{ "checked": [1, 2, 3, 4, 5, 6],
   "objections": [
     { "question": 2, "blocking": true, "objection": "…",
       "citation": "CLAUDE.md, the ATC-subgroup bullet: a uniform veto loses real signal 2.4x faster than it removes false claims" } ] }
@@ -265,6 +286,13 @@ it doesn't fail, tighten it until it does.
 Then make it pass by changing production code. Never by changing the test, the expected values, or the
 test data — that is changing the specification, and on a failing test the pipeline is what is wrong.
 
+**Check `git branch --show-current` before you edit, not only before you commit.** Every phase of this
+pipeline delegates, and an agent that runs `git checkout` silently redirects everything after it. On
+this skill's fourth run an agent left the worktree on `main` and four edits landed there; it surfaced
+only because the test count dropped by exactly the size of the new test file, and had those been code
+edits with a commit after them they would have gone to `main`. `pr-harden` states this rule for
+committing; committing is too late, because by then the edit is already in the wrong tree.
+
 **Edits made by script need three guards, because all three failures are silent.** You will edit by
 running short scripts rather than by hand; measured on this skill's third run, each of these cost a
 cycle or a review round. `str.replace` returns the string unchanged when it matches nothing and the
@@ -318,6 +346,16 @@ Link the ticket so it is machine-readable, because every round's reviewer resolv
 
 The body says what the ticket asked, what the change does, and how it was verified. It does not grade
 the design or tour the alternatives.
+
+**Write it once here, and RE-DERIVE IT WHOLE before the PR is marked ready — never patch it across
+rounds.** The body describes code the review loop is about to change under it, so an incremental edit
+is how it comes to assert something false. Measured on this skill's fourth run: a round-1 edit made the
+body say the ticket's second named shape was not fixed, round 2's fix made it fixed, round 3's only
+blocking finding was that sentence — and rounds 4, 5 and 6 each caught another stale claim in the same
+paragraph set ("nothing outside a folded chip is touched", two mutation counts, "the three sites that
+quoted it"). Four consecutive rounds whose top finding was the description. So: patch it mid-loop ONLY
+to satisfy a blocking finding, and at the end rewrite it against the final head, re-measuring every
+figure in it at that point rather than carrying one forward.
 
 **Treat the body as part of the change, not as a summary of it.** It is the durable public rationale
 attached to the closing of the ticket, no test can fail on a false sentence in it, and a repo-wide grep
@@ -379,6 +417,14 @@ One report for the whole run, in this order:
   work useless if wrong.
 - **Don't implement from the ticket title.** The body is often the first draft of the problem and a
   comment is where it was corrected.
+- **Don't publish a count you would have to re-measure every round; publish the method.** Measured on
+  this skill's fourth run, every figure that named a tally went stale, several of them twice —
+  "1342 tests", "negating it reddens exactly two", "the three sites that quoted it", "eleven cases" —
+  and each recurrence cost a round, because a review agent re-measures what a comment asserts. Two of
+  them went stale in the very round that added the thing they had miscounted. The recurrence stopped
+  only when the enumeration was deleted and replaced with *"mutate the line and read the failures"*.
+  Prefer that form. An exhaustive list that is wrong is worse than no list, because it invites the next
+  reader to treat the extra failure as a regression they caused.
 - **Don't skip the failing test** because the fix is obvious. Never-executed code is unverified code,
   and a test written after the fix tends to assert what the code does.
 - **Don't widen scope.** An adjacent defect you noticed goes in the report or a new ticket, not into
