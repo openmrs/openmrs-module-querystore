@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.11.0
+version: 0.12.0
 ---
 
 # Harden
@@ -43,6 +43,14 @@ For each behavior change the slice introduces (a new method, a changed signature
 - Pass on the post-change code.
 - **Verify the runtime effect — not a proxy for it, not an analogy.** Asserting the *artifact* of the change (the generated SQL/HQL string, the config key, the serialized shape) proves it was produced, not that it runs; "mirrors a pattern already in production" proves the sibling, not the variant you added. Both are necessary-not-sufficient. Ask plainly: **has this path ever executed on real input, with the effect observed?** If the only coverage is a shape assertion or an analogy, that's a partial-coverage gap — name it.
 
+**And ask what the FIXTURE can express, not only what the test asserts.** Where a rule rests on how
+some external system behaves — a judge, a parser, a remote — check whether the stub standing in for it
+can even produce the counterexample. Measured on the #302 run: every test of a new rule drove a stub
+that always refused a conjunction, so the rule's central premise ("a correct judge says no") was
+assumed and never exercised; the cell where the real system says yes was unreachable by the whole
+suite, and when a reviewer finally constructed it the design reversed. Cost: four cycles of work built
+on the unexamined premise. A premise no fixture can falsify is not covered, however many tests name it.
+
 A behavior change without a named test is a Phase 1 finding — even when the code looks "obviously correct," "matches an existing pattern," or "is trivially small." Never-executed code is unverified code.
 
 **Blocked-path exception (compile, infrastructure, OR un-fabricatable input).** When you claim part of the slice "can't be tested" — won't compile yet, needs a real DB, or the triggering input can't be constructed (a dangling FK an FK-enforcing test DB rejects) — split the claim: name the sub-path genuinely blocked AND the adjacent one that is NOT. You usually can't fabricate the error/orphan input, but you can still execute the new code on *valid* input and assert it runs. "Can't reproduce the failure case" is not "can't run the new code at all." Sketch the test contract in writing for whatever stays genuinely blocked.
@@ -79,7 +87,11 @@ Run simplify passes until polish opportunities converge. Each pass:
      run code); or license exactly one agent to mutate and tell the other three to read only; or run
      the mutating ones serially. Whichever you pick, say it in every brief — "be careful" does not
      survive contact.
-   - **Commit the cycle's work before spawning them, and do not edit the tree while they run.** These agents are told to mutate-and-restore for evidence, and a restore comes from what the agent READ — so an edit that lands after it read and before it restores is silently reverted. Measured: a quality agent mutated a guard to test whether a case could discriminate it, restored the file from its remembered copy, and reverted a fix applied in the meantime. It compiled and the suite passed; it surfaced only when a later test failed inexplicably. A commit is the one thing a remembered restore cannot undo. Tell them to restore with `git checkout -- <path>`, never by rewriting remembered content.
+   - **Commit before anything mutates the tree — the cycle's work before spawning them, and your own
+     measurement probes too — and do not edit the tree while they run.** `git checkout -- <path>` to
+     undo a probe restores HEAD, so on a file carrying uncommitted intended work it discards that work
+     as well: measured on the #302 run, four production edits vanished that way and the empty
+     `git diff --stat` afterwards read as "restored" rather than "reverted". These agents are told to mutate-and-restore for evidence, and a restore comes from what the agent READ — so an edit that lands after it read and before it restores is silently reverted. Measured: a quality agent mutated a guard to test whether a case could discriminate it, restored the file from its remembered copy, and reverted a fix applied in the meantime. It compiled and the suite passed; it surfaced only when a later test failed inexplicably. A commit is the one thing a remembered restore cannot undo. Tell them to restore with `git checkout -- <path>`, never by rewriting remembered content.
    - **integration** is not intrinsic polish. It asks: does the slice degrade gracefully when neighbors are missing, misordered, or silent? Does state propagate correctly across module/service boundaries? Does the slice's runtime contract hold when an upstream service violates an implicit assumption (e.g., mutates shared state without firing the expected event)? It revisits the Phase 1 "Trace outward" threads with a polish lens — looking for the gaps Phase 1 might have missed because the failure mode was framed as "fine in the happy path."
    - In every agent's brief, require them to trace at least one level out from the slice (callers, callees, lifecycle, optional deps) before declaring "nothing new." Reviews scoped to the file diff alone miss the bugs that live at boundaries.
 2. Aggregate findings across the four agents.

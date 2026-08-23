@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.7.0
+version: 0.8.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -109,11 +109,9 @@ the round pushed no commit (the fixer declined everything — that is a *did not
 **Termination**, not a free round), or the push had not landed when the fetch ran, or the ref was
 created outside a round at all.
 
-Observed across four earlier runs of this loop: `pr-288-r1` and `pr-288-r2` both pointed at one sha,
-and `pr-291-r2` and `pr-291-r3` at another. **Which of those causes produced them was not
-established** — the refs had already been deleted and the commit log is consistent with more than one
-— so do not read this as a diagnosis of a known bug. The guard is worth having regardless of the
-cause, because the cost of the case it catches does not depend on how the case arose.
+Two pairs of refs across four earlier runs each shared a sha (`pr-288-r1`/`r2`, `pr-291-r2`/`r3`).
+**Which cause produced them was never established**, so this is a guard, not a diagnosis — worth
+having because the cost of the case it catches does not depend on how the case arose.
 
 **Tell the reviewer what to diff against, and never let it be a local branch name.** Fetch the base
 too and name it explicitly: `git fetch origin main` then `git diff origin/main...pr-<n>-r<round>` — or
@@ -202,6 +200,10 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
 - **Name the test** for every behaviour change — one that fails on the pre-change code and passes
   after, verifying the runtime effect rather than a proxy for it. Where a path is genuinely blocked,
   split the blocked sub-path from the runnable one and sketch the contract for what stays blocked.
+- **And when you NAME a guard, mutate the thing and read which case actually reddens.** An attribution
+  is as falsifiable as an assertion and fails the same way: on the #302 run three sites named a test as
+  the guard for a branch it could not observe — it took a different code path — and twice the correct
+  attribution was already written in that test's own comment. "Guarded by X" is a claim; check it.
 - **If you ADD a guard over text or shape, prove it reddens on a semantically-equivalent rewrite, not
   only on deletion.** Its weakest point is the gap between the property it means and the string it
   matches, and that gap is invisible from the assertion's own side. Assert the SHAPE the code must have
@@ -564,7 +566,9 @@ how the run proceeds rather than how it ends.
 
 **Snapshot the worktree before every delegation and compare it after — on ANY terminal outcome.**
 `git diff | shasum` before you spawn; the same after the agent returns, fails, stalls or is killed. On a
-mismatch, restore from the snapshot and treat it as the agent's residue, never as a finding.
+mismatch, treat it as the agent's residue, never as a finding. **The hash DETECTS; it cannot restore —
+a shasum is not an artifact you can apply.** What makes the residue recoverable is the commit rule
+below, which is why that rule binds anything that mutates the worktree and not only delegation.
 
 This is not defensive habit, it is the one guard the rest of this skill actively needs. Every reviewer,
 fixer and verifier brief here tells the agent to **mutate the production code, run it, restore it**,
@@ -588,9 +592,17 @@ hash comparison is blind to it, because your own concurrent edits make the hash 
 Measured on the second run of this loop: a reviewer mutated `orderPartners` to test a hypothesis, put
 the file back from its remembered copy, and reverted a guard the orchestrator had added in between. It
 compiled, the whole suite passed, and it surfaced only because a test written later failed for a reason
-that made no sense. Two consequences: commit before you delegate — a commit is the only thing a
-remembered restore cannot undo — and tell agents to restore with `git checkout -- <path>`, never by
+that made no sense. Two consequences: commit before anything mutates the worktree — before you
+delegate, and before your OWN measurement probe, because a commit is the only thing a remembered
+restore cannot undo — and tell agents to restore with `git checkout -- <path>`, never by
 rewriting content they remember.
+
+**`git checkout -- <path>` is the right restore only where the file carries nothing but the mutation.**
+It restores HEAD, so in a worktree holding uncommitted intended work it silently discards that too:
+measured on the #302 run, an orchestrator's own mutation probe undone that way took four production
+edits with it, and the empty `git diff --stat` afterwards read as "restored" rather than "reverted", so
+a commit shipped whose message described changes absent from its diff. The axis is the FILE's state,
+not who typed the command — which is the whole reason the commit rule above comes first.
 
 **Tell every agent to restore BEFORE it reports, not after** — a mutation restored late is a mutation
 that ships if the agent dies mid-sentence. On the second run, the eleven agents briefed that way all

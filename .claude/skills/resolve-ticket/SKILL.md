@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.8.0
+version: 0.9.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -374,6 +374,15 @@ changes nothing) and let its own Stop gate do its job.
 Do not skip it on the grounds that the loop will review anyway. The two are not substitutes: polish
 with context first, adversarial review without it second. Skipping this hands the first clean reviewer
 a pile of nits and spends a whole round on them.
+
+**While harden runs, write its awaits to BOTH state files.** The gate armed at Step 1 is
+`pr-harden-gate.sh`, which reads `~/.claude/pr-harden-state.json`; harden's own await one-liner writes
+only `~/.claude/harden-state.json`. So a harden cycle blocked on its Phase 2 agents is invisible to the
+armed gate, which then refuses the yield the cycle needs in order to wait — the same shape #298
+measured in the un-nested case at "two ten-minute in-turn wait loops", and it fired again on the #302
+run with four agents live. Record the await in both files and clear it in both, **including at the end
+of this step and when a harden cycle dies or takes its labelled override** — a fresh await left in
+`pr-harden-state.json` licenses a real quit for up to the gate's hour-long TTL while Step 8 runs.
 
 **Then confirm `harden` left its own state entry finished**, because two Stop gates are now live in
 this run and both must allow the turn to end. `~/.claude/harden-state.json` must say `edits: 0` for
