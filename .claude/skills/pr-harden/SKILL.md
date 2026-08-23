@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.5.0
+version: 0.6.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -98,6 +98,22 @@ argue both sides in its own reasoning, or mark the finding non-blocking.
 
 Fetch and review the **pushed** head, not the local worktree:
 `git fetch origin 'pull/<n>/head:pr-<n>-r<round>'`. Record the sha.
+
+**Compare that sha against the last entry of `reviewed_shas` before you spawn anything.** The state
+file has recorded these since the skill was written and nothing has ever compared them, so the
+cheapest check in the loop was sitting unused. If the new head EQUALS the previous round's, the loop
+is about to spend a round re-reviewing bytes it has already reviewed — and a reviewer given identical
+input will either repeat its findings, which reads as an unfixed defect, or find nothing, which reads
+as convergence. Both are wrong and neither looks wrong. So stop and establish why before spawning:
+the round pushed no commit (the fixer declined everything — that is a *did not converge*, see
+**Termination**, not a free round), or the push had not landed when the fetch ran, or the ref was
+created outside a round at all.
+
+Observed across four earlier runs of this loop: `pr-288-r1` and `pr-288-r2` both pointed at one sha,
+and `pr-291-r2` and `pr-291-r3` at another. **Which of those causes produced them was not
+established** — the refs had already been deleted and the commit log is consistent with more than one
+— so do not read this as a diagnosis of a known bug. The guard is worth having regardless of the
+cause, because the cost of the case it catches does not depend on how the case arose.
 
 **Tell the reviewer what to diff against, and never let it be a local branch name.** Fetch the base
 too and name it explicitly: `git fetch origin main` then `git diff origin/main...pr-<n>-r<round>` — or
@@ -401,6 +417,14 @@ The reviewer found nothing blocking. Apply that round's non-blocking findings un
 rules, prove green, commit and push. The run ends here: those edits carry no blocking finding by
 construction, so no further round is owed.
 
+**Delete the run's own `pr-<n>-r<round>` refs.** They are local fetch copies of the PR head with no
+upstream, worth nothing once the round is over and re-fetchable from `pull/<n>/head` while GitHub
+retains it. The loop creates one per round and has never removed any: measured on this machine, four
+completed runs had left **eleven** behind (`pr-287`, `pr-288-r1..r3`, `pr-289-r1..r4`,
+`pr-291-r1..r3`), all pointing at merged PRs, cluttering every `git branch` a human or an agent runs
+afterwards. Delete them here rather than at the top of the next run, because the next run may be in a
+different repo or may never happen.
+
 **Re-derive the PR description against the merging head before marking ready.** Across rounds the body
 describes code that later rounds change under it, so the patches this loop applies to it accumulate into
 something false: on the fourth run, four consecutive rounds had their top finding in the description, one
@@ -527,7 +551,8 @@ into the round's own commit.
 `fixing` the gate blocks regardless of `blocking`, so leave the last measured value there for the
 record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts` and `override`; `declined` and
 `reviewed_shas` are the orchestrator's own ledger, carried in the same entry so one write keeps both
-in step.
+in step. `reviewed_shas` is not only a record: step 1 compares the incoming head against its last
+entry, because two rounds reviewing one sha is a round spent on bytes already reviewed.
 
 **`awaiting` is not optional bookkeeping — without it an unattended run cannot proceed at all.**
 Every phase here delegates to a background subagent, and while one is outstanding the orchestrator
