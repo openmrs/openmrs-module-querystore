@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.5.0
+version: 0.6.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -109,11 +109,16 @@ is also condition 1.
 and `pr-harden` will not mark one ready that no verifier could run — so an unavailable standalone blocks
 the whole run's finish line, and finding that out in the last round wastes the chance to fix it. One
 command: enumerate the standalones (a directory holding `openmrs-standalone.jar`), read each one's
-`tomcatport` from its `openmrs-runtime.properties`, and check whether anything is listening there. If no
-candidate is free, say so NOW — the loop's own rule forbids a verifier taking a server it did not start,
-so this is the moment the user can free one while the work proceeds. Measured on this skill's fourth run:
-both standalones were held by pre-existing processes, discovered at round 2, and the run reached its
-final round unable to mark the PR ready for a reason that had nothing to do with the code.
+`tomcatport` from its `openmrs-runtime.properties`, and check what is listening there. **The question
+is not "is a port free" — it is "is there a standalone I can attribute and restart, or one already
+running the module under test".** A busy port is the normal state on a machine that does this work,
+and a running, attributable `java -jar openmrs-standalone` is a usable target, not a blocker; what
+blocks is a port held by something you cannot attribute. Say so NOW if nothing qualifies — the loop's
+own rule forbids a verifier taking a server it did not start, so this is the moment the user can free
+one while the work proceeds. Measured on this skill's fourth run: both standalones were held by
+pre-existing processes, discovered at round 2, and the run reached its final round unable to mark the
+PR ready for a reason that had nothing to do with the code. Measured on the sixth, the opposite
+mistake — both ports busy at pre-flight, both by our own standalones, and neither a blocker.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names. If a PR exists, this is the wrong entry point — run `pr-harden <that PR>` on it
@@ -143,6 +148,15 @@ Either way the judgement stays here. Then write down:
 
 - **What the ticket actually asks for**, in your words, and what it does not. The ticket defines the
   scope; do not widen it because adjacent code looks wrong. Note the adjacent thing and leave it.
+- **Whether what it asks for is a FIX at all.** The rest of this skill assumes a defect and a
+  production change that closes it, and that assumption is wrong often enough to state: a ticket can
+  ask for a measurement before a remedy ("establish which of these two it is before proposing a
+  fix"), for an instrument, or for a diagnosis. When it does, that IS the deliverable — running the
+  discriminator and reporting what it decided is the work, not a preliminary to it. Two consequences
+  follow and both are easy to get wrong. The honest outcome may be *inconclusive*: "the measurement
+  refutes both branches as worded, and here is what is left" is a finding, not a failure, and it is
+  the finding the next change needs. And the PR then does not close the ticket, so Step 8's `Refs`
+  rule binds — check it now rather than at PR time.
 - **The root cause**, and how you know. `CLAUDE.md`: root-cause fixes over symptom patches, best
   solution before quickest, and diagnose *why* before proposing a fix.
 - **The failing test** that will define the behaviour — which file, what it asserts, and why it fails
@@ -172,6 +186,12 @@ Snapshot the worktree hash before spawning and compare it after — the refutati
 instruction, but "read-only by instruction" is not a guarantee, and `pr-harden`'s **State** section
 carries the measurement of what an agent that dies mid-mutation leaves behind. Tell it to restore
 anything it changed **before** it reports.
+
+**Snapshot `git branch --show-current` beside the hash, at every delegation in this skill.** A diff
+hash cannot see a `git checkout`: both trees are clean, so the hash matches and the switch is
+invisible. Measured on the run that added this line — a review agent left the worktree on `main`, and
+only the NEXT agent's own branch check caught it before edits landed there. A wrong-tree edit is
+recoverable exactly until something commits on top of it.
 
 Record the await — append to the entry's `awaiting` list — before spawning it, and clear that list
 on ANY terminal outcome: a result, or the harness reporting the agent failed, stalled or was killed.
@@ -234,6 +254,15 @@ what stops silence being mistaken for coverage.
 re-run the gate **once**. `CLAUDE.md` and a recorded measurement outrank the plan, so that is a
 revision, not a debate. Non-blocking objections are recorded in the plan and carried into the report;
 they do not hold the run.
+
+**Revise by deleting, not by re-wording.** The revision is itself unverified prose written fast under
+the pressure of an objection, and it is a live source of the next false claim: measured, gate pass 2's
+blocking objection was against a claim the pass-1 REVISION had introduced, and the `/harden` run later
+in that same session caught four more of the shape, twice in a correction from the round before. So
+when an objection lands on a claim, cut the unsupported clause rather than replacing it with a
+better-sounding one, and re-derive any figure you carry across rather than restating it. `harden` and
+`pr-harden` both carry this rule; it belongs here too, because Step 3 is where the first rewrite
+happens.
 
 After that one re-run there are **three** outcomes, and the discriminator is not how many objections
 have been raised but **whether the objection's citation determines the answer**:
@@ -344,6 +373,19 @@ Link the ticket so it is machine-readable, because every round's reviewer resolv
 - **JIRA** — no auto-close exists, so put the key in the **title** and the browse URL in the body.
   `pr-review` and `pr-harden` both look for a key in the title or branch name.
 
+**`Fixes` only if the PR actually closes the ticket. Otherwise `Refs`, and say why in the body.**
+GitHub acts on the keyword, so a PR that delivers something SHORT of the ticket — an instrument for a
+defect it does not fix, one part of a multi-part ask, a diagnosis the ticket asked for before a
+remedy — silently closes an open defect on merge. Measured: a run whose PR body said `Fixes #299` in
+its first line and, four paragraphs down and in bold, "this PR should not be read as closing #299".
+That contradiction was round 1's blocking finding, and it fails closed and quietly — nothing errors,
+no check reddens, and the next person looking for open defects does not see it.
+
+The cost of `Refs` is that `closingIssuesReferences` comes back **empty**, and `pr-review` Step 1
+resolves the ticket from exactly that field. So when you use it, **name the issue number explicitly
+in every reviewer brief** rather than leaving the reviewer to find it — otherwise the round that is
+supposed to ask "does this resolve the ticket?" never reads the ticket at all.
+
 The body says what the ticket asked, what the change does, and how it was verified. It does not grade
 the design or tour the alternatives.
 
@@ -437,6 +479,11 @@ One report for the whole run, in this order:
   pass re-gates something already decided. Step 3's three outcomes are the rule. And don't argue the
   plan's case to the refuter — an agent primed with your reasoning agrees, which is the one outcome
   that gate cannot use.
+- **Don't write `Fixes` on a PR that does not fix the ticket.** It is the default this skill hands
+  you in Step 8 and it is wrong whenever the delivery falls short of the ask, which is exactly the
+  case a careful run produces — an instrument, a diagnosis, one part of several. The merge then closes
+  an open defect and nothing anywhere says so. See Step 8; and having switched to `Refs`, hand every
+  reviewer the issue number by hand, because the field they resolve it from is now empty.
 - **Don't review your own PR after Step 8,** and don't pre-empt round 1.
 - **Don't spawn a subagent without recording the await.** Every phase of this skill and of the loop
   delegates, and the gate cannot tell a run waiting on an agent from a run that quit unless the
