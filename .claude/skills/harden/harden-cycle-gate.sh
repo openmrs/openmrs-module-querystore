@@ -8,7 +8,18 @@
 # Contract with the skill: at the end of every cycle it writes an entry to the state file below,
 # keyed by the repo it is hardening:
 #
-#   { "/abs/path/to/repo": { "cycle": 4, "edits": 3, "ts": 1755400000, "override": false } }
+#   { "/abs/path/to/repo": { "cycle": 4, "edits": 3, "ts": 1755400000, "override": false,
+#                            "awaiting": [ { "agent": "phase2 quality", "since": 1755400000 } ] } }
+#
+# `awaiting` is what lets a cycle wait for its own subagents. Phase 2 spawns them, so a cycle is
+# routinely blocked on one with nothing to do but yield — and without this field the gate refuses that
+# yield, making a cycle waiting correctly indistinguishable from one that quit. Measured: a Phase 2
+# pass blocked on a background agent tripped this hook on every yield and had to burn in-turn sleep
+# loops to stay alive. A non-empty, fresh `awaiting` therefore allows the stop; the harness re-invokes
+# the session when the agent completes, so yielding mid-await is how the cycle proceeds, not how it
+# ends. The obligation is to CLEAR the field on any terminal outcome, so the allow is bounded by
+# AWAIT_TTL and an agent that has not returned inside it counts as dead rather than outstanding.
+# Same field, same semantics as pr-harden-gate.sh, which solved this first.
 #
 # edits > 0        -> another cycle is required; this hook blocks the turn from ending.
 # edits == 0       -> converged; allow.
@@ -25,6 +36,10 @@ set -uo pipefail
 
 STATE="$HOME/.claude/harden-state.json"
 STALE_AFTER=21600   # 6h; a harden run older than this is abandoned, not in flight
+AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long is dead, not running.
+                    # Generous on purpose: a Phase 2 agent may run a full root build and drive
+                    # mutations. Still far under STALE_AFTER, so a forgotten `awaiting` cannot outlive
+                    # the run that wrote it.
 
 allow() { exit 0; }
 
@@ -44,6 +59,16 @@ TS=$(jq -r '.ts // 0' <<<"$ENTRY" 2>/dev/null) || allow
 case "$TS" in ''|*[!0-9]*) allow ;; esac
 NOW=$(date +%s)
 [ "$((NOW - TS))" -lt "$STALE_AFTER" ] || allow
+
+# A background agent this cycle delegated to is outstanding: allow the yield, whatever `edits` says.
+# Fail open on anything unparseable, like every other check here.
+AWAITING=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | length' <<<"$ENTRY" 2>/dev/null) || allow
+case "$AWAITING" in ''|*[!0-9]*) AWAITING=0 ;; esac
+if [ "$AWAITING" -gt 0 ]; then
+  NEWEST=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | max' <<<"$ENTRY" 2>/dev/null) || allow
+  case "$NEWEST" in ''|*[!0-9]*) NEWEST=0 ;; esac
+  [ "$((NOW - NEWEST))" -lt "$AWAIT_TTL" ] && allow
+fi
 
 EDITS=$(jq -r '.edits // empty' <<<"$ENTRY" 2>/dev/null) || allow
 case "$EDITS" in ''|*[!0-9]*) allow ;; esac

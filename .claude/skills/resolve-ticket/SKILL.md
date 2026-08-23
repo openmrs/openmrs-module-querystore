@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.6.0
+version: 0.7.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -163,6 +163,15 @@ Either way the judgement stays here. Then write down:
   on today's code. It must exercise the real production path with real data: no simulation, no mock,
   no reimplementation of pipeline logic in test code, no calling internal methods with hand-crafted
   inputs, and the composed method rather than a hand-chained pipeline.
+- **If any part of the plan exists ONLY so the change can be tested, say so and label it a TRADE.**
+  This is where a plan quietly gets worse while looking more rigorous. Measured on this skill's
+  seventh run: the fix was behaviour-neutral and therefore unobservable, so the plan changed a
+  *second* production decision — the order of two branches — purely to make the first one testable.
+  Both refutation passes accepted it. Round 1 of the review loop then refuted it in one move: the
+  reordering was not required by the ticket, and it ADDED exposure to the very defect the ticket
+  exists to remove, because in the old order an inconsistent state was harmless and in the new one it
+  reached a clinician-facing chip. State the trade explicitly, and rule out "test it differently"
+  before taking it — question 7 below is that check.
 - **Which API-surface rules in `CLAUDE.md` this touches.** That file is a list of entry points that
   must not be bypassed and of changes that were measured and rejected. If the plan reinvents one of
   them, the plan is wrong.
@@ -209,7 +218,7 @@ produced the plan and defeat the point. Give it the ticket as read (with its com
 verbatim, and the repo. Do **not** give it your argument for why the plan is right: advocacy primes it
 to agree, and agreement is the one thing this agent is not for.
 
-Six questions, and it must say which it actually checked:
+Seven questions, and it must say which it actually checked:
 
 1. **Does the plan bypass or reimplement a documented entry point?** `CLAUDE.md`'s API-surface rules
    name the only correct callers for their operations. Name the method and the rule.
@@ -222,7 +231,7 @@ Six questions, and it must say which it actually checked:
 5. **Does the scope match the ticket** — neither wider (an adjacent defect smuggled in) nor narrower
    (part of the ask quietly dropped)?
 6. **Does the plan rest on a claim about the DATA that nobody has measured?** Name the claim, and name
-   what would measure it. This is the question the other five cannot reach: they test the plan against
+   what would measure it. This is the question the others cannot reach: they test the plan against
    the repo's recorded decisions, and a premise about the *dataset* can be unrecorded and still false.
    Measured on this skill's fourth run, against #292: a plan whose whole gate was a name-identity test
    (`DrugReference.isNamed`, the accessor `CLAUDE.md` itself names for that question) survived TWO gate
@@ -233,10 +242,26 @@ Six questions, and it must say which it actually checked:
    tell is a plan that says "X names Y" or "X and Y are the same substance" and cites a method rather
    than a count: ask for the count.
 
+7. **If the plan says something CANNOT be tested, has this repo pinned an untestable rule before, and
+   how?** Ask it whenever the plan reaches for a production change to create observability, or says a
+   behaviour is unobservable, or calls a rule "conventional" / "enforced by javadoc only". The answer
+   is very often yes and the plan has not looked: a repo that has met this problem already has a
+   *structural* pin somewhere — a test that reads its own source or compiled class files, an
+   architecture guard, a build-time assertion — and finding it is strictly better than bending the
+   design to become behaviourally observable. Measured on this skill's seventh run: the plan concluded
+   "the write path alone is unobservable, so the branch order must change to give it coverage", and
+   both gate passes accepted that. The repo already pinned a behaviour-neutral rule structurally, in a
+   test `CLAUDE.md` itself cites approvingly for exactly that reason. Round 1 of the review loop found
+   it, and the redesign that followed was better on every axis — the trade the plan had accepted
+   disappeared, and a residue the plan had recorded as unclosable was closed. Two rounds spent
+   implementing, documenting and then reverting the wrong design. The tell is a plan whose
+   justification for touching production is "otherwise we cannot test it": grep the test tree for a
+   guard that reads source or `.class` files before believing it.
+
 It returns JSON:
 
 ```json
-{ "checked": [1, 2, 3, 4, 5, 6],
+{ "checked": [1, 2, 3, 4, 5, 6, 7],
   "objections": [
     { "question": 2, "blocking": true, "objection": "…",
       "citation": "CLAUDE.md, the ATC-subgroup bullet: a uniform veto loses real signal 2.4x faster than it removes false claims" } ] }
@@ -467,6 +492,8 @@ One report for the whole run, in this order:
   only when the enumeration was deleted and replaced with *"mutate the line and read the failures"*.
   Prefer that form. An exhaustive list that is wrong is worse than no list, because it invites the next
   reader to treat the extra failure as a regression they caused.
+
+  **And the rule is not about tallies — it is about claims you cannot check.** A universal or an exhaustive characterization is the same defect in different grammar, and it slips past a reader watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. Measured on the seventh run, five such claims in three consecutive cycles, each written to correct the previous cycle's false claim and each false in turn — "any looser pattern would reject" (looseness has more than one dimension), "it only re-admits `M01AE0`" (it re-admits any single trailing digit), "matched only the 5- and 7-character shapes" (the old pattern matched 6 too), "exactly the two levels the ladder is known to be handed" (nothing on the path validates a code's shape), and one that mis-numbered the very level it was excluding. So before writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what the thing DOES over what it excludes; and name the residue rather than claiming there is none.
 - **Don't skip the failing test** because the fix is obvious. Never-executed code is unverified code,
   and a test written after the fix tends to assert what the code does.
 - **Don't widen scope.** An adjacent defect you noticed goes in the report or a new ticket, not into
@@ -474,6 +501,14 @@ One report for the whole run, in this order:
 - **Don't spawn a subagent to write the implementation.** Then nobody holds the writing context, the
   judgement calls get made by an agent nobody can steer, and Step 7's harden loses the one advantage
   it has over the review loop. `Explore` for searching is fine; the judgement stays here.
+- **Don't change production to create observability without ruling out a structural pin first.**
+  A plan that says "this is behaviour-neutral, so I must change X to make it testable" is one move away
+  from making the code worse in the name of rigour — and the move it skipped is a grep of the test tree
+  for a guard that reads source or compiled class files. Measured on the seventh run: a second
+  production decision was changed purely for coverage, both gate passes accepted it, and round 1 of the
+  loop showed it added exposure to the defect the ticket existed to remove while buying coverage that
+  was available another way. Step 3's question 7 exists for this; if you take the trade anyway, label
+  it as one in the plan and in the PR body.
 - **Don't let the refutation gate become a loop.** The loop is a *third gate pass*, not a second
   revision: two blocking objections are fine when the second one settles the question, and a third
   pass re-gates something already decided. Step 3's three outcomes are the rule. And don't argue the

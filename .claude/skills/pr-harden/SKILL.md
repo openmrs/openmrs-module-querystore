@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.4.0
+version: 0.5.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -126,6 +126,16 @@ What the reviewer is given, and nothing more:
   code is an accretion of rounds of individually-approved fixes, each judged against the state at the
   time it landed; the bug lives in the seam between two separately-correct mechanisms. This rule was
   written for exactly this shape.
+- **how to attack a guard whose subject is TEXT or SHAPE** — a source scan, a class-file scan, an
+  architecture guard, a build-time assertion. Deleting the thing it guards is the weak mutation and the
+  one its author already tried; the strong one is a form that is **semantically the defect but textually
+  not the obvious edit**. Measured on this loop's seventh run, and it produced the run's only blocking
+  finding: a guard asserted that the gate's right-hand side *contained* the flag's name, so
+  `order != null || namesADrug ? order : null` passed it — that names the flag and means
+  `namingOrder = order` for every non-null order, i.e. the pre-fix state restored, with all 1350 tests
+  green. Deleting the gate was caught; the equivalent rewrite was not. Ask of any such guard: what is the
+  cheapest edit that satisfies its assertion and still breaks the property? A plausible slip is worth more
+  than a contrived one — that one is an `&&`/`||` typo in a defensive null check.
 
 It returns JSON as its final text, and nothing else:
 
@@ -176,6 +186,13 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
 - **Name the test** for every behaviour change — one that fails on the pre-change code and passes
   after, verifying the runtime effect rather than a proxy for it. Where a path is genuinely blocked,
   split the blocked sub-path from the runnable one and sketch the contract for what stays blocked.
+- **If you ADD a guard over text or shape, prove it reddens on a semantically-equivalent rewrite, not
+  only on deletion.** Its weakest point is the gap between the property it means and the string it
+  matches, and that gap is invisible from the assertion's own side. Assert the SHAPE the code must have
+  rather than that it mentions the right identifier — measured, a guard requiring only that a
+  right-hand side *contained* the flag's name accepted `order != null || namesADrug ? order : null`,
+  which restores the defect with the whole suite green. State in the guard's javadoc which shapes each
+  channel really catches, and never write that a shape is "caught behaviourally" without running it.
 - **Don't rewrite prose faster than you verify it.** When a finding is about text an earlier round
   wrote, delete the unsupported clause rather than replacing it with a better-sounding one. That is not
   a counsel of caution — measured on this loop's second run, a correction of a false claim introduced a
@@ -189,6 +206,8 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   so prefer that form, and treat an exhaustive list as worse than none, since it invites the next reader
   to treat the extra failure as a regression they caused. If a count really is load-bearing, name the
   head it was measured on.
+
+  **And the rule is not about tallies — it is about claims you cannot check.** A universal or an exhaustive characterization is the same defect in different grammar, and it slips past a reader watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. Measured on the seventh run, five such claims in three consecutive cycles, each written to correct the previous cycle's false claim and each false in turn — "any looser pattern would reject" (looseness has more than one dimension), "it only re-admits `M01AE0`" (it re-admits any single trailing digit), "matched only the 5- and 7-character shapes" (the old pattern matched 6 too), "exactly the two levels the ladder is known to be handed" (nothing on the path validates a code's shape), and one that mis-numbered the very level it was excluding. So before writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what the thing DOES over what it excludes; and name the residue rather than claiming there is none.
 - **Fix every home of a corrected claim, not the one the reviewer named** — see *Correcting a claim
   means finding every home of it*. And edit by script under the rules in *Editing by script*: assert
   before replacing, count neighbours after, verify by reading back.

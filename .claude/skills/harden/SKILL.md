@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.10.0
+version: 0.11.0
 ---
 
 # Harden
@@ -67,6 +67,18 @@ If you cannot truthfully complete ALL THREE sentences, the slice is NOT ready fo
 Run simplify passes until polish opportunities converge. Each pass:
 
 1. Spawn four parallel review agents (reuse, quality, efficiency, integration) over the current diff. After the first pass, brief subsequent passes' agents with the applied and deferred lists from prior passes so they don't re-surface them.
+   - **Only ONE of them may mutate the worktree, or give each its own.** This is the one place the skill
+     contradicted itself: Phase 2 mandates four *parallel* agents and every brief tells them to
+     mutate-and-restore for evidence, so the four are the same hazard to each other that the
+     orchestrator is to them. Measured: four concurrent agents on one checkout produced a tree that
+     went clean→dirty with "a revert of a branch order I did not make", a build that collapsed into
+     842 `NoClassDefFound` errors, and an agent that opened on another's uncommitted mutation and spent
+     a detour concluding the branch was red — two of four reports contaminated, and both flagged it
+     themselves rather than being caught. Pick one: pass `isolation: "worktree"` so each agent gets its
+     own checkout (the Agent tool supports it, and it is the only option that keeps all four able to
+     run code); or license exactly one agent to mutate and tell the other three to read only; or run
+     the mutating ones serially. Whichever you pick, say it in every brief — "be careful" does not
+     survive contact.
    - **Commit the cycle's work before spawning them, and do not edit the tree while they run.** These agents are told to mutate-and-restore for evidence, and a restore comes from what the agent READ — so an edit that lands after it read and before it restores is silently reverted. Measured: a quality agent mutated a guard to test whether a case could discriminate it, restored the file from its remembered copy, and reverted a fix applied in the meantime. It compiled and the suite passed; it surfaced only when a later test failed inexplicably. A commit is the one thing a remembered restore cannot undo. Tell them to restore with `git checkout -- <path>`, never by rewriting remembered content.
    - **integration** is not intrinsic polish. It asks: does the slice degrade gracefully when neighbors are missing, misordered, or silent? Does state propagate correctly across module/service boundaries? Does the slice's runtime contract hold when an upstream service violates an implicit assumption (e.g., mutates shared state without firing the expected event)? It revisits the Phase 1 "Trace outward" threads with a polish lens — looking for the gaps Phase 1 might have missed because the failure mode was framed as "fine in the happy path."
    - In every agent's brief, require them to trace at least one level out from the slice (callers, callees, lifecycle, optional deps) before declaring "nothing new." Reviews scoped to the file diff alone miss the bugs that live at boundaries.
@@ -118,6 +130,30 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
 
 Emitting the cycle gate is a forcing function, and forcing functions are exactly what got skipped. So also write the count where something other than you can read it. At the close of **every** cycle, alongside the gate sentence:
 
+**And record an `awaiting` entry whenever a cycle delegates, or the gate will not let the cycle
+wait for its own agents.** Phase 2 spawns subagents, so a cycle is routinely blocked on one with
+nothing to do but yield — and a yield is exactly what the gate refuses. Measured on the run that
+added this: a Phase 2 pass blocked on a background agent tripped the gate on every yield, and the
+only way to stay alive was two ten-minute in-turn wait loops, which is pure waste. `pr-harden` solved
+this first and its **State** section carries the reasoning; the field and the semantics are the same:
+
+```bash
+# usage:  awaiting.py await "phase2 quality"   |   awaiting.py clear
+import json, os, sys, time, pathlib
+p = pathlib.Path.home()/".claude/harden-state.json"
+s = json.loads(p.read_text()); e = s[os.getcwd()]
+if sys.argv[1] == "await":
+    e.setdefault("awaiting", []).append({"agent": sys.argv[2], "since": int(time.time())})
+else:
+    e["awaiting"] = []
+e["ts"] = int(time.time()); p.write_text(json.dumps(s, indent=2))
+```
+
+Record it immediately before spawning and **clear it on ANY terminal outcome** — a result, or the
+harness reporting the agent died, stalled or was killed. A stale entry lets the run stop for real,
+which is what the gate exists to prevent, so the gate's allow is bounded by an hour; an agent that
+has not returned inside it is treated as dead rather than outstanding.
+
 ```bash
 python3 - <<'PY'
 import json, os, subprocess, time, pathlib
@@ -127,7 +163,10 @@ n = len(d.splitlines()) + int(subprocess.run(
     ["git","rev-list","--count","@{u}..HEAD"], capture_output=True, text=True).stdout.strip() or 0)
 p = pathlib.Path.home()/".claude/harden-state.json"
 s = json.loads(p.read_text()) if p.exists() else {}
-s[os.getcwd()] = {"cycle": CYCLE, "edits": n, "ts": int(time.time()), "override": OVERRIDE}
+e = s.get(os.getcwd(), {})
+e.update({"cycle": CYCLE, "edits": n, "ts": int(time.time()), "override": OVERRIDE})
+e.setdefault("awaiting", [])        # written by the await one-liner above; never clobbered here
+s[os.getcwd()] = e
 p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(s, indent=2))
 print(f"cycle {CYCLE}: {n} edit(s) recorded")
 PY
@@ -174,6 +213,7 @@ After stopping, summarize:
 - **Don't pause for user input between passes** unless something is genuinely ambiguous. The skill is meant to converge autonomously up to the stopping rules — including across cycles, not just across passes within a cycle.
 - **Don't hand the termination decision back to the user.** This is the disguised form of stopping early, and it is harder to catch than the honest form because it reads as deference. "You should get to decide whether to spend another cycle", "want me to keep going?", "say the word and I'll run cycle N+1" — all of these end the run with edits in it while looking like good practice. Note what a naive check misses: reporting *truthfully* that the run has not converged and then handing back is still a violation, so a detector aimed at false convergence claims will not see it. The tell is the handback, not the claim. If the rule requires another cycle, run it; if you are not going to, use the labelled override in Termination, which states plainly that you overrode a rule rather than asking permission you already had instructions about.
 - **Don't rewrite prose faster than you verify it.** When a cycle's findings are all in text *you wrote in the previous cycle* — a comment, a failure message, a doc paragraph — stop rewriting and change tactics: delete the unsupported clause instead of replacing it with a better-sounding one. Replacing an unverified causal claim with a different unverified causal claim reads as progress and buys another mandatory cycle; several cycles in a row of this is the signature. Prefer stating only the mechanism you can check, naming candidates without ranking them, and saying outright that the evidence does not distinguish them. "I could not establish which" is a finished sentence.
+- **Don't publish a claim a later cycle must re-measure.** **And the rule is not about tallies — it is about claims you cannot check.** A universal or an exhaustive characterization is the same defect in different grammar, and it slips past a reader watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. Measured on the seventh run, five such claims in three consecutive cycles, each written to correct the previous cycle's false claim and each false in turn — "any looser pattern would reject" (looseness has more than one dimension), "it only re-admits `M01AE0`" (it re-admits any single trailing digit), "matched only the 5- and 7-character shapes" (the old pattern matched 6 too), "exactly the two levels the ladder is known to be handed" (nothing on the path validates a code's shape), and one that mis-numbered the very level it was excluding. So before writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what the thing DOES over what it excludes; and name the residue rather than claiming there is none. A count is the obvious case — prefer *"mutate the line and read the failures"* to any tally — but the universals are the ones that survive review, because nothing about them looks like a measurement.
 - **Don't trust a script's report that it edited something.** Every one of these passes edits by running a short script, and `str.replace` returns the string unchanged when it matches nothing while the script prints success anyway. One false claim survived FIVE cycles of this skill that way. Assert the target text is present before replacing; after a multi-line replacement, count what should still be there (a slice bounded by "this javadoc to the next method" once deleted a whole test method, and it compiled); and verify by reading the file back rather than by believing the script.
 - **Don't stop correcting a claim at the site you noticed it.** A false statement is rarely in one place. Measured on one run of this skill: a correction reached one of seven homes, then five of six, then five of six again, and once the two halves of a single paragraph contradicted each other after one half was fixed. Grep for the claim's distinctive phrasing, fix every hit, then grep for the phrasing you just wrote to see where it now lives. Two homes are easy to miss — the project's own instruction file, and anything outside the repo (a PR description, an issue comment) that no grep will reach. And a positional cross-reference ("the bullet above") is a claim about layout that any insertion falsifies: name the target instead of locating it.
 - **Don't promote architectural concerns** into in-pass fixes. Items like "this Hibernate proxy hits the DB at backfill scale" are real but belong in the indexer/sync layer, not in the slice being polished — flag and defer.
