@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.7.0
+version: 0.8.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -473,6 +473,44 @@ One report for the whole run, in this order:
   the report, not in a silence.
 - Nothing was posted to GitHub but the commits. Offer `pr-review <n> --post` or `--stage` once, at the
   end, if the user wants the review record public — offer it, do not wait for an answer.
+
+## Write the run record — always, before you finish
+
+Append a record to `~/.claude/skill-lessons/<UTC-date>-<repo>-<ticket-or-pr>.md` (create the
+directory if needed). This is **capture, not derivation**: it records what happened, never a proposed
+rule. `skill-retro` turns accumulated records into skill edits, because a lesson needs corroboration
+across runs and an adversarial pass before it changes how every future run behaves — neither of which
+this run can supply about itself.
+
+It costs no agent and nothing you do not already hold. Write it even when the run was clean; a record
+saying "the gate objected to nothing and no fresh agent found anything the author had missed" is
+evidence about the skill working, and its absence would bias every retro toward runs that went badly.
+
+```markdown
+# <skill> <version> · <repo> · <ticket/PR> · <UTC date>
+outcome: converged | did-not-converge (<reason>) | aborted (<condition>)
+rounds: <n>   cycles: <n>   verifier: ran (<verdict>) | skipped (<why>)
+
+## Refuted by measurement
+- <the claim, as it was stated> -> <what the measurement showed> · cost: <rounds/cycles>
+
+## Raised by a fresh agent, missed by the author
+- [r<n>] <finding> · blocking|non-blocking · cost: <rounds>
+
+## Where a skill blocked or contradicted this run
+- <skill>:<section> — <what happened, and what it cost>
+
+## Declined
+- <finding> — <the failure-mode sentence>
+
+## Assumptions review overturned
+- <assumption as recorded> -> <what replaced it, and which round>
+```
+
+The four middle sections are the ones with signal, and the reason is worth stating: **"refuted by
+measurement" and "raised by a fresh agent" are the two categories the run's own author provably
+cannot generate**, which is why they are recorded separately from everything else rather than folded
+into a summary.
 
 ## Anti-patterns
 
