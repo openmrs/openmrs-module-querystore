@@ -1,7 +1,8 @@
 #!/bin/bash
 # Stop-hook gate for the `harden` skill's termination contract.
 #
-# The contract: /harden is complete only when one full Phase 1 + Phase 2 cycle produces ZERO edits.
+# The contract: /harden is complete only when one cycle produces ZERO edits — a full Phase 1 +
+# Phase 2, or the documentation pass the skill's classification rule allows in its place.
 # The skill states that four times and it still got broken, because nothing outside the model
 # enforced it. This does.
 #

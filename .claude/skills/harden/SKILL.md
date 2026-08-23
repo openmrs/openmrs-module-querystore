@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.12.0
+version: 0.13.0
 ---
 
 # Harden
@@ -116,9 +116,31 @@ The two gates above end a *phase*. They do not end the run, and this is the rule
 
 So the run has its own condition, and it is a fact rather than a judgment:
 
-> **`/harden` is complete when one full Phase 1 + Phase 2 cycle produces zero edits.** If the cycle changed anything — a line of code, a comment, a test, a doc — that cycle was not the last one. Start another. Do not hand back to the user in between.
+> **`/harden` is complete when one cycle produces zero edits.** If the cycle changed anything — a line of code, a comment, a test, a doc — that cycle was not the last one. Start another. Do not hand back to the user in between. That next cycle is a full Phase 1 + Phase 2 unless the classification below makes it a documentation pass, which is a cheaper cycle and not a skipped one.
 
 Check it, do not estimate it. At the end of a cycle run `git status --porcelain` and count the commits the cycle made; report both. "I think it has converged" is not the condition; "this cycle made 0 edits" is.
+
+**Classify the cycle before deciding what the next one costs.** The confirming cycle is owed either
+way; what can change is its price. Where a cycle's only edits are DOCUMENTATION, it may be confirmed
+by a single agent rather than a full Phase 1 + Phase 2 — provided that agent does three things: the
+correction method in *Don't stop correcting a claim at the site you noticed it*, in full; the build;
+and, for any claim about behaviour, RUNS it rather than reads it.
+
+That third condition is what makes this a cheaper cycle rather than a weaker one, and it is not
+optional. A documentation-only diff can carry a behavioural falsehood: on the #302 run the claim that
+`clauseScoped=true` supersedes that issue's own treatment was written into `config.xml` and the
+README, and only driving the real `verify` refuted it — the flag REMOVES the rule and reinstates the
+symptom. A coherence sweep would have found that sentence coherent, and false.
+
+**What counts as documentation is a fact about the diff, and narrower than it reads.** One production
+line, one changed assertion, one new arrangement, and it is a full cycle. And where prose IS
+behaviour, the file it lives in does not save it: a prompt paragraph a test asserts a substring of, a
+log or failure message under assertion, a global-property default or the description shipped beside
+it — none of those are documentation for this purpose.
+
+A documentation pass that turns up anything behavioural escalates on the spot, to a full cycle
+starting at Phase 1. And the gate is unmoved: the pass still has to reach `edits: 0`, and the run
+still ends only on a cycle that changed nothing.
 
 **Cycle gate** (forcing function — the two phase gates demand verbatim sentences and get them; this one was prose and got skipped, so it is now the same shape). At the close of **every** cycle, before anything else, say this out loud with the measured values filled in:
 
@@ -220,7 +242,7 @@ After stopping, summarize:
 
 - **Don't invent concerns** to justify another pass — diminishing returns are real signals.
 - **Don't re-litigate** decisions from prior passes (e.g., "we deferred test fixture unification — should we revisit?" — no, ship).
-- **Don't run another pass** if the only items are below the noise floor or the agents start agreeing on "nothing actionable." This governs passes *within* a phase; it is not licence to skip the confirming cycle that Termination requires after a cycle that changed something. That cycle is expected to be empty — running it is how you prove it.
+- **Don't run another pass** if the only items are below the noise floor or the agents start agreeing on "nothing actionable." This governs passes *within* a phase; it is not licence to skip the confirming cycle that Termination requires after a cycle that changed something. That cycle is expected to be empty — running it is how you prove it, and a documentation pass, where the classification allows one, still is it.
 - **Don't end a cycle that changed something.** "It's basically converged, and the last fix was small" is the single most common way this skill stops early, because both phase gates are about findings and neither asks whether you just edited a file. If the cycle made an edit, it was not the last cycle — see Termination.
 - **Don't pause for user input between passes** unless something is genuinely ambiguous. The skill is meant to converge autonomously up to the stopping rules — including across cycles, not just across passes within a cycle.
 - **Don't hand the termination decision back to the user.** This is the disguised form of stopping early, and it is harder to catch than the honest form because it reads as deference. "You should get to decide whether to spend another cycle", "want me to keep going?", "say the word and I'll run cycle N+1" — all of these end the run with edits in it while looking like good practice. Note what a naive check misses: reporting *truthfully* that the run has not converged and then handing back is still a violation, so a detector aimed at false convergence claims will not see it. The tell is the handback, not the claim. If the rule requires another cycle, run it; if you are not going to, use the labelled override in Termination, which states plainly that you overrode a rule rather than asking permission you already had instructions about.
