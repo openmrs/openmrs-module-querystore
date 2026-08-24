@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.13.0
+version: 0.14.0
 ---
 
 # Harden
@@ -87,6 +87,14 @@ Run simplify passes until polish opportunities converge. Each pass:
      run code); or license exactly one agent to mutate and tell the other three to read only; or run
      the mutating ones serially. Whichever you pick, say it in every brief — "be careful" does not
      survive contact.
+   - **If you isolate, do not assume the worktree is on the branch under work.** Name the ref in every
+     brief and have the agent confirm its diff is non-empty before it reviews anything. The cause
+     differs between runs and neither is worth diagnosing here: on the #269 run every agent's worktree
+     "opened at origin/main, not the PR branch, so all six had to check the branch out themselves",
+     and two reported the diff they were asked for came back empty until they did; on the #250 run the
+     branch existed but git refused it to a second worktree because the main one held it, so agents
+     needed `git checkout --ignore-other-worktrees`. Both cost a detour per agent and no round or
+     cycle, which is why this is one sentence in the brief rather than a step.
    - **Commit before anything mutates the tree — the cycle's work before spawning them, and your own
      measurement probes too — and do not edit the tree while they run.** `git checkout -- <path>` to
      undo a probe restores HEAD, so on a file carrying uncommitted intended work it discards that work
