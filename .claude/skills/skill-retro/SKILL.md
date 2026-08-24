@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -118,6 +118,14 @@ Apply the surviving proposals. Then, per skill touched:
 - one commit in the repo's own voice — `<skill> <version>[, <skill> <version>]: <lowercase summary>` —
   whose body cites the run records, and which says for each change what corroborated it;
 - push, then write today's date into `~/.claude/skill-lessons/LAST`.
+
+**And mirror the evidence, in the same commit, whether or not a skill changed.** `~/.claude/skill-lessons/`
+— every run record, `REJECTED.md` and `LAST` — belongs in the source repo's `.claude/skill-lessons/`,
+`cmp`-verified like the skills. It is the corroboration itself: the counts that decide the Step 3 bar,
+and the killed proposals with the evidence that would reopen each. Left on one machine it is lost with
+that machine, and unavailable to anyone else running these skills. **A retro that applies NOTHING still
+commits here**, because the parked counts and the new records are its whole output — that is the pass
+most likely to skip this step and the one whose evidence is easiest to lose.
 
 `--dry-run` stops before applying and prints the proposals with their corroboration and objections.
 
