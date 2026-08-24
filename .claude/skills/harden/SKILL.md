@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.14.0
+version: 0.15.0
 ---
 
 # Harden
@@ -50,6 +50,17 @@ that always refused a conjunction, so the rule's central premise ("a correct jud
 assumed and never exercised; the cell where the real system says yes was unreachable by the whole
 suite, and when a reviewer finally constructed it the design reversed. Cost: four cycles of work built
 on the unexamined premise. A premise no fixture can falsify is not covered, however many tests name it.
+
+**The stand-in is not always a stub — it can be the INPUT POPULATION a measurement enumerates, and it
+need not be a measurement you wrote.** Two runs, one shape: a candidate population keyed on rows'
+display names, in which the tie the rule turned on cannot arise, so the result came back clean in good
+faith. On #250 an adversarial sweep of a two-clause predicate "took each row's DISPLAY NAME as the
+recorded order, a population where no two rows of a family can tie above rank 0"; the unguarded half of
+the line was found instead by a reviewer's mutation, at a cost of one round. On #268 the sizing the
+TICKET offered ("0 of 36 reachable") measured a display-name population too, while the rule turned on a
+leg that ties on a name that is no row's display name — caught at the gate, before code. Ask of any
+clean or zero result what its inputs could not have produced, and ask it of a measurement you rely on
+as readily as one you ran.
 
 A behavior change without a named test is a Phase 1 finding — even when the code looks "obviously correct," "matches an existing pattern," or "is trivially small." Never-executed code is unverified code.
 
