@@ -11,25 +11,37 @@ package org.openmrs.module.querystore.api.impl;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
+import org.openmrs.module.querystore.QueryStoreConstants;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.Filter;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
+import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRecord;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
+import org.openmrs.module.querystore.model.PatientChartFingerprint;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 /**
@@ -41,6 +53,21 @@ import org.openmrs.module.querystore.model.QueryDocument;
 public class QueryStoreServiceImpl extends BaseOpenmrsService implements QueryStoreService {
 
 	private static final Log log = LogFactory.getLog(QueryStoreServiceImpl.class);
+
+	private static final Pattern QUOTED_PHRASE = Pattern.compile("[\\\"]([^\\\"]{2,})[\\\"]|'([^']{2,})'");
+
+	private static final Pattern ISO_DATE = Pattern.compile("\\b\\d{4}-\\d{2}-\\d{2}\\b");
+
+	private static final Pattern UUID = Pattern.compile(
+	        "\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b",
+	        Pattern.CASE_INSENSITIVE);
+
+	private static final Pattern LABELED_IDENTIFIER = Pattern.compile(
+	        "\\b(?:mrn|id|identifier|code)(?:\\s+is\\s+|\\s*[:=#]\\s*)([a-z0-9][a-z0-9._/-]{2,})\\b",
+	        Pattern.CASE_INSENSITIVE);
+
+	private static final Pattern NAMESPACE_CODE = Pattern.compile(
+	        "\\b[a-z][a-z0-9_-]{1,15}:[a-z0-9][a-z0-9._-]{1,31}\\b", Pattern.CASE_INSENSITIVE);
 
 	private BackendStore backend;
 
@@ -218,11 +245,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 *  and returns whatever the backend has. */
 	private void ensureIndexedSafely(String patientUuid) {
 		try {
-			BootstrapService bootstrapService = bootstrapServiceOverride;
-			if (bootstrapService == null) {
-				bootstrapService = Context.getService(BootstrapService.class);
-			}
-			bootstrapService.ensureIndexed(patientUuid);
+			bootstrapService().ensureIndexed(patientUuid);
 		}
 		catch (RuntimeException e) {
 			// Index-failure must not block search; whatever did get indexed (or what was already
@@ -230,6 +253,21 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			// feature shipped.
 			log.warn("Auto-index for patient " + patientUuid
 			        + " failed; serving search with whatever is indexed", e);
+		}
+	}
+
+	private BootstrapService bootstrapService() {
+		return bootstrapServiceOverride == null
+		        ? Context.getService(BootstrapService.class) : bootstrapServiceOverride;
+	}
+
+	private boolean isProjectionComplete() {
+		try {
+			return BootstrapStatusReport.from(bootstrapService().getStatus()).isComplete();
+		}
+		catch (RuntimeException e) {
+			log.warn("Could not verify QueryStore projection completeness; reporting incomplete", e);
+			return false;
 		}
 	}
 
@@ -246,6 +284,18 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (backend == null || patientUuid == null) {
 			return Collections.emptyList();
 		}
+		return getPatientChartRead(patientUuid).getDocuments();
+	}
+
+	@Override
+	public PatientChartRead getPatientChartRead(String patientUuid) {
+		if (patientUuid == null) {
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
+		}
+		if (backend == null) {
+			throw new IllegalStateException(
+			        "No BackendStore wired into QueryStoreServiceImpl; cannot determine whether the patient chart is complete");
+		}
 		// Same cold-bootstrap protocol as searchByPatient: probe existsByPatient, lazy-project on
 		// miss, then read. Decision 15 explicitly mirrors searchByPatient's behaviour here so the
 		// first method to touch a never-indexed patient pays the projection cost once. The shared
@@ -254,7 +304,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (!backend.existsByPatient(patientUuid)) {
 			ensureIndexedSafely(patientUuid);
 		}
-		return backend.findAllByPatient(patientUuid);
+		PatientChartRead chartRead = backend.findPatientChart(patientUuid);
+		return new PatientChartRead(chartRead.getDocuments(), chartRead.isTruncated(),
+		        isProjectionComplete());
 	}
 
 	private List<QueryDocument> runHybrid(String query, int limit, Filter scope) {
@@ -281,7 +333,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 */
 	private float[] embedQueryCached(String query) {
 		String modelName = embeddingProvider.getModelName();
-		String key = (modelName == null ? "" : modelName) + ' ' + query;
+		String key = (modelName == null ? "" : modelName) + '\u0000' + query;
 		float[] cached = queryEmbedCache.get(key);
 		if (cached != null) {
 			return cached;
@@ -297,5 +349,247 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		List<QueryDocument> out = new ArrayList<>(result.getHits().size());
 		result.getHits().forEach(h -> out.add(h.getDocument()));
 		return out;
+	}
+
+	@Override
+	public ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request) {
+		if (request == null) {
+			request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		}
+		// Composed over the sibling complete-chart read so cold-bootstrap, ordering, and any
+		// backend-documented cap behave identically (Decision 17 §3).
+		PatientChartRead chartRead = getPatientChartRead(patientUuid);
+		List<QueryDocument> chart = chartRead.getDocuments();
+
+		// Server-side interpretation (ADR Decision 18): derived types UNION the caller's,
+		// derived temporal ORs the caller's — module-contributed additions always survive.
+		Set<String> effectiveTypes = new HashSet<>(request.getTypes());
+		boolean temporal = request.isTemporal();
+		if (request.isInterpretQuestion()) {
+			ContextQuestionInterpreter.Interpretation interpreted =
+			        ContextQuestionInterpreter.interpret(question);
+			effectiveTypes.addAll(interpreted.types);
+			temporal = temporal || interpreted.temporal;
+		}
+
+		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (panel
+		// expansion + stopword stripping) runs HERE, at the owner of the embedder — idempotent
+		// for callers that still preprocess. A failure degrades to the policy tiers alone —
+		// selection must never block on the ranking layer.
+		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
+		if (StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
+			try {
+				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
+				for (QueryDocument hit : searchByPatient(patientUuid, retrievalQuestion,
+				        request.getSimilarityLimit())) {
+					if (hit != null && hit.getResourceUuid() != null
+					        && !similarityRanks.containsKey(hit.getResourceUuid())) {
+						similarityRanks.put(hit.getResourceUuid(),
+						        Integer.valueOf(similarityRanks.size() + 1));
+					}
+				}
+			}
+			catch (RuntimeException e) {
+				log.warn("Context-slice ranked search failed for patient " + patientUuid
+				        + " — proceeding with policy tiers only", e);
+			}
+		}
+
+		int anchor = temporal ? request.getRecencyAnchorSize() : 0;
+		Set<String> exactSignals = exactSignals(question);
+		List<ContextSliceRecord> selected = new ArrayList<>();
+		Set<String> selectedUuids = new HashSet<>();
+		for (int i = 0; i < chart.size(); i++) {
+			QueryDocument doc = chart.get(i);
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			String tier = null;
+			if (isMandatoryCore(doc)) {
+				tier = QueryStoreConstants.TIER_MANDATORY;
+			} else if (matchesExactSignal(doc, exactSignals)) {
+				tier = QueryStoreConstants.TIER_EXACT;
+			} else if (doc.getResourceType() != null && effectiveTypes.contains(doc.getResourceType())) {
+				tier = QueryStoreConstants.TIER_TYPED;
+			} else if (i < anchor) {
+				tier = QueryStoreConstants.TIER_RECENCY_ANCHOR;
+			} else if (similarityRanks.containsKey(doc.getResourceUuid())) {
+				tier = QueryStoreConstants.TIER_SIMILARITY;
+			}
+			if (tier != null && selectedUuids.add(doc.getResourceUuid())) {
+				Integer rank = QueryStoreConstants.TIER_SIMILARITY.equals(tier)
+				        ? similarityRanks.get(doc.getResourceUuid()) : null;
+				selected.add(new ContextSliceRecord(doc, tier, rank));
+			}
+		}
+		selected = completePanelFamilies(chart, selected, selectedUuids);
+
+		return new ContextSlice(selected, chart.size(), chartRead.isTruncated(),
+		        chartRead.isProjectionComplete(), effectiveTypes, temporal,
+		        PatientChartFingerprint.snapshotId(chart, chartRead.isTruncated(),
+		                chartRead.isProjectionComplete()));
+	}
+
+	private static Set<String> exactSignals(String question) {
+		Set<String> signals = new HashSet<>();
+		if (StringUtils.isBlank(question)) {
+			return signals;
+		}
+		collectMatches(QUOTED_PHRASE, question, signals, true);
+		collectMatches(ISO_DATE, question, signals, false);
+		collectMatches(UUID, question, signals, false);
+		collectMatches(LABELED_IDENTIFIER, question, signals, true);
+		collectMatches(NAMESPACE_CODE, question, signals, false);
+		return signals;
+	}
+
+	private static void collectMatches(Pattern pattern, String question, Set<String> sink,
+	        boolean firstNonEmptyGroup) {
+		Matcher matcher = pattern.matcher(question);
+		while (matcher.find()) {
+			String value = matcher.group();
+			if (firstNonEmptyGroup) {
+				value = null;
+				for (int group = 1; group <= matcher.groupCount(); group++) {
+					if (StringUtils.isNotBlank(matcher.group(group))) {
+						value = matcher.group(group);
+						break;
+					}
+				}
+			}
+			if (StringUtils.isNotBlank(value)) {
+				sink.add(value.trim().toLowerCase(Locale.ROOT));
+			}
+		}
+	}
+
+	private static boolean matchesExactSignal(QueryDocument doc, Set<String> signals) {
+		if (signals.isEmpty()) {
+			return false;
+		}
+		StringBuilder values = new StringBuilder();
+		appendValue(values, doc.getResourceUuid());
+		appendValue(values, doc.getDate());
+		appendValue(values, doc.getText());
+		appendValue(values, doc.getMetadata());
+		String searchable = values.toString().toLowerCase(Locale.ROOT);
+		for (String signal : signals) {
+			if (containsBounded(searchable, signal)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static void appendValue(StringBuilder sink, Object value) {
+		if (value instanceof Map) {
+			for (Object child : ((Map<?, ?>) value).values()) {
+				appendValue(sink, child);
+			}
+		} else if (value instanceof Iterable) {
+			for (Object child : (Iterable<?>) value) {
+				appendValue(sink, child);
+			}
+		} else if (value != null) {
+			sink.append(value).append('\n');
+		}
+	}
+
+	private static boolean containsBounded(String searchable, String signal) {
+		int from = 0;
+		while (from <= searchable.length() - signal.length()) {
+			int index = searchable.indexOf(signal, from);
+			if (index < 0) {
+				return false;
+			}
+			int end = index + signal.length();
+			boolean leftBounded = index == 0 || !Character.isLetterOrDigit(searchable.charAt(index - 1));
+			boolean rightBounded = end == searchable.length()
+					|| !Character.isLetterOrDigit(searchable.charAt(end));
+			if (leftBounded && rightBounded) {
+				return true;
+			}
+			from = index + 1;
+		}
+		return false;
+	}
+
+	/**
+	 * The mandatory clinical core (Decision 17 tier 1): the patient demographics record, every
+	 * allergy, and every condition/diagnosis whose {@code clinical_status} metadata is ACTIVE.
+	 * Safety context every slice carries regardless of the caller's typed scope.
+	 */
+	private static boolean isMandatoryCore(QueryDocument doc) {
+		String type = doc.getResourceType();
+		if ("patient".equals(type) || "allergy".equals(type)) {
+			return true;
+		}
+		if ("condition".equals(type) || "diagnosis".equals(type)) {
+			Object status = doc.getMetadata().get(QueryStoreConstants.FIELD_CLINICAL_STATUS);
+			return status != null && "ACTIVE".equalsIgnoreCase(status.toString());
+		}
+		return false;
+	}
+
+	/**
+	 * Obs-group family completion (Decision 17 tier {@code panel}): when a group parent or any
+	 * member is already selected, the whole family joins — panel values live in member obs whose
+	 * text carries no panel name, so ranking can match the parent and miss every value. Returns a
+	 * REBUILT list scanned from the chart so joined members keep chart order instead of being
+	 * appended after unrelated newer records.
+	 */
+	private static List<ContextSliceRecord> completePanelFamilies(List<QueryDocument> chart,
+	        List<ContextSliceRecord> selected, Set<String> selectedUuids) {
+		Set<String> families = new HashSet<>();
+		for (QueryDocument doc : chart) {
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			Object group = doc.getMetadata().get(QueryStoreConstants.FIELD_OBS_GROUP_UUID);
+			if (group == null) {
+				continue;
+			}
+			String groupUuid = group.toString();
+			if (selectedUuids.contains(doc.getResourceUuid()) || selectedUuids.contains(groupUuid)) {
+				families.add(groupUuid);
+			}
+		}
+		if (families.isEmpty()) {
+			return selected;
+		}
+		Map<String, ContextSliceRecord> byUuid = new LinkedHashMap<>();
+		for (ContextSliceRecord record : selected) {
+			byUuid.put(record.getDocument().getResourceUuid(), record);
+		}
+		List<ContextSliceRecord> completed = new ArrayList<>();
+		for (QueryDocument doc : chart) {
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			Object group = doc.getMetadata().get(QueryStoreConstants.FIELD_OBS_GROUP_UUID);
+			boolean inFamily = (group != null && families.contains(group.toString()))
+			        || families.contains(doc.getResourceUuid());
+			ContextSliceRecord already = byUuid.get(doc.getResourceUuid());
+			if (already != null) {
+				if (inFamily && !isProtectedTier(already.getTier())) {
+					completed.add(new ContextSliceRecord(doc, QueryStoreConstants.TIER_PANEL,
+					        already.getRank()));
+				} else {
+					completed.add(already);
+				}
+				continue;
+			}
+			if (inFamily) {
+				completed.add(new ContextSliceRecord(doc, QueryStoreConstants.TIER_PANEL));
+			}
+		}
+		return completed;
+	}
+
+	private static boolean isProtectedTier(String tier) {
+		return QueryStoreConstants.TIER_MANDATORY.equals(tier)
+		        || QueryStoreConstants.TIER_EXACT.equals(tier)
+		        || QueryStoreConstants.TIER_TYPED.equals(tier)
+		        || QueryStoreConstants.TIER_PANEL.equals(tier);
 	}
 }

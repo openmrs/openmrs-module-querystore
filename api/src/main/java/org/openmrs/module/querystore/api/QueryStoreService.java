@@ -16,7 +16,10 @@ import org.openmrs.annotation.Authorized;
 import org.openmrs.api.OpenmrsService;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.WriteResult;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.util.PrivilegeConstants;
 
@@ -153,13 +156,46 @@ public interface QueryStoreService extends OpenmrsService {
 	 *
 	 * <p><b>ES tier caveat (v1):</b> the Elasticsearch backend issues a single wildcard search
 	 * with {@code size = 10 000} (the default {@code max_result_window}); patients with more
-	 * documents see the most-recent slice and the older tail is silently dropped at the backend
-	 * with a WARN log. MySQL and Lucene are unbounded. Tier-agnostic consumers should expect
-	 * truncation above ~10 000 docs on ES until PIT + {@code search_after} pagination lifts the cap
-	 * (deferred to v1.1). The LLM full-chart consumer that motivates this method tops out at
-	 * context-window size well below 10 000 documents, so the cap is operationally invisible to
-	 * the documented use case.
+	 * documents receive the most-recent slice and the backend emits a WARN. This legacy list-only
+	 * method cannot expose that loss; completeness-sensitive consumers must use
+	 * {@link #getPatientChartRead(String)}. MySQL and Lucene are unbounded. PIT plus
+	 * {@code search_after} pagination remains deferred to v1.1.
 	 */
 	@Authorized(PrivilegeConstants.GET_PATIENTS)
 	List<QueryDocument> getPatientChart(String patientUuid);
+
+	/**
+	 * Full patient-chart read with an explicit backend completeness signal. Existing in-JVM
+	 * consumers that only need records may continue to use {@link #getPatientChart(String)}.
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default PatientChartRead getPatientChartRead(String patientUuid) {
+		return PatientChartRead.complete(getPatientChart(patientUuid));
+	}
+
+	/**
+	 * Returns the tier-tagged context slice for one patient and question — the single
+	 * implementation of the provider-neutral context-selection invariants (ADR Decision 17;
+	 * conformance family {@code context_policy} in dual-provider-conformance.v1). Selection
+	 * tiers, by priority: {@code mandatory} (patient record, allergies, active conditions),
+	 * {@code exact} (explicit UUIDs, dates, namespaced codes, labeled identifiers, and quoted phrases),
+	 * {@code recency_anchor} (newest chart records, only when {@code request.temporal}),
+	 * {@code typed} (caller-declared typed-complete resource types), {@code similarity}
+	 * (ranked-search hits for {@code question}), {@code panel} (obs-group family completion).
+	 * Records keep {@link #getPatientChart}'s {@code record_date}-desc order, each appearing
+	 * once under its highest tier.
+	 *
+	 * <p>When {@link ContextSliceRequest#isInterpretQuestion()} is enabled, QueryStore derives
+	 * typed scope, temporal intent, and retrieval preprocessing from the raw question and unions
+	 * them with the caller's explicit additions (ADR Decision 18). Prompt composition and token
+	 * budgeting stay in the consumer; {@code mandatory}, {@code exact}, {@code typed}, and
+	 * {@code panel} records are protected there. A ranked-search
+	 * failure or blank question degrades to the policy tiers alone; cold-patient lazy bootstrap
+	 * and the ES full-chart cap behave exactly as {@link #getPatientChart} (a capped chart is
+	 * surfaced via {@link org.openmrs.module.querystore.model.ContextSlice#isChartTruncated}).
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request) {
+		throw new UnsupportedOperationException("Context slices are not supported by this QueryStoreService implementation");
+	}
 }
