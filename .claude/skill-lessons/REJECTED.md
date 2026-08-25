@@ -412,7 +412,13 @@ citation, because the refuter caught these before anything was applied.
   pins each round to an immutable fetched ref; `harden` Phase 2 points its agents at the live branch the
   orchestrator commits to. Not proposed: one record, and the cross-skill limb was killed once as "a run
   decision, not a document conflict".
-- The verifier's stray database process holding a datadir lock: **1 record** (#308, amended capture).
+- The verifier's stray database process holding a datadir lock: **0 records as a SKILL gap** (#308,
+  amended capture, corrected same day). The incident is real, but the trap — the orphaned
+  `database/bin/mariadbd` keeping the datadir lock, its exact `Can't lock aria control file` signature
+  and the `pkill -9 -f "database/bin/mariadbd"` fix — is ALREADY documented in this project's own
+  memory, and the run simply did not consult it. So the remedy is not a `pr-harden` rule: the
+  information existed and was ignored, which is the same "instruction is not the lever" shape as the
+  `git checkout --` hazard. Recorded here so a later retro does not read it as a missing rule.
 - Raising the round cap when every round finds a DIFFERENT defect: **1 record** (#308). Saved rounds
   rather than costing them, so below the bar on both limbs.
 - `git branch -D` blocked by an agent worktree holding the ref: **1 record** (#250).
