@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.8.0
+version: 0.9.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -708,6 +708,8 @@ evidence about the skill working, and its absence would bias every retro toward 
 # <skill> <version> · <repo> · <ticket/PR> · <UTC date>
 outcome: converged | did-not-converge (<reason>) | aborted (<condition>)
 rounds: <n>   cycles: <n>   verifier: ran (<verdict>) | skipped (<why>)
+context: no compaction | compacted at <step> · peak <n>% at <step> | peak not surfaced
+transcript: ~/.claude/projects/<cwd-slug>/<session-uuid>.jsonl
 
 ## Refuted by measurement
 - <the claim, as it was stated> -> <what the measurement showed> · cost: <rounds/cycles>
@@ -729,6 +731,17 @@ The four middle sections are the ones with signal, and the reason is worth stati
 measurement" and "raised by a fresh agent" are the two categories the run's own author provably
 cannot generate**, which is why they are recorded separately from everything else rather than folded
 into a summary.
+
+**`context:` and `transcript:` are capture, and the second is what makes the first checkable.** A
+run's own sense of how full its window was is a guess made by the thing being measured, so record
+only what actually surfaced — a compaction, a context warning, and the step it happened at — and name
+the transcript, which carries the ground truth a retro can measure instead. The path needs no
+bookkeeping: the session uuid is the directory name in this run's scratchpad path, and the transcript
+is `~/.claude/projects/<cwd-slug>/<uuid>.jsonl`. `no compaction · peak not surfaced` is the expected
+reading and is worth writing for the same reason a clean run still gets a record — a field filled in
+only when something went wrong biases every retro that reads it, in the direction of the runs that
+went badly. Derive nothing from it here: whether context pressure costs quality is a claim about many
+runs, and no run can settle it about itself.
 
 ## Anti-patterns
 

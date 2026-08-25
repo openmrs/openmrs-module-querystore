@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.9.0
+version: 0.10.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -499,6 +499,8 @@ evidence about the skill working, and its absence would bias every retro toward 
 # <skill> <version> · <repo> · <ticket/PR> · <UTC date>
 outcome: converged | did-not-converge (<reason>) | aborted (<condition>)
 rounds: <n>   cycles: <n>   verifier: ran (<verdict>) | skipped (<why>)
+context: no compaction | compacted at <step> · peak <n>% at <step> | peak not surfaced
+transcript: ~/.claude/projects/<cwd-slug>/<session-uuid>.jsonl
 
 ## Refuted by measurement
 - <the claim, as it was stated> -> <what the measurement showed> · cost: <rounds/cycles>
@@ -520,6 +522,17 @@ The four middle sections are the ones with signal, and the reason is worth stati
 measurement" and "raised by a fresh agent" are the two categories the run's own author provably
 cannot generate**, which is why they are recorded separately from everything else rather than folded
 into a summary.
+
+**`context:` and `transcript:` are capture, and the second is what makes the first checkable.** A
+run's own sense of how full its window was is a guess made by the thing being measured, so record
+only what actually surfaced — a compaction, a context warning, and the step it happened at — and name
+the transcript, which carries the ground truth a retro can measure instead. The path needs no
+bookkeeping: the session uuid is the directory name in this run's scratchpad path, and the transcript
+is `~/.claude/projects/<cwd-slug>/<uuid>.jsonl`. `no compaction · peak not surfaced` is the expected
+reading and is worth writing for the same reason a clean run still gets a record — a field filled in
+only when something went wrong biases every retro that reads it, in the direction of the runs that
+went badly. Derive nothing from it here: whether context pressure costs quality is a claim about many
+runs, and no run can settle it about itself.
 
 ## Anti-patterns
 
