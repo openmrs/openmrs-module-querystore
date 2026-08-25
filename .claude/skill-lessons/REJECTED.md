@@ -345,3 +345,74 @@ called it "step 4's timestamp check" when pr-harden's freshness check is step 5 
 - The verifier trusting `omod/target`: **0 records** — parked above, provenance.
 - `main` moving under a run: **1 record** (#284).
 - `git branch -D` blocked by an agent worktree holding the ref: **1 record** (#250).
+
+
+## 2026-08-25 (third pass, one-record window after #308) — one proposal killed, nothing applied
+
+**KILLED · resolve-ticket Step 2: "a plan whose success criterion is that two computed outputs AGREE
+must enumerate the UNITS each is computed over."** Five blocking objections, the first sufficient on
+its own:
+
+1. **The edit would not have prevented what it cites.** The prescribed action WAS performed and
+   produced a false answer: ADR 44's own justification stated a unit for the record channel
+   ("a record is rendered per ROW") and stated it wrongly, and the fold was placed on a unit the author
+   had named. A bullet saying "enumerate the units" is satisfied verbatim by the statement that cost
+   review round 1 and harden cycle 2. What was missing was VERIFYING the enumeration against code that
+   was already there to read — a different rule, and not the one proposed.
+2. **The load-bearing claim is falsified by the record's own fifth axis.** "Every one was readable in
+   both call paths at plan time" is false for the trim axis, which was established by RUNNING a
+   semantically-equivalent rewrite against the whole build. "Every one" is also the universal grammar
+   Step 4:87-88 forbids — the second consecutive retro to submit a wording faulted for it.
+3. **Four axes, not five.** The record states the number as four (collapsed key, row, subject-matter
+   gate, clause text). The trim row is a test-COVERAGE gap, not a unit the channels are computed over,
+   and enumerating units cannot surface "no case pins this"; the gate row is a gate, by the proposal's
+   own words.
+4. **The published cost figure was wrong in the direction that flattered the proposal.** "Five review
+   rounds and two harden cycles" against a table naming three rounds and two cycles. The cost limb of
+   the bar is still met (2 cycles + 3 rounds), so the defect is the figure, which Step 4:87 forbids
+   adding.
+5. **The prune justification misreads the host.** "Step 3's question 5 already provides the gate" is
+   false — question 5 asks whether the SCOPE matches the ticket. No Step 3 question asks whether two
+   computed outputs share their units, so the bullet would ship into a growing document with no gate
+   reading it.
+
+Non-blocking and also true: "each found by a different fresh agent" is not in the record (two findings
+carry the same `[c3]` tag), and the header miscounted the corpus as eight older records where there are
+seven.
+**NEW EVIDENCE THAT WOULD REOPEN IT: an incident where the divergence axes were NOT visible in the
+call paths at plan time, or a second record of the same shape. If readmitted, the rule to test is
+"verify a stated unit against the code that computes it", NOT "enumerate the units" — the enumeration
+was done and was wrong.**
+
+**PROCESS DEFECT FOUND BY THE REFUTER, recorded because it is the fourth pass to hit it.** Four of the
+five parked items in this pass cited facts present in NO run record — the `cp`-to-scratchpad idiom, the
+prose-correction cycles, the moving review target, and the stray database process — while using them to
+carry counts and, in one case, to partly discharge a kill condition from 2026-08-24 (second) P1. That is
+the shape parked at 4 cycles / 3 records ("a fact in no record at all, cited to the run"). Remedied the
+way #250 and #269 remedied theirs: the #308 record now carries a clearly-flagged **After-the-fact
+capture** section, and the counts below are stated against it. The parked entry for that defect moves to
+**5 cycles / 4 records**, and its own reopen condition is unchanged — still zero rules shipped on a bad
+citation, because the refuter caught these before anything was applied.
+
+## Running parked counts (superseding the previous block where they differ)
+- `git checkout -- <path>` losing uncommitted work: **8 incidents / 6 records** — remedies stay killed.
+  #308's incident is the same shape already analysed: a probe on a file carrying uncommitted work, i.e.
+  the commit rule not followed. The scratchpad-located `cp` idiom the run adopted answers 2026-08-24
+  (second) P1's objection 2 (an untracked file inside the repo corrupting `git status --porcelain`, the
+  harden cycle gate's arithmetic) but leaves objections 1, 3 and 4 standing. **Reopen only on an
+  incident where the commit rule WAS followed and the idiom still lost work.**
+- Prose-correction cycles: **6 records** — remedy killed; deletion-over-rewording is what the run applied.
+- Verifier standing-permission friction: **5 records** — relaxation killed.
+- The proposer not verifying its own citations: **5 cycles / 4 records** — parked above.
+- A negated closing keyword still closing: **1 record** (#250).
+- pr-harden silent on where the fixer works: **1 record** (#250) — cross-skill, killed.
+- The verifier trusting `omod/target`: **0 records** — provenance.
+- `main` moving under a run: **1 record** (#284).
+- A delegated agent's REVIEW TARGET moving under it: **1 record** (#308, amended capture). `pr-harden`
+  pins each round to an immutable fetched ref; `harden` Phase 2 points its agents at the live branch the
+  orchestrator commits to. Not proposed: one record, and the cross-skill limb was killed once as "a run
+  decision, not a document conflict".
+- The verifier's stray database process holding a datadir lock: **1 record** (#308, amended capture).
+- Raising the round cap when every round finds a DIFFERENT defect: **1 record** (#308). Saved rounds
+  rather than costing them, so below the bar on both limbs.
+- `git branch -D` blocked by an agent worktree holding the ref: **1 record** (#250).
