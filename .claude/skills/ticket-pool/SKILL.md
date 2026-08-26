@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.5.0
+version: 0.6.0
 ---
 
 # Ticket pool — the loop that learns
@@ -88,11 +88,24 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-run --no-retro` | tickets only, no retro at all |
 | `pool-run --init` | create the label in each configured repo |
 | `pool-run --config <path>` | a config other than the default |
+| `pool-watch` | render the newest session's stream the way an interactive session reads |
+| `pool-watch 310 --results` | that ticket's session, tool results included |
 
 `~/.claude/pipeline/pool.json` holds the label, a repo→checkout map, the source repo the retro pushes
 to, the retro's record threshold and timeout, the per-ticket timeout, quiet window and attempt cap,
 and a `claude` block — `model`, `effort`, `max_budget_usd`, and `extra_args` passed through to every
 session. Logs, the ledger and the per-session streams are under `~/.claude/pipeline/`.
+
+### Watching a session
+
+Each ticket runs as `claude -p --output-format stream-json`, so the whole session is on disk as it
+happens: every assistant message, every tool call, every subagent spawn and its progress. `pool-watch`
+renders it — live by default, `--replay` to print and stop, `--results` for tool output, `--thinking`
+for thinking blocks, `--tail N` to join near the end.
+
+**Read the stream; do not attach to the session.** `claude --resume <session-id>` puts a second writer
+on a conversation, so it is for a session that has FINISHED — `pool-watch`'s header prints the full id
+for exactly that. Reading the `.jsonl` is safe at any time and cannot perturb a run.
 
 ## What one invocation can do
 

@@ -184,6 +184,16 @@ def take_lock(say: Say) -> bool:
 
 
 def drop_lock() -> None:
+    """Release the lock only if it is OURS.
+
+    An unconditional unlink here was a live hazard the moment a read-only mode stopped taking the lock:
+    skipping `take_lock` does not skip the `finally`, so a `--dry-run` alongside a working pool DELETED
+    that pool's lock and left the checkout open to a second driver — the exact collision the lock
+    exists to prevent. Measured by doing it, to a real run, 18 minutes into its first ticket.
+    """
+    holder = load_json(LOCK, {})
+    if holder.get("pid") != os.getpid():
+        return
     try:
         LOCK.unlink()
     except OSError:
@@ -230,13 +240,13 @@ def parity_problems(cfg: dict) -> list[str]:
     src = cfg.get("source_repo")
     if not src:
         return problems
-    driver_mirror = Path(src).expanduser() / ".claude/pipeline/pool-run"
-    me = PIPELINE / "pool-run"
-    if not driver_mirror.is_file():
-        problems.append("pool-run itself is not mirrored in the source repo")
-    elif me.is_file() and driver_mirror.read_bytes() != me.read_bytes():
-        problems.append("pool-run differs from the source repo — the driver that ran is not the "
-                        "driver the repo records")
+    for script in ("pool-run", "pool-watch"):
+        mine, mirrored = PIPELINE / script, Path(src).expanduser() / ".claude/pipeline" / script
+        if not mirrored.is_file():
+            problems.append(f"{script} is not mirrored in the source repo")
+        elif mine.is_file() and mirrored.read_bytes() != mine.read_bytes():
+            problems.append(f"{script} differs from the source repo — what ran is not what the repo "
+                            "records")
     for skill in MIRRORED_SKILLS:
         live, mirror = CLAUDE / "skills" / skill, Path(src).expanduser() / ".claude/skills" / skill
         if not mirror.is_dir():
@@ -1013,7 +1023,11 @@ def main() -> int:
         return 1
     say("  ok")
 
-    if not take_lock(say):
+    # A dry run starts nothing, so it takes no lock and writes no ledger — "nothing was started" has to
+    # mean nothing was written either, and the useful moment to preview a queue is often while a batch
+    # is already working one. Reads are safe against a live run: every write here is atomic
+    # (temp file, then replace), so a concurrent reader sees one version or the other, never a torn one.
+    if not args.dry_run and not take_lock(say):
         return 1
     stopping = {"flag": False}
 
@@ -1044,7 +1058,10 @@ def main() -> int:
         say("queue")
         named = [t.strip() for t in args.ticket.split(",") if t.strip()] if args.ticket else None
         queue = build_queue(cfg, ledger, say, named)
-        save_json(LEDGER, ledger)
+        if not args.dry_run:
+            # build_queue records what it skipped (a ticket whose PR now exists, say). That is a real
+            # observation worth keeping — but only when this invocation is going to act on it.
+            save_json(LEDGER, ledger)
         if args.limit:
             queue = queue[: args.limit]
         if args.once:

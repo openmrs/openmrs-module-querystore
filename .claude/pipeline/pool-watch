@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""pool-watch — read a pool session's stream the way an interactive session reads.
+
+`pool-run` starts each ticket as `claude -p --output-format stream-json`, so the whole session — every
+assistant message, every tool call, every subagent spawn and its progress — is already on disk as
+newline-delimited JSON under `~/.claude/pipeline/logs/`. This renders it, live or after the fact.
+
+It only ever READS. It is safe to run against a session in flight, which is the point: the alternative,
+`claude --resume <session-id>`, attaches a second writer to a live session and must not be pointed at
+one that is still running.
+
+Usage:
+  pool-watch                 follow the newest session
+  pool-watch 310             follow the newest session for that ticket
+  pool-watch <file.jsonl>    follow that file
+  pool-watch --replay        print what is there and exit, do not follow
+  pool-watch --results       include tool RESULTS, not just the calls (verbose)
+  pool-watch --thinking      include thinking blocks
+  pool-watch --tail 50       start from the last N events rather than the beginning
+  pool-watch --list          list the sessions on disk, newest first
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+LOGS = Path.home() / ".claude/pipeline/logs"
+
+
+def sessions() -> list[Path]:
+    return sorted(LOGS.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def pick(target: str | None) -> Path | None:
+    if target:
+        p = Path(target)
+        if p.is_file():
+            return p
+        hits = [s for s in sessions() if target in s.name]
+        return hits[0] if hits else None
+    all_ = sessions()
+    return all_[0] if all_ else None
+
+
+def wrap(text: str, indent: str = "  ") -> str:
+    return "\n".join(indent + line for line in text.rstrip().splitlines())
+
+
+def one_line(value, limit: int) -> str:
+    s = " ".join(str(value).split())
+    return s if len(s) <= limit else s[: limit - 1] + "…"
+
+
+# The argument of the most recent tool call rendered. A backgrounded Bash task emits a progress event
+# whose description is "Running <that same command>", and it carries a subagent_type like a real agent's
+# does — so type cannot tell them apart and the text has to. Without this every Bash call printed twice.
+LAST_TOOL = {"arg": ""}
+
+
+def tool_line(block: dict, width: int) -> str:
+    name = block.get("name", "?")
+    arg = block.get("input", {}) or {}
+    for key in ("command", "file_path", "pattern", "prompt", "skill", "url", "description"):
+        if arg.get(key):
+            LAST_TOOL["arg"] = " ".join(str(arg[key]).split())
+            return f"⏺ {name}({one_line(arg[key], width)})"
+    LAST_TOOL["arg"] = ""
+    return f"⏺ {name}"
+
+
+def echoes_last_tool(description: str) -> bool:
+    text = " ".join(str(description).split())
+    for prefix in ("Running ", "Ran "):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+            break
+    else:
+        return False
+    # The harness truncates its own description with an ellipsis, so a full-string prefix test never
+    # matched and 41 of 42 echoes survived the first attempt. Compare a short head of each, ellipsis
+    # removed from both ends of the shorter one.
+    text = text.rstrip(". …").rstrip("…").strip()
+    last = LAST_TOOL["arg"]
+    head = 40
+    return bool(last) and bool(text) and (
+        last.startswith(text[:head]) or text.startswith(last[:head]))
+
+
+def render(event: dict, opts) -> None:
+    kind = event.get("type")
+
+    if kind == "system":
+        sub = event.get("subtype")
+        if sub == "init":
+            # The full id, not a prefix: it is what `claude --resume <id>` takes, once the run is done.
+            print(f"\n─── session {event.get('session_id','?')} · cwd {event.get('cwd','?')}\n")
+        elif sub == "task_started":
+            # Two different things arrive here and conflating them made a backgrounded Bash command
+            # render as a nameless subagent with its whole heredoc as the description. A real subagent
+            # names its type; a background task does not.
+            kind_of = event.get("subagent_type")
+            what = one_line(event.get("description", ""), opts.width)
+            if kind_of:
+                print(f"\n  ╭ subagent [{kind_of}] {what}")
+            else:
+                print(f"  ⇢ background task: {what}")
+        elif sub == "task_progress":
+            # Only a real subagent's progress is news. A background task's progress line repeats the
+            # tool call printed immediately above it.
+            what = event.get("description", "")
+            if event.get("subagent_type") and not echoes_last_tool(what):
+                print(f"  │ {one_line(what, opts.width)}")
+        elif sub == "task_notification":
+            print(f"  ╰ finished: {event.get('status','?')}\n")
+        return
+
+    if kind == "assistant":
+        for block in event.get("message", {}).get("content", []) or []:
+            btype = block.get("type")
+            if btype == "text" and block.get("text", "").strip():
+                print(wrap(block["text"]))
+                print()
+            elif btype == "thinking" and opts.thinking:
+                print(wrap("(thinking) " + one_line(block.get("thinking", ""), 4000), "  · "))
+            elif btype == "tool_use":
+                print(tool_line(block, opts.width))
+        return
+
+    if kind == "user" and opts.results:
+        for block in event.get("message", {}).get("content", []) or []:
+            if block.get("type") == "tool_result":
+                body = block.get("content")
+                if isinstance(body, list):
+                    body = " ".join(b.get("text", "") for b in body if isinstance(b, dict))
+                mark = "✗" if block.get("is_error") else "↳"
+                print(f"  {mark} {one_line(body or '', opts.width)}")
+        return
+
+    if kind == "result":
+        cost = event.get("total_cost_usd")
+        print("\n─── result: " + str(event.get("subtype", "?"))
+              + (f" · ${cost:.2f}" if isinstance(cost, (int, float)) else "")
+              + f" · {event.get('num_turns','?')} turns")
+        if event.get("result"):
+            print(wrap(str(event["result"])))
+        print()
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="watch a pool session's stream")
+    ap.add_argument("target", nargs="?", help="ticket number, filename fragment, or a path")
+    ap.add_argument("--replay", action="store_true", help="print and exit, do not follow")
+    ap.add_argument("--results", action="store_true", help="include tool results")
+    ap.add_argument("--thinking", action="store_true", help="include thinking blocks")
+    ap.add_argument("--tail", type=int, default=0, help="start from the last N events")
+    ap.add_argument("--width", type=int, default=140, help="truncation width for one-liners")
+    ap.add_argument("--list", action="store_true", help="list sessions, newest first")
+    opts = ap.parse_args()
+
+    if opts.list:
+        for s in sessions():
+            age = (time.time() - s.stat().st_mtime) / 60
+            print(f"  {s.name}  {s.stat().st_size // 1024}k  touched {age:.0f}m ago")
+        return 0
+
+    path = pick(opts.target)
+    if not path:
+        print(f"no session found under {LOGS}" + (f" matching {opts.target!r}" if opts.target else ""))
+        return 1
+    print(f"# {path.name}")
+
+    lines = path.read_text(errors="replace").splitlines()
+    if opts.tail:
+        lines = lines[-opts.tail:]
+    seen = 0
+    with open(path, errors="replace") as f:
+        for raw in lines:
+            seen += 1
+            try:
+                render(json.loads(raw), opts)
+            except ValueError:
+                pass  # the stream carries the occasional non-JSON warning line
+        if opts.replay:
+            return 0
+        f.seek(0)
+        for _ in range(seen if not opts.tail else 0):
+            f.readline()
+        if opts.tail:
+            f.seek(0, 2)
+        print("… following; ctrl-c to stop\n")
+        try:
+            while True:
+                where = f.tell()
+                raw = f.readline()
+                if not raw:
+                    time.sleep(1)
+                    f.seek(where)
+                    continue
+                try:
+                    event = json.loads(raw)
+                except ValueError:
+                    continue
+                render(event, opts)
+                if event.get("type") == "result":
+                    return 0
+        except KeyboardInterrupt:
+            print("\n(stopped watching; the session is unaffected)")
+            return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
