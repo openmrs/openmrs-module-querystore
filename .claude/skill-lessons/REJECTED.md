@@ -535,3 +535,76 @@ proposed them is the first to add none of its own count to be re-measured.
   registered worktrees in the chartsearchai checkout** — a residue class an order of magnitude larger
   than the `pr-*` refs the FINISH rule cleans, reached by no rule in these skills. **0 records /
   1 measurement.** Banked so a later pass need not re-derive it; not proposable on a measurement alone.
+
+
+## 2026-08-27 (window: 1 new record, #317 / PR 318) — one applied, three parked; linter 10 files, 0 findings
+
+**APPLIED (revised) · resolve-ticket 0.12.0 — "Check the field rather than the wording, with
+`gh pr view <n> --json closingIssuesReferences`, once the body is written and again after any later
+edit."** PARKED at count 1 on 2026-08-25 with the reopening condition *"a second sighting, or one that
+costs a round"*; #317 is the second sighting, readmitted in exactly the form that entry
+pre-constrained — the mechanical check alone, no keyword list, since a keyword list is a world fact a
+skill would have to keep true.
+
+Revised on two blocking objections, both citing the record against the proposal:
+1. The draft said the fix "emptied" the field and that *only* splitting the references onto separate
+   lines did it. Both false. The field was never emptied and must not be — PR 318 legitimately closes
+   #317 and the field correctly names it; what was removed was 315. And #317's record says the remedy
+   was splitting the lines AND dropping the keyword for 315, which the shipped body confirms. As
+   drafted the rule would have taught line-splitting-alone as the remedy and an empty field as the
+   success signal.
+2. The prune claim ("nothing stale in that paragraph") was refuted by the proposal's own evidence:
+   Step 8 stated flatly that *"the cost of `Refs` is that `closingIssuesReferences` comes back
+   **empty**"*, and #317 is a body carrying `Refs #315` whose field named 315. **That universal was
+   narrowed in the same edit** — "comes back empty for that ticket — unless a closing keyword elsewhere
+   in the body reaches it anyway" — so the addition retires a false absolute instead of sitting beside
+   one.
+Non-blocking, also applied: the count and the "only" were removed per Step 4's own grammar rule, which
+this ledger records three consecutive retros breaking; "the two records disagree about the cause" was
+corrected to what they show (same cause — a closing keyword whose scope reached an adjacent reference —
+different remedy); and the claim to prevent an observed loss was dropped, since both runs caught it
+themselves at zero recorded round cost. What the rule buys is repeatability of a practice that has
+worked twice, plus cover for the run where nobody looks.
+**Prune/growth (Step 4)**: +9 lines, and one false universal narrowed directly above them.
+
+**PARKED · `git checkout -- <path>` losing uncommitted work.** #317 adds one incident: the
+ORCHESTRATOR's own mutation probe, undone on a file carrying the uncommitted regression fix it was
+verifying, reverted the fix; the empty `git status` read as success and a commit shipped whose message
+described changes absent from its diff. **Remedies stay killed** — the reopening condition (an incident
+where "commit before probing" WAS followed) is still unmet, since the probe was run on a file carrying
+uncommitted work. Two corrections the refuter made, kept as method: the running figure was 8 incidents
+/ **6** records and the draft's enumeration silently dropped #308; and a line dating the incident
+"roughly two hours after this run had read the rule" appears in no record — orchestrator memory, the
+provenance defect that killed the closing-keyword proposal at count 1.
+
+**PARKED at count 1 · the one-hour await bound is shorter than a legitimate phase.** #317's round-1
+fixer ran ~85 minutes on a five-wording standalone A/B (each arm a rebuild, redeploy, restart and
+interleaved capture); the gate fired at 79 minutes, a liveness ping established the agent was alive,
+and it returned a complete result at zero recorded round cost. Below the bar, and the
+self-contradiction limb does not reach it — pr-harden calls the bound a backstop, consistent with its
+gate. **Correction kept**: the draft said following the skill literally "would have killed a live
+agent"; past `AWAIT_TTL` the gate instructs nothing of the sort — it blocks the yield with "continue
+the loop" — and the dead-agent contract is triggered by a terminal outcome the harness REPORTS, not by
+the clock. REOPEN ON: a second record of a phase legitimately exceeding the bound, or one where the
+dead-agent contract was followed and destroyed live work. Prefer then "establish liveness before
+treating a past-bound agent as dead" over changing the bound.
+
+**PARKED at count 1 · extracting the assembled prompt from llama-server's KV slot.** #317's finish
+verifier obtained the prompt the model actually ingested by saving the KV slot mid-generation and
+detokenizing it, where the audit table, the wire and the logs carry none. Below the bar, and a
+technique rather than a rule; writing a llama.cpp detail into a skill is the world-fact objection that
+killed the keyword list. **Correction kept**: the endpoint names, the header parsing and "succeeded
+first try" are not in the record, which says only that the slot was saved mid-generation and
+detokenized. REOPEN ON: a second run needing prompt-level evidence, or one reporting "could not
+determine" for want of it.
+
+## Running parked counts (superseding the previous block where they differ)
+- `git checkout -- <path>` losing uncommitted work: **9 incidents / 7 records** (#302, #284, #268,
+  #269 x2, #250 x2, #308, #317). Remedies stay killed; reopen only on an incident where the commit rule
+  WAS followed and the idiom still lost work.
+- A negated or adjacent closing keyword populating `closingIssuesReferences`: **2 records** (#250,
+  #317) — **APPLIED** above as the field check.
+- The one-hour await bound shorter than a legitimate phase: **1 record** (#317) — parked above.
+- Extracting the assembled prompt from the inference server: **1 record** (#317) — parked above.
+- Every other count in the 2026-08-26 block stands unchanged; this window's single record touched none
+  of them.

@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.11.0
+version: 0.12.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -421,10 +421,21 @@ its first line and, four paragraphs down and in bold, "this PR should not be rea
 That contradiction was round 1's blocking finding, and it fails closed and quietly — nothing errors,
 no check reddens, and the next person looking for open defects does not see it.
 
-The cost of `Refs` is that `closingIssuesReferences` comes back **empty**, and `pr-review` Step 1
-resolves the ticket from exactly that field. So when you use it, **name the issue number explicitly
+The cost of `Refs` is that `closingIssuesReferences` comes back **empty** for that ticket — unless a
+closing keyword elsewhere in the body reaches it anyway — and `pr-review` Step 1 resolves the ticket
+from exactly that field. So when you use it, **name the issue number explicitly
 in every reviewer brief** rather than leaving the reviewer to find it — otherwise the round that is
 supposed to ask "does this resolve the ticket?" never reads the ticket at all.
+
+**Check the field rather than the wording, with `gh pr view <n> --json closingIssuesReferences`, once
+the body is written and again after any later edit to it.** That field has named an issue the PR does
+not close on two runs. The cause was the same both times — a closing keyword whose scope reached an
+adjacent reference — but the remedy was not, which is the argument for checking the field instead of
+learning a rule about the prose: on #250 rewording the offending sentence was enough, and on #317
+rewording changed nothing while separating the two references onto their own lines and naming the
+non-closing one without a `#` did. Both runs caught it themselves, so this makes a practice that has
+already worked twice repeatable; what it guards against is the run where nobody looks, because merging
+then closes an open defect and nothing reddens.
 
 The body says what the ticket asked, what the change does, and how it was verified. It does not grade
 the design or tour the alternatives.
