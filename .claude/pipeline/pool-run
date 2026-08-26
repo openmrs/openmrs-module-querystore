@@ -368,75 +368,120 @@ def pr_created_at(pr: dict) -> int | None:
         return None
 
 
-def build_queue(cfg: dict, ledger: dict, say: Say, only: str | None) -> list[dict]:
+def consider(slug: str, path: str, issue: dict, prs: list[dict], ledger: dict, say: Say,
+             cfg: dict, forced: bool) -> dict | None:
+    """One issue against the skips. `forced` is an operator naming it, which passes every one.
+
+    Shared by both queue paths on purpose: the label path and the named path must agree about what
+    "already worked", "already has a PR" and "out of attempts" mean, and two copies of that would
+    drift into two answers.
+    """
+    ticket = str(issue.get("number") or issue.get("key"))
+    key = f"{slug}#{ticket}"
+    entry = ledger.get(key, {})
+    url = issue.get("url") or (
+        ticket if not ticket.isdigit() else f"https://github.com/{slug}/issues/{ticket}")
+
+    if not forced:
+        if entry.get("status") in DONE or entry.get("status") in NOT_OURS:
+            return None
+        if entry.get("status") in NEEDS_HUMAN:
+            say(f"  - {key}: the run aborted and handed back — one of resolve-ticket's six "
+                "conditions, which a second identical attempt cannot get past. Skipping.")
+            return None
+        # The ledger remembers the PR a previous attempt opened, and that memory beats re-matching
+        # prose: an attempt that ended as a draft may have written `Refs` on a branch carrying no
+        # number, which tiers 1-2 cannot see — and a second run on such a ticket opens a SECOND PR
+        # for one issue.
+        known = entry.get("pr")
+        existing = next((x for x in prs if x["number"] == known), None) if known else None
+        existing = existing or pr_for_ticket(prs, ticket)
+        if existing:
+            say(f"  - {key}: open PR #{existing['number']} already exists — that is "
+                "`pr-harden`'s entry point, not this pipeline's. Skipping.")
+            ledger[key] = {**entry, "status": "has-open-pr", "pr": existing["number"],
+                           "pr_url": existing.get("url")}
+            return None
+        attempts = entry.get("attempts", 0)
+        if attempts >= cfg["ticket"]["max_attempts"]:
+            say(f"  - {key}: {attempts} attempts already, last {entry.get('status')} — "
+                "needs a human before another attempt. Skipping.")
+            return None
+
+    return {"slug": slug, "path": Path(path).expanduser(), "ticket": ticket, "url": url,
+            "title": issue.get("title", ""), "key": key}
+
+
+def resolve_named(token: str, slug: str) -> dict | None:
+    """One operator-named ticket against one repo, or None if that repo does not own it."""
+    if token.isdigit():
+        got = sh(["gh", "issue", "view", token, "--repo", slug, "--json", "number,title,url"])
+        if got.returncode != 0:
+            return None
+        return load_json_str(got.stdout, {"number": int(token), "title": "", "url": ""})
+    return {"key": token, "title": f"JIRA {token}", "url": token}
+
+
+def build_queue(cfg: dict, ledger: dict, say: Say, named: list[str] | None) -> list[dict]:
+    """The queue, either from the label or from tickets the operator named.
+
+    **The named path keeps the operator's ORDER and does not sort.** Order has consequences the
+    driver cannot weigh — the retro fires once the record threshold is met, so which tickets run
+    first decide what evidence it reads and which ticket is worked by the skills it changed — and
+    weighing those means judging the tickets, which is the one thing this driver does not do. So the
+    operator's sequence is taken literally, and the label path's ascending issue number stays the
+    default for the reason a default should be boring: the same labels give the same order every
+    invocation.
+    """
     queue: list[dict] = []
-    for slug, path in cfg["repos"].items():
-        prs = open_prs(slug)
-        if only:
-            if only.isdigit():
-                got = sh(["gh", "issue", "view", only, "--repo", slug, "--json", "number,title,url"])
-                if got.returncode != 0:  # not this repo's issue; with several configured, only one owns it
+    pr_cache: dict[str, list[dict]] = {}
+
+    def prs_for(slug: str) -> list[dict]:
+        if slug not in pr_cache:
+            pr_cache[slug] = open_prs(slug)
+        return pr_cache[slug]
+
+    if named:
+        # Tokens in the OUTER loop, so the requested order survives even across several repos.
+        for token in named:
+            found = False
+            for slug, path in cfg["repos"].items():
+                issue = resolve_named(token, slug)
+                if issue is None:
                     continue
-                issues = [load_json_str(got.stdout, {"number": int(only), "title": "", "url": ""})]
-            else:
-                issues = [{"key": only, "title": f"JIRA {only}", "url": only}]
-        else:
-            # Enumerate the open issues and filter the label HERE, rather than passing --label.
-            # Measured 2026-08-26: three issues labelled through `gh issue edit`, all three confirmed
-            # by reading each issue, and `gh issue list --label` returned ONE of them — that filter is
-            # search-indexed and the index lagged. It caught up unprompted a minute later. The queue is
-            # built once at the start of an invocation, so labelling a ticket and starting the pool
-            # loses it for that whole run, silently and fail-closed: no error, no count that looks
-            # wrong, just work you queued that nobody does. An issue's own `labels` field is not
-            # indexed, so this reads what is true now. It also makes the preflight label check
-            # load-bearing rather than a courtesy — a mistyped label now yields an empty queue by the
-            # same mechanism a correct one yields a full one.
-            got = sh(
-                ["gh", "issue", "list", "--repo", slug, "--state", "open",
-                 "--limit", "200", "--json", "number,title,url,updatedAt,labels"]
-            )
-            if got.returncode != 0:
-                say(f"  ! could not list issues in {slug}: {got.stderr.strip()[:200]}")
-                continue
-            issues = [i for i in load_json_str(got.stdout, [])
-                      if any(l.get("name") == cfg["label"] for l in i.get("labels") or [])]
+                job = consider(slug, path, issue, prs_for(slug), ledger, say, cfg, forced=True)
+                if job:
+                    queue.append(job)
+                found = True
+                break
+            if not found:
+                say(f"  ! {token}: no configured repo has this issue. Skipping.")
+        return queue
 
+    for slug, path in cfg["repos"].items():
+        # Enumerate the open issues and filter the label HERE, rather than passing --label.
+        # Measured 2026-08-26: three issues labelled through `gh issue edit`, all three confirmed
+        # by reading each issue, and `gh issue list --label` returned ONE of them — that filter is
+        # search-indexed and the index lagged. It caught up unprompted a minute later. The queue is
+        # built once at the start of an invocation, so labelling a ticket and starting the pool
+        # loses it for that whole run, silently and fail-closed: no error, no count that looks
+        # wrong, just work you queued that nobody does. An issue's own `labels` field is not
+        # indexed, so this reads what is true now. It also makes the preflight label check
+        # load-bearing rather than a courtesy — a mistyped label now yields an empty queue by the
+        # same mechanism a correct one yields a full one.
+        got = sh(
+            ["gh", "issue", "list", "--repo", slug, "--state", "open",
+             "--limit", "200", "--json", "number,title,url,updatedAt,labels"]
+        )
+        if got.returncode != 0:
+            say(f"  ! could not list issues in {slug}: {got.stderr.strip()[:200]}")
+            continue
+        issues = [i for i in load_json_str(got.stdout, [])
+                  if any(l.get("name") == cfg["label"] for l in i.get("labels") or [])]
         for issue in sorted(issues, key=lambda i: i.get("number", 0)):
-            ticket = str(issue.get("number") or issue.get("key"))
-            key = f"{slug}#{ticket}"
-            entry = ledger.get(key, {})
-            url = issue.get("url") or (
-                ticket if not ticket.isdigit() else f"https://github.com/{slug}/issues/{ticket}")
-
-            if entry.get("status") in DONE and not only:
-                continue
-            if entry.get("status") in NOT_OURS and not only:
-                continue
-            if entry.get("status") in NEEDS_HUMAN and not only:
-                say(f"  - {key}: the run aborted and handed back — one of resolve-ticket's six "
-                    "conditions, which a second identical attempt cannot get past. Skipping.")
-                continue
-            # The ledger remembers the PR a previous attempt opened, and that memory beats
-            # re-matching prose: an attempt that ended as a draft may have written `Refs` on a branch
-            # carrying no number, which tiers 1-2 cannot see — and a second run on such a ticket
-            # opens a SECOND PR for one issue.
-            known = entry.get("pr")
-            existing = next((x for x in prs if x["number"] == known), None) if known else None
-            existing = existing or pr_for_ticket(prs, ticket)
-            if existing and not only:
-                say(f"  - {key}: open PR #{existing['number']} already exists — that is "
-                    "`pr-harden`'s entry point, not this pipeline's. Skipping.")
-                ledger[key] = {**entry, "status": "has-open-pr", "pr": existing["number"],
-                               "pr_url": existing.get("url")}
-                continue
-            attempts = entry.get("attempts", 0)
-            if attempts >= cfg["ticket"]["max_attempts"] and not only:
-                say(f"  - {key}: {attempts} attempts already, last {entry.get('status')} — "
-                    "needs a human before another attempt. Skipping.")
-                continue
-
-            queue.append({"slug": slug, "path": Path(path).expanduser(), "ticket": ticket,
-                          "url": url, "title": issue.get("title", ""), "key": key})
+            job = consider(slug, path, issue, prs_for(slug), ledger, say, cfg, forced=False)
+            if job:
+                queue.append(job)
     return queue
 
 
@@ -873,7 +918,8 @@ def main() -> int:
     ap.add_argument("--config", default=str(PIPELINE / "pool.json"))
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--ticket")
+    ap.add_argument("--ticket", help="one ticket, or several comma-separated and worked IN THE "
+                                     "ORDER GIVEN, past every skip")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--retro-now", action="store_true")
@@ -934,7 +980,8 @@ def main() -> int:
         ledger = load_json(LEDGER, {})
         say("")
         say("queue")
-        queue = build_queue(cfg, ledger, say, args.ticket)
+        named = [t.strip() for t in args.ticket.split(",") if t.strip()] if args.ticket else None
+        queue = build_queue(cfg, ledger, say, named)
         save_json(LEDGER, ledger)
         if args.limit:
             queue = queue[: args.limit]

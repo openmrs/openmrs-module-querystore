@@ -1,8 +1,8 @@
 ---
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
-argument-hint: "[--once] [--limit N] [--ticket N] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.2.1
+argument-hint: "[--once] [--limit N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
+version: 0.3.0
 ---
 
 # Ticket pool — the loop that learns
@@ -53,6 +53,17 @@ The PR is recognised from the **ledger's memory of the number** before any match
 branches is attempted, because a run that wrote `Refs` on a branch carrying no number leaves a PR that
 no matching can see — and a second run on that ticket would open a second PR for one issue.
 
+### Order
+
+The label path works tickets in **ascending issue number**, and a named list is worked in **the order
+given**. The split is deliberate. Order has consequences the driver cannot weigh: the retro fires once
+the record threshold is met, so which tickets run first decide both what evidence it reads and which
+ticket is worked by the skills it changed — and weighing that means judging the tickets, which is the
+one thing this driver does not do. So there is no ordering policy here and should not be: an operator
+who wants a particular sequence names it, and gets it unattended in one invocation rather than having
+to launch each ticket by hand. Ascending stays the default for the reason a default should be boring —
+the same labels give the same order every time.
+
 ## Running it
 
 Long runs belong in a terminal. A foreground tool call cannot exceed ten minutes and a ticket takes
@@ -63,7 +74,7 @@ conversation, use the read-only forms below and hand over the command for the re
 |---|---|
 | `~/.claude/pipeline/pool-run` | works the pool until it is empty, retroing when records allow |
 | `pool-run --once` / `--limit N` | one ticket / at most N |
-| `pool-run --ticket 314` | one named ticket, labelled or not, and past every skip above |
+| `pool-run --ticket 310,297,266` | those tickets, **in that order**, labelled or not, past every skip |
 | `pool-run --dry-run` | preflight and print the queue; starts nothing |
 | `pool-run --status` | the ledger, and how many records the next retro is waiting for |
 | `pool-run --retro-now` | the retro alone, past the record threshold and the stop below |
