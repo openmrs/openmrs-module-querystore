@@ -488,20 +488,52 @@ def build_queue(cfg: dict, ledger: dict, say: Say, named: list[str] | None) -> l
 # ───────────────────────────────────────────────────────── checkout prep ──
 
 
-def prepare_checkout(path: Path, say: Say) -> tuple[bool, str]:
+# What an operator has to DO about a checkout this driver would not start on. Two, because the
+# remedies differ and naming the wrong one is worse than naming none: uncommitted work is committed or
+# stashed, a default branch that will not fast-forward is reconciled, and telling someone to stash a
+# diverged `main` sends them at the wrong thing entirely.
+PREPARE_REMEDY = {
+    "dirty-skip": "Nothing was touched. Commit or stash that change in the checkout, then re-run.",
+    "checkout-blocked": "Nothing was touched. Push, reset or reconcile that checkout's default branch "
+                        "so it matches origin (the line above says which), then re-run.",
+}
+
+
+def prepare_checkout(path: Path, say: Say) -> tuple[str | None, str]:
+    """`(None, where)` when the checkout is ready, else `(ledger status, why)`.
+
+    The dirty check runs FIRST, and that ordering is what makes this non-destructive: nothing here
+    switches a branch or discards anything until it knows the tree is clean. `--ff-only` rather than a
+    pull for the same reason — a diverged local branch is refused, never merged over.
+    """
     dirty = sh(["git", "-C", str(path), "status", "--porcelain"]).stdout.strip()
     if dirty:
-        return False, "uncommitted changes in the checkout:\n" + dirty[:800]
+        return "dirty-skip", "uncommitted changes in the checkout:\n" + dirty[:800]
     sh(["git", "-C", str(path), "fetch", "origin", "--prune"], timeout=600)
     branch = default_branch(path)
     co = sh(["git", "-C", str(path), "checkout", branch])
     if co.returncode != 0:
-        return False, f"could not check out {branch}: {co.stderr.strip()[:300]}"
+        return "checkout-blocked", f"could not check out {branch}: {co.stderr.strip()[:300]}"
     ff = sh(["git", "-C", str(path), "merge", "--ff-only", f"origin/{branch}"])
     if ff.returncode != 0:
-        return False, f"{branch} is not fast-forwardable to origin/{branch}: {ff.stderr.strip()[:300]}"
+        return "checkout-blocked", (f"{branch} is not fast-forwardable to origin/{branch}: "
+                                   f"{ff.stderr.strip()[:300]}")
+    # `--ff-only` catches BEHIND and DIVERGED and says nothing about AHEAD: with an unpushed commit on
+    # the default branch, git answers "Already up to date" and exits 0. That state is not benign here —
+    # a branch cut from it carries the commit, and pushing the branch publishes it inside the ticket's
+    # PR, attributed to work nobody did for that ticket. Measured against a scratch clone one commit
+    # ahead: this function returned ready and named the local sha as the base. So compare HEAD against
+    # the remote ref rather than trusting the merge's exit code.
+    head_sha = sh(["git", "-C", str(path), "rev-parse", "HEAD"]).stdout.strip()
+    remote_sha = sh(["git", "-C", str(path), "rev-parse", f"origin/{branch}"]).stdout.strip()
+    if head_sha and remote_sha and head_sha != remote_sha:
+        ahead = sh(["git", "-C", str(path), "rev-list", "--count",
+                    f"origin/{branch}..HEAD"]).stdout.strip() or "?"
+        return "checkout-blocked", (
+            f"{branch} is {ahead} commit(s) ahead of origin/{branch}, so a branch cut from it would "
+            f"carry them into the ticket's PR")
     head = sh(["git", "-C", str(path), "rev-parse", "--short", "HEAD"]).stdout.strip()
-    return True, f"{branch} @ {head}"
+    return None, f"{branch} @ {head}"
 
 
 def clear_gate_state(path: Path, say: Say) -> list[str]:
@@ -731,14 +763,15 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
     say("")
     say(f"── {key}  {job['title'][:88]}")
 
-    ok, where = prepare_checkout(path, say)
-    if not ok:
+    failure, where = prepare_checkout(path, say)
+    if failure:
         say(f"    skipped: {where.splitlines()[0]}")
-        say("    Nothing was touched. Commit, stash or clean the checkout and re-run.")
-        ledger[key] = {**ledger.get(key, {}), "status": "dirty-skip", "note": where[:500],
+        say(f"    {PREPARE_REMEDY[failure]}")
+        # Neither failure spends an attempt: nothing ran, so there is nothing to have failed twice.
+        ledger[key] = {**ledger.get(key, {}), "status": failure, "note": where[:500],
                        "last_run": datetime.now(timezone.utc).isoformat()}
         save_json(LEDGER, ledger)
-        return "dirty-skip"
+        return failure
     say(f"    checkout: {where}")
     cleared = clear_gate_state(path, say)
 

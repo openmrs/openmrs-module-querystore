@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Ticket pool — the loop that learns
@@ -155,7 +155,8 @@ a deliberate hand-back from a crash, since both leave no PR, and it can only mak
 | `aborted` | the run hit one of `resolve-ticket`'s six abort conditions and handed back. Not retried |
 | `timeout` | the driver killed the session. The record says which bound it hit |
 | `no-pr` / `error` | it died before opening a PR, and its record did not report an abort |
-| `dirty-skip` | the checkout had uncommitted work, so nothing was touched |
+| `dirty-skip` | the checkout had uncommitted work, so nothing was touched. Commit or stash it |
+| `checkout-blocked` | the checkout's default branch would not fast-forward, or is **ahead** of origin, so nothing was touched. Push, reset or reconcile it |
 | `has-open-pr` | not this pipeline's job; `pr-harden` owns it |
 
 An abort is the skills working, not failing, and the conditions that reach this bucket are ones only a
@@ -167,9 +168,15 @@ the round cap and a declined blocking finding, normally leave a draft PR and lan
 Everything else is retried on a later invocation until `ticket.max_attempts`, after which a second
 identical failure is evidence about the skills rather than about the ticket.
 
-**A `dirty-skip` stalls the whole pool, not one ticket**, because every ticket for a repo shares its
-one checkout — so the pool's own worst case is a session killed mid-run, which leaves that checkout
-dirty and every remaining ticket skipped. Nothing is lost; commit, stash or clean it and re-run.
+**A `dirty-skip` or `checkout-blocked` stalls the whole pool, not one ticket**, because every ticket for
+a repo shares its one checkout — so the pool's own worst case is a session killed mid-run, which leaves
+that checkout dirty and every remaining ticket skipped. Nothing is lost, and neither spends an attempt.
+
+The checkout is prepared **before** each ticket and not after, so between batches it sits on the last
+ticket's branch. Three states are refused there rather than worked around, and the dirty check runs
+first, which is what makes the reset non-destructive: uncommitted work, a default branch that will not
+fast-forward, and one that is **ahead** of origin — that last because `--ff-only` reports "already up
+to date" for it, and a branch cut from an unpushed commit publishes that commit inside the ticket's PR.
 
 ## Anti-patterns
 
