@@ -1,5 +1,8 @@
 # proposal · resolve-ticket — an adjacent defect noticed unattended has nowhere durable to go · drafted 2026-08-26
-status: DRAFT. Not refuted — Step 5 has not run. It also leaves one design choice OPEN on purpose (see
+status: **PARKED** at 2026-08-26, below the Step 3 bar and not put through Step 5. It rests on zero run
+        records by its own admission, and the first pool runs have now banked (#315, #310-driver) with no
+        instance in either. Reopen when a record names an adjacent defect noticed and not fixed.
+superseded-status: DRAFT. Not refuted — Step 5 has not run. It also leaves one design choice OPEN on purpose (see
         **Where the capture lives**), which a refuter should settle rather than inherit.
 target: resolve-ticket (the run-record template, and one anti-pattern line), possibly one clause in
         skill-retro depending on how the open choice lands

@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.9.0
+version: 0.10.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -57,7 +57,13 @@ Refuse the run, with the reason, if any of these fails:
 - An entry for this repo in `~/.claude/pr-harden-state.json` is **this run's own** when its `pr`
   matches the PR being hardened, or when it has no `pr` yet — that is the handoff `resolve-ticket`
   writes, and you adopt it and carry its `round`, `declined` and `reviewed_shas` forward. An entry
-  naming a *different* PR is a stale run: report it and ask before clearing it.
+  naming a *different* PR is a stale run: report it and ask before clearing it — **but an unattended
+  run has nobody to ask**, which is settled for the verifier at step 6 and settles the same way here.
+  The gate already draws the line the ask stood in for: past `STALE_AFTER` (6h) it treats a run as
+  abandoned rather than in flight. So take over an entry past that bound, or one whose run recorded a
+  terminus (`blocking: 0` or `override: true`), and say in the report which PR's entry you cleared and
+  what it said; refuse a fresher entry claiming a live round on another PR rather than adopting it,
+  since two runs in one checkout is what the ask was preventing.
 
 Then write the opening state entry (`phase: "init"`, `round: 1`) — see **State**. From this point the
 Stop gate will not let the turn end until a review round reports zero blocking findings, or the
@@ -204,10 +210,16 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   is as falsifiable as an assertion and fails the same way: on the #302 run three sites named a test as
   the guard for a branch it could not observe — it took a different code path — and twice the correct
   attribution was already written in that test's own comment. "Guarded by X" is a claim; check it.
-- **If you ADD a guard over text or shape, prove it reddens on a semantically-equivalent rewrite, not
-  only on deletion.** Its weakest point is the gap between the property it means and the string it
-  matches, and that gap is invisible from the assertion's own side. Assert the SHAPE the code must have
-  rather than that it mentions the right identifier — measured, a guard requiring only that a
+- **If you ADD a guard, prove which case reddens — deleted, its arms swapped, its comparison loosened,
+  or rewritten in a semantically equivalent way.** `harden`'s Termination carries this same obligation at
+  cycle close; this is it at the moment the guard is written, and it was scoped to text and shape until
+  two blocking findings on the #308 run fell outside that scope at a round each: a guard the change
+  added, unpinned — deleting it left the whole suite green — and a trim normalisation unpinned against an
+  equivalent rewrite. Step 1's reviewer brief stays narrower on purpose, because what it teaches is the
+  string-versus-property attack and that is specific to text and shape; this obligation is not.
+  **For a guard over TEXT or SHAPE,** its weakest point is the gap between the property it means and
+  the string it matches, and that gap is invisible from the assertion's own side. Assert the SHAPE the
+  code must have rather than that it mentions the right identifier — measured, a guard requiring only that a
   right-hand side *contained* the flag's name accepted `order != null || namesADrug ? order : null`,
   which restores the defect with the whole suite green. State in the guard's javadoc which shapes each
   channel really catches, and never write that a shape is "caught behaviourally" without running it.
@@ -421,11 +433,12 @@ construction, so no further round is owed.
 
 **Delete the run's own `pr-<n>-r<round>` refs.** They are local fetch copies of the PR head with no
 upstream, worth nothing once the round is over and re-fetchable from `pull/<n>/head` while GitHub
-retains it. The loop creates one per round and has never removed any: measured on this machine, four
-completed runs had left **eleven** behind (`pr-287`, `pr-288-r1..r3`, `pr-289-r1..r4`,
-`pr-291-r1..r3`), all pointing at merged PRs, cluttering every `git branch` a human or an agent runs
-afterwards. Delete them here rather than at the top of the next run, because the next run may be in a
-different repo or may never happen.
+retains it. The loop creates one per round and went four completed runs without removing any, leaving
+refs on merged PRs that clutter every `git branch` a human or an agent runs afterwards. The check is
+`git branch --list 'pr-*'` in a repo this loop has worked, read for the `pr-<n>-r<round>` shape. This
+passage used to enumerate the refs instead; they are gone from the checkout it measured, which is why it
+names the method now. Delete them here rather than at the top of the next run, because the next run may
+be in a different repo or may never happen.
 
 **Re-derive the PR description against the merging head before marking ready.** Across rounds the body
 describes code that later rounds change under it, so the patches this loop applies to it accumulate into
@@ -527,6 +540,17 @@ condition out of the hands of the agent whose work is being judged, while still 
 refuse a wrong finding.
 
 The **round cap** (default 4) is the other. A cap is not convergence; reaching it is an override.
+
+**Raising the DEFAULT cap is a third move, and the runs that took it read a signal first.** #308 raised
+it with one real finding outstanding, on the ground that rounds 1-5 had each found a genuinely different
+defect; #315 extended it twice, on the ground that the findings were shrinking round on round. Both then
+converged. So what licenses a raise is evidence the loop is still WORKING rather than spinning — a
+different defect each round, or findings shrinking — and a round that re-raises what an earlier one
+raised is spinning: take the override instead. Raise it a round or two at a time, re-read the signal each
+time, and say what you raised it to, because a raise nobody states turns a *did not converge* into a
+*converged* silently. **Do not raise a cap the caller set:** `--max-rounds N` is their budget, and under
+`ticket-pool` a session that outruns `ticket.timeout_seconds` is killed, which leaves the checkout dirty
+and skips every remaining ticket in the pool. A labelled `draft` is by far the cheaper outcome.
 
 What is not permitted is ending the run without either the convergence line or an override line, and
 **handing the decision back to the user is the disguised form of it**. "Want me to run another

@@ -422,3 +422,116 @@ citation, because the refuter caught these before anything was applied.
 - Raising the round cap when every round finds a DIFFERENT defect: **1 record** (#308). Saved rounds
   rather than costing them, so below the bar on both limbs.
 - `git branch -D` blocked by an agent worktree holding the ref: **1 record** (#250).
+
+## 2026-08-26 (window: #315 + the #310 driver capture) — one killed, four applied, one of those promoted by the refuter
+
+**KILLED · skill-retro: "the single-record corroboration bar contradicts its own anti-pattern."** Filed
+2026-08-26 as `proposals/2026-08-26-skill-retro-single-record-bar.md`, refuted the same day. Three
+blocking objections, each settling on its own:
+
+1. **The Step 1 citation was an ellipsis that removed the deciding clause.** Full text (skill-retro
+   Step 1): "a retro over one record **is a retro that cannot corroborate anything**, and should say so
+   rather than proceed as if it could." The proposal quoted it as "a retro over one record… should say
+   so rather than proceed as if it could" and glossed that as "say so and proceed, not stop". Read
+   whole, Step 1 reads WITH the anti-pattern.
+2. **The two rules have different subjects, so clause 3 was never available.** Step 3's clauses govern
+   how often a LESSON appears; the anti-pattern governs whether a PASS is worth running. Obeying the
+   anti-pattern violates nothing in Step 3 — its single-record clauses simply go unexercised. That is
+   unstated PRECEDENCE, not a document contradicting itself, and clause 3 was the only limb claimed.
+   `ticket-pool`:153-154 already reads it as a pass-level gate: "The threshold defaults to 2 because
+   `skill-retro`'s own anti-pattern says a single record cannot corroborate anything."
+3. **"Retires nothing" was false.** Scoping the anti-pattern renders `ticket-pool`:153-154's stated
+   reason stale, and Step 4 requires naming that.
+
+**The deciding check the proposal said had not been run WAS run, and its answer is worth keeping** so a
+later pass need not re-derive it. Rules shipped from a single run's evidence: `fba95ab` ("Five lessons
+from run seven"), `11f920d` ("a run that took issue #299 to a ready PR"), `89db0c4` ("each from a
+failure on the run that produced #295"), `a8afea5` ("running resolve-ticket end to end on
+chartsearchai#290"); and `b06d6a8`'s pre-commit branch check, shipped from one run, is what #308 records
+catching — "the round's edits landed there. The pre-commit branch check caught it… Cost: none, because
+the check exists." So the bar's single-record clauses are load-bearing rather than decorative. **NEW
+EVIDENCE THAT WOULD REOPEN IT: a pass that stopped on the anti-pattern while holding a lesson clause 2
+or 3 admits, and lost it. If readmitted, the edit to test is a PRECEDENCE clause plus the matching
+correction at `ticket-pool`:153-154 — not the scope change that was filed.**
+
+**Applied, after revision forced by the refuter** (all four in `pr-harden` 0.10.0 / `harden` 0.17.0):
+
+- **Raising the default round cap** (2 records: #308, #315). Two blocking objections revised it rather
+  than killing it: the submitted wording carried "twice it has been the right one", the tally defect
+  `REJECTED.md` has now faulted three consecutive retros for, so the runs are named instead; and the
+  edit licensed an UNBOUNDED raise, against `ticket-pool`:135/:187/:202-204 — a session that outruns
+  `ticket.timeout_seconds` is killed, "which leaves that checkout dirty and every remaining ticket
+  skipped", so a raise taken to avoid a labelled `draft` can stall a pool. The rule now raises only the
+  DEFAULT cap, a round or two at a time, and never a cap the caller set.
+- **Widening the ADD-a-guard mutation obligation off "text or shape."** The corroboration was REPLACED
+  by the refuter. As filed it rested on #315's `[r4]/[r5]/[r6]`, and the objection settles: those are a
+  missing condition, a missing companion action and a non-blocking position defect — mutation asks
+  whether a guard is PINNED, and no mutation of what was written reddens a case never authored. That is
+  the shape that killed 2026-08-25 (third) P1. The refuter supplied the citation that does hold: #308's
+  `[r4]` "The fold's own matched-rules guard was unpinned; deleting it left the whole suite green ·
+  blocking · cost: 1 round" and `[r5]` "The trim normalisation was unpinned against a
+  semantically-equivalent rewrite · blocking · cost: 1 round" — both raised in pr-harden ROUNDS, both
+  outside the old scope. Also cut from the submitted wording: "each arrangement passed everything",
+  exhaustive-characterization grammar.
+- **A repeat is evidence only where something between the repeats is reset** (#315, 2 rounds). Revised:
+  "every figure from five cycles" dropped the record's word "prompt" and shipped the universal grammar —
+  restored; and "n repeats are one sample" was an absolute the evidence does not reach, replaced by what
+  it does reach (the repeats never exercised the path a first run takes). The refuter read
+  `LocalLlmEngine`'s javadoc rather than trusting the record, and confirmed the mechanism.
+- **PROMOTED BY THE REFUTER, from this pass's own parked list:** `pr-harden`:60 told a run to "report it
+  and ask before clearing it" about a stale state entry, while the same file settles at :310-311 that
+  "'Confirm with the user…' is not available to an unattended verifier, so the rule cannot be that."
+  Intra-file, clause 3, no altitude argument needed — and the 310 driver capture is the occurrence
+  ("pr-harden-state.json: phase=reviewed blocking=0 … pr=313 round=6" on a run working ticket 310). The
+  pass had parked it on a FREQUENCY argument ("only reachable by a hand-launched unattended run"), which
+  clause 3 does not ask for and which is itself the *only*-grammar Step 4 flags. Recorded because the
+  refuter finding a proposal the proposer missed is design rationale 2 working.
+
+**Pruned:** the eleven-ref enumeration at `pr-harden`:425. Retired by measurement — in the checkout
+those runs happened in, `git branch --list 'pr-*'` now returns `pr-286` alone. The refuter killed the
+proposal's second evidence claim: querystore's `pr-1/34/63/68` are NOT that class (reflogs show
+`pull/<n>/head:pr-<n>`, created before the FINISH rule; `git reflog --all | grep -cE 'pr-[0-9]+-r[0-9]'`
+returns 0 there), and the glob also matches `pr-harden-review-loop`. Dropped, and "so the FINISH rule
+works" dropped with it as an unchecked causal claim.
+
+**Net growth: +29 lines** across two files, against one enumeration deleted. The justifying sentence:
+three of the four are clauses appended to lines that already exist rather than new homes, the fourth
+closes an intra-file contradiction and so reduces the number of rules that disagree, and the retro that
+proposed them is the first to add none of its own count to be re-measured.
+
+## Running parked counts (superseding the previous block where they differ)
+- `git checkout -- <path>` losing uncommitted work: **8 incidents / 6 records** — unchanged; remedies
+  stay killed. Reopen only on an incident where the commit rule WAS followed and the idiom still lost work.
+- **The scratchpad — the adopted remedy for that hazard — is itself an unguarded shared surface:
+  1 record** (#315: "A subagent overwrote a helper script in the shared scratchpad (same filename,
+  different signature), silently breaking a later measurement"), no round cost stated. #308's amended
+  capture is what makes it worth watching: the `cp`-to-scratchpad idiom was adopted there precisely
+  BECAUSE `git checkout --` lost work. A gap rather than a contradiction, which is the shape this ledger
+  has killed before. Reopen on a second incident, or one that costs a round.
+- Prose-correction cycles: **7 records** — #315 adds "three successive overstated claims in one ADR
+  entry, each narrowed by the entry's own data; a FOURTH home of a false attribution after a round
+  claimed all three were fixed". Remedy still killed; deletion-over-rewording is the shipped rule and
+  this is the second record of it being violated after it shipped.
+- Verifier standing-permission friction: **5 records** — relaxation killed.
+- The proposer not verifying its own citations: **6 cycles / 5 records** — this pass added two (the Step 1
+  ellipsis in the killed proposal, and the #315 corroboration that did not reach its own remedy). Still
+  zero rules shipped on a bad citation; the gate caught both.
+- A retro submitting wording that breaks the counts/universals rule it is codifying: **3 consecutive
+  retros**. This pass shipped three such phrasings into Step 5 ("twice it has been the right one",
+  "passed everything", "every figure from five cycles") and the refuter cut all three. Worth a rule only
+  if one ever survives the gate; the gate is currently the mechanism.
+- Raising the round cap when the loop is demonstrably converging: **APPLIED** 2026-08-26 (2 records).
+- A fix applied to one member of a script family, its sibling left fail-open: **1 record** (#315 `[r6]`,
+  non-blocking). `pr-harden`'s "find every home" section is about CLAIMS; this is code.
+- "Don't widen scope" vs "never commit a known regression": **1 record** (#315). Second limb is a project
+  `CLAUDE.md`, so clause 3 (a skill contradicting ITSELF or its own gate script) does not reach it.
+- A record whose outcome is "converged, deliverable inverted" and has no template vocabulary:
+  **1 record** (#315). REJECTED 2026-08-24 P4/P3 settled that the template does not grow for one sighting.
+- A run that writes no record at all: **1 record** (#310). `ticket-pool` 0.6.0's driver capture is the
+  shipped remedy and this is its first exercise — it worked.
+- An adjacent product defect noticed and not fixed, with nowhere durable to go: **0 records.** The
+  proposal is parked, not killed; both pool runs have now banked and neither names an instance.
+- **New, from the refuter's own measurement and in no run record: 37 `worktree-agent-*` branches and 9
+  registered worktrees in the chartsearchai checkout** — a residue class an order of magnitude larger
+  than the `pr-*` refs the FINISH rule cleans, reached by no rule in these skills. **0 records /
+  1 measurement.** Banked so a later pass need not re-derive it; not proposable on a measurement alone.

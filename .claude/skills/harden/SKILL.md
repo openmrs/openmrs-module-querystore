@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.16.0
+version: 0.17.0
 ---
 
 # Harden
@@ -60,7 +60,12 @@ the line was found instead by a reviewer's mutation, at a cost of one round. On 
 TICKET offered ("0 of 36 reachable") measured a display-name population too, while the rule turned on a
 leg that ties on a name that is no row's display name — caught at the gate, before code. Ask of any
 clean or zero result what its inputs could not have produced, and ask it of a measurement you rely on
-as readily as one you ran.
+as readily as one you ran. **And of a STABLE result, ask what the repeats could not have varied.** On
+#315, n=3 byte-identical answers were published as stability while every repeat reused the server's
+cached prefix — the engine's own javadoc says that cache makes a borderline argmax non-deterministic, so
+the repeats measured the cache, and the prompt figures resting on them were weaker than they looked.
+Name what is reset between repeats; where nothing is, the repeats never exercised the path a first run
+takes.
 
 A behavior change without a named test is a Phase 1 finding — even when the code looks "obviously correct," "matches an existing pattern," or "is trivially small." Never-executed code is unverified code.
 

@@ -1,5 +1,7 @@
 # proposal · harden — the unpinned guard · drafted 2026-08-25, revised after refutation
-status: REVISED after a Step 5 refutation pass. One proposal, ready for Step 6.
+status: **APPLIED** 2026-08-25 as `harden` 0.16.0 (querystore 2044a02), at `harden:180`. Kept for the
+        refutation record below. Its named residue — `pr-harden:207` left narrower — was closed on
+        2026-08-26 as `pr-harden` 0.10.0; see `2026-08-26-retro-window-315.md` P2.
 target: harden (one existing bullet, at cycle close)
 history: the first draft proposed two new bullets, one per phase. Refuted — see **The refutation
          record** below. It rested on a false premise about harden's own text and would have opened

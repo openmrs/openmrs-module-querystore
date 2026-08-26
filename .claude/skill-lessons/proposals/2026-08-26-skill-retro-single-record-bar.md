@@ -1,5 +1,8 @@
 # proposal · skill-retro — the single-record bar contradicts its own anti-pattern · drafted 2026-08-26
-status: DRAFT. Not refuted — Step 5 has not run on it. The drafter is the finder, which is exactly the
+status: **KILLED** at Step 5 on 2026-08-26 — three blocking objections, each settling; see
+        `REJECTED.md`, 2026-08-26. The deciding check it asked for WAS run and its answer is recorded
+        there. Original text below, unaltered.
+superseded-status: DRAFT. Not refuted — Step 5 has not run on it. The drafter is the finder, which is exactly the
         pairing Step 5 exists to break, so this must not be applied by whoever reads it next without
         a fresh agent trying to kill it first.
 target: skill-retro 0.2.1 (one anti-pattern line, or one bar clause — the proposal picks between them)
