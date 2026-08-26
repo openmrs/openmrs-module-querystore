@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--ticket N] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.2.0
+version: 0.2.1
 ---
 
 # Ticket pool — the loop that learns
@@ -40,7 +40,9 @@ body is accepted only if it was created after the run started, because a body is
 ## Queueing work
 
 Label an issue `claude-pipeline` on GitHub. That is the whole queue: the driver lists open issues
-carrying the label, works them in ascending issue order, and skips what it should not start: a ticket
+carrying the label — reading each issue's own `labels` field rather than asking GitHub to filter, because
+that filter is search-indexed and lags behind a label you just added, which would drop the ticket from
+this invocation's queue silently — works them in ascending issue order, and skips what it should not start: a ticket
 the ledger records as `ready`, one whose run aborted, one that already has an open PR, and one that has
 spent its attempt budget. Unlabel an issue to remove it.
 

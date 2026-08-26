@@ -381,14 +381,25 @@ def build_queue(cfg: dict, ledger: dict, say: Say, only: str | None) -> list[dic
             else:
                 issues = [{"key": only, "title": f"JIRA {only}", "url": only}]
         else:
+            # Enumerate the open issues and filter the label HERE, rather than passing --label.
+            # Measured 2026-08-26: three issues labelled through `gh issue edit`, all three confirmed
+            # by reading each issue, and `gh issue list --label` returned ONE of them — that filter is
+            # search-indexed and the index lagged. It caught up unprompted a minute later. The queue is
+            # built once at the start of an invocation, so labelling a ticket and starting the pool
+            # loses it for that whole run, silently and fail-closed: no error, no count that looks
+            # wrong, just work you queued that nobody does. An issue's own `labels` field is not
+            # indexed, so this reads what is true now. It also makes the preflight label check
+            # load-bearing rather than a courtesy — a mistyped label now yields an empty queue by the
+            # same mechanism a correct one yields a full one.
             got = sh(
-                ["gh", "issue", "list", "--repo", slug, "--state", "open", "--label", cfg["label"],
-                 "--limit", "100", "--json", "number,title,url,updatedAt"]
+                ["gh", "issue", "list", "--repo", slug, "--state", "open",
+                 "--limit", "200", "--json", "number,title,url,updatedAt,labels"]
             )
             if got.returncode != 0:
                 say(f"  ! could not list issues in {slug}: {got.stderr.strip()[:200]}")
                 continue
-            issues = load_json_str(got.stdout, [])
+            issues = [i for i in load_json_str(got.stdout, [])
+                      if any(l.get("name") == cfg["label"] for l in i.get("labels") or [])]
 
         for issue in sorted(issues, key=lambda i: i.get("number", 0)):
             ticket = str(issue.get("number") or issue.get("key"))
