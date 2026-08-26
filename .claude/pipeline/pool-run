@@ -88,6 +88,12 @@ CURRENT: dict = {"proc": None}
 # Statuses that mean "do not queue this ticket again".
 DONE = {"ready"}
 NOT_OURS = {"has-open-pr"}
+# resolve-ticket's abort list is six conditions it hands BACK on, and every one of them is a fact
+# about the ticket or the environment rather than a flaky run: the wrong repository, no push rights,
+# a plan objection no citation settles, an unrepairable standalone, the round cap, a declined blocking
+# finding. A second identical attempt is guaranteed to reach the same place, so an abort waits for a
+# human instead of consuming the attempt budget.
+NEEDS_HUMAN = {"aborted"}
 
 
 # ─────────────────────────────────────────────────────────────── plumbing ──
@@ -395,7 +401,17 @@ def build_queue(cfg: dict, ledger: dict, say: Say, only: str | None) -> list[dic
                 continue
             if entry.get("status") in NOT_OURS and not only:
                 continue
-            existing = pr_for_ticket(prs, ticket)
+            if entry.get("status") in NEEDS_HUMAN and not only:
+                say(f"  - {key}: the run aborted and handed back — one of resolve-ticket's six "
+                    "conditions, which a second identical attempt cannot get past. Skipping.")
+                continue
+            # The ledger remembers the PR a previous attempt opened, and that memory beats
+            # re-matching prose: an attempt that ended as a draft may have written `Refs` on a branch
+            # carrying no number, which tiers 1-2 cannot see — and a second run on such a ticket
+            # opens a SECOND PR for one issue.
+            known = entry.get("pr")
+            existing = next((x for x in prs if x["number"] == known), None) if known else None
+            existing = existing or pr_for_ticket(prs, ticket)
             if existing and not only:
                 say(f"  - {key}: open PR #{existing['number']} already exists — that is "
                     "`pr-harden`'s entry point, not this pipeline's. Skipping.")
@@ -565,6 +581,30 @@ def lesson_files() -> dict[Path, float]:
     return {p: p.stat().st_mtime for p in LESSONS.glob("*.md") if p.name != "REJECTED.md"}
 
 
+def record_written(before: dict[Path, float]) -> Path | None:
+    """The newest record file this run created or appended to, if any."""
+    after = lesson_files()
+    fresh = [p for p, m in after.items() if before.get(p) != m]
+    return sorted(fresh, key=lambda p: after[p])[-1] if fresh else None
+
+
+def record_says_aborted(record: Path | None) -> bool:
+    """Whether the run reported one of `resolve-ticket`'s abort conditions.
+
+    This is the ONE place the driver reads the run's own account of itself, and it is bounded twice.
+    It is consulted only where the driver's own evidence — a PR, or the absence of one — cannot tell a
+    deliberate hand-back from a crash, since both leave no PR. And it can only make the driver do
+    LESS: the ticket waits for a human instead of being retried. A crashed run that mislabelled itself
+    therefore costs an attempt nobody spends, never a wrong PR.
+    """
+    if not record:
+        return False
+    for line in record.read_text().splitlines()[:12]:
+        if line.lower().startswith("outcome:") and "abort" in line.lower():
+            return True
+    return False
+
+
 def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, cleared: list[str],
                    before: dict[Path, float], say: Say) -> Path | None:
     """Write, or append to, the run record — but only with what the driver itself observed.
@@ -575,8 +615,7 @@ def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, 
     not have known (it was killed, it exited non-zero, it left the gate wedged) -> append that.
     Nothing to add -> touch nothing, because a record the run wrote is the better artifact.
     """
-    after = lesson_files()
-    fresh = [p for p, m in after.items() if before.get(p) != m]
+    own = record_written(before)
     notes = []
     if run.get("killed_for"):
         notes.append(f"the driver killed this session: it {run['killed_for']}")
@@ -603,14 +642,12 @@ def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, 
              f"{run.get('turns')} assistant turns · stream: {run.get('jsonl')}\n"
              f"{body}\n")
 
-    if fresh:
+    if own:
         if notes:
-            target = sorted(fresh, key=lambda p: after[p])[-1]
-            with open(target, "a") as f:
+            with open(own, "a") as f:
                 f.write("\n" + stamp)
-            say(f"    appended driver capture to {target.name}")
-            return target
-        return sorted(fresh, key=lambda p: after[p])[-1]
+            say(f"    appended driver capture to {own.name}")
+        return own
 
     LESSONS.mkdir(parents=True, exist_ok=True)
     path = LESSONS / f"{utc_date()}-{slug.split('/')[-1]}-{ticket}-driver.md"
@@ -669,6 +706,8 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
         status = "error"
     else:
         status = "no-pr"
+    if status in ("no-pr", "error") and record_says_aborted(record_written(before)):
+        status = "aborted"
 
     flags = []
     if status == "ready" and gate and not (gate.get("phase") == "reviewed" and gate.get("blocking") == 0):
@@ -704,7 +743,8 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
                "draft": f"PR #{pr['number'] if pr else '?'} left as a DRAFT — the loop did not converge",
                "timeout": f"killed — {run.get('killed_for')}",
                "error": "the session errored and opened no PR",
-               "no-pr": "ended with no PR — read the run's own report in the stream"}[status]
+               "no-pr": "ended with no PR — read the run's own report in the stream",
+               "aborted": "the run aborted and handed back — it will not be retried"}[status]
     say(f"    {status}: {verdict}  ({hms(run['seconds'])}, {run['turns']} turns"
         + (f", ${run['cost_usd']:.2f}" if run.get("cost_usd") else "") + ")")
     return status
