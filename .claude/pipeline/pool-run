@@ -885,6 +885,35 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
             "seconds": run["seconds"], "stream": run["jsonl"]}
 
 
+def retro_forecast(count: int, pending: int, cfg: dict) -> dict[int, list[str]]:
+    """Which queue positions a retro will follow, and which run reads what it changed.
+
+    A FORECAST, not a fact. It assumes each run leaves exactly one record — which holds on the normal
+    path, since the driver writes one when a run does not — and that each retro advances `LAST`. A
+    retro that does not turns retros off for the rest of the invocation, and then no mark after that
+    point happens at all.
+
+    It exists because the order is otherwise an invisible choice with visible consequences: which
+    tickets' records the retro reads, and which ticket is worked by the skills it changed. Printing it
+    does not make the default order right — it makes it VISIBLE, early enough to reorder with
+    `--ticket` before anything has been spent. Deciding the order remains the operator's, for the
+    reason the skill's own Order section gives.
+    """
+    if not cfg["retro"]["enabled"]:
+        return {}
+    need = max(1, int(cfg["retro"]["min_records"]))
+    marks: dict[int, list[str]] = {}
+    records = pending
+    for i in range(1, count + 1):
+        records += 1
+        if records >= need:
+            marks.setdefault(i, []).append("retro fires after this")
+            records = 0
+            if i < count:
+                marks.setdefault(i + 1, []).append("first run reading changed skills")
+    return marks
+
+
 # ─────────────────────────────────────────────────────────────────── main ──
 
 
@@ -987,8 +1016,17 @@ def main() -> int:
             queue = queue[: args.limit]
         if args.once:
             queue = queue[:1]
-        for job in queue:
-            say(f"  {job['key']}  {job['title'][:80]}")
+        pending = len(un_retroed())
+        marks = retro_forecast(len(queue), pending, cfg)
+        for n, job in enumerate(queue, 1):
+            say(f"  {job['key']}  {job['title'][:76]}")
+            for mark in marks.get(n, []):
+                say(f"        \u21b3 {mark}")
+        if cfg["retro"]["enabled"]:
+            say(f"  ({pending} un-retroed record(s) now, threshold "
+                f"{cfg['retro']['min_records']} — the marks above are a forecast, one record per run)")
+        else:
+            say("  (retro disabled for this invocation)")
         if not queue:
             say(f"  (nothing to work — label an issue {cfg['label']!r} to queue it)")
             return 0

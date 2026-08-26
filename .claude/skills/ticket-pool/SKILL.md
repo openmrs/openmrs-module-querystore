@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Ticket pool — the loop that learns
@@ -63,6 +63,13 @@ one thing this driver does not do. So there is no ordering policy here and shoul
 who wants a particular sequence names it, and gets it unattended in one invocation rather than having
 to launch each ticket by hand. Ascending stays the default for the reason a default should be boring —
 the same labels give the same order every time.
+
+So the queue is printed with a **forecast** instead: which position a retro will follow, and which run
+is the first to read what it changed. It is a forecast and says so — it assumes one record per run and
+that each retro advances `LAST` — and its point is that the order stops being an invisible choice while
+it is still free to change. Read the un-retroed count printed under it: records banked before the pool
+started shift every mark, and a pool begun with one record already in hand retros after its FIRST
+ticket, not its second.
 
 ## Running it
 
