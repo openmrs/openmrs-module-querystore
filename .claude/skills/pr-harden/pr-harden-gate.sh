@@ -22,6 +22,17 @@
 # `awaiting` allows the yield. That is not a concession — the harness re-invokes the orchestrator when
 # the agent completes, so yielding mid-await does not end the run, it is how the run proceeds.
 #
+# THAT PREMISE HOLDS ONLY FOR AN ATTENDED SESSION, and taking it as universal is what let two
+# unattended runs die here. Measured 2026-08-26: a `claude -p` process exits when its turn ends, so
+# nothing re-invokes it and the yield IS the death. Issue #297 wrote
+# `awaiting=[{agent: "refute plan #297 pass 1"}]`, narrated "dispatched the refutation gate. Here is
+# where things stand", and ended — 51 turns, no PR, its plan and reproduction discarded; the gate
+# allowed it, silently, because allowing is exit 0. Issue #310 died with the same signature in
+# /harden pass 3, at 1365 turns and $76.72. So the allow is now scoped to attended sessions and an
+# unattended yield is blocked with an instruction to collect the agent in-turn. Hooks DO reach `-p`
+# sessions — probed the same day, feedback delivered and captured in the stream — so the absence of
+# any gate text in those two logs was never evidence that the hook had not run.
+#
 # The obligation this puts on the skill: CLEAR `awaiting` the moment a result arrives. An entry left
 # behind would let the run stop for real, which is the one thing this hook exists to prevent — so the
 # allow is bounded by AWAIT_TTL as well, and an agent that has not returned within it is treated as
@@ -79,10 +90,48 @@ NOW=$(date +%s)
 # blocking > 0). Fail open on anything unparseable, like every other check here.
 AWAITING=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | length' <<<"$ENTRY" 2>/dev/null) || allow
 case "$AWAITING" in ''|*[!0-9]*) AWAITING=0 ;; esac
+# An UNATTENDED run has no next turn. `claude -p` exits when the turn ends, so for it a yield
+# mid-await is not how the run proceeds — it is how the run dies, silently and with its work
+# unpublished. Absent or unparseable, this is false, so an attended session keeps exactly the
+# behaviour documented above.
+UNATTENDED=$(jq -r 'if .unattended == true then "true" else "false" end' <<<"$ENTRY" 2>/dev/null) || allow
+case "$UNATTENDED" in true|false) ;; *) UNATTENDED=false ;; esac
+
+# The authoritative signal is a marker file the driver holds for the life of the run, NOT the field
+# above: the skill rewrites its own state entry at its Step 1 and would drop a seeded field, silently
+# and fail-open into the very defect this closes. The marker carries the driver pid, because a driver
+# killed with SIGKILL leaves the file behind and a stale marker must not make an interactive session
+# in this checkout unattended. The field is kept as a second channel; either one is enough.
+MARKER="$HOME/.claude/pipeline/unattended/$(printf '%s' "$PWD" | tr '/' '_' | sed 's/^_*//').json"
+if [ -f "$MARKER" ]; then
+  OWNER=$(jq -r '.pid // empty' "$MARKER" 2>/dev/null)
+  case "$OWNER" in
+    ''|*[!0-9]*) ;;
+    *) kill -0 "$OWNER" 2>/dev/null && UNATTENDED=true ;;
+  esac
+fi
+
 if [ "$AWAITING" -gt 0 ]; then
   NEWEST=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | max' <<<"$ENTRY" 2>/dev/null) || allow
   case "$NEWEST" in ''|*[!0-9]*) NEWEST=0 ;; esac
-  [ "$((NOW - NEWEST))" -lt "$AWAIT_TTL" ] && allow
+  if [ "$((NOW - NEWEST))" -lt "$AWAIT_TTL" ]; then
+    [ "$UNATTENDED" = "true" ] || allow
+    AGENTS=$(jq -r '[(.awaiting // [])[] | (.agent // "?")] | join(", ")' <<<"$ENTRY" 2>/dev/null) || AGENTS="?"
+    jq -n --arg a "$AGENTS" '{
+      decision: "block",
+      reason: ("This run is UNATTENDED and you ended your turn with a background agent outstanding: "
+        + $a + ". An unattended run has no next turn — the process exits when the turn ends, so "
+        + "yielding mid-await does not continue the run, it ends it, with the work unpublished. "
+        + "Collect that agent IN THIS TURN, clear the awaiting entry in "
+        + "~/.claude/pr-harden-state.json, and carry on with the phases the skill defines. Do NOT "
+        + "hand back to the user, do NOT report progress as if finished, and do NOT ask whether to "
+        + "continue; if you are aborting, take one of the labelled abort conditions and set "
+        + "override:true with its reason so the deviation is on the record."),
+      systemMessage: ("unattended run yielded with agents outstanding (" + $a
+        + ") — there is no next turn; collect them in-turn")
+    }'
+    exit 0
+  fi
 fi
 
 PHASE=$(jq -r '.phase // empty' <<<"$ENTRY" 2>/dev/null) || allow

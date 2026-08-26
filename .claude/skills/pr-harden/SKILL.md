@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.10.0
+version: 0.11.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -587,6 +587,19 @@ run that quit. So: **record the await immediately before spawning, and clear it 
 result arrives.** A non-empty, fresh `awaiting` lets the gate allow the yield — not a loophole,
 because the harness re-invokes the orchestrator when the agent completes, so yielding mid-await is
 how the run proceeds rather than how it ends.
+
+**That last clause holds only for an ATTENDED session, and taking it as universal killed two
+unattended runs.** A `claude -p` process exits when its turn ends, so nothing re-invokes it: there
+the yield IS the death, and the gate's own allow made it silent (allowing is `exit 0`). Measured
+2026-08-26 — #297 recorded `awaiting=[{agent: "refute plan #297 pass 1"}]`, narrated *"dispatched the
+refutation gate. Here is where things stand"*, and ended at 51 turns with no PR and its plan and
+reproduction discarded; #310 died with the same signature in `/harden` pass 3, at 1365 turns and
+$76.72. So **an unattended run never ends a turn with an agent outstanding — collect it in the same
+turn.** The gate enforces it now, scoping the allow to attended sessions off a pid-stamped marker the
+driver holds for the life of the run; the rule is stated here as well because a gate can only refuse
+a stop after the decision to stop has been made, and that decision is what costs the run. And do not
+read a stream with no gate text in it as evidence the gate never ran: hooks DO reach `-p` sessions,
+probed the same day, feedback delivered and captured.
 
 **Snapshot the worktree before every delegation and compare it after — on ANY terminal outcome.**
 `git diff | shasum` before you spawn; the same after the agent returns, fails, stalls or is killed. On a

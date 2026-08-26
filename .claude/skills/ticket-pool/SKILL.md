@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.7.0
+version: 0.8.0
 ---
 
 # Ticket pool — the loop that learns
@@ -186,6 +186,7 @@ a deliberate hand-back from a crash, since both leave no PR, and it can only mak
 | `aborted` | the run hit one of `resolve-ticket`'s six abort conditions and handed back. Not retried |
 | `timeout` | the driver killed the session. The record says which bound it hit |
 | `no-pr` / `error` | it died before opening a PR, and its record did not report an abort |
+| `died-yielding` | it ended with a background agent still outstanding. Not its judgement: it yielded, and an unattended run has no next turn to yield into. The gate refuses this now, so a fresh sighting means the marker did not reach it — check `pipeline/unattended/` |
 | `dirty-skip` | the checkout had uncommitted work, so nothing was touched. Commit or stash it |
 | `checkout-blocked` | the checkout's default branch would not fast-forward, or is **ahead** of origin, so nothing was touched. Push, reset or reconcile it |
 | `has-open-pr` | not this pipeline's job; `pr-harden` owns it |

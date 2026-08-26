@@ -37,6 +37,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -578,6 +579,32 @@ def read_gate_state(path: Path) -> dict:
     return load_json(PR_STATE, {}).get(str(path), {})
 
 
+UNATTENDED_DIR = PIPELINE / "unattended"
+
+
+def unattended_marker_path(path: Path) -> Path:
+    return UNATTENDED_DIR / (str(path).replace("/", "_").lstrip("_") + ".json")
+
+
+@contextlib.contextmanager
+def unattended_marker(path: Path):
+    """Tell the Stop-hook gate that this checkout is being driven with no human on the other end.
+
+    The gate cannot read this off the state ENTRY, because the skill rewrites that entry as its own
+    Step 1 and would drop any field we seeded there — silently, and fail-open straight back into the
+    defect this marker exists to close. So it is a file, and it carries our pid: a driver killed with
+    SIGKILL leaves the marker behind, and a stale marker whose owner is gone must not make an
+    interactive session in this checkout unattended.
+    """
+    UNATTENDED_DIR.mkdir(parents=True, exist_ok=True)
+    marker = unattended_marker_path(path)
+    marker.write_text(json.dumps({"pid": os.getpid(), "cwd": str(path), "since": now()}))
+    try:
+        yield marker
+    finally:
+        marker.unlink(missing_ok=True)
+
+
 # ──────────────────────────────────────────────────────────────── session ──
 
 
@@ -796,8 +823,9 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
     started_at = now()
     stem = LOGS / f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}"
     say(f"    running /resolve-ticket {job['url']}")
-    run = Session(f"/resolve-ticket {job['url']}", path, cfg, stem, cfg["ticket"]["timeout_seconds"],
-                  cfg["ticket"]["quiet_seconds"], say).run()
+    with unattended_marker(path):
+        run = Session(f"/resolve-ticket {job['url']}", path, cfg, stem,
+                      cfg["ticket"]["timeout_seconds"], cfg["ticket"]["quiet_seconds"], say).run()
 
     # Outcome from evidence, never from the session's own closing prose.
     gate = read_gate_state(path)
@@ -814,6 +842,10 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
         status = "no-pr"
     if status in ("no-pr", "error") and record_says_aborted(record_written(before)):
         status = "aborted"
+    # Ended with an agent still outstanding. Distinct from no-pr because the cause is known and is
+    # not the run's judgement: it yielded, and an unattended run has no next turn to yield into.
+    if status == "no-pr" and (gate.get("awaiting") or []):
+        status = "died-yielding"
 
     flags = []
     if status == "ready" and gate and not (gate.get("phase") == "reviewed" and gate.get("blocking") == 0):
@@ -850,6 +882,8 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
                "timeout": f"killed — {run.get('killed_for')}",
                "error": "the session errored and opened no PR",
                "no-pr": "ended with no PR — read the run's own report in the stream",
+               "died-yielding": ("ended while still awaiting a background agent — it yielded, and an "
+                                "unattended run has no next turn; see the gate entry's awaiting list"),
                "aborted": "the run aborted and handed back — it will not be retried"}[status]
     say(f"    {status}: {verdict}  ({hms(run['seconds'])}, {run['turns']} turns"
         + (f", ${run['cost_usd']:.2f}" if run.get("cost_usd") else "") + ")")
