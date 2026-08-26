@@ -139,6 +139,13 @@ def sh(args: list[str], cwd: Path | None = None, timeout: int = 300) -> subproce
     )
 
 
+def iso_to_epoch(stamp) -> int | None:
+    try:
+        return int(datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp())
+    except (TypeError, ValueError):
+        return None
+
+
 def load_json(path: Path, default):
     try:
         return json.loads(path.read_text())
@@ -957,6 +964,66 @@ def retro_forecast(count: int, pending: int, cfg: dict) -> dict[int, list[str]]:
     return marks
 
 
+def refresh_outcomes(ledger: dict, say: Say, loud: bool = True) -> int:
+    """Record what BECAME of each PR this pipeline opened.
+
+    Everything else here measures the pipeline's own activity — rounds, turns, whether a PR was marked
+    ready. None of that says whether the work was any good. The only honest evidence for that is
+    downstream and it arrives days later: did the PR merge, was it closed unmerged, did someone push
+    commits on top of it. Without this the ledger can only ever report that the machine ran.
+
+    `commits_after_pipeline` is named for exactly what it counts — commits whose `committedDate` is
+    after this ticket's run finished — and NOT "human rework", which it is not: a later attempt on the
+    same ticket would also land here, and its own `last_run` then moves the boundary. Read it with
+    `attempts`. This is deliberately a count of something checkable rather than an inference about who
+    did what and why.
+
+    Read-only against GitHub, one `gh pr view` per PR the ledger knows about.
+    """
+    checked = 0
+    for key in sorted(ledger):
+        entry = ledger[key]
+        pr = entry.get("pr")
+        if not pr:
+            continue
+        slug = key.split("#")[0]
+        got = sh(["gh", "pr", "view", str(pr), "--repo", slug, "--json",
+                  "state,isDraft,mergedAt,closedAt,url,commits,changedFiles,additions,deletions,"
+                  "comments,reviews,reviewDecision"])
+        if got.returncode != 0:
+            if loud:
+                say(f"  ! {key}: could not read PR #{pr}: {got.stderr.strip()[:120]}")
+            continue
+        pr_json = load_json_str(got.stdout, {})
+        since = iso_to_epoch(entry.get("last_run"))
+        commits = pr_json.get("commits") or []
+        after = sum(1 for c in commits
+                    if since and (iso_to_epoch(c.get("committedDate")) or 0) > since)
+        entry["outcome"] = {
+            "pr_state": pr_json.get("state"),
+            "is_draft": pr_json.get("isDraft"),
+            "merged_at": pr_json.get("mergedAt"),
+            "closed_at": pr_json.get("closedAt"),
+            "commits": len(commits),
+            "commits_after_pipeline": after,
+            "changed_files": pr_json.get("changedFiles"),
+            "additions": pr_json.get("additions"),
+            "deletions": pr_json.get("deletions"),
+            "review_decision": pr_json.get("reviewDecision"),
+            "comments": len(pr_json.get("comments") or []),
+            "reviews": len(pr_json.get("reviews") or []),
+            "checked": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        checked += 1
+        if loud:
+            o = entry["outcome"]
+            say(f"  {key}  PR #{pr} {o['pr_state']}"
+                + (" (draft)" if o["is_draft"] else "")
+                + f" · {o['commits']} commits, {o['commits_after_pipeline']} after the pipeline"
+                + f" · {o['reviews']} review(s), {o['comments']} comment(s)")
+    return checked
+
+
 # ─────────────────────────────────────────────────────────────────── main ──
 
 
@@ -967,6 +1034,12 @@ def cmd_status(cfg: dict, say: Say) -> int:
     for key, e in sorted(ledger.items()):
         say(f"{key:52s} {e.get('status','?'):12s} attempts={e.get('attempts',0)} "
             f"pr={e.get('pr')} {hms(e.get('duration_s') or 0)} {e.get('last_run','')[:19]}")
+        o = e.get("outcome")
+        if o:
+            say(f"{'':52s} → PR {o.get('pr_state')}"
+                + (" (draft)" if o.get("is_draft") else "")
+                + f", {o.get('commits_after_pipeline')} commit(s) after the pipeline"
+                + f", {o.get('reviews')} review(s), checked {str(o.get('checked'))[:10]}")
         for f in e.get("flags") or []:
             say(f"{'':52s} ! {f}")
     pending = un_retroed()
@@ -997,6 +1070,8 @@ def main() -> int:
     ap.add_argument("--retro-now", action="store_true")
     ap.add_argument("--no-retro", action="store_true")
     ap.add_argument("--init", action="store_true")
+    ap.add_argument("--outcomes", action="store_true",
+                    help="refresh what became of every PR the ledger knows about, and stop")
     args = ap.parse_args()
 
     cfg = merge(DEFAULTS, load_json(Path(args.config).expanduser(), {}))
@@ -1029,6 +1104,17 @@ def main() -> int:
     # (temp file, then replace), so a concurrent reader sees one version or the other, never a torn one.
     if not args.dry_run and not take_lock(say):
         return 1
+    if args.outcomes:
+        try:
+            led = load_json(LEDGER, {})
+            say("")
+            say("outcomes")
+            n = refresh_outcomes(led, say)
+            save_json(LEDGER, led)
+            say(f"  ({n} PR(s) checked)")
+            return 0
+        finally:
+            drop_lock()
     stopping = {"flag": False}
 
     def on_signal(signum, _frame):
@@ -1054,6 +1140,10 @@ def main() -> int:
             return 0
 
         ledger = load_json(LEDGER, {})
+        if not args.dry_run and any(e.get("pr") for e in ledger.values()):
+            say("")
+            say("outcomes of earlier tickets")
+            refresh_outcomes(ledger, say)
         say("")
         say("queue")
         named = [t.strip() for t in args.ticket.split(",") if t.strip()] if args.ticket else None

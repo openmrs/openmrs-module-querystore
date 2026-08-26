@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.6.0
+version: 0.7.0
 ---
 
 # Ticket pool — the loop that learns
@@ -88,6 +88,7 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-run --no-retro` | tickets only, no retro at all |
 | `pool-run --init` | create the label in each configured repo |
 | `pool-run --config <path>` | a config other than the default |
+| `pool-run --outcomes` | refresh what became of every PR the ledger knows about, and stop |
 | `pool-watch` | render the newest session's stream the way an interactive session reads |
 | `pool-watch 310 --results` | that ticket's session, tool results included |
 
@@ -106,6 +107,23 @@ for thinking blocks, `--tail N` to join near the end.
 **Read the stream; do not attach to the session.** `claude --resume <session-id>` puts a second writer
 on a conversation, so it is for a session that has FINISHED — `pool-watch`'s header prints the full id
 for exactly that. Reading the `.jsonl` is safe at any time and cannot perturb a run.
+
+### What became of the work
+
+Everything else the ledger holds measures the pipeline's own activity — rounds, turns, whether a PR was
+marked ready — and none of it says whether the work was any good. That evidence is downstream and
+arrives days later, so every invocation refreshes it first, and `--outcomes` does only that: per PR,
+whether it MERGED, was closed unmerged or is still open, its size, its reviews, and
+`commits_after_pipeline`.
+
+That last field is named for exactly what it counts — commits whose date falls after this ticket's run
+finished — and **not** "human rework", which it is not: a second attempt on the same ticket lands there
+too, and moves the boundary as it does. Read it beside `attempts`. A count of something checkable is
+worth more here than an inference about who changed what and why.
+
+Until several tickets have been through, this is the only column that can answer the questions this
+pipeline defers to evidence: whether ordering deserves a policy, whether the retro's threshold is right,
+whether a ticket shape predicts a `draft`.
 
 ## What one invocation can do
 
