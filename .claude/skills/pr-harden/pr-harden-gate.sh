@@ -101,7 +101,9 @@ case "$UNATTENDED" in true|false) ;; *) UNATTENDED=false ;; esac
 # above: the skill rewrites its own state entry at its Step 1 and would drop a seeded field, silently
 # and fail-open into the very defect this closes. The marker carries the driver pid, because a driver
 # killed with SIGKILL leaves the file behind and a stale marker must not make an interactive session
-# in this checkout unattended. The field is kept as a second channel; either one is enough.
+# in this checkout unattended. The field above is checked first and NOTHING WRITES IT TODAY — it is
+# there for a caller that can set it without the skill clobbering it, and until one exists the
+# marker is the only live producer. Do not read the pair as redundancy.
 MARKER="$HOME/.claude/pipeline/unattended/$(printf '%s' "$PWD" | tr '/' '_' | sed 's/^_*//').json"
 if [ -f "$MARKER" ]; then
   OWNER=$(jq -r '.pid // empty' "$MARKER" 2>/dev/null)

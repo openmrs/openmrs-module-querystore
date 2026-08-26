@@ -186,7 +186,7 @@ a deliberate hand-back from a crash, since both leave no PR, and it can only mak
 | `aborted` | the run hit one of `resolve-ticket`'s six abort conditions and handed back. Not retried |
 | `timeout` | the driver killed the session. The record says which bound it hit |
 | `no-pr` / `error` | it died before opening a PR, and its record did not report an abort |
-| `died-yielding` | it ended with a background agent still outstanding. Not its judgement: it yielded, and an unattended run has no next turn to yield into. The gate refuses this now, so a fresh sighting means the marker did not reach it — check `pipeline/unattended/` |
+| `died-yielding` | it ended with a background agent still outstanding. Not its judgement: it yielded, and an unattended run has no next turn to yield into. Both gates refuse this now, so a fresh sighting means EITHER the marker never reached the gate (check `pipeline/unattended/` for a file whose pid was live) or the run stopped despite being told not to — a block is persuasion, not a lock, and the two have different fixes |
 | `dirty-skip` | the checkout had uncommitted work, so nothing was touched. Commit or stash it |
 | `checkout-blocked` | the checkout's default branch would not fast-forward, or is **ahead** of origin, so nothing was touched. Push, reset or reconcile it |
 | `has-open-pr` | not this pipeline's job; `pr-harden` owns it |

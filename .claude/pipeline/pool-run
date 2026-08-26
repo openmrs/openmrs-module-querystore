@@ -1066,7 +1066,7 @@ def cmd_status(cfg: dict, say: Say) -> int:
     if not ledger:
         say("the ledger is empty — nothing has been worked yet.")
     for key, e in sorted(ledger.items()):
-        say(f"{key:52s} {e.get('status','?'):12s} attempts={e.get('attempts',0)} "
+        say(f"{key:52s} {e.get('status','?'):13s} attempts={e.get('attempts',0)} "
             f"pr={e.get('pr')} {hms(e.get('duration_s') or 0)} {e.get('last_run','')[:19]}")
         o = e.get("outcome")
         if o:
@@ -1225,7 +1225,7 @@ def main() -> int:
         say("## summary")
         for key, status in results:
             e = load_json(LEDGER, {}).get(key, {})
-            say(f"  {status:12s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
+            say(f"  {status:13s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
         needs = [k for k, s in results if s != "ready"]
         if needs:
             say("")
