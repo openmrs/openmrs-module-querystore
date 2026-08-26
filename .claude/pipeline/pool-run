@@ -1,0 +1,931 @@
+#!/usr/bin/env python3
+"""pool-run — work a pool of tickets to reviewed PRs, learning between them.
+
+One ticket, one fresh headless session running `/resolve-ticket`. Between tickets, whenever enough
+un-retroed run records have accumulated, one fresh session running `/skill-retro`. That split is not
+an implementation convenience: `skill-retro`'s own design rests on a run being unable to grade its
+own lessons, so the retro must not share a session with the run whose records it reads. And a fresh
+session per ticket is what keeps run N+1 reading the skills as the retro left them.
+
+What this driver decides, and what it deliberately does not:
+
+  * It decides which ticket runs next, that the checkout is clean before it starts, that a session
+    that stopped producing is dead, and what the RUN'S OUTCOME WAS — the last from GitHub and the
+    gate state file, never from the model's closing prose. A session that says it opened a ready PR
+    and did not is exactly the failure a driver exists to catch.
+  * It decides nothing about the work. The prompt is `/resolve-ticket <url>` and nothing else: the
+    skill owns its own autonomy contract, and a pipeline-level instruction bolted on here would be
+    governance that no retro can see and no run record can cite. Anything this pipeline needs the
+    runs to do belongs in the skill text, put there by a retro.
+
+Evidence the runs cannot produce about themselves is captured here: a run that dies leaves no record
+of its own death, so this driver writes (or appends to) the record in `~/.claude/skill-lessons/`,
+labelled as driver capture. It is capture, never a proposed rule — same contract the skills have.
+
+Usage:
+  pool-run                 work the pool until it is empty
+  pool-run --once          work one ticket and stop
+  pool-run --limit N       work at most N tickets
+  pool-run --ticket 314    work one named ticket, label or no label
+  pool-run --dry-run       preflight and print the queue; start nothing
+  pool-run --status        print the ledger and stop
+  pool-run --retro-now     run only the retro (ignores the record threshold)
+  pool-run --no-retro      work tickets, never retro
+  pool-run --init          create the pool label in each configured repo
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+HOME = Path.home()
+CLAUDE = HOME / ".claude"
+PIPELINE = CLAUDE / "pipeline"
+LOGS = PIPELINE / "logs"
+LEDGER = PIPELINE / "ledger.json"
+LOCK = PIPELINE / "pool.lock"
+LESSONS = CLAUDE / "skill-lessons"
+LAST = LESSONS / "LAST"
+PR_STATE = CLAUDE / "pr-harden-state.json"
+HARDEN_STATE = CLAUDE / "harden-state.json"
+SETTINGS = CLAUDE / "settings.json"
+
+REQUIRED_SKILLS = ["resolve-ticket", "pr-harden", "harden", "pr-review", "skill-retro"]
+# What a RUN needs is the list above; what the source repo mirrors is a superset. Two questions, and
+# conflating them would either demand a skill no run uses or stop checking one the mirror carries.
+MIRRORED_SKILLS = REQUIRED_SKILLS + ["ticket-pool"]
+GATE_PAIRS = [  # installed hook <-> the skill's own copy; a divergence means the gate runs old logic
+    (CLAUDE / "hooks/pr-harden-gate.sh", CLAUDE / "skills/pr-harden/pr-harden-gate.sh"),
+    (CLAUDE / "hooks/harden-cycle-gate.sh", CLAUDE / "skills/harden/harden-cycle-gate.sh"),
+]
+
+DEFAULTS = {
+    "label": "claude-pipeline",
+    "repos": {},
+    "source_repo": None,
+    "retro": {"enabled": True, "min_records": 2, "timeout_seconds": 7200},
+    "ticket": {"timeout_seconds": 28800, "max_attempts": 2, "quiet_seconds": 5400},
+    "claude": {"model": None, "effort": None, "max_budget_usd": None, "extra_args": []},
+}
+
+# The session running right now, so a second interrupt can reach it. A first interrupt asks the
+# driver to stop after the current session — which is usually what you want, since a killed
+# resolve-ticket leaves a half-worked branch — and a second one means it now.
+CURRENT: dict = {"proc": None}
+
+# Statuses that mean "do not queue this ticket again".
+DONE = {"ready"}
+NOT_OURS = {"has-open-pr"}
+
+
+# ─────────────────────────────────────────────────────────────── plumbing ──
+
+
+def now() -> int:
+    return int(time.time())
+
+
+def utc_date() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def utc_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def hms(seconds: float) -> str:
+    seconds = int(seconds)
+    h, m = seconds // 3600, (seconds % 3600) // 60
+    return f"{h}h{m:02d}m" if h else f"{m}m{seconds % 60:02d}s"
+
+
+class Say:
+    """stdout for the operator, and a markdown transcript of the same for the log."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.lines: list[str] = []
+
+    def __call__(self, line: str = "") -> None:
+        print(line, flush=True)
+        self.lines.append(line)
+        try:
+            self.path.write_text("\n".join(self.lines) + "\n")
+        except OSError:
+            pass
+
+
+def sh(args: list[str], cwd: Path | None = None, timeout: int = 300) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        args, cwd=str(cwd) if cwd else None, capture_output=True, text=True, timeout=timeout
+    )
+
+
+def load_json(path: Path, default):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return default
+
+
+def save_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+
+
+def merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for k, v in (over or {}).items():
+        out[k] = merge(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
+    return out
+
+
+# ───────────────────────────────────────────────────────────────── locking ──
+
+
+def take_lock(say: Say) -> bool:
+    if LOCK.exists():
+        holder = load_json(LOCK, {})
+        pid = holder.get("pid")
+        alive = False
+        if isinstance(pid, int):
+            try:
+                os.kill(pid, 0)
+                alive = True
+            except OSError:
+                alive = False
+        if alive:
+            say(f"another pool-run holds the lock (pid {pid}, since {holder.get('started')}).")
+            say("Two drivers in one checkout would corrupt each other's branch state. Stopping.")
+            return False
+        say(f"clearing a stale lock from pid {pid} (no such process).")
+    save_json(LOCK, {"pid": os.getpid(), "started": datetime.now(timezone.utc).isoformat()})
+    return True
+
+
+def drop_lock() -> None:
+    try:
+        LOCK.unlink()
+    except OSError:
+        pass
+
+
+# ────────────────────────────────────────────────────────────── preflight ──
+
+
+def repo_slug(path: Path) -> str | None:
+    got = sh(["git", "-C", str(path), "remote", "get-url", "origin"])
+    if got.returncode != 0:
+        return None
+    url = got.stdout.strip()
+    m = re.search(r"[:/]([^/:]+/[^/]+?)(?:\.git)?$", url)
+    return m.group(1) if m else None
+
+
+def default_branch(path: Path) -> str:
+    got = sh(["git", "-C", str(path), "rev-parse", "--abbrev-ref", "origin/HEAD"])
+    if got.returncode == 0 and "/" in got.stdout:
+        return got.stdout.strip().split("/", 1)[1]
+    for candidate in ("main", "master"):
+        if sh(["git", "-C", str(path), "rev-parse", "--verify", f"origin/{candidate}"]).returncode == 0:
+            return candidate
+    return "main"
+
+
+def parity_problems(cfg: dict) -> list[str]:
+    """Where the LIVE copies and the source repo's mirror disagree.
+
+    Three separate copies of this machinery exist and only one of them is what actually runs: the
+    skills under `~/.claude/skills`, the gate scripts registered under `~/.claude/hooks`, and the
+    committed mirror in the source repo. `skill-retro` Step 6 is what keeps them in step; this reports
+    when they are not. It is a warning before a run and a finding after a retro, and the same
+    definition for both on purpose — two copies of a consistency check drift exactly like the thing
+    they are checking.
+    """
+    problems = []
+    for installed, shipped in GATE_PAIRS:
+        if installed.is_file() and shipped.is_file() and installed.read_bytes() != shipped.read_bytes():
+            problems.append(f"{installed.name}: the registered hook differs from the skill's own copy, "
+                            "so the gate is running logic the skill no longer describes")
+    src = cfg.get("source_repo")
+    if not src:
+        return problems
+    driver_mirror = Path(src).expanduser() / ".claude/pipeline/pool-run"
+    me = PIPELINE / "pool-run"
+    if not driver_mirror.is_file():
+        problems.append("pool-run itself is not mirrored in the source repo")
+    elif me.is_file() and driver_mirror.read_bytes() != me.read_bytes():
+        problems.append("pool-run differs from the source repo — the driver that ran is not the "
+                        "driver the repo records")
+    for skill in MIRRORED_SKILLS:
+        live, mirror = CLAUDE / "skills" / skill, Path(src).expanduser() / ".claude/skills" / skill
+        if not mirror.is_dir():
+            problems.append(f"{skill} is not mirrored in the source repo")
+            continue
+        for f in sorted(live.rglob("*")):
+            if f.is_file():
+                m = mirror / f.relative_to(live)
+                if not m.is_file():
+                    problems.append(f"{skill}/{f.relative_to(live)} is not in the source repo")
+                elif m.read_bytes() != f.read_bytes():
+                    problems.append(f"{skill}/{f.relative_to(live)} differs from the source repo")
+    return problems
+
+
+def preflight(cfg: dict, say: Say, want_label: bool) -> list[str]:
+    """Returns a list of fatal problems. Non-fatal ones are said and carried."""
+    fatal: list[str] = []
+
+    for tool in ("claude", "gh", "jq", "git"):
+        if not shutil.which(tool):
+            fatal.append(f"{tool} is not on PATH")
+    if shutil.which("gh") and sh(["gh", "auth", "status"]).returncode != 0:
+        fatal.append("gh is not authenticated (`gh auth login`)")
+
+    hooks = json.dumps(load_json(SETTINGS, {}).get("hooks", {}))
+    for gate in ("pr-harden-gate.sh", "harden-cycle-gate.sh"):
+        if gate not in hooks:
+            fatal.append(
+                f"{gate} is not registered as a Stop hook in ~/.claude/settings.json — without it "
+                "the skills' termination contract is prose and an unattended run can stop early"
+            )
+
+    for skill in REQUIRED_SKILLS:
+        if not (CLAUDE / "skills" / skill / "SKILL.md").is_file():
+            fatal.append(f"skill {skill} is missing from ~/.claude/skills")
+
+    for problem in parity_problems(cfg):
+        say(f"  ! {problem}")
+
+    if not cfg["repos"]:
+        fatal.append("no repos configured in pool.json")
+    for slug, path in cfg["repos"].items():
+        p = Path(path).expanduser()
+        if not (p / ".git").exists():
+            fatal.append(f"{path} is not a git checkout (repo {slug})")
+            continue
+        found = repo_slug(p)
+        if found and found.lower() != slug.lower():
+            fatal.append(f"{path} has origin {found}, but pool.json files it under {slug}")
+        if want_label:
+            got = sh(["gh", "label", "list", "--repo", slug, "--limit", "200", "--json", "name"])
+            names = [x["name"] for x in load_json_str(got.stdout, [])]
+            if got.returncode == 0 and cfg["label"] not in names:
+                fatal.append(
+                    f"label {cfg['label']!r} does not exist in {slug} — run `pool-run --init` "
+                    "to create it, then label the issues you want worked"
+                )
+
+    src = cfg.get("source_repo")
+    if cfg["retro"]["enabled"]:
+        if not src:
+            fatal.append("retro is enabled but source_repo is not configured")
+        elif not (Path(src).expanduser() / ".git").exists():
+            fatal.append(f"source_repo {src} is not a git checkout")
+
+    return fatal
+
+
+def load_json_str(text: str, default):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return default
+
+
+# ────────────────────────────────────────────────────────────────── queue ──
+
+
+def open_prs(slug: str) -> list[dict]:
+    got = sh(
+        ["gh", "pr", "list", "--repo", slug, "--state", "open", "--limit", "100", "--json",
+         "number,title,isDraft,headRefName,closingIssuesReferences,url,body,createdAt"]
+    )
+    return load_json_str(got.stdout, [])
+
+
+def pr_for_ticket(prs: list[dict], ticket: str, since: int | None = None) -> dict | None:
+    """The PR for a ticket, in three descending tiers of how sure the link is.
+
+    Tier 1 is `closingIssuesReferences`, which only a `Fixes` keyword populates. Tier 2 is the ticket
+    named in the title or the branch. **Tier 3 is the body, and it is not redundant:** the skill
+    writes `Refs #n` instead of `Fixes #n` whenever the PR delivers something short of the ticket —
+    an instrument, a diagnosis, one part of several — which is exactly what a careful run produces,
+    and that keyword populates no field and may appear nowhere but the body. Its branch naming also
+    permits `fix/<slug>` with no number in it, so tiers 1 and 2 can BOTH miss a PR the run really
+    opened, and the driver would then report `no-pr` over a finished piece of work.
+
+    Tier 3 needs a bound, because a body is prose and may mention any issue: it counts only for a PR
+    created since `since`. So the two callers ask different questions with the same function — "does a
+    PR for this ticket already exist?" passes no `since` and gets tiers 1-2 only, because a wrong yes
+    there silently drops a ticket from the queue; "did THIS run open one?" passes the run's start and
+    can afford the third tier, because recency is what makes it safe.
+    """
+    num = ticket.lstrip("#")
+    digit = num.isdigit()
+    named = rf"(?<!\d)#?{num}(?!\d)" if digit else re.escape(num)
+    flags = 0 if digit else re.IGNORECASE
+    best = None
+    for pr in prs:
+        tier = 0
+        if num in [str(r.get("number")) for r in pr.get("closingIssuesReferences") or []]:
+            tier = 3
+        elif re.search(named, pr.get("title") or "", flags) or re.search(
+                named, pr.get("headRefName") or "", flags):
+            tier = 2
+        elif since is not None and re.search(named, pr.get("body") or "", flags) and (
+                pr_created_at(pr) or 0) >= since:
+            tier = 1
+        if tier and (best is None or (tier, pr["number"]) > (best[0], best[1]["number"])):
+            best = (tier, pr)
+    return best[1] if best else None
+
+
+def pr_created_at(pr: dict) -> int | None:
+    try:
+        return int(datetime.fromisoformat(pr["createdAt"].replace("Z", "+00:00")).timestamp())
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def build_queue(cfg: dict, ledger: dict, say: Say, only: str | None) -> list[dict]:
+    queue: list[dict] = []
+    for slug, path in cfg["repos"].items():
+        prs = open_prs(slug)
+        if only:
+            if only.isdigit():
+                got = sh(["gh", "issue", "view", only, "--repo", slug, "--json", "number,title,url"])
+                if got.returncode != 0:  # not this repo's issue; with several configured, only one owns it
+                    continue
+                issues = [load_json_str(got.stdout, {"number": int(only), "title": "", "url": ""})]
+            else:
+                issues = [{"key": only, "title": f"JIRA {only}", "url": only}]
+        else:
+            got = sh(
+                ["gh", "issue", "list", "--repo", slug, "--state", "open", "--label", cfg["label"],
+                 "--limit", "100", "--json", "number,title,url,updatedAt"]
+            )
+            if got.returncode != 0:
+                say(f"  ! could not list issues in {slug}: {got.stderr.strip()[:200]}")
+                continue
+            issues = load_json_str(got.stdout, [])
+
+        for issue in sorted(issues, key=lambda i: i.get("number", 0)):
+            ticket = str(issue.get("number") or issue.get("key"))
+            key = f"{slug}#{ticket}"
+            entry = ledger.get(key, {})
+            url = issue.get("url") or (
+                ticket if not ticket.isdigit() else f"https://github.com/{slug}/issues/{ticket}")
+
+            if entry.get("status") in DONE and not only:
+                continue
+            if entry.get("status") in NOT_OURS and not only:
+                continue
+            existing = pr_for_ticket(prs, ticket)
+            if existing and not only:
+                say(f"  - {key}: open PR #{existing['number']} already exists — that is "
+                    "`pr-harden`'s entry point, not this pipeline's. Skipping.")
+                ledger[key] = {**entry, "status": "has-open-pr", "pr": existing["number"],
+                               "pr_url": existing.get("url")}
+                continue
+            attempts = entry.get("attempts", 0)
+            if attempts >= cfg["ticket"]["max_attempts"] and not only:
+                say(f"  - {key}: {attempts} attempts already, last {entry.get('status')} — "
+                    "needs a human before another attempt. Skipping.")
+                continue
+
+            queue.append({"slug": slug, "path": Path(path).expanduser(), "ticket": ticket,
+                          "url": url, "title": issue.get("title", ""), "key": key})
+    return queue
+
+
+# ───────────────────────────────────────────────────────── checkout prep ──
+
+
+def prepare_checkout(path: Path, say: Say) -> tuple[bool, str]:
+    dirty = sh(["git", "-C", str(path), "status", "--porcelain"]).stdout.strip()
+    if dirty:
+        return False, "uncommitted changes in the checkout:\n" + dirty[:800]
+    sh(["git", "-C", str(path), "fetch", "origin", "--prune"], timeout=600)
+    branch = default_branch(path)
+    co = sh(["git", "-C", str(path), "checkout", branch])
+    if co.returncode != 0:
+        return False, f"could not check out {branch}: {co.stderr.strip()[:300]}"
+    ff = sh(["git", "-C", str(path), "merge", "--ff-only", f"origin/{branch}"])
+    if ff.returncode != 0:
+        return False, f"{branch} is not fast-forwardable to origin/{branch}: {ff.stderr.strip()[:300]}"
+    head = sh(["git", "-C", str(path), "rev-parse", "--short", "HEAD"]).stdout.strip()
+    return True, f"{branch} @ {head}"
+
+
+def clear_gate_state(path: Path, say: Say) -> list[str]:
+    """A crashed run leaves an entry that blocks turns in this checkout for up to 6 hours.
+
+    The next run writes its own entry at its Step 1, so removing a leftover is not a loophole — but
+    it IS evidence about the run that left it, so it is reported rather than quietly dropped.
+    """
+    cleared = []
+    for state in (PR_STATE, HARDEN_STATE):
+        data = load_json(state, {})
+        entry = data.pop(str(path), None)
+        if entry is not None:
+            cleared.append(
+                f"{state.name}: phase={entry.get('phase')} blocking={entry.get('blocking')} "
+                f"edits={entry.get('edits')} pr={entry.get('pr')} round={entry.get('round')}"
+            )
+            save_json(state, data)
+    for line in cleared:
+        say(f"    cleared leftover gate state — {line}")
+    return cleared
+
+
+def read_gate_state(path: Path) -> dict:
+    return load_json(PR_STATE, {}).get(str(path), {})
+
+
+# ──────────────────────────────────────────────────────────────── session ──
+
+
+class Session:
+    """One headless `claude -p` run, streamed to a .jsonl and watched for death."""
+
+    def __init__(self, prompt: str, cwd: Path, cfg: dict, log_stem: Path, timeout: int,
+                 quiet: int, say: Say):
+        self.prompt, self.cwd, self.cfg = prompt, cwd, cfg
+        self.jsonl = log_stem.with_suffix(".jsonl")
+        self.err = log_stem.with_suffix(".err")
+        self.timeout, self.quiet, self.say = timeout, quiet, say
+        self.session_id = str(uuid.uuid4())
+        self.killed_for = None
+        self.turns = 0
+        self.last_tool = ""
+        self.result = {}
+
+    def argv(self) -> list[str]:
+        c = self.cfg["claude"]
+        argv = ["claude", "-p", self.prompt, "--output-format", "stream-json", "--verbose",
+                "--dangerously-skip-permissions", "--session-id", self.session_id]
+        if c.get("model"):
+            argv += ["--model", c["model"]]
+        if c.get("effort"):
+            argv += ["--effort", c["effort"]]
+        if c.get("max_budget_usd"):
+            argv += ["--max-budget-usd", str(c["max_budget_usd"])]
+        argv += list(c.get("extra_args") or [])
+        return argv
+
+    def run(self) -> dict:
+        started = now()
+        with open(self.jsonl, "w") as out, open(self.err, "w") as errf:
+            proc = subprocess.Popen(
+                self.argv(), cwd=str(self.cwd), stdout=subprocess.PIPE, stderr=errf,
+                text=True, bufsize=1, start_new_session=True,
+            )
+            last_line = [now()]
+            CURRENT["proc"] = proc
+
+            def kill(why: str) -> None:
+                self.killed_for = why
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    time.sleep(20)
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except OSError:
+                    pass
+
+            def watchdog() -> None:
+                while proc.poll() is None:
+                    time.sleep(15)
+                    if now() - started > self.timeout:
+                        return kill(f"exceeded the ticket timeout of {hms(self.timeout)}")
+                    if now() - last_line[0] > self.quiet:
+                        return kill(f"produced nothing for {hms(self.quiet)}")
+
+            threading.Thread(target=watchdog, daemon=True).start()
+            last_report = now()
+            for line in proc.stdout:
+                out.write(line)
+                out.flush()
+                last_line[0] = now()
+                self._absorb(line)
+                if now() - last_report >= 300:
+                    last_report = now()
+                    self.say(f"    … {hms(now() - started)} · {self.turns} turns"
+                             + (f" · last: {self.last_tool}" if self.last_tool else ""))
+            code = proc.wait()
+            CURRENT["proc"] = None
+
+        return {"exit": code, "seconds": now() - started, "session_id": self.session_id,
+                "killed_for": self.killed_for, "turns": self.turns, "jsonl": str(self.jsonl),
+                "cost_usd": self.result.get("total_cost_usd"),
+                "is_error": bool(self.result.get("is_error")) or code != 0,
+                "summary": (self.result.get("result") or "")[-1200:]}
+
+    def _absorb(self, line: str) -> None:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            return
+        kind = event.get("type")
+        if kind == "assistant":
+            self.turns += 1
+            for block in event.get("message", {}).get("content", []) or []:
+                if block.get("type") == "tool_use":
+                    name = block.get("name", "")
+                    arg = block.get("input", {}) or {}
+                    detail = arg.get("command") or arg.get("prompt") or arg.get("skill") or ""
+                    self.last_tool = f"{name}({str(detail)[:60]})" if detail else name
+        elif kind == "result":
+            self.result = event
+
+
+# ─────────────────────────────────────────────────────── record  capture ──
+
+
+DRIVER_HEADER = "## Driver capture (pool-run)"
+
+
+def lesson_files() -> dict[Path, float]:
+    if not LESSONS.is_dir():
+        return {}
+    return {p: p.stat().st_mtime for p in LESSONS.glob("*.md") if p.name != "REJECTED.md"}
+
+
+def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, cleared: list[str],
+                   before: dict[Path, float], say: Say) -> Path | None:
+    """Write, or append to, the run record — but only with what the driver itself observed.
+
+    A run that dies cannot write its own record, and the death is exactly the kind of evidence a
+    retro needs. So: no record from the run -> write one, marked as driver capture, whose middle
+    sections are absent and which says they are absent rather than empty. A record plus something the run could
+    not have known (it was killed, it exited non-zero, it left the gate wedged) -> append that.
+    Nothing to add -> touch nothing, because a record the run wrote is the better artifact.
+    """
+    after = lesson_files()
+    fresh = [p for p, m in after.items() if before.get(p) != m]
+    notes = []
+    if run.get("killed_for"):
+        notes.append(f"the driver killed this session: it {run['killed_for']}")
+    if run.get("exit") not in (0, None) and not run.get("killed_for"):
+        notes.append(f"`claude -p` exited {run['exit']} (see {Path(run['jsonl']).with_suffix('.err')})")
+    # A converged run leaves its entry behind with blocking 0 — that is the normal end state, not
+    # evidence, and noting it would append a line to every clean record. Only an entry that says the
+    # run did NOT finish is worth carrying: a pre-terminal phase, findings still outstanding, or the
+    # labelled override, which is the skill's own record of a deviation.
+    unfinished = gate.get("override") or gate.get("phase") in ("building", "init", "fixing") or (
+        gate.get("blocking") or 0) > 0
+    if gate and unfinished:
+        notes.append(
+            f"the run left its gate entry unfinished: phase={gate.get('phase')} "
+            f"blocking={gate.get('blocking')} round={gate.get('round')} override={gate.get('override')}"
+        )
+    for line in cleared:
+        notes.append(f"this run started on a checkout whose gate state a previous run left behind — {line}")
+
+    body = "\n".join(f"- {n}" for n in notes) or "- nothing the run could not observe itself."
+    stamp = (f"{DRIVER_HEADER}\n"
+             f"outcome as the driver measured it: {outcome}\n"
+             f"session: {run.get('session_id')} · {hms(run.get('seconds', 0))} · "
+             f"{run.get('turns')} assistant turns · stream: {run.get('jsonl')}\n"
+             f"{body}\n")
+
+    if fresh:
+        if notes:
+            target = sorted(fresh, key=lambda p: after[p])[-1]
+            with open(target, "a") as f:
+                f.write("\n" + stamp)
+            say(f"    appended driver capture to {target.name}")
+            return target
+        return sorted(fresh, key=lambda p: after[p])[-1]
+
+    LESSONS.mkdir(parents=True, exist_ok=True)
+    path = LESSONS / f"{utc_date()}-{slug.split('/')[-1]}-{ticket}-driver.md"
+    path.write_text(
+        f"# pool-run · {slug} · {ticket} · {utc_date()}\n"
+        f"outcome: {outcome}\n"
+        f"rounds: unknown   cycles: unknown   verifier: unknown\n"
+        f"context: not surfaced\n"
+        f"transcript: ~/.claude/projects/<cwd-slug>/{run.get('session_id')}.jsonl\n\n"
+        "**This record was written by the pool driver, not by the run.** The run ended without "
+        "writing one, so the four sections a retro reads for signal — refuted by measurement, raised "
+        "by a fresh agent, where a skill blocked the run, declined — are ABSENT rather than empty: "
+        "nobody observed them. Corroborate nothing from this file except what it states below. What "
+        "it is evidence of is that a run ended this way at all.\n\n"
+        f"{stamp}")
+    say(f"    wrote driver capture {path.name} (the run left no record of its own)")
+    return path
+
+
+# ───────────────────────────────────────────────────────────────── ticket ──
+
+
+def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
+    key, path, ticket = job["key"], job["path"], job["ticket"]
+    say("")
+    say(f"── {key}  {job['title'][:88]}")
+
+    ok, where = prepare_checkout(path, say)
+    if not ok:
+        say(f"    skipped: {where.splitlines()[0]}")
+        say("    Nothing was touched. Commit, stash or clean the checkout and re-run.")
+        ledger[key] = {**ledger.get(key, {}), "status": "dirty-skip", "note": where[:500],
+                       "last_run": datetime.now(timezone.utc).isoformat()}
+        save_json(LEDGER, ledger)
+        return "dirty-skip"
+    say(f"    checkout: {where}")
+    cleared = clear_gate_state(path, say)
+
+    before = lesson_files()
+    started_at = now()
+    stem = LOGS / f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}"
+    say(f"    running /resolve-ticket {job['url']}")
+    run = Session(f"/resolve-ticket {job['url']}", path, cfg, stem, cfg["ticket"]["timeout_seconds"],
+                  cfg["ticket"]["quiet_seconds"], say).run()
+
+    # Outcome from evidence, never from the session's own closing prose.
+    gate = read_gate_state(path)
+    pr = pr_for_ticket(open_prs(job["slug"]), ticket, since=started_at)
+    if run.get("killed_for"):
+        status = "timeout"
+    elif pr and not pr.get("isDraft"):
+        status = "ready"
+    elif pr:
+        status = "draft"
+    elif run["is_error"]:
+        status = "error"
+    else:
+        status = "no-pr"
+
+    flags = []
+    if status == "ready" and gate and not (gate.get("phase") == "reviewed" and gate.get("blocking") == 0):
+        flags.append(f"PR is ready but the gate entry says phase={gate.get('phase')} "
+                     f"blocking={gate.get('blocking')} — one of the two is wrong; read the round log")
+    if status == "ready" and gate.get("override"):
+        flags.append("the run took the labelled override — read its reason in the state entry")
+
+    record = capture_record(job["slug"], ticket, status, run, gate, cleared, before, say)
+    for f in flags:
+        say(f"    ! {f}")
+
+    entry = ledger.get(key, {})
+    ledger[key] = {
+        **entry,
+        "status": status,
+        "attempts": entry.get("attempts", 0) + 1,
+        "pr": pr["number"] if pr else None,
+        "pr_url": pr.get("url") if pr else None,
+        "last_run": datetime.now(timezone.utc).isoformat(),
+        "duration_s": run["seconds"],
+        "turns": run["turns"],
+        "cost_usd": run.get("cost_usd"),
+        "session_id": run["session_id"],
+        "stream": run["jsonl"],
+        "record": str(record) if record else None,
+        "flags": flags,
+        "killed_for": run.get("killed_for"),
+    }
+    save_json(LEDGER, ledger)
+
+    verdict = {"ready": f"PR #{pr['number'] if pr else '?'} marked ready for review",
+               "draft": f"PR #{pr['number'] if pr else '?'} left as a DRAFT — the loop did not converge",
+               "timeout": f"killed — {run.get('killed_for')}",
+               "error": "the session errored and opened no PR",
+               "no-pr": "ended with no PR — read the run's own report in the stream"}[status]
+    say(f"    {status}: {verdict}  ({hms(run['seconds'])}, {run['turns']} turns"
+        + (f", ${run['cost_usd']:.2f}" if run.get("cost_usd") else "") + ")")
+    return status
+
+
+# ────────────────────────────────────────────────────────────────── retro ──
+
+
+def un_retroed() -> list[Path]:
+    """Records newer than the retro's own LAST marker. Mtime, not the date in the filename: two
+    records written on the retro's own day sit either side of it and a date cannot tell which."""
+    files = lesson_files()
+    if not LAST.exists():
+        return sorted(files)
+    cut = LAST.stat().st_mtime
+    return sorted(p for p, m in files.items() if m > cut)
+
+
+# Set when a retro leaves LAST where it was. The threshold is computed from LAST, so without this
+# every remaining ticket in the invocation would trigger another retro over the same records.
+RETRO_STOPPED: dict = {"why": None}
+
+
+def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
+    if not cfg["retro"]["enabled"]:
+        return None
+    if RETRO_STOPPED["why"] and not force:
+        say(f"    retro: not run — {RETRO_STOPPED['why']}")
+        return None
+    pending = un_retroed()
+    need = cfg["retro"]["min_records"]
+    if not force and len(pending) < need:
+        say(f"    retro: {len(pending)} un-retroed record(s), threshold {need} — not yet. "
+            "One record cannot corroborate a lesson, which is the skill's own rule.")
+        return None
+
+    src = Path(cfg["source_repo"]).expanduser()
+    say("")
+    say(f"── retro over {len(pending)} record(s): {', '.join(p.name for p in pending) or 'all'}")
+    dirty = sh(["git", "-C", str(src), "status", "--porcelain"]).stdout.strip()
+    if dirty:
+        say(f"    skipped: {src} has uncommitted changes, and the retro's last step is a commit "
+            "there. Clean it and re-run.")
+        return {"status": "skipped-dirty"}
+    sh(["git", "-C", str(src), "fetch", "origin", "--prune"], timeout=600)
+    branch = default_branch(src)
+    sh(["git", "-C", str(src), "checkout", branch])
+    sh(["git", "-C", str(src), "merge", "--ff-only", f"origin/{branch}"])
+    before_head = sh(["git", "-C", str(src), "rev-parse", "HEAD"]).stdout.strip()
+    before_last = LAST.stat().st_mtime if LAST.exists() else 0
+
+    stem = LOGS / f"{utc_stamp()}-retro"
+    run = Session("/skill-retro", src, cfg, stem, cfg["retro"]["timeout_seconds"],
+                  cfg["ticket"]["quiet_seconds"], say).run()
+
+    after_head = sh(["git", "-C", str(src), "rev-parse", "HEAD"]).stdout.strip()
+    ahead = sh(["git", "-C", str(src), "status", "-sb"]).stdout.splitlines()[:1]
+    problems = []
+    if run.get("killed_for"):
+        problems.append(f"killed — {run['killed_for']}")
+    if after_head == before_head:
+        problems.append("no commit landed in the source repo. The skill commits even when it "
+                        "applies nothing, because the records and the parked counts are its output")
+    if (LAST.stat().st_mtime if LAST.exists() else 0) <= before_last:
+        problems.append("LAST was not advanced, so the next retro will re-read these same records")
+        RETRO_STOPPED["why"] = ("the last retro did not advance LAST, so the threshold still counts "
+                                "the same records — retros are off for the rest of this run")
+    if ahead and "ahead" in ahead[0]:
+        problems.append(f"the commit was not pushed ({ahead[0].strip()})")
+    problems += parity_problems(cfg)
+
+    say(f"    retro finished in {hms(run['seconds'])}, {run['turns']} turns"
+        + (f", ${run['cost_usd']:.2f}" if run.get("cost_usd") else ""))
+    if after_head != before_head:
+        say("    " + sh(["git", "-C", str(src), "log", "-1", "--oneline"]).stdout.strip())
+    for p in problems:
+        say(f"    ! {p}")
+    if not problems:
+        say("    verified: committed, pushed, LAST advanced, live copies and the mirror identical.")
+    return {"status": "problems" if problems else "ok", "problems": problems,
+            "records": [p.name for p in pending], "commit": after_head,
+            "seconds": run["seconds"], "stream": run["jsonl"]}
+
+
+# ─────────────────────────────────────────────────────────────────── main ──
+
+
+def cmd_status(cfg: dict, say: Say) -> int:
+    ledger = load_json(LEDGER, {})
+    if not ledger:
+        say("the ledger is empty — nothing has been worked yet.")
+    for key, e in sorted(ledger.items()):
+        say(f"{key:52s} {e.get('status','?'):12s} attempts={e.get('attempts',0)} "
+            f"pr={e.get('pr')} {hms(e.get('duration_s') or 0)} {e.get('last_run','')[:19]}")
+        for f in e.get("flags") or []:
+            say(f"{'':52s} ! {f}")
+    pending = un_retroed()
+    say("")
+    say(f"un-retroed records: {len(pending)} (threshold {cfg['retro']['min_records']})")
+    for p in pending:
+        say(f"  {p.name}")
+    return 0
+
+
+def cmd_init(cfg: dict, say: Say) -> int:
+    for slug in cfg["repos"]:
+        got = sh(["gh", "label", "create", cfg["label"], "--repo", slug, "--color", "5319e7",
+                  "--description", "Queued for the unattended resolve-ticket pipeline"])
+        say(f"{slug}: {(got.stdout + got.stderr).strip()[:160]}")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(add_help=True, description="work a pool of tickets to reviewed PRs")
+    ap.add_argument("--config", default=str(PIPELINE / "pool.json"))
+    ap.add_argument("--once", action="store_true")
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--ticket")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--status", action="store_true")
+    ap.add_argument("--retro-now", action="store_true")
+    ap.add_argument("--no-retro", action="store_true")
+    ap.add_argument("--init", action="store_true")
+    args = ap.parse_args()
+
+    cfg = merge(DEFAULTS, load_json(Path(args.config).expanduser(), {}))
+    if args.no_retro:
+        cfg["retro"]["enabled"] = False
+    LOGS.mkdir(parents=True, exist_ok=True)
+    say = Say(LOGS / f"pool-{utc_stamp()}.md")
+    say(f"# pool-run · {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
+    say(f"config: {args.config}")
+
+    if args.status:
+        return cmd_status(cfg, say)
+    if args.init:
+        return cmd_init(cfg, say)
+
+    say("")
+    say("preflight")
+    fatal = preflight(cfg, say, want_label=not (args.ticket or args.retro_now))
+    for f in fatal:
+        say(f"  x {f}")
+    if fatal:
+        say("")
+        say("Fix the above and re-run. Nothing was started.")
+        return 1
+    say("  ok")
+
+    if not take_lock(say):
+        return 1
+    stopping = {"flag": False}
+
+    def on_signal(signum, _frame):
+        proc = CURRENT["proc"]
+        if stopping["flag"] and proc and proc.poll() is None:
+            say(f"\nsignal {signum} again — killing the session now. Its branch is left as it is; "
+                "the next run will refuse the checkout until you commit or clean it.")
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except OSError:
+                pass
+            return
+        stopping["flag"] = True
+        say(f"\ncaught signal {signum} — will stop after the current session finishes. "
+            "Signal again to kill it instead.")
+
+    signal.signal(signal.SIGINT, on_signal)
+    signal.signal(signal.SIGTERM, on_signal)
+
+    try:
+        if args.retro_now:
+            run_retro(cfg, say, force=True)
+            return 0
+
+        ledger = load_json(LEDGER, {})
+        say("")
+        say("queue")
+        queue = build_queue(cfg, ledger, say, args.ticket)
+        save_json(LEDGER, ledger)
+        if args.limit:
+            queue = queue[: args.limit]
+        if args.once:
+            queue = queue[:1]
+        for job in queue:
+            say(f"  {job['key']}  {job['title'][:80]}")
+        if not queue:
+            say(f"  (nothing to work — label an issue {cfg['label']!r} to queue it)")
+            return 0
+        if args.dry_run:
+            say("")
+            say("--dry-run: preflight passed and the queue is above. Nothing was started.")
+            return 0
+
+        results = []
+        for i, job in enumerate(queue, 1):
+            if stopping["flag"]:
+                say("stopping as asked; the rest of the queue is untouched.")
+                break
+            say("")
+            say(f"[{i}/{len(queue)}]")
+            status = work_ticket(job, cfg, ledger, say)
+            results.append((job["key"], status))
+            if not stopping["flag"]:
+                run_retro(cfg, say, force=False)
+
+        say("")
+        say("## summary")
+        for key, status in results:
+            e = load_json(LEDGER, {}).get(key, {})
+            say(f"  {status:12s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
+        needs = [k for k, s in results if s != "ready"]
+        if needs:
+            say("")
+            say("needs a human: " + ", ".join(needs))
+        say("")
+        say(f"log: {say.path}")
+        return 0
+    finally:
+        drop_lock()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
