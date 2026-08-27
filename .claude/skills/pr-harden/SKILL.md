@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.12.3
+version: 0.12.4
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -618,9 +618,12 @@ two sessions sharing ONE directory still share one entry, and `owner` is what te
 `phase` is `"init"` before the first review, `"reviewed"` once a reviewer's count is recorded,
 `"fixing"` from the moment the fixer is spawned until the next reviewer reports. On `init` and
 `fixing` the gate blocks regardless of `blocking`, so leave the last measured value there for the
-record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts`, `override` and `owner`; `declined` and
-`reviewed_shas` are the orchestrator's own ledger, carried in the same entry so one write keeps both
-in step. `reviewed_shas` is not only a record: step 1 compares the incoming head against its last
+record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts`, `override`, `owner`, `awaiting`, `unattended`
+and `mode` — all ten; `declined` and `reviewed_shas` are the orchestrator's own ledger, carried in the
+same entry so one write keeps both in step. **`mode` has no writer today**, which is a defect and not a
+spare field: the gate has a distinct `--plan-only` message behind it, so a plan-only run instead gets
+the generic `building` one, telling it to "continue the phases" through implementation and a draft PR —
+exactly the work its own mode excludes. Either something writes `mode` or that branch goes. `reviewed_shas` is not only a record: step 1 compares the incoming head against its last
 entry, because two rounds reviewing one sha is a round spent on bytes already reviewed.
 
 **`owner` is what tells your entry from somebody else's, and it is not the unattended marker's job.**

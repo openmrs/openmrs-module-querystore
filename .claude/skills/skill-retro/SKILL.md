@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.2.2
+version: 0.2.3
 ---
 
 # Skill retro — evidence in, governance change out
@@ -118,6 +118,12 @@ Apply the surviving proposals. Then, per skill touched:
   `cmp` that the live copy and the repo copy are byte-identical, **including any `*gate*.sh`** — the
   registered hooks under `~/.claude/hooks/` are SEPARATE copies, so a skill push alone leaves the gate
   running old logic;
+- **and `cmp` the live SKILL copy of each gate against the live HOOK copy** — `~/.claude/skills/<skill>/
+  <gate>.sh` against `~/.claude/hooks/<gate>.sh`. Four copies need THREE equalities to be transitively
+  identical and the two below state only two disjoint pairs, so without this one the repo's skill copy
+  may drift arbitrarily from the repo's hook copy with every check green. That is the edge that matters:
+  each skill's own install line is `cp .claude/skills/<skill>/<gate>.sh ~/.claude/hooks/`, so the
+  uncopied one is what becomes the registered gate on the next machine;
 - **and `cmp` `~/.claude/hooks/` against the repo's `.claude/hooks/`, every file, whether or not a skill
   changed.** That directory is what `settings.json` actually runs, so each gate now exists in THREE
   copies (live hook, live skill, repo skill) plus its repo hook copy, and `git-restore-backup.sh` exists

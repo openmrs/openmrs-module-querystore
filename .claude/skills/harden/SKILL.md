@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.19.2
+version: 0.19.3
 ---
 
 # Harden
@@ -243,7 +243,9 @@ somebody's `awaiting`, and their gate then sees a run that quit with agents outs
 valid JSON throughout, nothing raised. `gate-state` holds an exclusive `flock` across both state files
 and writes atomically. Do not retype the mechanism; call the helper.
 
-`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says `edits > 0`. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, non-numeric count), so it can only ever add a cycle you owed — it cannot wedge a session.
+`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says `edits > 0`. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, non-numeric count), so it can only ever add a cycle you owed — it can only ever cost you the cycle you owed. It CAN hold a session, though — an
+entry this session owns and never clears blocks every turn in that directory until the six-hour expiry,
+and the way out is to finish the cycle or take the labelled override, not to wait.
 
 A skill cannot register its own hook, so this is a one-time install per machine:
 

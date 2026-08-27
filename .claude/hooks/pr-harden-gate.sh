@@ -88,6 +88,18 @@ case "$TS" in ''|*[!0-9]*) allow ;; esac
 NOW=$(date +%s)
 [ "$((NOW - TS))" -lt "$STALE_AFTER" ] || allow
 
+# Normalise a pid field before anything trusts it. Two silent fail-opens live here, both measured
+# 2026-08-27: `kill -0 0` SUCCEEDS (it signals the whole process group), while the ancestry walk can
+# never match "0" because its `0|1` rung fires first — so `"owner": 0` read as a live non-ancestor and
+# disarmed every block path. And the comparison below is a STRING one, so a zero-padded but numerically
+# correct pid ("0010560") read as somebody else's. Strip leading zeros, and treat a pure zero as no pid
+# at all. `ps` never pads its output, so normalising the needle is enough.
+pid_or_empty() {
+  case "$1" in ''|*[!0-9]*) return 0 ;; esac
+  local n; n=$(printf '%s' "$1" | sed 's/^0*//')
+  [ -n "$n" ] && printf '%s' "$n"
+}
+
 # Is PID an ancestor of this hook process? 0 = yes, 1 = the walk reached the top without meeting it
 # (positively somebody else's), 2 = could not be established. The three stay distinct because only 1
 # may relax anything. Callers validate PID first; the numeric guard is belt-and-braces for a later one.
@@ -128,8 +140,14 @@ owns_this_session() {
 # An UNSTAMPED entry keeps the behaviour that predates this check, so nothing is relaxed on the
 # strength of a missing field, and an indeterminate walk keeps it too: losing the unattended guard back
 # is the more expensive direction, since that guard exists for a run that died at 1365 turns with no PR.
-# A DEAD owner allows, because no session can advance an entry whose writer is gone and blocking then
-# offers only the two damaging remedies above; `STALE_AFTER` used to reach that case six hours later.
+# A DEAD owner allows, and the reason first written here was wrong twice over, so it is stated properly:
+# it is NOT that nobody can advance that run (`claude --resume` is a new pid on the same conversation,
+# and a fresh `/harden` in the same directory simply overwrites the entry), and it is NOT the two
+# damaging remedies above, which both need a LIVE foreign owner to damage. It allows because a pid that
+# no longer exists is not evidence that anything is in flight, and holding a session to a contract on
+# that evidence is what `STALE_AFTER` already did six hours late. Note what is therefore NOT pinned by
+# this rung alone: for a dead pid the walk answers 1 anyway, so the liveness test only changes the
+# answer when `ps` is unusable mid-walk.
 #
 # WHAT THIS DOES AND DOES NOT FIX, restated after worktrees. The key is the WORKING TREE, not the
 # repository, and under the pool driver each ticket is worked in its own `git worktree` — so two runs
@@ -142,6 +160,7 @@ owns_this_session() {
 # `realpath`. They used to disagree — logical here, resolved there — and a mismatch finds no entry,
 # which is this hook's fail-OPEN case.
 OWNER_PID=$(jq -r '.owner // empty' <<<"$ENTRY" 2>/dev/null) || OWNER_PID=""
+OWNER_PID=$(pid_or_empty "$OWNER_PID")
 case "$OWNER_PID" in
   ''|*[!0-9]*) ;;   # unstamped: block per the contract, exactly as before this check existed
   *)
@@ -176,9 +195,14 @@ case "$UNATTENDED" in true|false) ;; *) UNATTENDED=false ;; esac
 # in this checkout unattended. The field above is checked first and NOTHING WRITES IT TODAY — it is
 # there for a caller that can set it without the skill clobbering it, and until one exists the
 # marker is the only live producer. Do not read the pair as redundancy.
-MARKER="$HOME/.claude/pipeline/unattended/$(printf '%s' "$PWD" | tr '/' '_' | sed 's/^_*//').json"
+# $KEY, not $PWD: the writer is `pool-run.unattended_marker_path`, which builds this name from
+# `tenant_key` = `os.path.realpath`. The state key above was resolved and this line was not, so with a
+# symlink anywhere in the path the entry was found and the marker was not — `UNATTENDED` stayed false
+# and an unattended run's awaiting-yield was allowed, which is the death this marker exists to prevent.
+# That is the SAME conflation the comment on `KEY` above says to resolve "on both sides or neither".
+MARKER="$HOME/.claude/pipeline/unattended/$(printf '%s' "$KEY" | tr '/' '_' | sed 's/^_*//').json"
 if [ -f "$MARKER" ]; then
-  OWNER=$(jq -r '.pid // empty' "$MARKER" 2>/dev/null)
+  OWNER=$(pid_or_empty "$(jq -r '.pid // empty' "$MARKER" 2>/dev/null)")
   case "$OWNER" in
     ''|*[!0-9]*) ;;
     *)
