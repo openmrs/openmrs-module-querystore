@@ -20,3 +20,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# the test suite loads pool-run/pool-watch with SourceFileLoader
+.claude/pipeline/__pycache__/

@@ -18,17 +18,170 @@ Usage:
   pool-watch --thinking      include thinking blocks
   pool-watch --tail 50       start from the last N events rather than the beginning
   pool-watch --list          list the sessions on disk, newest first
+  pool-watch --live          what is RUNNING right now: every session, its ticket, its gate
+                             phase, what it is waiting on, and the slot it holds
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import re
+import os
 import sys
 import time
 from pathlib import Path
 
 LOGS = Path.home() / ".claude/pipeline/logs"
+
+
+CLAUDE = Path.home() / ".claude"
+SLOTS = CLAUDE / "pipeline/slots"
+
+
+def _run(args: list[str]) -> str:
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def live_sessions_detail() -> list[dict]:
+    """Every `claude` process running now, with what the pipeline knows about each.
+
+    This exists because it had to be assembled by hand, repeatedly, on a day when several sessions
+    were running at once — and getting it wrong once was enough to delete a live run's worktree. The
+    facts that mattered were never in one place: which processes are sessions, what each is working
+    in, what its Stop gate thinks, whether it is waiting on an agent, and whether it holds a slot.
+
+    Read-only throughout. The gate files are read directly rather than through `gate-state`, because
+    this must never take that lock or write those files while other runs depend on them.
+    """
+    out = []
+    for line in _run(["ps", "-eo", "pid=,etime=,command="]).splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3:
+            continue
+        pid, etime, cmd = parts
+        exe = cmd.split()[0]
+        if not (exe.endswith("/claude") or exe == "claude"):
+            continue
+        if "Helper" in cmd or ".app/" in cmd:
+            continue
+        cwd = ""
+        for l in _run(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"]).splitlines():
+            if l.startswith("n"):
+                cwd = l[1:]
+        out.append({"pid": pid, "etime": etime, "cmd": cmd, "cwd": cwd})
+
+    gates = {}
+    for name in ("pr-harden-state.json", "harden-state.json"):
+        try:
+            gates[name] = json.loads((CLAUDE / name).read_text())
+        except (OSError, ValueError):
+            gates[name] = {}
+    leases = {}
+    for f in sorted(SLOTS.glob("*.json")) if SLOTS.is_dir() else []:
+        try:
+            leases[f.stem] = json.loads(f.read_text())
+        except (OSError, ValueError):
+            pass
+
+    for s in out:
+        key = os.path.realpath(s["cwd"]) if s["cwd"] else ""
+        s["gate"] = gates["pr-harden-state.json"].get(key, {})
+        s["harden"] = gates["harden-state.json"].get(key, {})
+        s["slot"] = next((n for n, l in leases.items() if l.get("worktree") == s["cwd"]), None)
+        # A ticket is knowable from the argv of a `--work` session, or from the gate entry.
+        m = re.search(r"/resolve-ticket\s+\S*?(?:issues/|browse/)?([A-Z]+-\d+|\d+)\b", s["cmd"])
+        s["ticket"] = m.group(1) if m else (s["gate"].get("ticket") or "")
+        # Anchored on the TICKET SEGMENT of the stem, never a bare substring: the driver names a
+        # stream `<utc-stamp>-<slug>-<ticket>.jsonl`, and a bare match puts ticket 293 on a file
+        # whose TIMESTAMP happens to contain "2937".
+        s["stream"] = next((x.name for x in sessions()
+                            if s["ticket"] and x.stem.endswith(f"-{s['ticket']}")), None)
+    return out
+
+
+def pipeline_relevant(s: dict) -> bool:
+    """A session this pipeline has anything to say about.
+
+    Every `claude` on the machine is not the answer to "what is running": there are routinely dozens
+    across unrelated repos, and burying the two that hold slots in that list is how a live run gets
+    mistaken for a leftover. A session qualifies if the pipeline knows something about it — a gate
+    entry, a slot, or a `/resolve-ticket` in its own argv.
+    """
+    return bool(s.get("gate") or s.get("harden") or s.get("slot")
+                or "/resolve-ticket" in s.get("cmd", ""))
+
+
+def print_live(show_all: bool = False) -> int:
+    rows = live_sessions_detail()
+    total = len(rows)
+    if not show_all:
+        rows = [r for r in rows if pipeline_relevant(r)]
+    if not rows:
+        print(f"no pipeline sessions are running ({total} other claude session(s) on this machine; "
+              "--live --all lists them).")
+        return 0
+    now_ts = time.time()
+    for s in sorted(rows, key=lambda r: r["cwd"]):
+        home = str(Path.home())
+        where = (s["cwd"] or "?").replace(home, "~")
+        head = f"pid {s['pid']}  up {s['etime']}"
+        if s["ticket"]:
+            head += f"  ·  #{s['ticket']}"
+        if s["slot"]:
+            head += f"  ·  {s['slot']}"
+        print(head)
+        # A session whose working directory has been deleted underneath it is the single most
+        # important thing this view can say, and the only way I found it before was comparing inodes
+        # by hand. `os.path.exists` is not enough: a directory RECREATED at the same path is a
+        # different inode, and the process still holds the old one.
+        gone = ""
+        if s["cwd"]:
+            try:
+                held = int(_run(["lsof", "-a", "-p", s["pid"], "-d", "cwd", "-Fi"]).split("i")[-1])
+                gone = "" if held == os.stat(s["cwd"]).st_ino else "   <- DELETED underneath it"
+            except (OSError, ValueError, IndexError):
+                gone = "   <- gone" if not os.path.isdir(s["cwd"]) else ""
+        print(f"    {where}{gone}")
+        g = s["gate"]
+        if g:
+            bits = [f"phase={g.get('phase')}", f"blocking={g.get('blocking')}"]
+            if g.get("pr"):
+                bits.append(f"pr={g['pr']}")
+            if g.get("override"):
+                bits.append("OVERRIDE")
+            print("    gate: " + "  ".join(str(b) for b in bits))
+            for a in g.get("awaiting") or []:
+                age = int(now_ts - (a.get("since") or now_ts))
+                warn = "  (past the gate's 1h allowance)" if age > 3600 else ""
+                print(f"    waiting on: {a.get('agent')} — {age // 60}m{age % 60:02d}s{warn}")
+        h = s["harden"]
+        if h.get("edits") is not None:
+            print(f"    harden: cycle={h.get('cycle')} edits={h.get('edits')}")
+        # A `--work` session is an ordinary interactive `claude`; only the headless driver writes a
+        # stream. Saying so is the point — otherwise "no session found" reads like something is lost.
+        if s["stream"]:
+            print(f"    stream: pool-watch {Path(s['stream']).stem}")
+        elif "--remote-control" in s["cmd"] or s["slot"]:
+            print("    stream: none — interactive session, watch its own terminal")
+        print()
+    held = {n: l for n, l in
+            ((f.stem, json.loads(f.read_text())) for f in sorted(SLOTS.glob("*.json"))
+             if SLOTS.is_dir())} if SLOTS.is_dir() else {}
+    orphan = [n for n, l in held.items()
+              if not any(r["slot"] == n for r in rows)]
+    if orphan:
+        print("slots held by no running session: " + ", ".join(
+            f"{n} (#{held[n].get('ticket')})" for n in sorted(orphan)))
+        print("  `pool-run --release <ticket>` gives one back.")
+    if not show_all and total > len(rows):
+        print(f"({total - len(rows)} other claude session(s) on this machine are not pipeline work; "
+              "--live --all shows them)")
+    return 0
 
 
 def sessions() -> list[Path]:
@@ -181,7 +334,15 @@ def main() -> int:
     ap.add_argument("--tail", type=int, default=0, help="start from the last N events")
     ap.add_argument("--width", type=int, default=140, help="truncation width for one-liners")
     ap.add_argument("--list", action="store_true", help="list sessions, newest first")
+    ap.add_argument("--all", action="store_true",
+                    help="with --live: every claude session, not only pipeline work")
+    ap.add_argument("--live", action="store_true",
+                    help="what is RUNNING right now, across driver, --work and hand-launched "
+                         "sessions, with each one's gate state and slot")
     opts = ap.parse_args()
+
+    if opts.live:
+        return print_live(opts.all)
 
     if opts.list:
         for s in sessions():
@@ -191,7 +352,17 @@ def main() -> int:
 
     path = pick(opts.target)
     if not path:
-        print(f"no session found under {LOGS}" + (f" matching {opts.target!r}" if opts.target else ""))
+        print(f"no stream found under {LOGS}" + (f" matching {opts.target!r}" if opts.target else ""))
+        # Only the headless driver writes a stream. A ticket worked by `pool-run --work` runs as an
+        # ordinary interactive `claude`, so there is nothing on disk to follow and "not found" would
+        # otherwise read as something lost. Say which it is.
+        live = [r for r in live_sessions_detail()
+                if not opts.target or str(opts.target) in (str(r.get("ticket")) + r.get("cmd", ""))]
+        if live:
+            print("\nbut a session IS running for it — interactive, so it has no stream:")
+            for r in live:
+                print(f"  pid {r['pid']}  up {r['etime']}  {r['cwd'].replace(str(Path.home()), '~')}")
+            print("\nWatch its own terminal, or `pool-watch --live` for the whole picture.")
         return 1
     print(f"# {path.name}")
 
