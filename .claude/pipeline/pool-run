@@ -1104,7 +1104,10 @@ def build_queue(cfg: dict, ledger: dict, say: Say, named: list[str] | None) -> l
                 break
             if not found:
                 say(f"  ! {token}: no configured repo has this issue. Skipping.")
-        return queue
+        # Deduped HERE rather than at the call site: `build_queue` is the one place a queue is made,
+        # and a guard wired in `main` was pinned by nothing — removing it reddened no test at all,
+        # because the case drove `dedupe_queue` directly and never the path that uses it.
+        return dedupe_queue(queue, say)
 
     for slug, path in cfg["repos"].items():
         # Enumerate the open issues and filter the label HERE, rather than passing --label.
@@ -1130,7 +1133,7 @@ def build_queue(cfg: dict, ledger: dict, say: Say, named: list[str] | None) -> l
             job = consider(slug, path, issue, prs_for(slug), ledger, say, cfg, forced=False)
             if job:
                 queue.append(job)
-    return queue
+    return dedupe_queue(queue, say)
 
 
 # ───────────────────────────────────────────────────────── checkout prep ──
@@ -1928,6 +1931,35 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
 
 
 # ─────────────────────────────────────────────────────────────── scheduling ──
+
+
+def dedupe_queue(queue: list[dict], say) -> list[dict]:
+    """One ticket, once. A repeat is operator error, and a silent one.
+
+    The worktree path is derived from the ticket, so a queue holding the same ticket twice puts two
+    workers in the SAME directory — and the second one's `make_worktree` releases and recreates the
+    tree the first is working in. `claim_slot` has guarded this since the hand-launched path existed;
+    the driver never did, because it calls `make_worktree` directly and nothing between the queue and
+    the wave ever asked whether it was about to work one ticket twice.
+
+    Found by accident, in a four-worker rehearsal typed `--ticket 266,297,310,266`: two sessions were
+    handed the same worktree and neither noticed. The label path cannot produce a repeat — issue
+    numbers are unique per repo — so this only ever fires on a named list, which is exactly where a
+    typo lands. Keyed on the REPOSITORY and the number, because the same number in two repos is two
+    different tickets. First occurrence wins, so the operator's order survives.
+    """
+    seen, out, dropped = set(), [], []
+    for job in queue:
+        key = (job["slug"], job["ticket"].lstrip("#"))
+        if key in seen:
+            dropped.append(job["key"])
+            continue
+        seen.add(key)
+        out.append(job)
+    for key in dropped:
+        say(f"  ! {key} is named more than once; working it once. Two workers on one ticket share "
+            "one worktree, and the second would recreate the first's checkout under it.")
+    return out
 
 
 def plan_waves(queue: list, width: int) -> list[list]:

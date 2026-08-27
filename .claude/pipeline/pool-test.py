@@ -1535,6 +1535,41 @@ def test_ledger_snapshot_is_deep(tmp: Path) -> None:
         check("and it reaches the file", json.loads(pool.LEDGER.read_text())["a"]["v"] == 2)
 
 
+def test_queue_never_repeats_a_ticket(tmp: Path) -> None:
+    """One ticket named twice must not become two workers in one worktree.
+
+    The worktree path is derived from the ticket, so a queue holding `266,297,266` puts two workers
+    in the SAME directory — and the second one's `make_worktree` releases and recreates the tree the
+    first is working in. `claim_slot` has guarded this since the hand-launched path existed; the
+    DRIVER never did, because it calls `make_worktree` directly. Found by accident: a four-worker
+    rehearsal typed `--ticket 266,297,310,266` and two sessions were handed the same worktree.
+    """
+    print("\na ticket named twice")
+    jobs = [{"slug": "o/r", "ticket": "266", "key": "o/r#266"},
+            {"slug": "o/r", "ticket": "297", "key": "o/r#297"},
+            {"slug": "o/r", "ticket": "266", "key": "o/r#266"},
+            {"slug": "o/b", "ticket": "266", "key": "o/b#266"}]
+    say = pool.Say(tmp / "q.md")
+    out = pool.dedupe_queue(jobs, say)
+    check("the repeat is dropped", [j["key"] for j in out] == ["o/r#266", "o/r#297", "o/b#266"],
+          str([j["key"] for j in out]))
+    check("the order the operator gave is kept", out[0]["ticket"] == "266" and out[1]["ticket"] == "297")
+    check("the same number in ANOTHER repo is a different ticket and survives",
+          any(j["slug"] == "o/b" for j in out), str([j["key"] for j in out]))
+    # The guard has to be WIRED, not merely present: an earlier version called it from `main`, where
+    # removing the call reddened nothing, because this case drives the function directly.
+    src = (HERE / "pool-run").read_text()
+    made = src[src.index("def build_queue("):]
+    made = made[:made.index("\n# ", 1) if "\n# " in made else len(made)]
+    check("every queue build_queue returns has been deduped",
+          made.count("return dedupe_queue(") == made.count("return queue") + made.count("return dedupe_queue("),
+          "a return path in build_queue skips the dedupe")
+    check("and no queue is returned raw", "    return queue\n" not in made, "a raw return survives")
+
+    check("a queue with no repeats is returned unchanged",
+          [j["key"] for j in pool.dedupe_queue(jobs[:2], say)] == ["o/r#266", "o/r#297"])
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1562,7 +1597,8 @@ def main() -> int:
                          ("platform floor", test_platform_floor),
                          ("work ledger", test_work_reaches_the_ledger),
                          ("dead lease", test_dead_owner_lease_is_reclaimable),
-                         ("watch live", test_pool_watch_live)]:
+                         ("watch live", test_pool_watch_live),
+                         ("dupe queue", test_queue_never_repeats_a_ticket)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
