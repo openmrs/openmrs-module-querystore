@@ -547,15 +547,32 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         f"({claim['slot'].describe().split(': ', 1)[1]})")
     say(f"  {claim['worktree']}")
     say("")
+
+    # CTRL-C MUST REACH THE SESSION AND NOT THIS LAUNCHER. Ctrl-C is delivered to the whole
+    # foreground process group, and the session is in ours — so without this, python raises
+    # `KeyboardInterrupt` out of the wait below WHILE the session is still running, the `finally`
+    # fires, and the release deletes the worktree out from under a live `claude`. Measured before the
+    # fix: `subprocess.run` returned control after 2.3s against a child that caught SIGINT and ran on
+    # for another 4. In Claude Code, Ctrl-C is how you interrupt a tool call — it is pressed
+    # constantly, and it is not a request to end the session.
+    #
+    # A no-op HANDLER rather than `SIG_IGN`, and the difference is the whole trick: `exec` resets a
+    # handled signal to its default in the child but leaves an IGNORED one ignored, so `SIG_IGN` here
+    # would silently disable Ctrl-C inside the session as well. With a handler, the parent absorbs it
+    # (PEP 475 resumes the interrupted wait) and the session gets the default disposition — its own
+    # Ctrl-C, behaving exactly as it does when you start `claude` yourself.
+    def absorb(_signum, _frame):
+        pass
+
+    previous = signal.signal(signal.SIGINT, absorb)
     try:
         proc = subprocess.run([cfg["claude"].get("binary") or "claude", prompt],
                               cwd=str(claim["worktree"]), env=claim["env"])
         return proc.returncode
-    except KeyboardInterrupt:
-        return 130
     finally:
+        signal.signal(signal.SIGINT, previous)
         # In `finally` deliberately: the release is the half an operator forgets, and it has to
-        # happen on the paths they forget it on — a session that errored, or one they interrupted.
+        # happen on the paths they forget it on — a session that errored, or one that was killed.
         release_claim(cfg, ticket, say)
 
 

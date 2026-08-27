@@ -18,6 +18,8 @@ import os
 import re
 import contextlib
 import shutil
+import time
+import signal
 import subprocess
 import sys
 import tempfile
@@ -904,6 +906,79 @@ def test_work_one_command(tmp: Path) -> None:
               held["worktree"].is_dir())
 
 
+def test_ctrl_c_reaches_the_session(tmp: Path) -> None:
+    """Ctrl-C must interrupt the SESSION, never the launcher waiting on it.
+
+    Ctrl-C goes to the whole foreground process group, and the session is in the launcher's. Before
+    the fix `subprocess.run` raised `KeyboardInterrupt` out of the wait while the session was still
+    running, the `finally` fired, and the release deleted the worktree out from under a live
+    `claude`. In Claude Code Ctrl-C is how you interrupt a tool call, so this is not an edge case; it
+    is the most-pressed key in the product.
+
+    Driven for real: a separate process group, a real SIGINT to it, and a stub that catches SIGINT
+    and keeps running — exactly what `claude` does.
+    """
+    print("\nctrl-c while the session is running")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    log = tmp / "child.log"
+    stub = tmp / "claude-stub"
+    stub.write_text("#!/bin/bash\n"
+                    f'trap \'echo interrupted >> {log}\' INT\n'
+                    f'echo started >> {log}\n'
+                    "for i in 1 2 3 4 5 6 7 8; do sleep 0.5; done\n"
+                    f'echo finished >> {log}\n')
+    stub.chmod(0o755)
+
+    # The launcher runs in its OWN process group so the suite can send it a real Ctrl-C without
+    # signalling itself. Its config goes in a file rather than being interpolated into source.
+    (tmp / "runner-cfg.json").write_text(json.dumps({
+        "root": str(tmp / "state"), "pool": str(HERE / "pool-run"),
+        "repo": str(work), "stub": str(stub), "standalone": str(one),
+        "say": str(tmp / "runner.md")}))
+    runner = tmp / "runner.py"
+    runner.write_text(
+        "import importlib.machinery as m, json, os, pathlib, sys\n"
+        "c = json.load(open(sys.argv[1]))\n"
+        "pool = m.SourceFileLoader('p', c['pool']).load_module()\n"
+        "for n in ['LEDGER','LOGS','LESSONS','LAST','PR_STATE','HARDEN_STATE','UNATTENDED_DIR',\n"
+        "          'WORKTREES','SLOT_M2','SLOTS','LOCK']:\n"
+        "    setattr(pool, n, pathlib.Path(c['root'])/pathlib.Path(getattr(pool, n)).name)\n"
+        "pool.LOGS.mkdir(parents=True, exist_ok=True)\n"
+        "os.environ['CLAUDE_HOME'] = c['root']\n"
+        "cfg = pool.merge(pool.DEFAULTS, {'repos': {'o/r': c['repo']},\n"
+        "                                 'claude': {'binary': c['stub']},\n"
+        "                                 'parallel': {'max_workers': 1,\n"
+        "                                              'standalones': [c['standalone']]}})\n"
+        "rc = pool.work_in_session(cfg, 'o/r', '266', {'url': 'https://example/266'},\n"
+        "                          pathlib.Path(c['repo']), pool.Say(pathlib.Path(c['say'])))\n"
+        "print('RC', rc)\n")
+
+    proc = subprocess.Popen([sys.executable, str(runner), str(tmp / "runner-cfg.json")],
+                            start_new_session=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    deadline = time.time() + 10
+    while time.time() < deadline and "started" not in (log.read_text() if log.exists() else ""):
+        time.sleep(0.1)
+    if not (log.exists() and "started" in log.read_text()):
+        proc.kill()
+        check("the session started", False, proc.communicate()[0][-400:])
+        return
+    check("the session started", True)
+
+    os.killpg(os.getpgid(proc.pid), signal.SIGINT)      # the operator presses ctrl-c
+    out, _ = proc.communicate(timeout=30)
+
+    body = log.read_text() if log.exists() else ""
+    check("the session received the interrupt", "interrupted" in body, body)
+    check("the launcher did NOT abandon it — the session ran to its own end",
+          "finished" in body, body or "the launcher returned while the session was still alive")
+    check("the launcher waited for it before releasing", "RC" in out, out[-200:])
+    check("and only then gave the slot back",
+          not list((tmp / "state/slots").glob("*.json")) if (tmp / "state/slots").is_dir() else True)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -917,7 +992,8 @@ def main() -> int:
                          ("save_json temp", test_save_json_temp_is_private),
                          ("claims", test_claim_and_release),
                          ("claim cli", test_claim_cli),
-                         ("one command", test_work_one_command)]:
+                         ("one command", test_work_one_command),
+                         ("ctrl-c", test_ctrl_c_reaches_the_session)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

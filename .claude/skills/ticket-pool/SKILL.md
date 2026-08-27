@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.11.0
+version: 0.11.1
 ---
 
 # Ticket pool — the loop that learns
@@ -294,6 +294,18 @@ because the release is the half a person forgets and it has to happen on the pat
 
 `--work` refuses to run from inside a session that already holds a slot, since that is the mistake
 that puts two runs in one worktree.
+
+**Ctrl-C goes to the session, not to the launcher.** It has to be said because it very nearly did not
+work: Ctrl-C reaches the whole foreground process group, so without care `subprocess.run` raises
+`KeyboardInterrupt` out of the wait while the session is still running and the release then deletes
+the worktree out from under a live `claude`. Measured before the fix, against a child that caught
+SIGINT and ran on for four more seconds: the launcher returned in **0.4s**. In Claude Code Ctrl-C is
+how you interrupt a tool call, so that is the most-pressed key in the product, not an edge case. The
+launcher now absorbs SIGINT with a no-op HANDLER — not `SIG_IGN`, which `exec` would leave inherited
+and so disable Ctrl-C inside the session too.
+
+If a terminal is closed outright rather than exited, the lease survives its session. `--claims` shows
+it and `--release <ticket>` gives it back.
 
 The pieces are still there if you want to drive them yourself — `--claim 266` prints the `cd` and the
 three exports instead of launching anything, `--claims` lists what is held, `--release 266` gives one
