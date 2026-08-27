@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import contextlib
+import fcntl
 import json
 import os
 import re
@@ -1508,12 +1509,75 @@ def record_written(before: dict[Path, float], ticket: str | None = None,
 
 # The ledger is one dict and one file, mutated by every worker. Read-modify-write it under this.
 LEDGER_LOCK = threading.Lock()
+LEDGER_FLOCK = PIPELINE / "ledger.lock"
+
+
+@contextlib.contextmanager
+def ledger_held():
+    """Exclusive across THREADS and PROCESSES, with the file re-read INSIDE the lock.
+
+    A `threading.Lock` alone was not enough, and the reason is the re-read rather than the lock. Every
+    writer here held one long-lived in-memory snapshot of the WHOLE ledger — read once at startup, kept
+    for the life of the run — and published all of it on every write. So any change another process
+    made in between was silently reverted, however short the write itself was: `pool.lock` keeps two
+    drivers apart, but `pool-run --outcomes`, a `mark`, or any other subcommand run beside a live pool
+    is a second process by design, and the operator is invited to run them. Locking without re-reading
+    would have serialised the writes and lost exactly the same data.
+
+    This yields what the file currently holds; a caller mutates that and it is written back before the
+    lock drops. On an exception nothing is written — a half-applied mutation is not a state the ledger
+    should record.
+
+    **The file is authoritative for OTHER keys, never for the one you are writing.** A caller recording
+    an outcome for a ticket it just ran holds the freshest entry for that key, and it may not be in the
+    file at all; the lock exists to stop that write clobbering everybody ELSE's keys. Reading the key's
+    own content back out of the file instead was measured wrong — it dropped a recorded `pr` and turned
+    a `ready` ticket into an `error`, reddening four cases in `pool-test.py`. So: decide from the
+    caller's view, publish per key. And do not hold this across network I/O — `refresh_outcomes` calls
+    `gh` per PR, and the lock would be held against a live pool for the duration.
+
+    Order is threads-then-file everywhere, so no caller can invert it. Reads outside this are left
+    unlocked: `save_json` renames atomically, so a reader sees one whole version or the other, and a
+    Stop hook or a status print must never block on somebody else's lock.
+    """
+    LEDGER_FLOCK.parent.mkdir(parents=True, exist_ok=True)
+    with LEDGER_LOCK:
+        fh = open(LEDGER_FLOCK, "a+")
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            data = load_json(LEDGER, {})
+            yield data
+            save_json(LEDGER, data)
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+            fh.close()
+
+
+def merge_ledger_changes(before: dict, after: dict) -> list[str]:
+    """Publish only the keys this invocation actually changed, comparing against what it read.
+
+    The alternative — writing every key of the caller's snapshot — is what the whole-file write did,
+    one level down: a key another process changed in the meantime is overwritten with this snapshot's
+    older value. Comparing tells the keys this run has an opinion about from the ones it merely read.
+    """
+    changed = [k for k, v in after.items() if before.get(k) != v]
+    if changed:
+        with ledger_held() as data:
+            for k in changed:
+                data[k] = after[k]
+    return changed
 
 
 def write_ledger(ledger: dict, key: str, entry: dict) -> None:
-    with LEDGER_LOCK:
-        ledger[key] = entry
-        save_json(LEDGER, ledger)
+    """Merge ONE key into the file, never the caller's whole snapshot.
+
+    `ledger` is updated too, so the caller's own scheduling decisions see what it just wrote. It stays
+    a private view for every OTHER key — this driver's tickets are its own, and `pool.lock` stops a
+    second driver — but it is no longer what gets published.
+    """
+    with ledger_held() as data:
+        data[key] = entry
+    ledger[key] = entry
 
 
 # What describes ONE run rather than the ticket. A status that means "nothing ran" has to clear
@@ -1769,6 +1833,7 @@ def reap_running(ledger: dict, say: Say) -> list[str]:
     keeps being killed would otherwise be retried without limit.
     """
     reaped = []
+    touched = []
     for key, entry in sorted(ledger.items()):
         if entry.get("status") != "running":
             continue
@@ -1778,10 +1843,15 @@ def reap_running(ledger: dict, say: Say) -> list[str]:
             "a previous pool driver was killed while this ticket was running; no outcome was ever "
             "recorded for it"]
         reaped.append(f"{key} (started {str(entry.get('last_run'))[:19]})")
-    if reaped:
-        save_json(LEDGER, ledger)
-        for line in reaped:
-            say(f"  ! a previous driver died mid-ticket: {line}")
+        touched.append(key)
+    if touched:
+        # Per key, not the whole snapshot: a ticket nobody here touched keeps whatever another process
+        # recorded for it while this pass was deciding.
+        with ledger_held() as data:
+            for key in touched:
+                data[key] = ledger[key]
+    for line in reaped:
+        say(f"  ! a previous driver died mid-ticket: {line}")
     return reaped
 
 
@@ -1830,17 +1900,17 @@ def crash_entry(ledger: dict, key: str, exc: BaseException) -> str:
     always appended as a flag, and the STATUS is forced to `error` only when the entry is still the
     `running` sentinel, i.e. nothing was recorded for this attempt.
     """
-    with LEDGER_LOCK:
-        entry = dict(ledger.get(key, {}))
-        entry["flags"] = list(entry.get("flags") or []) + [
-            f"the driver's own worker raised {type(exc).__name__}: {exc}"[:500]]
-        if entry.get("status") in (None, "running"):
-            entry["status"] = "error"
-            entry["attempts"] = entry.get("attempts", 0) + 1
-        entry["last_run"] = datetime.now(timezone.utc).isoformat()
-        ledger[key] = entry
-        save_json(LEDGER, ledger)
-        return entry["status"]
+    entry = dict(ledger.get(key, {}))
+    entry["flags"] = list(entry.get("flags") or []) + [
+        f"the driver's own worker raised {type(exc).__name__}: {exc}"[:500]]
+    if entry.get("status") in (None, "running"):
+        entry["status"] = "error"
+        entry["attempts"] = entry.get("attempts", 0) + 1
+    entry["last_run"] = datetime.now(timezone.utc).isoformat()
+    ledger[key] = entry
+    with ledger_held() as data:
+        data[key] = entry
+    return entry["status"]
 
 
 def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: Say,
@@ -2263,11 +2333,12 @@ def main() -> int:
         return 1
     if args.outcomes:
         try:
-            led = load_json(LEDGER, {})
             say("")
             say("outcomes")
+            led = load_json(LEDGER, {})
+            before = json.loads(json.dumps(led))
             n = refresh_outcomes(led, say)
-            save_json(LEDGER, led)
+            merge_ledger_changes(before, led)
             say(f"  ({n} PR(s) checked)")
             return 0
         finally:
@@ -2299,6 +2370,7 @@ def main() -> int:
             return 0
 
         ledger = load_json(LEDGER, {})
+        ledger_before = json.loads(json.dumps(ledger))
         if not args.dry_run:
             reap_running(ledger, say)
         if not args.dry_run and any(e.get("pr") for e in ledger.values()):
@@ -2311,8 +2383,10 @@ def main() -> int:
         queue = build_queue(cfg, ledger, say, named)
         if not args.dry_run:
             # build_queue records what it skipped (a ticket whose PR now exists, say). That is a real
-            # observation worth keeping — but only when this invocation is going to act on it.
-            save_json(LEDGER, ledger)
+            # observation worth keeping — but only when this invocation is going to act on it. Merged
+            # by CHANGED key, so a subcommand running beside this one keeps everything it recorded —
+            # publishing every key of this snapshot would clobber those just as the whole file did.
+            merge_ledger_changes(ledger_before, ledger)
         if args.limit:
             queue = queue[: args.limit]
         if args.once:

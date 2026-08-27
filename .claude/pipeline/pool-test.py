@@ -99,8 +99,8 @@ def isolated(tmp: Path):
     # EVERY path the driver writes. A constant added to `pool-run` and forgotten here is a suite that
     # writes the operator's real state: measured — omitting `SLOTS` let a case read the real leases
     # and RELEASE two slots a hand-launched session was holding, removing their worktrees.
-    names = ["LEDGER", "LOGS", "LESSONS", "LAST", "PR_STATE", "HARDEN_STATE", "UNATTENDED_DIR",
-             "WORKTREES", "SLOT_M2", "SLOTS", "LOCK"]
+    names = ["LEDGER", "LEDGER_FLOCK", "LOGS", "LESSONS", "LAST", "PR_STATE", "HARDEN_STATE",
+             "UNATTENDED_DIR", "WORKTREES", "SLOT_M2", "SLOTS", "LOCK"]
     saved = {n: getattr(pool, n) for n in names}
     root = tmp / "state"
     for n in names:
@@ -1326,6 +1326,106 @@ def test_dead_owner_lease_is_reclaimable(tmp: Path) -> None:
               c["worktree"].is_dir())
 
 
+def test_pool_watch_live(tmp: Path) -> None:
+    """`pool-watch --live`: the survey that had to be assembled by hand, and got wrong once."""
+    print("\npool-watch --live")
+    watch = SourceFileLoader("poolwatch", str(HERE / "pool-watch")).load_module()
+
+    # A stream is named `<utc-stamp>-<slug>-<ticket>.jsonl`. A bare substring match put ticket 293 on
+    # a file whose TIMESTAMP contained "2937" — a real false match, seen in the first run of this view.
+    saved = watch.LOGS
+    try:
+        watch.LOGS = tmp / "logs"
+        watch.LOGS.mkdir()
+        (watch.LOGS / "20260826T122937Z-repo-310.jsonl").write_text("")
+        (watch.LOGS / "20260827T090000Z-repo-293.jsonl").write_text("")
+        stems = [x.stem for x in watch.sessions()]
+        check("a ticket matches only the stem's ticket segment",
+              [x for x in stems if x.endswith("-293")] == ["20260827T090000Z-repo-293"], str(stems))
+        check("and a timestamp that merely contains the digits does not match",
+              not "20260826T122937Z-repo-310".endswith("-293"))
+    finally:
+        watch.LOGS = saved
+
+    # Every claude on this machine is not the answer to "what is running": there are dozens, and
+    # burying the ones that hold slots among them is how a live run gets read as a leftover.
+    check("a session with a gate entry is pipeline work",
+          watch.pipeline_relevant({"gate": {"phase": "building"}, "cmd": ""}))
+    check("so is one holding a slot", watch.pipeline_relevant({"slot": "slot-1", "cmd": ""}))
+    check("so is one whose argv invokes the skill",
+          watch.pipeline_relevant({"cmd": "claude /resolve-ticket https://x/1"}))
+    check("an unrelated session is not",
+          not watch.pipeline_relevant({"cmd": "claude", "gate": {}, "harden": {}, "slot": None}))
+
+
+
+LEDGER_CHILD = """
+import sys, time
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+pool = SourceFileLoader("poolrun", sys.argv[1]).load_module()
+pool.LEDGER = Path(sys.argv[2])
+pool.LEDGER_FLOCK = Path(sys.argv[3])
+me = sys.argv[4]
+# The shape that loses data: read the WHOLE ledger, hold it while others write, then write. A real
+# driver holds this snapshot for the life of a run, which is minutes to hours.
+ledger = pool.load_json(pool.LEDGER, {})
+time.sleep(float(sys.argv[5]))
+pool.write_ledger(ledger, me, {"status": "done", "who": me})
+"""
+
+
+def test_ledger_cross_process(tmp: Path) -> None:
+    print("\nthe ledger survives concurrent processes")
+    ledger = tmp / "ledger.json"
+    flock = tmp / "ledger.lock"
+    child = tmp / "child.py"
+    child.write_text(LEDGER_CHILD)
+    pool.save_json(ledger, {"seed": {"status": "kept"}})
+
+    procs = [subprocess.Popen(
+        [sys.executable, str(child), str(HERE / "pool-run"), str(ledger), str(flock),
+         f"k{i}", "0.5" if i % 2 else "0.05"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        for i in range(8)]
+    for pr in procs:
+        pr.wait()
+    bad = [pr.stderr.read().decode()[-300:] for pr in procs if pr.returncode]
+    check("every child exited cleanly", not bad, str(bad[:1]))
+
+    data = json.loads(ledger.read_text())
+    missing = [f"k{i}" for i in range(8) if f"k{i}" not in data]
+    check("no write is lost to another process's snapshot", not missing, f"lost {missing}")
+    check("a key nobody wrote is left alone", data.get("seed", {}).get("status") == "kept")
+    check("each write kept its own value",
+          all(data.get(f"k{i}", {}).get("who") == f"k{i}" for i in range(8)))
+
+    saved = (pool.LEDGER, pool.LEDGER_FLOCK)
+    pool.LEDGER, pool.LEDGER_FLOCK = ledger, flock
+    try:
+        pool.write_ledger({}, "after", {"status": "done"})
+        check("the lock is released for the next writer", "after" in json.loads(ledger.read_text()))
+        with contextlib.suppress(RuntimeError):
+            with pool.ledger_held() as d:
+                d["poison"] = {"status": "half"}
+                raise RuntimeError("boom")
+        check("a failed mutation writes nothing", "poison" not in json.loads(ledger.read_text()))
+        pool.write_ledger({}, "post", {"status": "done"})
+        check("and the lock survives that exception", "post" in json.loads(ledger.read_text()))
+
+        # merge_ledger_changes must publish only what changed, never the whole snapshot.
+        pool.save_json(ledger, {"a": {"v": 1}, "b": {"v": 1}})
+        stale = {"a": {"v": 1}, "b": {"v": 1}}
+        mine = {"a": {"v": 2}, "b": {"v": 1}}
+        pool.save_json(ledger, {"a": {"v": 1}, "b": {"v": 99}})   # another process moved b
+        changed = pool.merge_ledger_changes(stale, mine)
+        end = json.loads(ledger.read_text())
+        check("only the changed key is published", changed == ["a"], str(changed))
+        check("and the other process's key is not reverted", end["b"]["v"] == 99, str(end))
+        check("while the change itself lands", end["a"]["v"] == 2, str(end))
+    finally:
+        pool.LEDGER, pool.LEDGER_FLOCK = saved
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1337,6 +1437,7 @@ def main() -> int:
                          ("skill commands", test_skills_commands_run),
                          ("driver gate-state", test_pool_gate_state_via_helper),
                          ("save_json temp", test_save_json_temp_is_private),
+                         ("ledger cross-process", test_ledger_cross_process),
                          ("claims", test_claim_and_release),
                          ("needs a tty", test_work_needs_a_terminal),
                          ("claim cli", test_claim_cli),
@@ -1346,7 +1447,8 @@ def main() -> int:
                          ("two repos", test_same_ticket_number_in_two_repos),
                          ("platform floor", test_platform_floor),
                          ("work ledger", test_work_reaches_the_ledger),
-                         ("dead lease", test_dead_owner_lease_is_reclaimable)]:
+                         ("dead lease", test_dead_owner_lease_is_reclaimable),
+                         ("watch live", test_pool_watch_live)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

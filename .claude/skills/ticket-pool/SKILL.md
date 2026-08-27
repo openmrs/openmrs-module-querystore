@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.14.0
+version: 0.14.2
 ---
 
 # Ticket pool — the loop that learns
@@ -93,6 +93,12 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-run --init` | create the label in each configured repo |
 | `pool-run --config <path>` | a config other than the default |
 | `pool-run --outcomes` | refresh what became of every PR the ledger knows about, and stop |
+
+These are safe to run beside a live pool. They were not: each held one in-memory copy of the whole
+ledger and wrote all of it back, so whatever the pool recorded in between was reverted silently —
+measured, 7 of 8 concurrent writes lost. Every write now merges the keys it actually changed under a
+lock the driver and its subcommands share, and `--outcomes` does its `gh` calls outside that lock so a
+network round trip cannot stall the pool.
 | `pool-watch` | render the newest session's stream the way an interactive session reads |
 | `pool-watch 310 --results` | that ticket's session, tool results included |
 
