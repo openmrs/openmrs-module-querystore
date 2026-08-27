@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.12.0
+version: 0.12.1
 ---
 
 # Ticket pool — the loop that learns
@@ -318,6 +318,17 @@ and so disable Ctrl-C inside the session too.
 
 If a terminal is closed outright rather than exited, the lease survives its session. `--claims` shows
 it and `--release <ticket>` gives it back.
+
+**One claim per ticket, and it is a safety check rather than tidiness.** The worktree path is derived
+from the ticket, so a second claim for the same one resolves to the SAME directory — and creating a
+worktree releases whatever it finds there first. A running session that has just committed has a
+clean tree, so that release succeeds: measured, the second claim deleted the live session's committed
+file and left two leases pointing at one directory, silently.
+
+**And a claim refuses to start while a driver is running**, which is the mirror of the driver
+refusing while a claim is held. Without both halves the symmetry is decorative — a claim would take a
+standalone the driver was already using. Only a LIVE holder counts; a lock left behind by a killed
+driver blocks nobody.
 
 The pieces are still there if you want to drive them yourself — `--claim 266` prints the `cd` and the
 three exports instead of launching anything, `--claims` lists what is held, `--release 266` gives one

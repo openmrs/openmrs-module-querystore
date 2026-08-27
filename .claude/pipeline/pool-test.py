@@ -998,6 +998,73 @@ def test_ctrl_c_reaches_the_session(tmp: Path) -> None:
           not list((tmp / "state/slots").glob("*.json")) if (tmp / "state/slots").is_dir() else True)
 
 
+def test_double_claim_and_live_driver(tmp: Path) -> None:
+    """The two ways a claim can collide with work that is already running.
+
+    Both were live defects, both found by trying them rather than by reading the code, and both are
+    silent — the operator sees a session start normally and finds out later.
+    """
+    print("\nclaims that would collide with running work")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/r": str(work)},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]}})
+
+    with isolated(tmp):
+        say = pool.Say(tmp / "collide.md")
+        base = pool.remote_head(work)
+
+        first = pool.claim_slot(cfg, "o/r", "266", work, base, say)
+        check("the first claim is taken", first is not None)
+        (first["worktree"] / "session-work.txt").write_text("the live session's file\n")
+        sh(["git", "-C", str(first["worktree"]), "add", "-A"])
+        sh(["git", "-C", str(first["worktree"]), "-c", "user.email=t@t", "-c", "user.name=t",
+            "commit", "-qm", "the live session just committed"])
+        head = sh(["git", "-C", str(first["worktree"]), "rev-parse", "HEAD"]).stdout.strip()
+
+        # Same ticket again. The worktree path is derived from the ticket, so without a guard the
+        # second claim REMOVES the first session's tree — it is clean, having just committed — and
+        # recreates it, wiping the running session's checkout and leaving two leases on one directory.
+        second = pool.claim_slot(cfg, "o/r", "266", work, base, say)
+        check("a ticket that is already claimed cannot be claimed again", second is None,
+              f"got a second claim on {second['slot'].name if second else None}")
+        check("the running session's worktree is untouched",
+              (first["worktree"] / "session-work.txt").is_file(),
+              "the live session's file was deleted")
+        check("and it is still on its own commit",
+              sh(["git", "-C", str(first["worktree"]), "rev-parse", "HEAD"]).stdout.strip() == head)
+        check("only one lease exists for it", len(pool.active_leases()) == 1,
+              str(pool.active_leases()))
+
+        # A live DRIVER holds the machine-wide lock and is using these same standalones. The driver
+        # already refuses to start while a claim is held; the reverse has to hold too or the symmetry
+        # is decorative.
+        # A REAL other live process. Writing our own pid proves nothing: the guard treats the
+        # current process as "us" on purpose, so the lock a driver takes cannot trip its own
+        # preflight — and a test that writes its own pid silently exercises that branch instead.
+        other = subprocess.Popen(["sleep", "30"])
+        try:
+            pool.LOCK.write_text(json.dumps({"pid": other.pid, "started": "now"}))
+            problems = pool.preflight(cfg, say, want_label=False, driving=False)
+            check("a claim refuses to start while a driver is running",
+                  any("driver" in x.lower() for x in problems), str(problems))
+        finally:
+            other.kill()
+            other.wait()
+            problems = pool.preflight(cfg, say, want_label=False, driving=False)
+            check("and once that driver's process is gone, the stale lock is ignored",
+                  not any("driver" in x.lower() for x in problems), str(problems))
+            pool.LOCK.unlink(missing_ok=True)
+
+        check("and does not refuse once that driver is gone",
+              not any("driver" in x.lower()
+                      for x in pool.preflight(cfg, say, want_label=False, driving=False)))
+        pool.release_claim(cfg, "266", say)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1012,7 +1079,8 @@ def main() -> int:
                          ("claims", test_claim_and_release),
                          ("claim cli", test_claim_cli),
                          ("one command", test_work_one_command),
-                         ("ctrl-c", test_ctrl_c_reaches_the_session)]:
+                         ("ctrl-c", test_ctrl_c_reaches_the_session),
+                         ("collisions", test_double_claim_and_live_driver)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

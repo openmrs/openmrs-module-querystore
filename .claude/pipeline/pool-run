@@ -471,6 +471,21 @@ def claim_slot(cfg: dict, slug: str, ticket: str, repo: Path, base: str,
     held = active_leases()
     SLOTS.mkdir(parents=True, exist_ok=True)
 
+    # ONE CLAIM PER TICKET, and this is a safety check rather than tidiness. The worktree path is
+    # derived from the ticket, so a second claim for the same one resolves to the SAME directory —
+    # and `make_worktree` releases whatever it finds there before recreating it. A running session
+    # that has just committed has a CLEAN tree, so the release succeeds and the second claim wipes
+    # the first session's checkout out from under it. Measured: the live session's committed file was
+    # deleted and two leases were left pointing at one directory, which then made `release_claim`
+    # ambiguous. Nothing errored on either count.
+    want = ticket.lstrip("#")
+    for name, lease in sorted(held.items()):
+        if lease.get("ticket") == want:
+            say(f"  x #{want} is already claimed on {name} ({lease.get('worktree')}). One claim per "
+                f"ticket: a second one resolves to that same worktree and would remove it. If that "
+                f"session is finished, `pool-run --release {want}`.")
+            return None
+
     for slot in slots:
         if slot.name in held:
             continue
@@ -585,6 +600,27 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         release_claim(cfg, ticket, say)
 
 
+def driver_problems() -> list[str]:
+    """A hand-launched session must not start while the DRIVER is working tickets.
+
+    The mirror image of `claim_problems`, and without it the symmetry is decorative: the driver
+    refuses to start while a claim is held, but a claim happily took a standalone a running driver
+    was already using. Only a LIVE holder counts — a lock left by a killed driver is cleared by the
+    next driver, and must not block an operator in the meantime.
+    """
+    if not LOCK.exists():
+        return []
+    pid = load_json(LOCK, {}).get("pid")
+    if not isinstance(pid, int) or pid == os.getpid():
+        return []
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return []          # the holder is gone; the next driver clears the file
+    return [f"a pool driver is running (pid {pid}) and is using these standalones. Wait for it, or "
+            f"stop it, before starting a session by hand"]
+
+
 def claim_problems(cfg: dict) -> list[str]:
     """The driver must not run while hand-launched sessions hold slots.
 
@@ -696,8 +732,9 @@ def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True) -> li
 
     workers = max(1, int(cfg["parallel"]["max_workers"]))
     fatal += slot_problems(cfg, workers)
-    if driving:
-        fatal += claim_problems(cfg)
+    # Each side refuses to start while the other is working, and the two checks are deliberately
+    # separate: they are asked by different callers about different evidence.
+    fatal += claim_problems(cfg) if driving else driver_problems()
     if workers > 1:
         # The per-slot maven repository is a SPLIT repository, which Maven only understands from
         # 3.9. Under an older one `maven.repo.local.tail` is ignored, the head repository is empty,
