@@ -202,10 +202,21 @@ def load_json(path: Path, default):
 
 
 def save_json(path: Path, data) -> None:
+    """Write atomically, through a temp path NO other writer can be using.
+
+    The rename is atomic, so a reader always sees one whole version — but a FIXED `.tmp` suffix is
+    shared by every concurrent writer, and `write_text` truncates before it writes. Two writers then
+    interleave inside one temp file and the rename publishes whichever truncation won. Scoped to the
+    pid and thread, the temp path is private and the rename is the only thing that races, which is
+    what atomic means.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
-    tmp.replace(path)
+    tmp = path.with_suffix(f"{path.suffix}.tmp{os.getpid()}.{threading.get_ident()}")
+    try:
+        tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def merge(base: dict, over: dict) -> dict:
@@ -853,30 +864,67 @@ def tenant_key(path: Path) -> str:
     return os.path.realpath(path)
 
 
+GATE_STATE = PIPELINE / "gate-state"
+
+
+def gate_state_cmd(*argv: str) -> dict:
+    """Every read and write of the gate files goes through `gate-state`, never through load/save here.
+
+    Those two files are shared with LIVE claude sessions, which write them through `gate-state` under
+    an exclusive `flock`. A read-modify-write here takes no lock and so is not serialised against
+    them, nor against this driver's own ticket threads — and this driver is concurrent by
+    construction (`ThreadPoolExecutor`, one worktree per ticket). The lost update resurrects an entry
+    a finished run legitimately cleared, which then blocks the next session in that path for six
+    hours, or drops another worktree's `awaiting`, which is the unattended death the marker exists to
+    prevent. That is verbatim the race `gate-state`'s own docstring says it exists to remove, so the
+    fix is to use it rather than to add a second lock here.
+
+    Measured on the pre-fix code (2026-08-27, `pool-run` at 9866a1f, driving its own
+    `clear_gate_state` from 20 threads over 20 worktrees, 5 trials): 16, 16, 17, 17 and 17 of the 20
+    entries SURVIVED a clear that removed all 20, and 56 threads died of `FileNotFoundError` racing
+    the shared `.tmp` path. Nothing in the driver noticed either. Every survivor blocks the next
+    session in that worktree for six hours.
+
+    Returns {} on any failure — a missing helper, a non-zero exit, unparseable output. The caller
+    then reports nothing and clears nothing, which is the safe direction: racing the files is worse
+    than leaving a leftover for `STALE_AFTER` to expire.
+    """
+    if not GATE_STATE.exists():
+        return {}
+    try:
+        r = subprocess.run([str(GATE_STATE), *argv], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if r.returncode != 0:
+        return {}
+    try:
+        return json.loads(r.stdout or "{}")
+    except ValueError:
+        return {}
+
+
 def clear_gate_state(path: Path, say) -> list[str]:
     """A crashed run leaves an entry that blocks turns in this working tree for up to 6 hours.
 
     The next run writes its own entry at its Step 1, so removing a leftover is not a loophole — but
-    it IS evidence about the run that left it, so it is reported rather than quietly dropped.
+    it IS evidence about the run that left it, so it is reported rather than quietly dropped. The
+    report comes back FROM the clear, in one locked operation: reading it first and clearing it second
+    would be two, and the gap between them is the race described on `gate_state_cmd`.
     """
-    cleared = []
-    key = tenant_key(path)
-    for state in (PR_STATE, HARDEN_STATE):
-        data = load_json(state, {})
-        entry = data.pop(key, None)
-        if entry is not None:
-            cleared.append(
-                f"{state.name}: phase={entry.get('phase')} blocking={entry.get('blocking')} "
-                f"edits={entry.get('edits')} pr={entry.get('pr')} round={entry.get('round')}"
-            )
-            save_json(state, data)
+    removed = gate_state_cmd("--cwd", str(path), "clear", "--json")
+    names = {"pr": PR_STATE.name, "harden": HARDEN_STATE.name}
+    cleared = [
+        f"{names[w]}: phase={e.get('phase')} blocking={e.get('blocking')} "
+        f"edits={e.get('edits')} pr={e.get('pr')} round={e.get('round')}"
+        for w, e in sorted(removed.items()) if e
+    ]
     for line in cleared:
         say(f"    cleared leftover gate state — {line}")
     return cleared
 
 
 def read_gate_state(path: Path) -> dict:
-    return load_json(PR_STATE, {}).get(tenant_key(path), {})
+    return gate_state_cmd("--cwd", str(path), "show", "--json").get("pr", {})
 
 
 UNATTENDED_DIR = PIPELINE / "unattended"

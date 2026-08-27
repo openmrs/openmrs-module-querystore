@@ -576,6 +576,104 @@ def test_skills_commands_run(tmp: Path) -> None:
     check("the default-scope await lands in both gates", all(both), str(both))
 
 
+
+def test_pool_gate_state_via_helper(tmp: Path) -> None:
+    """The driver must not read-modify-write the gate files itself.
+
+    Those files are shared with live claude sessions, which write them through `gate-state` under an
+    exclusive flock. The driver is concurrent by construction, so an unlocked read-modify-write here
+    loses updates against its own threads AND against every live session — resurrecting an entry a
+    finished run cleared, which blocks the next session in that path for six hours. These cases drive
+    `pool-run`'s own functions, not the helper.
+    """
+    print("\nthe driver's gate-state access is serialised")
+    helper = HERE / "gate-state"
+    check("the helper is installed and executable", os.access(helper, os.X_OK))
+    if not os.access(helper, os.X_OK):
+        return
+
+    home = tmp / "home"
+    (home / ".claude").mkdir(parents=True)
+    dirs = []
+    for i in range(20):
+        d = tmp / f"wt{i}"
+        d.mkdir()
+        dirs.append(d.resolve())
+
+    saved_home, saved_gs = os.environ.get("HOME"), pool.GATE_STATE
+    os.environ["HOME"] = str(home)
+    pool.GATE_STATE = helper
+    try:
+        for d in dirs:
+            sh([sys.executable, str(helper), "pr-set", "--pr", "9", "--round", "1",
+                "--phase", "building", "--blocking", "0"], cwd=d)
+        state = home / ".claude" / "pr-harden-state.json"
+        check("twenty entries were written", len(json.loads(state.read_text())) == 20)
+
+        reports: dict[Path, list[str]] = {}
+
+        def clear(d: Path) -> None:
+            reports[d] = pool.clear_gate_state(d, lambda *_a, **_k: None)
+
+        threads = [threading.Thread(target=clear, args=(d,)) for d in dirs]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        left = json.loads(state.read_text())
+        check("no entry survives twenty concurrent clears", left == {},
+              f"{len(left)} left: {sorted(left)[:2]}")
+        check("every clear reported the entry it removed",
+              all(len(reports.get(d) or []) == 1 for d in dirs),
+              f"{sum(1 for d in dirs if not reports.get(d))} reported nothing")
+        check("the report names the phase it found",
+              all("phase=building" in (reports.get(d) or [""])[0] for d in dirs))
+
+        sh([sys.executable, str(helper), "pr-set", "--pr", "42", "--round", "3",
+            "--phase", "reviewed", "--blocking", "0"], cwd=dirs[0])
+        check("read_gate_state reads this worktree's pr entry",
+              pool.read_gate_state(dirs[0]).get("pr") == 42)
+        check("read_gate_state is empty for a worktree with no entry",
+              pool.read_gate_state(dirs[1]) == {})
+
+        # The helper must be the only writer: with it unavailable the driver reports and clears
+        # nothing rather than falling back to racing the files itself.
+        pool.GATE_STATE = tmp / "no-such-helper"
+        before = state.read_text()
+        check("with no helper it clears nothing", pool.clear_gate_state(dirs[0], lambda *_a: None) == [])
+        check("with no helper the file is untouched", state.read_text() == before)
+    finally:
+        pool.GATE_STATE = saved_gs
+        if saved_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = saved_home
+
+
+def test_save_json_temp_is_private(tmp: Path) -> None:
+    """A fixed `.tmp` suffix is shared by every concurrent writer, and `write_text` truncates first."""
+    print("\nsave_json's temp path is private to the writer")
+    target = tmp / "x.json"
+    errors: list[str] = []
+
+    def writer(n: int) -> None:
+        for _ in range(40):
+            try:
+                pool.save_json(target, {"who": n, "pad": "x" * 4000})
+                json.loads(target.read_text())
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    check("concurrent writers never publish unparseable json", not errors, str(errors[:2]))
+    check("no temp file is left behind", not list(tmp.glob("x.json.tmp*")))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -584,7 +682,9 @@ def main() -> int:
                          ("parallel run", test_parallel_run), ("say", test_say_is_thread_safe),
                          ("records", test_record_attribution), ("crash", test_crash_does_not_clobber),
                          ("maven tail", test_shared_maven_repo), ("db ports", test_db_port_hosts),
-                         ("skill commands", test_skills_commands_run)]:
+                         ("skill commands", test_skills_commands_run),
+                         ("driver gate-state", test_pool_gate_state_via_helper),
+                         ("save_json temp", test_save_json_temp_is_private)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.9.0
+version: 0.9.1
 ---
 
 # Ticket pool — the loop that learns
@@ -278,7 +278,12 @@ port" is a licence to stop a sibling's server mid-query.
   is a skill edit, and it goes through a retro so it is corroborated and refuted first.
 - **Don't clear a gate state entry by hand to unstick a queue.** The driver clears a leftover at the
   start of the next ticket *and reports it into the record*, because whose leftover it was is
-  evidence. Clearing it by hand throws that away.
+  evidence. Clearing it by hand throws that away — and by hand means `jq`, an editor, or any other
+  read-modify-write, because those files are shared with every live session and only
+  `gate-state` serialises them. Use `gate-state clear`, which reports what it removed from inside its
+  own lock. Measured on the driver's pre-fix code, which did the read-modify-write itself: 20 threads
+  clearing 20 worktrees left 16-17 of the 20 entries standing and killed 56 threads on a shared temp
+  path, silently. Each survivor blocks the next session in that worktree for six hours.
 - **Don't treat a `draft` as nearly done.** The loop not converging is the outcome the whole pipeline
   is built to make visible; it earns a look, not another attempt.
 - **Don't answer a stalled pool by widening a skip.** A ticket the driver refuses is refused for a

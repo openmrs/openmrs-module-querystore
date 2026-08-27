@@ -35,8 +35,8 @@ hook must never block on someone else's lock — always see one whole version or
   gate-state clear-await [--only pr|harden|both]
   gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"
   gate-state reviewed-sha <sha>
-  gate-state show
-  gate-state clear [--only pr|harden|both]
+  gate-state show [--json]
+  gate-state clear [--only pr|harden|both] [--json]        # --json prints what it REMOVED
 """
 
 from __future__ import annotations
@@ -178,10 +178,15 @@ def main() -> int:
     r = sub.add_parser("reviewed-sha", help="record the sha a round reviewed")
     r.add_argument("sha")
 
-    sub.add_parser("show", help="print both entries for this working tree")
+    sh = sub.add_parser("show", help="print both entries for this working tree")
+    sh.add_argument("--json", action="store_true", help="one JSON object keyed pr/harden, for callers")
 
     x = sub.add_parser("clear", help="remove this working tree's entries")
     x.add_argument("--only", default="both", choices=("pr", "harden", "both"))
+    x.add_argument("--json", action="store_true",
+                   help="print what was REMOVED, keyed pr/harden. A caller that wants to report a "
+                        "leftover must get it from here: reading it first and clearing it second is "
+                        "two operations, and the gap between them is the race this lock removes.")
 
     args = ap.parse_args()
     key = os.path.realpath(args.cwd) if args.cwd else os.path.realpath(os.getcwd())
@@ -251,13 +256,23 @@ def main() -> int:
             print(f"reviewed {args.sha[:12]} ({len(shas)} round(s))")
 
         elif args.cmd == "show":
-            for w in ("pr", "harden"):
-                print(f"{w}: " + json.dumps(held.data[w].get(key, {}), indent=2, sort_keys=True))
+            if args.json:
+                print(json.dumps({w: held.data[w].get(key, {}) for w in ("pr", "harden")},
+                                 sort_keys=True))
+            else:
+                for w in ("pr", "harden"):
+                    print(f"{w}: " + json.dumps(held.data[w].get(key, {}), indent=2, sort_keys=True))
 
         elif args.cmd == "clear":
+            removed = {}
             for w in which[args.only]:
-                held.data[w].pop(key, None)
-            print(f"cleared {args.only} for {key}")
+                gone = held.data[w].pop(key, None)
+                if gone is not None:
+                    removed[w] = gone
+            if args.json:
+                print(json.dumps(removed, sort_keys=True))
+            else:
+                print(f"cleared {args.only} for {key}")
 
     return 0
 
