@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.19.0
+version: 0.19.1
 ---
 
 # Harden
@@ -208,7 +208,10 @@ wait for its own agents.** Phase 2 spawns subagents, so a cycle is routinely blo
 nothing to do but yield — and a yield is exactly what the gate refuses. Measured on the run that
 added this: a Phase 2 pass blocked on a background agent tripped the gate on every yield, and the
 only way to stay alive was two ten-minute in-turn wait loops, which is pure waste. `pr-harden` solved
-this first and its **State** section carries the reasoning; the field and the semantics are the same:
+this first and its **State** section carries the reasoning; the field and the semantics are the same.
+Since 2026-08-27 the same marker also decides which session OWNS an entry — this state is keyed on the
+checkout, not the session, so the gate allows a stop where a live marker pid is not an ancestor of the
+stopping session — and that reasoning lives there too:
 
 ```bash
 # usage:  awaiting.py await "phase2 quality"   |   awaiting.py clear

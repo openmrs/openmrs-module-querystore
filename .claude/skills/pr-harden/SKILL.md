@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.12.1
+version: 0.12.2
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -612,6 +612,18 @@ driver holds for the life of the run; the rule is stated here as well because a 
 a stop after the decision to stop has been made, and that decision is what costs the run. And do not
 read a stream with no gate text in it as evidence the gate never ran: hooks DO reach `-p` sessions,
 probed the same day, feedback delivered and captured.
+
+**And that marker now decides OWNERSHIP as well as attendedness, because the gate state is keyed on the
+checkout and not on the session.** Measured live 2026-08-26: an interactive session in a checkout the
+pool was working was stopped by a `phase: building` entry belonging to a different live
+`claude -p /resolve-ticket` run, and both remedies the block offered damaged that run — `override: true`
+disarms its gate for the rest of its life, and "continue the phases" puts a second session in one
+worktree. The gate now allows the stop where the marker's pid is alive and is **not** an ancestor of the
+stopping session. Two consequences to keep. Ownership is only ever established POSITIVELY, so an
+indeterminate answer keeps the block — losing the unattended guard back is the more expensive
+direction. And the state file is still keyed on `$PWD` alone, so two runs in one checkout share one
+entry and the later writer wins: this narrows a false positive and does not make the state
+multi-tenant.
 
 **Snapshot the worktree before every delegation and compare it after — on ANY terminal outcome.**
 `git diff | shasum` before you spawn; the same after the agent returns, fails, stalls or is killed. On a

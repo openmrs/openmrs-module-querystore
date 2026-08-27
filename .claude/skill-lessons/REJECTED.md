@@ -714,5 +714,14 @@ hand", and the remedy was removing the keyword rather than rewording around it. 
   retros**. This pass shipped "returns the same clean result", "what only the intended root holds", "is
   not a base" and "however many repeats stood behind it"; the refuter cut all four. Worth a rule only if
   one ever survives the gate; the gate is still the mechanism.
-- Every other count in the previous block stands unchanged; this window's single record touched none of
-  them.
+- Every other count in the previous block stands unchanged, with ONE correction made 2026-08-27 after
+  the retro, while answering which rules belong in hooks: **"verifier standing-permission friction:
+  5 records — relaxation killed" is now CLOSED, not killed.** #298 identifies the permission concerned as
+  standing permission to restart local standalones ("memory granting standing permission to restart
+  local standalones. Followed the memory"), and the 2026-08-27 owner instruction settled it directly —
+  `pr-harden`:322-327, `resolve-ticket`:112-114 and `verify-frontend-change`:40 now all say to take the
+  standalone without asking. The 2026-08-24 objection that killed the relaxation ("where the project
+  records a standing permission, that governs" would let an agent-written auto-memory outrank a safety
+  guard) is void twice over: the permission is now the owner's own, stated, and the guard it protected
+  has been reversed. Carried forward unchanged by this pass's own block, which is how a closed count
+  keeps reading as an open one.
