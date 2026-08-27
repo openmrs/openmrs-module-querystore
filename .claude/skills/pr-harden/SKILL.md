@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.12.0
+version: 0.12.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -217,7 +217,7 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   added, unpinned — deleting it left the whole suite green — and a trim normalisation unpinned against an
   equivalent rewrite. Step 1's reviewer brief stays narrower on purpose, because what it teaches is the
   string-versus-property attack and that is specific to text and shape; this obligation is not.
-  **For a guard over TEXT or SHAPE,** its weakest point is the gap between the property it means and
+  **For a guard over TEXT or SHAPE,** one gap is between the property it means and
   the string it matches, and that gap is invisible from the assertion's own side. Assert the SHAPE the
   code must have rather than that it mentions the right identifier — measured, a guard requiring only that a
   right-hand side *contained* the flag's name accepted `order != null || namesADrug ? order : null`,

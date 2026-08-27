@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.18.0
+version: 0.19.0
 ---
 
 # Harden
@@ -65,7 +65,14 @@ as readily as one you ran. **And of a STABLE result, ask what the repeats could 
 cached prefix — the engine's own javadoc says that cache makes a borderline argmax non-deterministic, so
 the repeats measured the cache, and the prompt figures resting on them were weaker than they looked.
 Name what is reset between repeats; where nothing is, the repeats never exercised the path a first run
-takes.
+takes. **And of a PASSING check, ask what it actually examined.** A check that discovers its own subject —
+a source or class-file walk, a directory scan, a script reporting on output it captured itself — can
+return the same clean result whether the subject was compliant or absent. Two runs of #315: a walking
+architecture guard passed every rule on a wrong source root, having scanned nothing, and a capture
+script wrote its done-marker without checking, so an arm that captured nothing read as a clean, empty
+A/B with exit 0. Make an empty discovery FAIL, and choose the thing you assert was found so that a
+sibling could not supply it — the same run found that asserting the intended root merely exists is not
+equivalent, because the sibling omod module carries the same package path.
 
 A behavior change without a named test is a Phase 1 finding — even when the code looks "obviously correct," "matches an existing pattern," or "is trivially small." Never-executed code is unverified code.
 
@@ -183,6 +190,14 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
 - **Do not manufacture a change to look thorough.** An empty cycle is the goal, not a failure. If a cycle finds nothing, say so and stop; padding it with a comment tweak just buys another mandatory cycle.
 - **Do not withhold a warranted change to end sooner.** If you find something real on what you hoped was the final cycle, fix it and run another. The rule exists precisely to stop "it's basically converged" from ending a run that still had a finding in it.
 - Every applied change still needs its evidence: verified by build or test, and where it fixes a behavior, checked by reverting it and confirming the failure. **Where it ADDS a guard or clause, the same check is owed on that — deleted, its arms swapped, its comparison loosened, or rewritten in a semantically equivalent way** — because a clause the suite never discriminates is one the next change can remove for free.
+- **And where the guard is over TEXT, mutate the SUBJECT too — the four mutations above are all of the
+  guard, and none of them moves the thing it forbids.** Relocate that string: into a comment, across the
+  file's own line-wrap, behind a block comment, into a sibling declaration outside the slice the guard
+  reads — and check it still reddens. On the #315 run one guard was defeated five ways in turn, each
+  found by the next fresh agent at a cycle or a round apiece and each fix opening the next, so treat no
+  list of relocations as closed. Two the run paid for: bound the window at the construct it is about
+  rather than at a line count, and have both halves of a two-sided guard read text normalised the same
+  way.
 
 ### Record the cycle so the gate can enforce it
 

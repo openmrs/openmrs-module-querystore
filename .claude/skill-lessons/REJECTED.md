@@ -608,3 +608,111 @@ determine" for want of it.
 - Extracting the assembled prompt from the inference server: **1 record** (#317) — parked above.
 - Every other count in the 2026-08-26 block stands unchanged; this window's single record touched none
   of them.
+
+## 2026-08-27 (second window: 1 new record, #315 / PR 321) — two applied, one applied-with-its-reason-refuted, two parked; linter 10 files, 0 findings
+
+Proposals filed as `proposals/2026-08-27-retro-window-315-pr321.md`. The refuter revised two, refuted
+the stated reason of a third while accepting its edit, and **PROMOTED one the proposer had parked** —
+design rationale 2 working for the second retro running.
+
+**APPLIED (revised) · `harden` 0.19.0 — "of a PASSING check, ask what it actually examined."** Two
+records: `2026-08-26-...-315.md` `[r4]` "round 3's CAPTURE_DONE fix wrote the marker unconditionally: an
+arm that captured nothing read as a clean, empty A/B, exit 0 · blocking" and `2026-08-27-...-315.md`
+`[harden c3]` "`ArchitectureGuardTest` passed 5/5 on a wrong source root — it WALKS, so it scanned
+nothing and reported no violations · 1 cycle" with `[c4]` "the fifth walks its own directory and returned
+silently. Then: existence alone was not equivalent to the canary, because the sibling omod module
+carries the same package path · 2 cycles". Appended to the paragraph that already asks the same question
+of an input population and of stable repeats; what it adds is the mechanical remedy that limb lacked.
+Three revisions the refuter forced, all kept: the two sightings are **two runs on one ticket**, weaker
+independence than two tickets, and the text now says "Two runs of #315" rather than implying two
+independent ones; "returns the same clean result" softened to "can return"; and "what **only** the
+intended root holds" replaced by "so that a sibling could not supply it", since `only` is named in
+`harden`:274's own list and the record shows this is the hard part, not a safe absolute. Noted for a
+later pass: `[r4]`'s use by the 2026-08-26 window was killed at :470-476 as "a missing condition"; that
+ruling is P1's own reading and does not block it, and `[r4]`'s lesson was unclaimed until now.
+
+**APPLIED (promoted by the refuter, from this pass's own parked list) · `harden` 0.19.0 — "where the
+guard is over TEXT, mutate the SUBJECT too."** The proposer parked this at count 1 on an "adopted
+precedence" it read out of this ledger; the refuter read the ledger back and settled it: :429-459 says
+the anti-pattern governs "whether a PASS is worth running" and that obeying it "violates nothing in
+Step 3 — its single-record clauses simply go unexercised", and lists four commits shipped from one run's
+evidence. **This pass did not stop**, so the anti-pattern was never in play, and :445-447 names this
+exact loss as the reopen condition — "a pass that stopped on the anti-pattern while holding a lesson
+clause 2 or 3 admits, and lost it". Clause 2 is met on the record's own cost lines whether the five
+relocations are counted as five sightings or one lesson: `[c1]` blocking-equivalent, `[c2]`, `[c3]`,
+`[c3]` a cycle each, `[pr r1]` blocking, a round. Homed at `harden`:185 and not in `pr-harden`, because
+four of the five sightings were harden CYCLES — a pr-harden-only home would have prevented one of them —
+and `pr-harden`:214 inherits that obligation by reference already. It narrows the implicit sufficiency of
+that bullet's four mutations, all of which mutate the GUARD while every one of these five moved the
+SUBJECT.
+
+**APPLIED, REASON REFUTED · `pr-harden` 0.12.1 — the ranking at :220 deleted ("its weakest point is the
+gap" → "one gap is").** The edit survives because nothing in the corpus ranks the failure modes of a
+text guard, so the superlative is an unmeasured claim and Step 4 prefers deleting an unsupported clause.
+**The submitted justification was refuted and must not be reused:** the proposal read ":22's 'this is the
+only one where the assertion measured the wrong PROPERTY rather than looking in too small a WINDOW'" as
+retiring the clause, but a window defect IS the gap between the property meant and the string matched —
+`[c1]`'s "slice ran 125 lines past the constant, so a hardcoded mark passed as long as the constant's
+NAME appeared anywhere in between" is exactly that gap. The record separates two SUB-KINDS of the gap;
+six of six sat in it. Also corrected: the proposal cited the grammar rule at `pr-harden`:224 (it is :240)
+and claimed those lists name superlatives (they name `any`/`only`/`exactly`/`all`/`never`/`the whole`/
+`cannot`). Seventh instance of the parked "proposer not verifying its own citations" count.
+
+**Net growth: +18 lines in `harden` against a four-word deletion in `pr-harden`, and NO prune this
+window.** The submitted Step 4 sentence — "net growth is paid for by P2's deletion in the same commit" —
+was false arithmetic and the refuter blocked it. The honest justification: both additions are clauses on
+bullets that already exist, adding no home and no section, and each supplies the mechanical remedy for a
+limb that until now asked its question without answering it — the cost of leaving them unwritten is
+measured at four cycles plus a round in one run and a blocking finding in another. A scan for a genuine
+prune found none: `harden` carries one tally (:60, "0 of 36 reachable") and it is quoted with its
+provenance.
+
+**PARKED at count 1 · a base measured in an EARLIER run is not a base.** `2026-08-27-...-315.md`:24
+"Three runs on record against the unchanged prompt, three different bases, each stable within its own
+run — so '3/3' against that cell was never safe to publish. Now recorded as unsettled." The second
+citation offered does not corroborate it: `2026-08-26-...-315.md`:9 is a WITHIN-run statement
+("consecutive repeats measure KV-CACHE stability"), already shipped as `harden`:63-67, and says nothing
+about a base from another run. Clause 2 is not met either — that line carries no cost annotation and the
+run self-corrected. Whether the two are one mechanism (borderline argmax non-determinism) or two is
+OPEN, which is why this parks rather than dies. **REOPEN ON:** a second record of a base moving across
+runs against an unchanged input, or one where a figure published against a foreign base cost a round.
+When readmitted, drop the absolute — say what the record shows (three runs, three bases, each stable
+within its run), not "a base from an earlier run is not a base".
+
+**PARKED at count 1, and already covered · a test TOTAL summed off the wrong lines.**
+`2026-08-27-...-315.md`:14 "'3052 tests' … real figure 1557, then 1559. A double count: per-class
+`Tests run:` lines summed against each module's `Results:` summary · cost: caught at r2". One record, no
+round cost, and `pr-harden`:230 already governs it — "Don't write a tally a later round will have to
+re-measure; write the method" is exactly a total in a PR body that round 2 re-measured. The proposal
+leaned on this project's `CLAUDE.md` Bash-output rule instead, which is context economy rather than
+accuracy; cite :230. **REOPEN ON:** a second record, or one where a wrong total reached a merged PR body
+uncorrected.
+
+**REPORT ONLY · the restart contradiction this record flags is already resolved.** The record's "Where a
+skill blocked or contradicted this run" names `pr-harden` §6 against `resolve-ticket` §1 on restarting a
+running standalone and says "Worth reconciling"; both were reconciled live on 2026-08-27 under an
+owner's instruction (`pr-harden`:322-327, `resolve-ticket`:112-114, `verify-frontend-change`:40). Those
+three files were UNMIRRORED in the source repo, so this retro's commit carries three version bumps it
+did not author — `pr-harden` 0.11.0→0.12.0, `resolve-ticket` 0.12.0→0.13.0,
+`verify-frontend-change` 0.1.0→0.2.0 — plus this pass's own `pr-harden` 0.12.1 on top.
+
+**REPORT ONLY · the field check's first post-ship exercise.** Same record: "resolve-ticket §8 says check
+`closingIssuesReferences` rather than the wording — it earned its place twice here." Shipped as `3394ec3`
+on 2026-08-27; `Refs #315` still produced `closes=[315]` because the body said "Please close #315 by
+hand", and the remedy was removing the keyword rather than rewording around it. No edit proposed.
+
+## Running parked counts (superseding the previous block where they differ)
+- A check that examined nothing reporting clean: **2 records** (#315 ×2) — **APPLIED** above.
+- A text guard defeated by relocating its SUBJECT: **1 record, 4 cycles + 1 round** (#315 / PR 321) —
+  **APPLIED** above, promoted by the refuter on clause 2.
+- A base measured in an earlier run: **1 record** (#315 / PR 321) — parked above.
+- A test total summed off the wrong lines: **1 record** (#315 / PR 321) — parked above; covered by
+  `pr-harden`:230.
+- The proposer not verifying its own citations: **7 cycles / 6 records** — this pass added one (the P2
+  justification, and a wrong line number with it). Still zero rules shipped on a bad citation.
+- A retro submitting wording that breaks the counts/universals rule it enforces: **4 consecutive
+  retros**. This pass shipped "returns the same clean result", "what only the intended root holds", "is
+  not a base" and "however many repeats stood behind it"; the refuter cut all four. Worth a rule only if
+  one ever survives the gate; the gate is still the mechanism.
+- Every other count in the previous block stands unchanged; this window's single record touched none of
+  them.
