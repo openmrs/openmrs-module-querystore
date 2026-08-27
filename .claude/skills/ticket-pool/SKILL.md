@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.12.2
+version: 0.12.3
 ---
 
 # Ticket pool — the loop that learns
@@ -278,6 +278,11 @@ somewhere, because **a session started by hand has none of it**. It inherits no
 your checkout they share one working tree. Measured: two sessions in one directory share ONE gate
 entry, and the first ticket's is silently gone — the later writer wins. Give them a worktree each and
 both entries survive.
+
+**`pool-run` is a shell script, not a skill.** Skills — `/resolve-ticket`, `/ticket-pool` — are what
+you type INSIDE a Claude Code session. `~/.claude/pipeline/pool-run` is a program you run in a
+terminal, and `--work` is a program that STARTS a session. Mistaking one for the other is easy and
+the failure was silent, so `--work` now refuses when it has no terminal and says which it wanted.
 
 So: **one command per terminal.**
 

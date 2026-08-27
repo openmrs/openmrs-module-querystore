@@ -1930,6 +1930,17 @@ def cmd_claim(cfg: dict, say: Say, token: str) -> int:
 
 def cmd_work(cfg: dict, say: Say, token: str) -> int:
     """One command per terminal: `pool-run --work 266`."""
+    # `--work` launches an INTERACTIVE Claude Code session, which needs a terminal to draw on and to
+    # read keys from. Without this the failure is silent and confusing: the session starts with no
+    # tty, renders none of its interface, and there is nothing on screen to say why. It catches the
+    # mistake worth catching — running this from INSIDE a Claude Code session, where `pool-run` looks
+    # like it ought to be a skill. It is not; skills are what you type inside a session, and this is
+    # a shell script that starts one.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        say("  x --work starts an interactive Claude Code session, so it needs a terminal.")
+        say("    Run it in a terminal — not from inside a Claude Code session, a pipe or a script.")
+        say(f"    To prepare a session without launching it: pool-run --claim {token}")
+        return 1
     problems = preflight(cfg, say, want_label=False, driving=False)
     for problem in problems:
         say(f"  x {problem}")

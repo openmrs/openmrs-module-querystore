@@ -807,6 +807,26 @@ def test_claim_and_release(tmp: Path) -> None:
               pool.claim_slot(cfg, "o/r", "402", work, base, say) is not None)
 
 
+def test_work_needs_a_terminal(tmp: Path) -> None:
+    """`--work` launches an INTERACTIVE session, so refusing without a tty is the whole contract.
+
+    The mistake this catches is thinking `pool-run` is a skill and running it from inside a Claude
+    Code session. It is not — skills are what you type inside a session, this is a shell script that
+    starts one — and without the guard the session starts with no terminal, renders none of its
+    interface, and says nothing about why.
+    """
+    print("\n--work without a terminal")
+    cfgpath = tmp / "cfg.json"
+    cfgpath.write_text(json.dumps({"label": "x", "repos": {}, "retro": {"enabled": False}}))
+    got = subprocess.run([str(HERE / "pool-run"), "--config", str(cfgpath), "--work", "266"],
+                         capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    check("it refuses when there is no terminal", got.returncode != 0, got.stdout[-200:])
+    check("and says so in terms of what it was about to do",
+          "needs a terminal" in got.stdout, got.stdout[-300:])
+    check("and points at the command that prepares one without launching",
+          "--claim 266" in got.stdout, got.stdout[-300:])
+
+
 def test_claim_cli(tmp: Path) -> None:
     """`--claim` twice, through the real CLI, because that is where the defect was.
 
@@ -1165,6 +1185,7 @@ def main() -> int:
                          ("driver gate-state", test_pool_gate_state_via_helper),
                          ("save_json temp", test_save_json_temp_is_private),
                          ("claims", test_claim_and_release),
+                         ("needs a tty", test_work_needs_a_terminal),
                          ("claim cli", test_claim_cli),
                          ("one command", test_work_one_command),
                          ("ctrl-c", test_ctrl_c_reaches_the_session),
