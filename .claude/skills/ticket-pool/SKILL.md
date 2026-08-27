@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.12.3
+version: 0.13.0
 ---
 
 # Ticket pool — the loop that learns
@@ -299,6 +299,20 @@ because the release is the half a person forgets and it has to happen on the pat
 
 `--work` refuses to run from inside a session that already holds a slot, since that is the mistake
 that puts two runs in one worktree.
+
+**Permission prompts.** `claude.skip_permissions` starts `--work` sessions with
+`--dangerously-skip-permissions`, so a run never stops to ask; `--skip-permissions` /
+`--no-skip-permissions` override one invocation. It is opt-IN here and unconditional in the headless
+driver, and the difference is not an oversight: a headless run has nobody to ask, so a prompt is not
+a pause but a hang until the quiet watchdog kills the run hours later, while an interactive session
+has somebody in front of it who could answer. What the bypass is scoped to is worth knowing — the
+session's own worktree, its own maven repository and its own standalone, none of which is the
+operator's checkout.
+
+**The whole `claude` block reaches `--work` too**, which for a while it did not: the headless driver
+read `model`, `effort`, `max_budget_usd` and `extra_args` and `--work` read none of them, so a
+configured model silently did not apply to the sessions an operator actually watched. One definition
+now, `common_claude_args`, read by both launchers.
 
 **Remote Control travels with it.** It is a flag on the LAUNCH (`--remote-control [name]`), so a
 launcher that does not pass it silently costs you phone monitoring, with nothing in the session to

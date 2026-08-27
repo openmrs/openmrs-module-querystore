@@ -938,6 +938,38 @@ def test_work_one_command(tmp: Path) -> None:
                              {"url": "https://example/266"}, work, say)
         check("and it is off unless asked for",
               "--remote-control" not in seen.read_text(), seen.read_text())
+
+        # `pool.json` documents its `claude` block as reaching EVERY session, and for a while
+        # `--work` read none of it — an operator's configured model silently did not apply to the
+        # sessions they actually watched.
+        seen.unlink()
+        full = pool.merge(cfg, {"claude": {"skip_permissions": True, "model": "opus",
+                                           "effort": "high", "max_budget_usd": 40,
+                                           "extra_args": ["--verbose"]}})
+        pool.work_in_session(full, "o/r", "266", {"url": "https://example/266"}, work, say)
+        args = seen.read_text().strip().split("|")[4]
+        check("permission prompts are skipped when asked for",
+              "--dangerously-skip-permissions" in args, args)
+        for flag, value in (("--model", "opus"), ("--effort", "high"),
+                            ("--max-budget-usd", "40")):
+            check(f"the configured {flag[2:]} reaches the session",
+                  f"{flag} {value}" in args, args)
+        check("and so do extra_args", "--verbose" in args, args)
+        check("with the prompt still last, where a positional belongs",
+              args.strip().endswith("/resolve-ticket https://example/266"), args)
+
+        seen.unlink()
+        pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
+        check("permissions are NOT skipped unless asked for",
+              "--dangerously-skip-permissions" not in seen.read_text(), seen.read_text())
+
+        # The headless driver differs on purpose: nobody is there to ask, so a prompt is a hang.
+        head = pool.Session("p", tmp, pool.merge(pool.DEFAULTS, {"claude": {"model": "sonnet"}}),
+                            tmp / "s", 10, 10, print).argv()
+        check("a headless session always skips permissions, settings or not",
+              "--dangerously-skip-permissions" in head, str(head))
+        check("and reads the same shared options",
+              "--model" in head and "sonnet" in head, str(head))
         check("and the clean worktree with it",
               not (pool.WORKTREES / "o-r-266").is_dir())
 

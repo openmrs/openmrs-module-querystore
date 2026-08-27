@@ -87,7 +87,7 @@ DEFAULTS = {
     # nothing to the headless driver. The name is per ticket rather than per host, because the point
     # of monitoring two sessions from a phone is being able to tell which is which.
     "claude": {"model": None, "effort": None, "max_budget_usd": None, "extra_args": [],
-               "binary": "claude", "remote_control": False},
+               "binary": "claude", "remote_control": False, "skip_permissions": False},
     # `max_workers` is how many tickets run AT ONCE, and it is bounded by `standalones`, not by
     # cores: the verifier restarts a real OpenMRS instance and drives a real query against it, so two
     # runs sharing one instance would restart it underneath each other and each would grade the
@@ -585,11 +585,18 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
 
     prompt = f"/resolve-ticket {issue.get('url') or claim['url']}"
     argv = [cfg["claude"].get("binary") or "claude"]
+    if cfg["claude"].get("skip_permissions"):
+        # Opt-in, unlike the headless path, because this session has somebody in front of it who
+        # COULD answer a prompt — so bypassing is a choice rather than a structural necessity. What
+        # it is scoped to is worth knowing: the session's own worktree, its own maven repository and
+        # its own standalone, none of which is the operator's checkout.
+        argv.append("--dangerously-skip-permissions")
     if cfg["claude"].get("remote_control"):
         # Named for the ticket. `--remote-control [name]` takes an optional value, and a name that
         # does not start with `-` binds to it, leaving the prompt as the positional it was.
         argv += ["--remote-control", f"{slug.split('/')[-1].replace('openmrs-module-', '')}"
                                      f"-{ticket.lstrip('#')}"]
+    argv += common_claude_args(cfg)
     argv.append(prompt)
     say(f"{slug}#{ticket.lstrip('#')} on {claim['slot'].name} "
         f"({claim['slot'].describe().split(': ', 1)[1]})")
@@ -1214,6 +1221,26 @@ def unattended_marker(path: Path):
 # ──────────────────────────────────────────────────────────────── session ──
 
 
+def common_claude_args(cfg: dict) -> list[str]:
+    """The options that apply to a session however it is started.
+
+    `pool.json` documents its `claude` block as reaching EVERY session, and for a while it did not:
+    the headless driver read `model`, `effort`, `max_budget_usd` and `extra_args` while `--work`
+    ignored all four, so an operator's configured model silently did not apply to the sessions they
+    watched. One definition, read by both launchers.
+    """
+    c = cfg["claude"]
+    argv: list[str] = []
+    if c.get("model"):
+        argv += ["--model", c["model"]]
+    if c.get("effort"):
+        argv += ["--effort", c["effort"]]
+    if c.get("max_budget_usd"):
+        argv += ["--max-budget-usd", str(c["max_budget_usd"])]
+    argv += list(c.get("extra_args") or [])
+    return argv
+
+
 class Session:
     """One headless `claude -p` run, streamed to a .jsonl and watched for death."""
 
@@ -1235,17 +1262,14 @@ class Session:
 
     def argv(self) -> list[str]:
         c = self.cfg["claude"]
+        # `--dangerously-skip-permissions` is unconditional HERE and not a setting: a headless run
+        # has nobody to ask, so a permission prompt is not a pause, it is a hang until the quiet
+        # watchdog kills the run hours later. For an interactive session it IS a setting, because
+        # there the prompt reaches somebody who can answer it — see `work_in_session`.
         argv = [c.get("binary") or "claude",
                 "-p", self.prompt, "--output-format", "stream-json", "--verbose",
                 "--dangerously-skip-permissions", "--session-id", self.session_id]
-        if c.get("model"):
-            argv += ["--model", c["model"]]
-        if c.get("effort"):
-            argv += ["--effort", c["effort"]]
-        if c.get("max_budget_usd"):
-            argv += ["--max-budget-usd", str(c["max_budget_usd"])]
-        argv += list(c.get("extra_args") or [])
-        return argv
+        return argv + common_claude_args(self.cfg)
 
     def run(self) -> dict:
         started = now()
@@ -2009,6 +2033,11 @@ def main() -> int:
                     help="work ONE ticket in this terminal: claims a worktree and a standalone, "
                          "starts an ordinary interactive claude in it with /resolve-ticket already "
                          "invoked, and gives the slot back when you are done. One per terminal")
+    ap.add_argument("--skip-permissions", action="store_true", default=None,
+                    help="with --work: start the session with --dangerously-skip-permissions so it "
+                         "runs without stopping to ask. Also settable as claude.skip_permissions")
+    ap.add_argument("--no-skip-permissions", dest="skip_permissions", action="store_false",
+                    help="with --work: override claude.skip_permissions for this one session")
     ap.add_argument("--remote-control", action="store_true", default=None,
                     help="with --work: start the session with Remote Control enabled, named for the "
                          "ticket, so it can be monitored from a phone. Also settable as "
@@ -2031,6 +2060,8 @@ def main() -> int:
         cfg["parallel"]["max_workers"] = args.workers
     if args.remote_control is not None:
         cfg["claude"]["remote_control"] = args.remote_control
+    if args.skip_permissions is not None:
+        cfg["claude"]["skip_permissions"] = args.skip_permissions
     LOGS.mkdir(parents=True, exist_ok=True)
     say = Say(LOGS / f"pool-{utc_stamp()}.md")
     say(f"# pool-run · {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
