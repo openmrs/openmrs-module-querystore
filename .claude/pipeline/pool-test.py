@@ -482,6 +482,24 @@ def test_crash_does_not_clobber(tmp: Path) -> None:
               pool.reap_running({"a": {"status": "ready"}}, pool.Say(tmp / "reap2.md")) == [])
 
 
+def test_nothing_ran(tmp: Path) -> None:
+    print("\na status that means nothing ran")
+    prior = {"status": "draft", "pr": 412, "pr_url": "u", "attempts": 2, "duration_s": 8123,
+             "turns": 900, "cost_usd": 41.5, "session_id": "abc", "stream": "/x.jsonl",
+             "record": "/r.md", "slot": "slot-1", "flags": ["an old flag"]}
+    got = pool.nothing_ran(prior, "worktree-blocked", "a previous run left it unreleased")
+    check("the previous attempt's runtime is not carried onto this one",
+          "duration_s" not in got and "turns" not in got and "cost_usd" not in got, str(got))
+    check("nor its session, stream or record",
+          not any(k in got for k in ("session_id", "stream", "record", "slot")), str(got))
+    check("nor its flags", got["flags"] == [], str(got))
+    # The ledger's memory of a PR is what stops a second run opening a second PR for one issue.
+    check("the PR the ticket already has IS kept", got["pr"] == 412 and got["pr_url"] == "u", str(got))
+    check("and the attempt count is neither spent nor lost", got["attempts"] == 2, str(got))
+    check("the status and reason are this attempt's",
+          got["status"] == "worktree-blocked" and got["note"].startswith("a previous run"), str(got))
+
+
 def test_shared_maven_repo(tmp: Path) -> None:
     print("\nresolving the repository the slot heads read through")
     override = tmp / "elsewhere"
@@ -681,7 +699,7 @@ def main() -> int:
                          ("gate-state", test_gate_state_locking), ("waves", test_waves),
                          ("parallel run", test_parallel_run), ("say", test_say_is_thread_safe),
                          ("records", test_record_attribution), ("crash", test_crash_does_not_clobber),
-                         ("maven tail", test_shared_maven_repo), ("db ports", test_db_port_hosts),
+                         ("nothing ran", test_nothing_ran), ("maven tail", test_shared_maven_repo), ("db ports", test_db_port_hosts),
                          ("skill commands", test_skills_commands_run),
                          ("driver gate-state", test_pool_gate_state_via_helper),
                          ("save_json temp", test_save_json_temp_is_private)]:

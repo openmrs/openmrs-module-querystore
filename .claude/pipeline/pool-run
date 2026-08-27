@@ -821,7 +821,7 @@ def make_worktree(repo: Path, slug: str, ticket: str, base: str, say) -> tuple[P
         if wt.exists():
             dropped = drop_worktree(repo, wt, say, locked=True)
             if not dropped.startswith("removed"):
-                return None, f"a previous run left work in {wt}: {dropped}"
+                return None, f"a previous run left it unreleased — {dropped}"
         wt.parent.mkdir(parents=True, exist_ok=True)
         made = sh(["git", "-C", str(repo), "worktree", "add", "--detach", str(wt), base])
         if made.returncode != 0:
@@ -1111,6 +1111,21 @@ def write_ledger(ledger: dict, key: str, entry: dict) -> None:
         save_json(LEDGER, ledger)
 
 
+# What describes ONE run rather than the ticket. A status that means "nothing ran" has to clear
+# these, or the entry says `last_run: now` beside the previous attempt's duration, turns and cost —
+# and the summary then prints a runtime for an attempt that never started. `pr` is deliberately not
+# in the list: the ledger's memory of a previous attempt's PR is what stops a second run opening a
+# second PR for one issue.
+RUN_FIELDS = ("duration_s", "turns", "cost_usd", "session_id", "stream", "killed_for",
+              "slot", "standalone", "worktree", "worktree_release", "record")
+
+
+def nothing_ran(entry: dict, status: str, note: str) -> dict:
+    kept = {k: v for k, v in entry.items() if k not in RUN_FIELDS}
+    return {**kept, "status": status, "note": note[:500], "flags": [],
+            "last_run": datetime.now(timezone.utc).isoformat()}
+
+
 def record_says_aborted(record: Path | None) -> bool:
     """Whether the run reported one of `resolve-ticket`'s abort conditions.
 
@@ -1217,11 +1232,9 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
     wt, why = make_worktree(repo, job["slug"], ticket, bases[str(repo)], say)
     if wt is None:
         say(f"skipped: {why}")
-        say(f"{PREPARE_REMEDY['worktree-blocked']}")
+        say(PREPARE_REMEDY["worktree-blocked"])
         # Nothing ran, so there is nothing to have failed twice: no attempt is spent.
-        write_ledger(ledger, key, {**ledger.get(key, {}), "status": "worktree-blocked",
-                                   "note": why[:500],
-                                   "last_run": datetime.now(timezone.utc).isoformat()})
+        write_ledger(ledger, key, nothing_ran(ledger.get(key, {}), "worktree-blocked", why))
         return "worktree-blocked"
     say(f"worktree: {wt.name} @ {bases[str(repo)][:8]}  ·  {slot.describe()}")
     cleared = clear_gate_state(wt, say)
@@ -1780,9 +1793,7 @@ def main() -> int:
                 say(f"    {PREPARE_REMEDY[failure]}")
                 for blocked in [j for j in queue if str(j["path"]) == repo]:
                     write_ledger(ledger, blocked["key"],
-                                 {**ledger.get(blocked["key"], {}), "status": failure,
-                                  "note": where[:500],
-                                  "last_run": datetime.now(timezone.utc).isoformat()})
+                                 nothing_ran(ledger.get(blocked["key"], {}), failure, where))
                 continue
             bases[repo] = sha
             say(f"  {job['slug']}: {where}")
