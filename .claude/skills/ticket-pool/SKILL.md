@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.13.0
+version: 0.14.0
 ---
 
 # Ticket pool — the loop that learns
@@ -240,6 +240,15 @@ by cores:
   "standalones": ["/path/to/standalone-a", "/path/to/standalone-b"]
 }
 ```
+
+**Pick a slot by its openmrs-core version, never by the directory name.** A reference-application
+bundle called `…-3.7.1` says nothing about the platform inside it, and the platform is what decides
+whether the module loads: `require_version` is a FLOOR, so a core below it means the module simply
+does not start and every verification on that slot fails for a reason about the instance rather than
+the code. Measured the hard way — a slot configured by matching `…-3.7.1` carried core 2.8.8 against
+a module needing 2.9.0-SNAPSHOT, while a `…-3.7.0` directory carried the right core. The preflight
+now reads both numbers (the module's from its pom, the instance's from
+`tomcat/webapps/openmrs/WEB-INF/lib/openmrs-api-*.jar`) and refuses the mismatch.
 
 **One OpenMRS standalone per worker, each on its own tomcat AND database port.** The verifier restarts
 a real instance and drives a real query against it, so two runs sharing one would restart it underneath

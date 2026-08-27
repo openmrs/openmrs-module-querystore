@@ -1205,6 +1205,63 @@ def test_same_ticket_number_in_two_repos(tmp: Path) -> None:
         pool.release_claim(cfg, "o/a#266", say)
 
 
+def test_platform_floor(tmp: Path) -> None:
+    """A standalone older than the module requires cannot run the module at all.
+
+    `require_version` is a FLOOR, so the module refuses to start and the verifier then reports a
+    failure about the INSTANCE every round until the cap. This was configured wrongly by hand — a
+    slot picked by matching the reference-application version in the directory name (`…-3.7.1`),
+    which is not the criterion: that instance carried openmrs-core 2.8.8 while the module needed
+    2.9.0-SNAPSHOT, and a `…-3.7.0` directory carried the right core.
+    """
+    print("\nthe platform floor")
+    check("a qualifier does not change the number",
+          pool.version_tuple("2.9.0-SNAPSHOT") == (2, 9, 0), str(pool.version_tuple("2.9.0-SNAPSHOT")))
+    check("a release satisfies a SNAPSHOT floor of the same number",
+          not (pool.version_tuple("2.9.0") < pool.version_tuple("2.9.0-SNAPSHOT")))
+    check("and an older core does not",
+          pool.version_tuple("2.8.8") < pool.version_tuple("2.9.0-SNAPSHOT"))
+    check("a two-part version still parses", pool.version_tuple("2.9") == (2, 9, 0))
+    check("junk parses to nothing rather than to zero", pool.version_tuple("beta") is None)
+
+    repo = tmp / "module"
+    repo.mkdir()
+    (repo / "pom.xml").write_text(
+        "<project><properties><openmrsPlatformVersion>2.9.0-SNAPSHOT"
+        "</openmrsPlatformVersion></properties></project>")
+    check("the requirement is read from the pom, where the number actually lives",
+          pool.required_platform(repo) == "2.9.0-SNAPSHOT", str(pool.required_platform(repo)))
+
+    def instance(name: str, core: str | None) -> Path:
+        d = standalone_fixture(tmp, name, 8081 + len(name), 3316 + len(name))
+        if core:
+            lib = d / "tomcat/webapps/openmrs/WEB-INF/lib"
+            lib.mkdir(parents=True)
+            (lib / f"openmrs-api-{core}.jar").write_text("")
+        return d
+
+    good, old, unknown = instance("ok", "2.9.0-SNAPSHOT"), instance("old", "2.8.8"), instance("na", None)
+    base = {"repos": {"o/m": str(repo)}}
+    check("a matching core is no problem",
+          pool.platform_problems(pool.merge(pool.DEFAULTS, {**base, "parallel": {
+              "standalones": [str(good)]}}), 1) == [])
+    problems = pool.platform_problems(pool.merge(pool.DEFAULTS, {**base, "parallel": {
+        "standalones": [str(old)]}}), 1)
+    check("an older core is refused", len(problems) == 1, str(problems))
+    check("and the message names both versions and which slot",
+          "2.8.8" in problems[0] and "2.9.0-SNAPSHOT" in problems[0] and str(old) in problems[0],
+          problems[0])
+    check("a core that cannot be read is reported rather than assumed good",
+          len(pool.platform_problems(pool.merge(pool.DEFAULTS, {**base, "parallel": {
+              "standalones": [str(unknown)]}}), 1)) == 1)
+    check("only the standalones a run will actually use are checked",
+          pool.platform_problems(pool.merge(pool.DEFAULTS, {**base, "parallel": {
+              "standalones": [str(good), str(old)]}}), 1) == [])
+    check("a repo whose pom states no platform is skipped, not guessed at",
+          pool.platform_problems(pool.merge(pool.DEFAULTS, {
+              "repos": {"o/x": str(tmp)}, "parallel": {"standalones": [str(old)]}}), 1) == [])
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1222,7 +1279,8 @@ def main() -> int:
                          ("one command", test_work_one_command),
                          ("ctrl-c", test_ctrl_c_reaches_the_session),
                          ("collisions", test_double_claim_and_live_driver),
-                         ("two repos", test_same_ticket_number_in_two_repos)]:
+                         ("two repos", test_same_ticket_number_in_two_repos),
+                         ("platform floor", test_platform_floor)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

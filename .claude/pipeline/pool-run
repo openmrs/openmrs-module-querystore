@@ -389,6 +389,73 @@ def build_slots(cfg: dict, workers: int, root: Path | None = None) -> list[Slot]
     return slots
 
 
+def version_tuple(text: str) -> tuple[int, ...] | None:
+    """`2.9.0-SNAPSHOT` -> (2, 9, 0). Qualifiers are dropped, which is what the comparison needs.
+
+    OpenMRS reads `require_version` as a FLOOR, so a module wanting 2.9.0-SNAPSHOT runs on 2.9.0 and
+    on anything later. Comparing the numbers alone gets that right; comparing the strings does not.
+    """
+    m = re.match(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?", text.strip())
+    if not m:
+        return None
+    return tuple(int(g) if g else 0 for g in m.groups())
+
+
+def standalone_platform(home: Path) -> str | None:
+    """The openmrs-core version a standalone is running, read off the webapp it will actually load."""
+    lib = home / "tomcat/webapps/openmrs/WEB-INF/lib"
+    for jar in sorted(lib.glob("openmrs-api-*.jar")) if lib.is_dir() else []:
+        return jar.name[len("openmrs-api-"):-len(".jar")]
+    return None
+
+
+def required_platform(repo: Path) -> str | None:
+    """The platform a module targets, from its own pom. `config.xml` states the requirement as
+    `${openmrsPlatformVersion}`, so the pom is where the number actually lives."""
+    try:
+        m = re.search(r"<openmrsPlatformVersion>([^<]+)</openmrsPlatformVersion>",
+                      (repo / "pom.xml").read_text())
+    except OSError:
+        return None
+    return m.group(1).strip() if m else None
+
+
+def platform_problems(cfg: dict, workers: int) -> list[str]:
+    """A standalone whose core is older than the module requires cannot run the module at all.
+
+    Not a nicety: `require_version` is a FLOOR, so the module simply refuses to start there — and the
+    verifier then reports a failure that is about the instance rather than the code, every round,
+    until the cap. This is exactly the class of thing the pre-flight exists to catch before hours are
+    spent, and it is checked here because nothing else in the pipeline reads either version.
+
+    Found the hard way: a slot was configured by matching the REFERENCE APPLICATION version in the
+    directory name (`…-3.7.1`), which is not the criterion — that instance carried core 2.8.8 while
+    the module required 2.9.0-SNAPSHOT, and a `…-3.7.0` directory carried the right core.
+    """
+    homes = [Path(x).expanduser() for x in cfg["parallel"].get("standalones") or []][:workers]
+    if not homes:
+        return []
+    problems = []
+    for slug, path in cfg["repos"].items():
+        want = required_platform(Path(path).expanduser())
+        wanted = version_tuple(want) if want else None
+        if not wanted:
+            continue
+        for home in homes:
+            got = standalone_platform(home)
+            if not got:
+                problems.append(f"{home.name}: cannot read its openmrs-core version, so it cannot be "
+                                f"checked against {slug}'s required platform {want}")
+                continue
+            if (version_tuple(got) or ()) < wanted:
+                problems.append(
+                    f"{home} runs openmrs-core {got}, but {slug} requires {want} — the module will "
+                    f"not start there, so every verification on that slot fails for a reason that is "
+                    f"about the instance and not the code. Point that slot at an instance running "
+                    f"{want} or newer")
+    return problems
+
+
 def slot_problems(cfg: dict, workers: int) -> list[str]:
     """Fatal misconfigurations, reported at preflight rather than discovered by two verifiers.
 
@@ -773,6 +840,7 @@ def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True) -> li
 
     workers = max(1, int(cfg["parallel"]["max_workers"]))
     fatal += slot_problems(cfg, workers)
+    fatal += platform_problems(cfg, workers)
     # Each side refuses to start while the other is working, and the two checks are deliberately
     # separate: they are asked by different callers about different evidence.
     fatal += claim_problems(cfg) if driving else driver_problems()
