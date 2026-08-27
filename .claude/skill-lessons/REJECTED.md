@@ -725,3 +725,133 @@ hand", and the remedy was removing the keyword rather than rewording around it. 
   guard) is void twice over: the permission is now the owner's own, stated, and the guard it protected
   has been reversed. Carried forward unchanged by this pass's own block, which is how a closed count
   keeps reading as an open one.
+
+## 2026-08-27 (third window: 2 new records, #266 / PR 322 and #293 / PR 323) — two applied, both revised by the refuter, two killed, five parked; linter 10 files, 0 findings
+
+**APPLIED (revised) · pr-harden 0.12.5 and harden 0.20.0 — "Search for the claim's rarest single TOKEN,
+over the whole tree rather than over the docs."** Both homes of *Correcting a claim means finding every
+home of it* said to grep the claim's *distinctive phrasing*. #266:14: "the two-format claim about the
+groups file has N homes -> seven, found one per cycle, each hidden by a NEW mechanism: a data file
+rather than a doc; markdown emphasis splitting the phrase; a line break between quantifier and noun
+with wording matching no other home · cost: 3 harden cycles" — clause 2 on one record, and the
+refuter's own correction is why it is stated that way rather than as two: **the #293 corroboration
+offered for it does not hold.** #293:11 was quoted with an ellipsis removing "retired by this change",
+which reframes it from a correction that failed to find its homes into a claim the change made false,
+and #293:10 (asserted in four places before being measured) is harden:289's class, not this one. Two
+further objections shaped the wording. The submitted "**Every** survivor #266 paid for was a home a
+phrase grep **structurally cannot** hit" is false on the record's own evidence — a data file is
+reachable by a phrase grep, and what failed there was SCOPE — so the shipped text names the two failure
+kinds separately and attributes the third home to scope. And "name the three mechanisms" would ship a
+closed list against harden:197's own "treat no list of relocations as closed", so the shipped text ends
+"treat no list of those mechanisms as closed". The existing after-check ("then grep again for the
+phrasing you just wrote") is kept in both homes; the plan to "replace the method sentence" had not said
+it would be.
+
+**APPLIED (revised) · harden 0.20.0 — "And ask whether the thing you fixed has a SIBLING. The
+revert-check above cannot answer that."** Three records: #315:22 (a fail-open fixed in one script of a
+family, left in the member that was actually gated), #266:18 and :21 (a validity rule's detail
+corrected on one rule and not its sibling; a literal asserted at one of two call sites), #293:21 (a
+normal form compiled twice from one pattern, widening one making a name unfindable in the record that
+renders it). Readmitted from the 2026-08-26 parked entry at count 1, which is what Step 3 licenses.
+Three refuter corrections are in the shipped form. The submission counted "#266 ×2" toward the bar: the
+unit is RECORDS (skill-retro:63) and those two bullets are one lesson in one `[h1]` group, so the count
+is 3 records and not 4 sightings. As worded it reached **one of its three sightings** — "grep for a
+second definition" fits #293 and neither #266 bullet nor #315 — so the noun is widened to the family
+the records share (a second definition, a sibling rule, another call site, a sibling script). And Step
+4 subsumption was owed against harden:192, which already requires "checked by reverting it and
+confirming the failure": on #293 that check answers directly, since the record's own words are
+"reddened NOTHING" — so the rule now opens by saying what it adds, that a revert-check shows the suite
+observes a fix and says nothing about a second member. Landed in ONE home rather than two; pr-harden
+reaches it by the reference it already carries at :214-215.
+
+**KILLED · pr-harden step 6.2 + verify-frontend-change:29 — "the JDK rule names one direction and
+hardcodes 1.8".** Submitted on clause 3, that ":317-321 says 'Build under the JDK the pom targets' while
+prescribing `/usr/libexec/java_home -v 1.8`", with `openmrs-module-chartsearchai/pom.xml:34` =
+`<maven.compiler.target>11</maven.compiler.target>` as the contradiction. **Not clause 3:** read whole,
+the sentence states its own antecedent — "**a module on Java 1.8** fails its test gate under a newer
+default JDK" — so for the module it names the remedy agrees with the premise, and it never asserts what
+chartsearchai targets. The pom is a fact about a repository, and clause 3 is available precisely
+because "the contradiction is a fact about the document rather than an inference about the world"
+(skill-retro:66-68); incompleteness in one direction was already ruled not-clause-3 at :434-440 and
+:527-528. With clause 3 gone it is 1 record at #266:30's own "Cost: one repair attempt" — neither a
+round nor a cycle, so clause 2 (skill-retro:64-65) is unmet. The submission also carried a false claim,
+"Prunes the hardcoded `1.8` in both files (it is the false half)": 1.8 is a real target and is the
+antecedent the `MockitoException … Java: 21` signature attaches to, so deleting it is separately blocked
+by skill-retro:82-84. And the mechanism was already present at the second site — verify-frontend-change:29
+*already* says to read `<java.version>` (or `maven.compiler.target`) from the pom, and the run
+mis-repaired anyway. **REOPEN ON:** a second record, or one where the wrong-direction repair costs a
+round or cycle. If readmitted, the edit to test is the second signature (`invalid target release: <n>`
+under too OLD a JDK) added BESIDE 1.8, never a prune of it.
+
+**KILLED · skill-retro Step 6 — "the `*gate*.sh` glob over-reaches its own obligation".** Raised by this
+retro from its own Step 6 sweep: two files match `*gate*.sh` and have no hook copy by design
+(`harden/gate-test.sh`, `pr-harden/gate-test.sh` — test harnesses taking `HOOK="${1:?hook path}"`,
+installed nowhere). Facts verified independently by the refuter and all correct. **Killed twice over.**
+The claim merged two separate bullets: the glob sits on :116-120, whose obligation is live-skill↔repo-skill
+mirroring, while the hook-copy obligation is :121-126 and does not use the glob at all — it says "each
+gate" and then defines it by the install line. Read whole, nothing is unsatisfiable; same reading
+failure as :429-433, where a clause-3 claim died because the quotation had removed the deciding clause.
+And the narrower wording would LOSE real coverage, on the record: scoping :118 to installed gates drops
+both harnesses from the repo mirror, and they have drifted — `2026-08-27-retro-authored-hook-regression.md`:40
+("`pr-harden/gate-test.sh`'s new header was a verbatim copy of harden's, quoting harden's hook and
+harden's numbers (8/3 where its own measurement is 8/4)") and :77. Also below the bar on provenance:
+0 records / 1 measurement, and :534-537 has already ruled that "not proposable on a measurement alone".
+The submission's "reports two missing hook copies on every pass, forever" is itself unchecked — no retro
+block on record reports that finding. **Residue, banked without an edit:** :118's glob and :121's "each
+gate" use the same word for two different sets.
+
+**No change · #266's "`gate-state pr-set` dropped `declined` and `reviewed_shas`".** Retracted by the
+record's own appended correction (#266:55-58): `pr-set` uses `setdefault` for both and cannot drop them;
+a foreign `gate-state --cwd <path> clear` removed them. Confirmed in `~/.claude/pipeline/gate-state`
+(:209, :250-256). The skill's claim that a transition write "cannot drop them" stands. Recording it
+because the run record states the defect in its own "Where a skill blocked" section, where a retro
+reading only that section would have changed a correct rule.
+
+## Running parked counts (superseding the previous block where they differ)
+- **Cross-session interference on a live run's shared state: 2 records, and no single remedy at 2.**
+  #266:55-64 (a foreign `gate-state --cwd <path> clear` emptied a live run's ledger, and the same
+  session released its slot lease, deleting the chartsearchai worktree twice mid-verifier; the run
+  recovered it with `git worktree add --detach` at the same sha and re-attached the branch) and
+  `2026-08-27-retro-authored-hook-regression.md`:87-95 (a second session mirroring `~/.claude` into
+  querystore, so a commit ABSORBED its `KEY="$PWD"` → `KEY="$(pwd -P)"` edit and described it in this
+  session's voice; ":92 the `cmp` checks passed because they compare live against repo AFTER the copy").
+  Ruled TWO events, not one described twice: different repos, different shared surface, different harm
+  (destruction vs misattribution). Independence is weaker than two records usually implies — #266:51-52
+  names its interferer as "a concurrent Claude Code session working on the pipeline itself", possibly
+  the same actor. This entry supersedes that record's own "Count so far: **1 record**" (:99), so a third
+  sighting does not restart at 1. The two candidate remedies, each at 1: refuse to clear or release
+  another checkout's pipeline state without a liveness check; and, before mirroring `~/.claude` into the
+  repo, check whether another live `claude` process has written those files since you read them.
+- **No progress signal for parallel Phase 2 agents: 1 record** (#293 — "the agent output files stay at
+  201 bytes until the agent finishes, so size-idleness is not a usable progress signal. In-turn waiting
+  had to be blind `sleep` loops"). harden prescribes no size-idleness, so this is a GAP, not a
+  contradiction. REOPEN ON: a second record, or one where the blind waiting costs a cycle.
+- **`gate-state reviewed-sha` / `declined` reject `--only`: 1 record** (#293). ~0 cost, and the script is
+  right by construction — both write only the `pr` entry (`gate-state`:250-256, :244-248). Candidate
+  remedy is one line in the usage block saying they are pr-scoped. Not clause 3: the skill documents
+  `--only` for `await`/`clear-await` only (pr-harden:768-773, harden:217-221).
+- **A mutation surviving because the only covering case sits in a degenerate state: 1 record, 1 cycle**
+  (#266:16 — hardcoding four of the crossReactivity map's five keys left the suite green, because the
+  only case reading it drives the DISABLED state where all five equal the mutation). Possibly already
+  reached by harden's "Ask of any clean or zero result what its inputs could not have produced".
+- **harden Termination vs the claims-about-claims anti-pattern: not carried, and deliberately not
+  counted as a contradiction.** #293 states it as one ("The skill names that signature and tells you to
+  change tactics, but its termination rule still demands a cycle that changes nothing … took the
+  labelled override"). Reading recorded instead: :288's tactic is *delete*, and a deleted clause
+  generates no successor claim, so the recursion terminates — this is the shipped rule being violated,
+  not two rules conflicting. Filed under Prose-correction cycles.
+- **Prose-correction cycles: 9 records** — #266 adds "seven homes, found one per cycle" (:14) and #293
+  adds a claim asserted in four places before measurement (:10) plus a five-text measurement whose fifth
+  home surfaced a cycle later (:11). Remedy still killed; deletion-over-rewording is the shipped rule.
+- **A vacuously-true negative assertion: existing rule exercised and worked, nothing proposed.** #266:17
+  — `assertFalse(capture.describeAll().contains(...))` on a List was an exact-element match that can
+  never be true, green while the forbidden line was being logged; caught by the run's own mutation check
+  at cost 0, which is harden:192. Recorded so a later pass does not read it as a gap.
+- **The proposer not verifying its own citations: 7 cycles / 6 records** — unchanged by this pass at the
+  run level, but the RETRO added three of its own, all cut at the gate: an ellipsis that reframed
+  #293:11, "#266 ×2" counted as two records, and P4's merge of two bullets into one quotation.
+- **A retro submitting wording that breaks the counts/universals rule it enforces: 5 consecutive
+  retros.** This pass shipped "Every survivor … structurally cannot", "name the three mechanisms" and
+  "on every pass, forever"; the refuter cut all three. Still worth a rule only if one ever survives the
+  gate — the gate is still the mechanism.
+- Every other count in the previous block stands unchanged.

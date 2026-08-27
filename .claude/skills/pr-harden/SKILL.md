@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.12.4
+version: 0.12.5
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -522,11 +522,17 @@ When a finding is that some statement is false, the statement is rarely in one p
 loop's second run: a correction reached one of seven homes, then five of six, then five of six again —
 and once, both halves of a single paragraph disagreed with each other after one half was fixed.
 
-So a correction is not finished when the named site is fixed. **Grep the repository for the claim's
-distinctive phrasing and fix every hit**, including the ones a reviewer did not name; then grep again
-for the phrasing you just wrote, to see how many places now say it. Two homes are easy to forget: the
-project's own instruction file, which outranks the code and is the worst place for a half-true rule,
-and the **pull request description**, which no repo-wide grep will ever reach.
+So a correction is not finished when the named site is fixed. **Search for the claim's rarest single
+TOKEN, over the whole tree rather than over the docs**, and fix every hit, including the ones a
+reviewer did not name; then grep again for the phrasing you just wrote, to see how many places now say
+it. Searching the PHRASING is what leaves the last home standing, and it fails two different ways: a
+phrase the file's own formatting has split — markdown emphasis inside it, a line break falling between
+a quantifier and its noun — does not match what you typed, while a home that is a DATA file rather
+than a doc is missed by scope alone. Both were paid for on the #266 run, where the survivors were
+found a cycle apiece and each was hidden by a mechanism the one before it had not used; treat no list
+of those mechanisms as closed. Two homes are easy to forget: the project's own instruction file, which
+outranks the code and is the worst place for a half-true rule, and the **pull request description**,
+which no repo-wide grep will ever reach.
 
 And a positional cross-reference — "the bullet above", "the section below" — is a claim about layout
 that any insertion falsifies. On that same run, inserting a bullet silently re-pointed a neighbouring
