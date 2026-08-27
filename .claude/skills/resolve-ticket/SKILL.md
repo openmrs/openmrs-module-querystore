@@ -83,6 +83,29 @@ reason** — an abort that leaves `blocking > 0` behind wedges the next turn in 
 6-hour expiry. And never hand the termination decision back: "want me to continue?" ends the run with
 work owed while reading as deference. If a phase is owed, run it.
 
+## You may not be the only run on this machine
+
+`$CLAUDE_PIPELINE_SLOT` is set when the pool driver is working several tickets at once. If it is set,
+other `resolve-ticket` runs are in flight right now, and three things are yours alone while
+everything else is shared:
+
+| yours | given as | shared, and not yours to reclaim |
+|---|---|---|
+| the working tree | the cwd — a `git worktree`, not the operator's checkout | the repository's object store: fetch through it, never reset it |
+| the OpenMRS standalone | `$OPENMRS_STANDALONE_HOME` | every other standalone, and every port you were not given |
+| the maven repository | `$MAVEN_ARGS` — a per-run head over the shared repository behind it | that shared repository, which is read-only to you: your installs go to the head |
+
+`$MAVEN_ARGS` is read by `mvn` itself, so a plain `mvn -o clean install` already picks it up: do not
+strip it, do not add `-Dmaven.repo.local` of your own, and do not be surprised that
+`chartsearchai-api-1.0.0-SNAPSHOT.jar` installs somewhere under `~/.claude/pipeline/m2/`. That is the
+point — it is the jar `omod` unpacks over `omod/target/classes`, so two runs sharing it means one
+run's classes silently under the other's tests.
+
+The rule that follows from all of it: **repair what you were given, and report the rest.** A process
+holding a port you did not resolve, a `java` you cannot attribute, the shared inference server — a
+co-tenant may be mid-query against any of them. Killing by symptom is correct alone and destructive
+beside a sibling, and only this variable tells you which you are.
+
 ## Step 1 — Resolve the ticket, and read it
 
 Parse the argument:
@@ -108,10 +131,13 @@ is also condition 1.
 **Pre-flight the verifier here, not at the end.** This pipeline's terminal state is a PR marked ready,
 and `pr-harden` will not mark one ready that no verifier could run — so an unavailable standalone blocks
 the whole run's finish line, and finding that out in the last round wastes the chance to fix it. One
-command: confirm a standalone exists (a directory holding `openmrs-standalone.jar`) and read its
-`tomcatport` from `openmrs-runtime.properties`, which is **not always 8080**. **Do not check whether
-the port is free** — these are throwaway demo instances (owner's instruction, 2026-08-27), a busy
-port is the normal state, and the verifier simply takes and restarts whichever it needs. What would
+command: confirm a standalone exists (`$OPENMRS_STANDALONE_HOME` if it is set — the pool driver sets it
+whenever it has an instance to assign, and then it is an assignment rather than a hint — else a
+directory holding
+`openmrs-standalone.jar`) and read its `tomcatport` from `openmrs-runtime.properties`, which is **not
+always 8080**. **Do not check whether the port is free** — these are throwaway demo instances
+(owner's instruction, 2026-08-27), a busy port is the normal state, and the verifier simply takes and
+restarts the one it resolved. What would
 actually block the run is having no standalone on disk at all, or no LLM endpoint for a module that
 needs one. Say so NOW if either is missing, so the user can fix it while the work proceeds. Measured on this skill's fourth run: both standalones were held by
 pre-existing processes, discovered at round 2, and the run reached its final round unable to mark the
@@ -131,6 +157,15 @@ Now write the opening state entry: `phase: "building"`, `round: 1`, no `pr` yet.
 gate's pre-PR phase — it blocks the turn from ending and says so in the language of *this* skill's
 remaining steps, rather than telling you to spawn a reviewer for code that does not exist yet.
 `pr-harden` moves it to `init` when it takes over at Step 9. The run is now gated.
+
+```bash
+~/.claude/pipeline/gate-state --owner $PPID pr-set --ticket 315 --round 1 --phase building --blocking 0
+```
+
+`gate-state` is the only writer of either state file — it holds a lock across both and writes
+atomically, which an inline read-modify-write cannot, and under a parallel pool cannot safely be
+retyped: measured with 20 concurrent writers, the inline form kept 3 of 20 entries and raised nothing.
+`pr-harden`'s **State** section has the rest of the subcommands.
 
 ## Step 2 — Plan before code
 
@@ -320,8 +355,7 @@ body.
 this repo, not merely its `awaiting` list — so the next turn in this directory is ungated:
 
 ```bash
-python3 -c "import json,os,pathlib; p=pathlib.Path.home()/'.claude/pr-harden-state.json'; \
-s=json.loads(p.read_text()); s.pop(os.getcwd(), None); p.write_text(json.dumps(s, indent=2))"
+~/.claude/pipeline/gate-state clear --only pr
 ```
 
 Then report: the plan, every assumption taken, and what the gate checked and objected to. A
@@ -380,13 +414,21 @@ with context first, adversarial review without it second. Skipping this hands th
 a pile of nits and spends a whole round on them.
 
 **While harden runs, write its awaits to BOTH state files.** The gate armed at Step 1 is
-`pr-harden-gate.sh`, which reads `~/.claude/pr-harden-state.json`; harden's own await one-liner writes
-only `~/.claude/harden-state.json`. So a harden cycle blocked on its Phase 2 agents is invisible to the
+`pr-harden-gate.sh`, which reads `~/.claude/pr-harden-state.json`; harden's own awaits are written to
+`~/.claude/harden-state.json`. So a harden cycle blocked on its Phase 2 agents is invisible to the
 armed gate, which then refuses the yield the cycle needs in order to wait — the same shape #298
 measured in the un-nested case at "two ten-minute in-turn wait loops", and it fired again on the #302
-run with four agents live. Record the await in both files and clear it in both, **including at the end
-of this step and when a harden cycle dies or takes its labelled override** — a fresh await left in
-`pr-harden-state.json` licenses a real quit for up to the gate's hour-long TTL while Step 8 runs.
+run with four agents live. That is what `gate-state`'s default scope is for — **omit `--only` and one
+command writes both**, so the pair cannot come apart the way two commands could:
+
+```bash
+~/.claude/pipeline/gate-state --owner $PPID await "harden phase 2"
+~/.claude/pipeline/gate-state --owner $PPID clear-await
+```
+
+Clear it in both **at the end of this step, and when a harden cycle dies or takes its labelled
+override** — a fresh await left in `pr-harden-state.json` licenses a real quit for up to the gate's
+hour-long TTL while Step 8 runs.
 
 **Then confirm `harden` left its own state entry finished**, because two Stop gates are now live in
 this run and both must allow the turn to end. `~/.claude/harden-state.json` must say `edits: 0` for

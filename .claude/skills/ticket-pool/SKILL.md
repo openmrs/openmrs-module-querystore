@@ -1,8 +1,8 @@
 ---
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
-argument-hint: "[--once] [--limit N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.8.0
+argument-hint: "[--once] [--limit N] [--workers N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
+version: 0.9.0
 ---
 
 # Ticket pool — the loop that learns
@@ -81,6 +81,7 @@ conversation, use the read-only forms below and hand over the command for the re
 |---|---|
 | `~/.claude/pipeline/pool-run` | works the pool until it is empty, retroing when records allow |
 | `pool-run --once` / `--limit N` | one ticket / at most N |
+| `pool-run --workers 2` | work two tickets AT ONCE; see **Working several at once** |
 | `pool-run --ticket 310,297,266` | those tickets, **in that order**, labelled or not, past every skip |
 | `pool-run --dry-run` | preflight and print the queue; starts nothing |
 | `pool-run --status` | the ledger, and how many records the next retro is waiting for |
@@ -93,8 +94,10 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-watch 310 --results` | that ticket's session, tool results included |
 
 `~/.claude/pipeline/pool.json` holds the label, a repo→checkout map, the source repo the retro pushes
-to, the retro's record threshold and timeout, the per-ticket timeout, quiet window and attempt cap,
-and a `claude` block — `model`, `effort`, `max_budget_usd`, and `extra_args` passed through to every
+to, the retro's record threshold and timeout, the per-ticket timeout, quiet window and attempt cap, a
+`parallel` block (`max_workers`, the `standalones` that bound it, and `shared_m2` if your local maven
+repository is not `~/.m2/repository`), and a `claude` block — `model`, `effort`, `max_budget_usd`,
+`binary`, and `extra_args` passed through to every
 session. Logs, the ledger and the per-session streams are under `~/.claude/pipeline/`.
 
 ### Watching a session
@@ -138,8 +141,9 @@ one to decide about before the first long run rather than after it.
 
 ## What the driver decides, and what it must not
 
-It decides the queue, that the checkout is clean and on an up-to-date default branch before a ticket
-starts, when a silent session has passed the bound above, and **what the run's outcome was** — from
+It decides the queue, that each repository can be fetched and its default branch resolved before any
+ticket starts, that each ticket gets a worktree and a slot, when a silent session has passed the bound
+above, and **what the run's outcome was** — from
 `gh` and the gate state file, never from the session's closing prose. A session reporting a ready PR
 that does not exist is precisely the failure an outer loop is for.
 
@@ -149,7 +153,8 @@ cite; anything the runs need to do differently belongs in the skill text, put th
 
 ## The retro gate
 
-After each ticket, if at least `retro.min_records` run records are newer than
+After each wave — every ticket in it finished, nothing in flight — if at least `retro.min_records` run
+records are newer than
 `~/.claude/skill-lessons/LAST`, the driver runs `/skill-retro` in the source repo. The threshold
 defaults to 2 because `skill-retro`'s own anti-pattern says a single record cannot corroborate
 anything — below it, the driver says how many it is waiting for and moves on.
@@ -187,8 +192,9 @@ a deliberate hand-back from a crash, since both leave no PR, and it can only mak
 | `timeout` | the driver killed the session. The record says which bound it hit |
 | `no-pr` / `error` | it died before opening a PR, and its record did not report an abort |
 | `died-yielding` | it ended with a background agent still outstanding. Not its judgement: it yielded, and an unattended run has no next turn to yield into. Both gates refuse this now, so a fresh sighting means EITHER the marker never reached the gate (check `pipeline/unattended/` for a file whose pid was live) or the run stopped despite being told not to — a block is persuasion, not a lock, and the two have different fixes |
-| `dirty-skip` | the checkout had uncommitted work, so nothing was touched. Commit or stash it |
-| `checkout-blocked` | the checkout's default branch would not fast-forward, or is **ahead** of origin, so nothing was touched. Push, reset or reconcile it |
+| `worktree-blocked` | a previous run left uncommitted work in this ticket's worktree; nothing was touched. Read it, then `git worktree remove --force` that path |
+| `checkout-blocked` | the repository could not be fetched, or its default branch does not resolve on origin, so nothing was touched. Fix the remote or the clone |
+| `dirty-skip` | only in ledger entries written before worktrees: the shared checkout had uncommitted work. It can no longer happen — the driver does not touch your checkout |
 | `has-open-pr` | not this pipeline's job; `pr-harden` owns it |
 
 An abort is the skills working, not failing, and the conditions that reach this bucket are ones only a
@@ -200,20 +206,74 @@ the round cap and a declined blocking finding, normally leave a draft PR and lan
 Everything else is retried on a later invocation until `ticket.max_attempts`, after which a second
 identical failure is evidence about the skills rather than about the ticket.
 
-**A `dirty-skip` or `checkout-blocked` stalls the whole pool, not one ticket**, because every ticket for
-a repo shares its one checkout — so the pool's own worst case is a session killed mid-run, which leaves
-that checkout dirty and every remaining ticket skipped. Nothing is lost, and neither spends an attempt.
+**A `checkout-blocked` stalls every ticket for that repository**, because it means the driver could not
+fetch it or could not resolve its default branch on origin — there is no base to cut a worktree from.
+It costs no attempt: nothing ran.
 
-The checkout is prepared **before** each ticket and not after, so between batches it sits on the last
-ticket's branch. Three states are refused there rather than worked around, and the dirty check runs
-first, which is what makes the reset non-destructive: uncommitted work, a default branch that will not
-fast-forward, and one that is **ahead** of origin — that last because `--ff-only` reports "already up
-to date" for it, and a branch cut from an unpushed commit publishes that commit inside the ticket's PR.
+**A `worktree-blocked` costs one ticket and no others.** It means a previous run left uncommitted work
+in that ticket's worktree, and the driver will not delete a killed run's evidence to get past it. Read
+the directory it names, then `git worktree remove --force` it.
+
+*This section used to say that a dirty checkout stalled the whole pool*, and that a single uncommitted
+file in the operator's own tree skipped every remaining ticket. It is no longer true and the change is
+the point: the driver never checks out, resets or branches your checkout. It **fetches**, and cuts each
+ticket a `git worktree` under `~/.claude/pipeline/worktrees/` detached at `origin/<default>`. Your
+branch and your uncommitted work survive a pool run untouched, several tickets of one repository can be
+in flight at once, and the "ahead of origin" case this section used to have to detect cannot arise —
+no ticket branch is ever cut from local HEAD.
+
+A worktree is removed when its run leaves it clean, and kept when it does not. Nothing committed is
+ever at risk either way: removing a worktree does not delete the branch it was on.
+
+## Working several at once
+
+`parallel.max_workers` (or `--workers N`) is how many tickets run concurrently. It defaults to **1**,
+which is the behaviour that predates it, and it is bounded by hardware you have to supply rather than
+by cores:
+
+```json
+"parallel": {
+  "max_workers": 2,
+  "standalones": ["/path/to/standalone-a", "/path/to/standalone-b"]
+}
+```
+
+**One OpenMRS standalone per worker, each on its own tomcat AND database port.** The verifier restarts
+a real instance and drives a real query against it, so two runs sharing one would restart it underneath
+each other and each would grade the other's deploy. The preflight refuses a width it cannot resource:
+fewer standalones than workers, a directory with no `openmrs-standalone.jar`, or two that bind the same
+port. Check the ports before configuring — on this machine five of the eight standalones on disk share
+8081/3316, so "there are several standalones" is not the same claim as "several can run at once".
+
+Each worker also gets its own maven repository: installs go to a per-slot head under
+`~/.claude/pipeline/m2/`, reads fall through to the shared `~/.m2/repository` behind it, so builds stay
+offline and fast while the module's own jar stops being one file two runs overwrite. That needs Maven
+3.9 or newer and the preflight checks it. The tail is read from `parallel.shared_m2`, else from a
+`<localRepository>` in `~/.m2/settings.xml`, else the default — a tail pointing where maven is not
+looking is a tail with nothing in it, and every offline build then fails on its first dependency.
+
+Two at once is comfortable on a 10-core / 32GB machine: each slot costs a JVM, an embedded MariaDB and
+a maven build. Raise it only as far as you have standalones on distinct ports.
+
+**Tickets are worked in waves, not as a rolling pool**, and the retro is why. `skill-retro` rewrites the
+skills, and this pipeline's whole reason for existing is that a run started after it reads what it
+changed — which needs a moment when nothing is in flight. A rolling pool never has one; a wave boundary
+is one. It costs the width's slowest ticket, and it keeps the queue forecast meaningful: the marks say
+which WAVE a retro follows, not which ticket.
+
+Each run is told it has co-tenants through `$CLAUDE_PIPELINE_SLOT`, and the skills read it: with it set,
+a run repairs the standalone, worktree and maven repository it was given and reports everything else
+rather than killing by symptom. Without that scoping a verifier's ordinary "kill whatever holds the
+port" is a licence to stop a sibling's server mid-query.
 
 ## Anti-patterns
 
-- **Don't run two pools over one checkout.** The driver takes a lock for exactly this; a second
-  driver resetting the branch under a live run corrupts both.
+- **Don't run two pool DRIVERS.** The lock is one file for the whole machine, not one per checkout, and
+  that is deliberate: two drivers would each retro over the other's records and race the one ledger.
+  Several tickets at once is what `--workers` is for, inside one driver that can hold the wave barrier.
+- **Don't raise `--workers` past the standalones you actually have.** The preflight refuses it, and the
+  refusal is the feature: the alternative is two verifiers restarting one server and both reporting on
+  the other's deploy.
 - **Don't add instructions to the prompt** to work around something a run keeps getting wrong. That
   is a skill edit, and it goes through a retro so it is corroborated and refuted first.
 - **Don't clear a gate state entry by hand to unstick a queue.** The driver clears a leftover at the

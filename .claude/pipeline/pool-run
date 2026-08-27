@@ -37,6 +37,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import contextlib
 import json
 import os
@@ -57,6 +58,9 @@ PIPELINE = CLAUDE / "pipeline"
 LOGS = PIPELINE / "logs"
 LEDGER = PIPELINE / "ledger.json"
 LOCK = PIPELINE / "pool.lock"
+WORKTREES = PIPELINE / "worktrees"     # one per in-flight ticket; see `make_worktree`
+SLOT_M2 = PIPELINE / "m2"              # one maven repository head per slot; see `Slot`
+SHARED_M2 = HOME / ".m2/repository"
 LESSONS = CLAUDE / "skill-lessons"
 LAST = LESSONS / "LAST"
 PR_STATE = CLAUDE / "pr-harden-state.json"
@@ -78,13 +82,38 @@ DEFAULTS = {
     "source_repo": None,
     "retro": {"enabled": True, "min_records": 2, "timeout_seconds": 7200},
     "ticket": {"timeout_seconds": 28800, "max_attempts": 2, "quiet_seconds": 5400},
-    "claude": {"model": None, "effort": None, "max_budget_usd": None, "extra_args": []},
+    "claude": {"model": None, "effort": None, "max_budget_usd": None, "extra_args": [],
+               "binary": "claude"},
+    # `max_workers` is how many tickets run AT ONCE, and it is bounded by `standalones`, not by
+    # cores: the verifier restarts a real OpenMRS instance and drives a real query against it, so two
+    # runs sharing one instance would restart it underneath each other and each would grade the
+    # other's deploy. One standalone per worker, each with its own tomcat and database port. Default
+    # 1, which is exactly the behaviour that predates this.
+    "parallel": {"max_workers": 1, "standalones": [], "shared_m2": None},
 }
 
-# The session running right now, so a second interrupt can reach it. A first interrupt asks the
-# driver to stop after the current session — which is usually what you want, since a killed
-# resolve-ticket leaves a half-worked branch — and a second one means it now.
-CURRENT: dict = {"proc": None}
+# The sessions running right now, so a second interrupt can reach them. A first interrupt asks the
+# driver to stop after the current wave — which is usually what you want, since a killed
+# resolve-ticket leaves a half-worked branch — and a second one means it now. A SET, because with
+# several tickets in flight "the current session" is not one thing, and an interrupt that reached
+# only the most recently started one would leave the others running unattended with no driver.
+LIVE: set = set()
+LIVE_LOCK = threading.Lock()
+
+
+def live_add(proc) -> None:
+    with LIVE_LOCK:
+        LIVE.add(proc)
+
+
+def live_drop(proc) -> None:
+    with LIVE_LOCK:
+        LIVE.discard(proc)
+
+
+def live_procs() -> list:
+    with LIVE_LOCK:
+        return [p for p in LIVE if p.poll() is None]
 
 # Statuses that mean "do not queue this ticket again".
 DONE = {"ready"}
@@ -119,19 +148,37 @@ def hms(seconds: float) -> str:
 
 
 class Say:
-    """stdout for the operator, and a markdown transcript of the same for the log."""
+    """stdout for the operator, and a markdown transcript of the same for the log.
+
+    Serialised, because with several tickets in flight this has concurrent callers: the whole
+    append-and-rewrite is one critical section, or two workers read the same `self.lines`, each
+    appends its own line, and the second rewrite drops the first — losing operator output in exactly
+    the run where there is most of it to read.
+
+    `for_ticket` is how a worker writes: every line it produces is tagged with the ticket that
+    produced it. Untagged interleaved output from N runs is not a log, it is noise.
+    """
 
     def __init__(self, path: Path):
         self.path = path
         self.lines: list[str] = []
+        self.lock = threading.Lock()
+        path.parent.mkdir(parents=True, exist_ok=True)
 
     def __call__(self, line: str = "") -> None:
-        print(line, flush=True)
-        self.lines.append(line)
-        try:
-            self.path.write_text("\n".join(self.lines) + "\n")
-        except OSError:
-            pass
+        with self.lock:
+            print(line, flush=True)
+            self.lines.append(line)
+            try:
+                self.path.write_text("\n".join(self.lines) + "\n")
+            except OSError:
+                pass
+
+    def for_ticket(self, tag: str):
+        """A `Say` for one worker: same sink, every line labelled with whose it is."""
+        def tagged(line: str = "") -> None:
+            self(f"{tag} {line}" if line else tag)
+        return tagged
 
 
 def sh(args: list[str], cwd: Path | None = None, timeout: int = 300) -> subprocess.CompletedProcess:
@@ -184,7 +231,10 @@ def take_lock(say: Say) -> bool:
                 alive = False
         if alive:
             say(f"another pool-run holds the lock (pid {pid}, since {holder.get('started')}).")
-            say("Two drivers in one checkout would corrupt each other's branch state. Stopping.")
+            say("The lock is one per MACHINE, not one per checkout, and deliberately: two drivers "
+                "would each retro over the other's records and race the one ledger. Several tickets "
+                "at once is what --workers is for, inside one driver that can hold the wave barrier. "
+                "Stopping.")
             return False
         say(f"clearing a stale lock from pid {pid} (no such process).")
     save_json(LOCK, {"pid": os.getpid(), "started": datetime.now(timezone.utc).isoformat()})
@@ -206,6 +256,164 @@ def drop_lock() -> None:
         LOCK.unlink()
     except OSError:
         pass
+
+
+# ─────────────────────────────────────────────────────────────────── slots ──
+
+
+PORT_KEYS = ("tomcatport", "dbport")
+
+
+def standalone_ports(home: Path) -> dict[str, int | None]:
+    """The two ports a standalone binds, read from its own runtime properties.
+
+    Both matter and reading only the tomcat port is not enough: a standalone runs an embedded MariaDB
+    as well, and two instances agreeing on 3316 fail to start for a reason that looks nothing like a
+    port clash from the outside. Measured on this machine — five of the eight standalones on disk
+    share 8081/3316, so "there are several standalones" is not the same as "several can run at once".
+    """
+    props = home / "openmrs-runtime.properties"
+    ports: dict[str, int | None] = {"tomcatport": None, "dbport": None}
+    try:
+        text = props.read_text()
+    except OSError:
+        return ports
+    for line in text.splitlines():
+        if line.startswith("tomcatport="):
+            with contextlib.suppress(ValueError):
+                ports["tomcatport"] = int(line.split("=", 1)[1].strip())
+        # Any host, not just 127.0.0.1: a standalone written with `localhost` published no database
+        # port at all under the narrower pattern, so two of them agreeing on 3316 passed the
+        # port-clash check and failed at startup instead.
+        m = re.search(r"//[^/:@]+:(\d+)/", line)
+        if m and line.startswith("connection.url="):
+            ports["dbport"] = int(m.group(1))
+    return ports
+
+
+def shared_maven_repo(cfg: dict) -> Path:
+    """The repository the per-slot heads read THROUGH, which is not always `~/.m2/repository`.
+
+    A `<localRepository>` in `~/.m2/settings.xml` moves it, and a tail pointing at a directory maven
+    is not using is a tail with nothing in it — every offline build then fails on its first
+    dependency. Config wins, then settings.xml, then the default.
+    """
+    override = (cfg.get("parallel") or {}).get("shared_m2")
+    if override:
+        return Path(override).expanduser()
+    settings = HOME / ".m2/settings.xml"
+    try:
+        m = re.search(r"<localRepository>\s*([^<]+?)\s*</localRepository>", settings.read_text())
+    except OSError:
+        m = None
+    if m:
+        return Path(os.path.expandvars(m.group(1).replace("${user.home}", str(HOME)))).expanduser()
+    return SHARED_M2
+
+
+class Slot:
+    """The exclusive resources one concurrent run gets, and how they reach its session.
+
+    Three things are shared by default and each is a way for two runs to corrupt each other:
+
+      * the OpenMRS standalone — one per slot, handed over as `$OPENMRS_STANDALONE_HOME`, which is
+        already the first thing the verifier resolves. Without this two verifiers restart one server
+        under each other and both grade the wrong deploy.
+      * the local maven repository — SPLIT, not replaced: installs go to this slot's own head and
+        every read falls through to the shared `~/.m2/repository` behind it, so builds stay offline
+        and fast while `chartsearchai-api-1.0.0-SNAPSHOT.jar` stops being one file two runs
+        overwrite. That jar is exactly the one `omod` unpacks over `omod/target/classes`, so sharing
+        it means run A's classes silently under run B's tests.
+      * the working tree — a git worktree per ticket, which is `work_ticket`'s job rather than this
+        one's, since it is per ticket and the slot is per worker.
+
+    `CLAUDE_PIPELINE_SLOT` is the session's own notice that it has co-tenants: the skills read it and
+    stop doing the things that are correct alone and destructive beside a sibling — killing whatever
+    holds a port, taking whichever standalone is idle, restarting the shared inference server.
+    """
+
+    def __init__(self, name: str, standalone: Path | None, m2: Path, tail: Path | None = None):
+        self.name = name
+        self.standalone = standalone
+        self.m2 = m2
+        self.tail = tail or SHARED_M2
+        ports = standalone_ports(standalone) if standalone else {}
+        self.tomcatport = ports.get("tomcatport")
+        self.dbport = ports.get("dbport")
+
+    def env(self) -> dict[str, str]:
+        self.m2.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ)
+        env["MAVEN_ARGS"] = (f"-Dmaven.repo.local={self.m2} "
+                             f"-Dmaven.repo.local.tail={self.tail}")
+        env["CLAUDE_PIPELINE_SLOT"] = self.name
+        if self.standalone:
+            env["OPENMRS_STANDALONE_HOME"] = str(self.standalone)
+        return env
+
+    def describe(self) -> str:
+        if not self.standalone:
+            return f"{self.name}: no standalone assigned (single-worker run)"
+        # parent/name, not name: the instances are commonly several copies of one release, so the
+        # basename alone prints two identical-looking slots and the log stops saying which is which.
+        where = f"{self.standalone.parent.name}/{self.standalone.name}"
+        return (f"{self.name}: {where} "
+                f"(tomcat {self.tomcatport}, db {self.dbport}) · m2 {self.m2.name}")
+
+
+def build_slots(cfg: dict, workers: int, root: Path | None = None) -> list[Slot]:
+    """One slot per worker. Standalones are taken in configured order, so a slot keeps its instance
+    across waves — which keeps its database warm and makes a run's log say which server it used."""
+    root = root or SLOT_M2
+    tail = shared_maven_repo(cfg)
+    homes = [Path(x).expanduser() for x in cfg["parallel"].get("standalones") or []]
+    slots = []
+    for i in range(workers):
+        name = f"slot-{i + 1}"
+        slots.append(Slot(name, homes[i] if i < len(homes) else None, root / name, tail))
+    return slots
+
+
+def slot_problems(cfg: dict, workers: int) -> list[str]:
+    """Fatal misconfigurations, reported at preflight rather than discovered by two verifiers.
+
+    A single worker needs no standalone CONFIGURED: that is the behaviour that predates slots, it has
+    no co-tenant to collide with, and the verifier's own `$OPENMRS_STANDALONE_HOME`-else-search still
+    applies. But one that IS configured is still checked, at any width — handing a session an
+    `$OPENMRS_STANDALONE_HOME` that does not exist fails later and further away than here.
+
+    Ports are checked per port and not as a pair. Two instances agreeing on tomcat 8081 cannot run at
+    once whatever their database ports are, and a pair key quietly passes exactly that case.
+    """
+    homes = [Path(x).expanduser() for x in cfg["parallel"].get("standalones") or []]
+    problems = []
+    if workers > 1 and len(homes) < workers:
+        problems.append(
+            f"{workers} workers but {len(homes)} standalone(s) configured — set "
+            f"parallel.standalones to {workers} instances, or lower parallel.max_workers. Two runs "
+            "sharing one standalone restart it underneath each other")
+    used = homes[:workers]
+    seen: dict[tuple[str, int], str] = {}
+    for home in used:
+        if not (home / "openmrs-standalone.jar").is_file():
+            problems.append(f"{home} holds no openmrs-standalone.jar")
+            continue
+        ports = standalone_ports(home)
+        if not ports["tomcatport"]:
+            problems.append(f"{home} has no tomcatport in openmrs-runtime.properties")
+        if workers <= 1:
+            continue
+        for which in PORT_KEYS:
+            port = ports[which]
+            if port is None:
+                continue
+            if (which, port) in seen:
+                problems.append(
+                    f"{home.name} and {Path(seen[(which, port)]).name} both bind {which} {port} — "
+                    "they cannot run at the same time. Give one of them a different port in its "
+                    "openmrs-runtime.properties")
+            seen[(which, port)] = str(home)
+    return problems
 
 
 # ────────────────────────────────────────────────────────────── preflight ──
@@ -294,6 +502,28 @@ def preflight(cfg: dict, say: Say, want_label: bool) -> list[str]:
 
     for problem in parity_problems(cfg):
         say(f"  ! {problem}")
+
+    workers = max(1, int(cfg["parallel"]["max_workers"]))
+    fatal += slot_problems(cfg, workers)
+    if workers > 1:
+        # The per-slot maven repository is a SPLIT repository, which Maven only understands from
+        # 3.9. Under an older one `maven.repo.local.tail` is ignored, the head repository is empty,
+        # and an offline build fails on the first dependency — so this is fatal rather than a
+        # warning, and it is checked here rather than discovered by the first `mvn -o` of a run.
+        got = sh(["mvn", "-v"])
+        m = re.search(r"Apache Maven (\d+)\.(\d+)", got.stdout)
+        if not m:
+            fatal.append("could not read the maven version, and a parallel run needs >= 3.9 for "
+                         "the per-slot split local repository")
+        elif (int(m.group(1)), int(m.group(2))) < (3, 9):
+            fatal.append(f"maven {m.group(1)}.{m.group(2)} is too old for a parallel run: the "
+                         "per-slot `maven.repo.local.tail` needs >= 3.9. Without it the workers "
+                         "share ~/.m2 and overwrite each other's module jars")
+        tail = shared_maven_repo(cfg)
+        if not tail.is_dir():
+            fatal.append(f"{tail} does not exist, so there is nothing for the per-slot repositories "
+                         "to read through. Set parallel.shared_m2 if your local repository is "
+                         "somewhere else")
 
     if not cfg["repos"]:
         fatal.append("no repos configured in pool.json")
@@ -506,64 +736,134 @@ def build_queue(cfg: dict, ledger: dict, say: Say, named: list[str] | None) -> l
 # ───────────────────────────────────────────────────────── checkout prep ──
 
 
-# What an operator has to DO about a checkout this driver would not start on. Two, because the
-# remedies differ and naming the wrong one is worse than naming none: uncommitted work is committed or
-# stashed, a default branch that will not fast-forward is reconciled, and telling someone to stash a
-# diverged `main` sends them at the wrong thing entirely.
+# What an operator has to DO about a repository this driver would not start on. The list is shorter
+# than it was, and deliberately: the driver no longer checks out, resets or branches the operator's
+# own checkout, so "uncommitted work in it" and "its default branch is ahead of origin" stopped being
+# reasons to skip anything. It fetches, and it cuts each ticket a worktree from `origin/<default>`.
+# That removed the pool's own worst case — one dirty checkout skipping every remaining ticket.
 PREPARE_REMEDY = {
-    "dirty-skip": "Nothing was touched. Commit or stash that change in the checkout, then re-run.",
-    "checkout-blocked": "Nothing was touched. Push, reset or reconcile that checkout's default branch "
-                        "so it matches origin (the line above says which), then re-run.",
+    "checkout-blocked": "Nothing was touched. The repository could not be fetched or its default "
+                        "branch could not be resolved on origin (the line above says which); fix "
+                        "that, then re-run.",
+    "worktree-blocked": "Nothing was touched. A previous run left uncommitted work in that worktree. "
+                        "Read it, then `git worktree remove --force <path>` to release the ticket.",
 }
 
 
-def prepare_checkout(path: Path, say: Say) -> tuple[str | None, str]:
-    """`(None, where)` when the checkout is ready, else `(ledger status, why)`.
+def prepare_repo(path: Path, say) -> tuple[str | None, str, str]:
+    """`(None, where, base sha)` when the repository can be worked, else `(status, why, "")`.
 
-    The dirty check runs FIRST, and that ordering is what makes this non-destructive: nothing here
-    switches a branch or discards anything until it knows the tree is clean. `--ff-only` rather than a
-    pull for the same reason — a diverged local branch is refused, never merged over.
+    It returns the sha it resolved rather than leaving the caller to resolve it again. Two
+    resolutions of "what are we cutting from" is two answers waiting to differ, and the second one
+    would be the one every worktree actually used.
+
+    This used to be `prepare_checkout`, and it used to CHECK OUT: it refused a dirty tree, switched
+    to the default branch and fast-forwarded it, so every ticket for a repo took turns in one working
+    tree and a single uncommitted file stalled the whole pool. Tickets now get a worktree each, cut
+    straight from `origin/<default>`, so none of the local state matters and none of it is touched.
+    What is left is the one thing that does matter: can we fetch, and does the remote branch resolve.
+
+    Cutting from the REMOTE ref rather than local HEAD also settles the "ahead of origin" case this
+    function used to have to detect. A local unpushed commit can no longer end up inside a ticket's
+    PR, because no ticket branch is ever cut from local HEAD.
     """
-    dirty = sh(["git", "-C", str(path), "status", "--porcelain"]).stdout.strip()
-    if dirty:
-        return "dirty-skip", "uncommitted changes in the checkout:\n" + dirty[:800]
-    sh(["git", "-C", str(path), "fetch", "origin", "--prune"], timeout=600)
+    fetched = sh(["git", "-C", str(path), "fetch", "origin", "--prune"], timeout=600)
+    if fetched.returncode != 0:
+        return "checkout-blocked", f"could not fetch origin: {fetched.stderr.strip()[:300]}", ""
     branch = default_branch(path)
-    co = sh(["git", "-C", str(path), "checkout", branch])
-    if co.returncode != 0:
-        return "checkout-blocked", f"could not check out {branch}: {co.stderr.strip()[:300]}"
-    ff = sh(["git", "-C", str(path), "merge", "--ff-only", f"origin/{branch}"])
-    if ff.returncode != 0:
-        return "checkout-blocked", (f"{branch} is not fast-forwardable to origin/{branch}: "
-                                   f"{ff.stderr.strip()[:300]}")
-    # `--ff-only` catches BEHIND and DIVERGED and says nothing about AHEAD: with an unpushed commit on
-    # the default branch, git answers "Already up to date" and exits 0. That state is not benign here —
-    # a branch cut from it carries the commit, and pushing the branch publishes it inside the ticket's
-    # PR, attributed to work nobody did for that ticket. Measured against a scratch clone one commit
-    # ahead: this function returned ready and named the local sha as the base. So compare HEAD against
-    # the remote ref rather than trusting the merge's exit code.
-    head_sha = sh(["git", "-C", str(path), "rev-parse", "HEAD"]).stdout.strip()
-    remote_sha = sh(["git", "-C", str(path), "rev-parse", f"origin/{branch}"]).stdout.strip()
-    if head_sha and remote_sha and head_sha != remote_sha:
-        ahead = sh(["git", "-C", str(path), "rev-list", "--count",
-                    f"origin/{branch}..HEAD"]).stdout.strip() or "?"
-        return "checkout-blocked", (
-            f"{branch} is {ahead} commit(s) ahead of origin/{branch}, so a branch cut from it would "
-            f"carry them into the ticket's PR")
-    head = sh(["git", "-C", str(path), "rev-parse", "--short", "HEAD"]).stdout.strip()
-    return None, f"{branch} @ {head}"
+    sha = remote_head(path)
+    if not sha:
+        return "checkout-blocked", f"origin/{branch} does not resolve in {path}", ""
+    return None, f"origin/{branch} @ {sha[:8]}", sha
 
 
-def clear_gate_state(path: Path, say: Say) -> list[str]:
-    """A crashed run leaves an entry that blocks turns in this checkout for up to 6 hours.
+def remote_head(path: Path) -> str:
+    """The sha every worktree for this repo is cut from, for this invocation."""
+    return sh(["git", "-C", str(path), "rev-parse",
+               f"origin/{default_branch(path)}"]).stdout.strip()
+
+
+# `git worktree add` and `remove` both write `.git/worktrees`, and several workers reach them at
+# once. Git takes its own locks per worktree, not over the registration as a whole, so this is ours.
+WORKTREE_LOCK = threading.Lock()
+
+
+def worktree_path(slug: str, ticket: str) -> Path:
+    return WORKTREES / f"{slug.replace('/', '-')}-{ticket.lstrip('#')}"
+
+
+def make_worktree(repo: Path, slug: str, ticket: str, base: str, say) -> tuple[Path | None, str]:
+    """One ticket, one working tree, detached at the remote head.
+
+    DETACHED and not on a branch, because the skill cuts its own branch as its first act and git
+    refuses to check out one branch in two worktrees — so starting detached is what lets two tickets
+    of one repository be in flight at all.
+
+    An existing directory here is a previous run's leftover. If it is clean it is removed and
+    recreated, since nothing is in it to lose; if it holds uncommitted work the ticket is REFUSED and
+    the path is named, because deleting a killed run's evidence to get past it is the one thing this
+    driver must not do quietly. That refusal now costs one ticket rather than the whole pool.
+    """
+    with WORKTREE_LOCK:
+        sh(["git", "-C", str(repo), "worktree", "prune"])
+        wt = worktree_path(slug, ticket)
+        if wt.exists():
+            dropped = drop_worktree(repo, wt, say, locked=True)
+            if not dropped.startswith("removed"):
+                return None, f"a previous run left work in {wt}: {dropped}"
+        wt.parent.mkdir(parents=True, exist_ok=True)
+        made = sh(["git", "-C", str(repo), "worktree", "add", "--detach", str(wt), base])
+        if made.returncode != 0:
+            return None, f"could not create a worktree at {wt}: {made.stderr.strip()[:300]}"
+        return wt, f"{wt} @ {base[:8]}"
+
+
+def drop_worktree(repo: Path, wt: Path, say, force: bool = False, locked: bool = False) -> str:
+    """Release a worktree, unless it still holds work nobody has seen.
+
+    Committed work is never at risk here — removing a worktree does not delete the branch it was on,
+    and the ticket's branch lives in the shared repository — so the only thing a removal can lose is
+    an UNCOMMITTED change, which is exactly what this checks for. A run that pushed its PR leaves a
+    clean tree and its directory goes; a run killed mid-edit keeps its directory and says so.
+    """
+    def release() -> str:
+        if not force:
+            dirty = sh(["git", "-C", str(wt), "status", "--porcelain"]).stdout.strip()
+            if dirty:
+                n = len(dirty.splitlines())
+                return f"kept: {n} uncommitted change(s) in {wt}"
+        gone = sh(["git", "-C", str(repo), "worktree", "remove", "--force", str(wt)])
+        if gone.returncode != 0 and wt.exists():
+            shutil.rmtree(wt, ignore_errors=True)
+            sh(["git", "-C", str(repo), "worktree", "prune"])
+        return f"removed {wt}"
+
+    if locked:
+        return release()
+    with WORKTREE_LOCK:
+        return release()
+
+
+def tenant_key(path: Path) -> str:
+    """The key both Stop hooks use for a working tree: its PHYSICAL path.
+
+    The hooks resolve with `pwd -P` and `gate-state` with `realpath`, so anything here that keys on a
+    logical path writes an entry the gate cannot find — and "no entry" is the gate's fail-OPEN case.
+    """
+    return os.path.realpath(path)
+
+
+def clear_gate_state(path: Path, say) -> list[str]:
+    """A crashed run leaves an entry that blocks turns in this working tree for up to 6 hours.
 
     The next run writes its own entry at its Step 1, so removing a leftover is not a loophole — but
     it IS evidence about the run that left it, so it is reported rather than quietly dropped.
     """
     cleared = []
+    key = tenant_key(path)
     for state in (PR_STATE, HARDEN_STATE):
         data = load_json(state, {})
-        entry = data.pop(str(path), None)
+        entry = data.pop(key, None)
         if entry is not None:
             cleared.append(
                 f"{state.name}: phase={entry.get('phase')} blocking={entry.get('blocking')} "
@@ -576,29 +876,34 @@ def clear_gate_state(path: Path, say: Say) -> list[str]:
 
 
 def read_gate_state(path: Path) -> dict:
-    return load_json(PR_STATE, {}).get(str(path), {})
+    return load_json(PR_STATE, {}).get(tenant_key(path), {})
 
 
 UNATTENDED_DIR = PIPELINE / "unattended"
 
 
 def unattended_marker_path(path: Path) -> Path:
-    return UNATTENDED_DIR / (str(path).replace("/", "_").lstrip("_") + ".json")
+    return UNATTENDED_DIR / (tenant_key(path).replace("/", "_").lstrip("_") + ".json")
 
 
 @contextlib.contextmanager
 def unattended_marker(path: Path):
-    """Tell the Stop-hook gate that this checkout is being driven with no human on the other end.
+    """Tell the Stop-hook gate that this working tree is being driven with no human on the other end.
 
     The gate cannot read this off the state ENTRY, because the skill rewrites that entry as its own
     Step 1 and would drop any field we seeded there — silently, and fail-open straight back into the
     defect this marker exists to close. So it is a file, and it carries our pid: a driver killed with
     SIGKILL leaves the marker behind, and a stale marker whose owner is gone must not make an
-    interactive session in this checkout unattended.
+    interactive session in this tree unattended.
+
+    With several tickets in flight there is one marker per worktree and they all carry the SAME pid,
+    the driver's. That is correct: the hook asks whether the marker's pid is an ANCESTOR of the
+    session asking, and the driver is the ancestor of all of them, so each session is unattended in
+    its own tree and none of them is foreign to another's.
     """
     UNATTENDED_DIR.mkdir(parents=True, exist_ok=True)
     marker = unattended_marker_path(path)
-    marker.write_text(json.dumps({"pid": os.getpid(), "cwd": str(path), "since": now()}))
+    marker.write_text(json.dumps({"pid": os.getpid(), "cwd": tenant_key(path), "since": now()}))
     try:
         yield marker
     finally:
@@ -612,8 +917,12 @@ class Session:
     """One headless `claude -p` run, streamed to a .jsonl and watched for death."""
 
     def __init__(self, prompt: str, cwd: Path, cfg: dict, log_stem: Path, timeout: int,
-                 quiet: int, say: Say):
+                 quiet: int, say, env: dict | None = None):
         self.prompt, self.cwd, self.cfg = prompt, cwd, cfg
+        # The slot's environment, or this process's. Everything a run must not share with a sibling
+        # travels here rather than in the prompt: the skills read it, and a pipeline instruction
+        # bolted onto the prompt would be governance no retro can see.
+        self.env = env or dict(os.environ)
         self.jsonl = log_stem.with_suffix(".jsonl")
         self.err = log_stem.with_suffix(".err")
         self.timeout, self.quiet, self.say = timeout, quiet, say
@@ -625,7 +934,8 @@ class Session:
 
     def argv(self) -> list[str]:
         c = self.cfg["claude"]
-        argv = ["claude", "-p", self.prompt, "--output-format", "stream-json", "--verbose",
+        argv = [c.get("binary") or "claude",
+                "-p", self.prompt, "--output-format", "stream-json", "--verbose",
                 "--dangerously-skip-permissions", "--session-id", self.session_id]
         if c.get("model"):
             argv += ["--model", c["model"]]
@@ -641,10 +951,10 @@ class Session:
         with open(self.jsonl, "w") as out, open(self.err, "w") as errf:
             proc = subprocess.Popen(
                 self.argv(), cwd=str(self.cwd), stdout=subprocess.PIPE, stderr=errf,
-                text=True, bufsize=1, start_new_session=True,
+                text=True, bufsize=1, start_new_session=True, env=self.env,
             )
             last_line = [now()]
-            CURRENT["proc"] = proc
+            live_add(proc)
 
             def kill(why: str) -> None:
                 self.killed_for = why
@@ -675,7 +985,7 @@ class Session:
                     self.say(f"    … {hms(now() - started)} · {self.turns} turns"
                              + (f" · last: {self.last_tool}" if self.last_tool else ""))
             code = proc.wait()
-            CURRENT["proc"] = None
+            live_drop(proc)
 
         return {"exit": code, "seconds": now() - started, "session_id": self.session_id,
                 "killed_for": self.killed_for, "turns": self.turns, "jsonl": str(self.jsonl),
@@ -713,11 +1023,44 @@ def lesson_files() -> dict[Path, float]:
     return {p: p.stat().st_mtime for p in LESSONS.glob("*.md") if p.name != "REJECTED.md"}
 
 
-def record_written(before: dict[Path, float]) -> Path | None:
-    """The newest record file this run created or appended to, if any."""
+def record_written(before: dict[Path, float], ticket: str | None = None,
+                   others: set[str] | None = None) -> Path | None:
+    """The record file this run created or appended to, if any.
+
+    The `ticket` and `others` arguments are what make this safe with several runs in flight. A
+    snapshot taken before run A starts cannot contain a record run B writes WHILE A is running, so
+    the naive "newest fresh file" answer hands A a record B wrote — and that record is then quoted in
+    A's ledger entry, appended to with A's driver capture, and read by the retro as evidence about
+    the wrong ticket. Nothing errors; the evidence is just wrong.
+
+    So: the skills name a record `<date>-<repo>-<ticket>.md`, and a fresh file carrying THIS ticket's
+    number is taken first. Failing that — a run may name a record for the lesson rather than the
+    ticket — a fresh file is accepted only if it does not carry a CONCURRENT ticket's number, which
+    is the case where attributing it here would be attributing it away from its owner.
+    """
     after = lesson_files()
     fresh = [p for p, m in after.items() if before.get(p) != m]
+    if not fresh:
+        return None
+    if ticket:
+        num = ticket.lstrip("#")
+        mine = [p for p in fresh if re.search(rf"[-_]{re.escape(num)}(-driver)?$", p.stem)]
+        if mine:
+            return sorted(mine, key=lambda p: after[p])[-1]
+    for num in sorted(others or ()):
+        fresh = [p for p in fresh
+                 if not re.search(rf"[-_]{re.escape(num)}(-driver)?$", p.stem)]
     return sorted(fresh, key=lambda p: after[p])[-1] if fresh else None
+
+
+# The ledger is one dict and one file, mutated by every worker. Read-modify-write it under this.
+LEDGER_LOCK = threading.Lock()
+
+
+def write_ledger(ledger: dict, key: str, entry: dict) -> None:
+    with LEDGER_LOCK:
+        ledger[key] = entry
+        save_json(LEDGER, ledger)
 
 
 def record_says_aborted(record: Path | None) -> bool:
@@ -738,7 +1081,7 @@ def record_says_aborted(record: Path | None) -> bool:
 
 
 def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, cleared: list[str],
-                   before: dict[Path, float], say: Say) -> Path | None:
+                   own: Path | None, say) -> Path | None:
     """Write, or append to, the run record — but only with what the driver itself observed.
 
     A run that dies cannot write its own record, and the death is exactly the kind of evidence a
@@ -747,7 +1090,8 @@ def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, 
     not have known (it was killed, it exited non-zero, it left the gate wedged) -> append that.
     Nothing to add -> touch nothing, because a record the run wrote is the better artifact.
     """
-    own = record_written(before)
+    # `own` is resolved by the caller, which is the only place that knows which fresh record files
+    # belong to THIS ticket rather than to a sibling running beside it.
     notes = []
     if run.get("killed_for"):
         notes.append(f"the driver killed this session: it {run['killed_for']}")
@@ -802,34 +1146,60 @@ def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, 
 # ───────────────────────────────────────────────────────────────── ticket ──
 
 
-def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
-    key, path, ticket = job["key"], job["path"], job["ticket"]
-    say("")
-    say(f"── {key}  {job['title'][:88]}")
+def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
+                bases: dict[str, str], siblings: set[str] | None = None) -> str:
+    """One ticket, in its own worktree, on its own slot. Safe to call from several threads.
 
-    failure, where = prepare_checkout(path, say)
-    if failure:
-        say(f"    skipped: {where.splitlines()[0]}")
-        say(f"    {PREPARE_REMEDY[failure]}")
-        # Neither failure spends an attempt: nothing ran, so there is nothing to have failed twice.
-        ledger[key] = {**ledger.get(key, {}), "status": failure, "note": where[:500],
-                       "last_run": datetime.now(timezone.utc).isoformat()}
-        save_json(LEDGER, ledger)
-        return failure
-    say(f"    checkout: {where}")
-    cleared = clear_gate_state(path, say)
+    Everything this touches is either per ticket (the worktree, the gate-state entry keyed on it, the
+    unattended marker, the log stem) or per slot (the standalone, the maven repository) or guarded
+    (the ledger, the operator's log). Nothing is shared and unguarded, which is the whole of what
+    "ready to run in parallel" means here.
+
+    `siblings` is every OTHER ticket in this wave — the whole wave, fixed before it starts, and not a
+    live view of what is running. The live view is wrong in one direction that matters: a sibling that
+    FINISHES first leaves the set, so the record it just wrote stops being excluded and the last run
+    standing can attribute it to itself. The wave is the right unit because a wave is a barrier: no
+    other ticket can have written a record while this one ran.
+    """
+    key, repo, ticket = job["key"], job["path"], job["ticket"]
+    say = say_all.for_ticket(f"[{key}]")
+    say_all("")
+    say_all(f"── {key}  {job['title'][:80]}   ({slot.name})")
+
+    wt, why = make_worktree(repo, job["slug"], ticket, bases[str(repo)], say)
+    if wt is None:
+        say(f"skipped: {why}")
+        say(f"{PREPARE_REMEDY['worktree-blocked']}")
+        # Nothing ran, so there is nothing to have failed twice: no attempt is spent.
+        write_ledger(ledger, key, {**ledger.get(key, {}), "status": "worktree-blocked",
+                                   "note": why[:500],
+                                   "last_run": datetime.now(timezone.utc).isoformat()})
+        return "worktree-blocked"
+    say(f"worktree: {wt.name} @ {bases[str(repo)][:8]}  ·  {slot.describe()}")
+    cleared = clear_gate_state(wt, say)
+    # Mark it running BEFORE the session starts. Two reasons, and the second is the load-bearing one:
+    # `--status` during a parallel run would otherwise show each in-flight ticket's PREVIOUS outcome,
+    # and the wave's crash handler needs to be able to tell "this worker died before recording
+    # anything" from "it recorded an outcome and then died" — without that it overwrites a complete
+    # entry, PR number and all, with a bare error.
+    write_ledger(ledger, key, {**ledger.get(key, {}), "status": "running", "slot": slot.name,
+                               "worktree": str(wt),
+                               "last_run": datetime.now(timezone.utc).isoformat()})
 
     before = lesson_files()
     started_at = now()
     stem = LOGS / f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}"
-    say(f"    running /resolve-ticket {job['url']}")
-    with unattended_marker(path):
-        run = Session(f"/resolve-ticket {job['url']}", path, cfg, stem,
-                      cfg["ticket"]["timeout_seconds"], cfg["ticket"]["quiet_seconds"], say).run()
+    say(f"running /resolve-ticket {job['url']}")
+    with unattended_marker(wt):
+        run = Session(f"/resolve-ticket {job['url']}", wt, cfg, stem,
+                      cfg["ticket"]["timeout_seconds"], cfg["ticket"]["quiet_seconds"], say,
+                      env=slot.env()).run()
 
     # Outcome from evidence, never from the session's own closing prose.
-    gate = read_gate_state(path)
+    gate = read_gate_state(wt)
     pr = pr_for_ticket(open_prs(job["slug"]), ticket, since=started_at)
+    own_record = record_written(before, ticket, siblings)
+
     if run.get("killed_for"):
         status = "timeout"
     elif pr and not pr.get("isDraft"):
@@ -840,7 +1210,7 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
         status = "error"
     else:
         status = "no-pr"
-    if status in ("no-pr", "error") and record_says_aborted(record_written(before)):
+    if status in ("no-pr", "error") and record_says_aborted(own_record):
         status = "aborted"
     # Ended with an agent still outstanding. Distinct from no-pr because the cause is known and is
     # not the run's judgement: it yielded, and an unattended run has no next turn to yield into.
@@ -854,12 +1224,24 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
     if status == "ready" and gate.get("override"):
         flags.append("the run took the labelled override — read its reason in the state entry")
 
-    record = capture_record(job["slug"], ticket, status, run, gate, cleared, before, say)
+    record = capture_record(job["slug"], ticket, status, run, gate, cleared, own_record, say)
     for f in flags:
-        say(f"    ! {f}")
+        say(f"! {f}")
+
+    # The worktree goes only if the run left nothing uncommitted in it. Its BRANCH survives either
+    # way — removing a worktree does not delete a ref — so what a removal can cost is only work the
+    # run never committed, and that is exactly what is worth keeping to look at.
+    released = drop_worktree(repo, wt, say)
+    if not released.startswith("removed"):
+        say(f"! {released}")
+        flags.append(released)
+    # The entry stays behind otherwise: this worktree is gone, and a leftover keyed on a path that no
+    # longer exists is 6 hours of a gate the next run in that path cannot see past.
+    if released.startswith("removed"):
+        clear_gate_state(wt, say)
 
     entry = ledger.get(key, {})
-    ledger[key] = {
+    write_ledger(ledger, key, {
         **entry,
         "status": status,
         "attempts": entry.get("attempts", 0) + 1,
@@ -872,10 +1254,13 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
         "session_id": run["session_id"],
         "stream": run["jsonl"],
         "record": str(record) if record else None,
+        "slot": slot.name,
+        "standalone": str(slot.standalone) if slot.standalone else None,
+        "worktree": str(wt),
+        "worktree_release": released,
         "flags": flags,
         "killed_for": run.get("killed_for"),
-    }
-    save_json(LEDGER, ledger)
+    })
 
     verdict = {"ready": f"PR #{pr['number'] if pr else '?'} marked ready for review",
                "draft": f"PR #{pr['number'] if pr else '?'} left as a DRAFT — the loop did not converge",
@@ -883,11 +1268,104 @@ def work_ticket(job: dict, cfg: dict, ledger: dict, say: Say) -> str:
                "error": "the session errored and opened no PR",
                "no-pr": "ended with no PR — read the run's own report in the stream",
                "died-yielding": ("ended while still awaiting a background agent — it yielded, and an "
-                                "unattended run has no next turn; see the gate entry's awaiting list"),
+                                 "unattended run has no next turn; see the gate entry's awaiting list"),
                "aborted": "the run aborted and handed back — it will not be retried"}[status]
-    say(f"    {status}: {verdict}  ({hms(run['seconds'])}, {run['turns']} turns"
+    say(f"{status}: {verdict}  ({hms(run['seconds'])}, {run['turns']} turns"
         + (f", ${run['cost_usd']:.2f}" if run.get("cost_usd") else "") + ")")
     return status
+
+
+# ─────────────────────────────────────────────────────────────── scheduling ──
+
+
+def plan_waves(queue: list, width: int) -> list[list]:
+    """The queue, cut into waves of at most `width` tickets.
+
+    WAVES rather than a rolling pool, and the reason is the retro. `skill-retro` rewrites the skills,
+    and the pipeline's guarantee is that a run started after it reads what it changed — which needs a
+    moment when nothing is in flight. A rolling pool never has one. A wave boundary is that moment,
+    bought at the cost of the width's slowest ticket, and it keeps the forecast honest: "the retro
+    fires after wave 2" is a statement an operator can act on before spending anything.
+    """
+    width = max(1, int(width))
+    return [queue[i:i + width] for i in range(0, len(queue), width)]
+
+
+def reap_running(ledger: dict, say: Say) -> list[str]:
+    """Close out tickets a previous driver left marked `running`.
+
+    Sound because of the lock: this runs having just taken the one machine-wide pool lock, so no
+    other driver is alive, so nothing can still be running. An entry that says otherwise belongs to a
+    driver that was killed outright — SIGKILL, a closed terminal, a reboot — which is precisely the
+    death that leaves no record of itself, and leaving it as `running` reports a live run forever.
+
+    It spends the attempt. A session did start and did cost real tokens, and a ticket whose driver
+    keeps being killed would otherwise be retried without limit.
+    """
+    reaped = []
+    for key, entry in sorted(ledger.items()):
+        if entry.get("status") != "running":
+            continue
+        entry["status"] = "error"
+        entry["attempts"] = entry.get("attempts", 0) + 1
+        entry["flags"] = list(entry.get("flags") or []) + [
+            "a previous pool driver was killed while this ticket was running; no outcome was ever "
+            "recorded for it"]
+        reaped.append(f"{key} (started {str(entry.get('last_run'))[:19]})")
+    if reaped:
+        save_json(LEDGER, ledger)
+        for line in reaped:
+            say(f"  ! a previous driver died mid-ticket: {line}")
+    return reaped
+
+
+def crash_entry(ledger: dict, key: str, exc: BaseException) -> str:
+    """Record a worker that raised, WITHOUT overwriting an outcome it had already recorded.
+
+    `work_ticket` writes its full entry — pr, session, cost, record — and only then formats the line
+    it prints. A handler that replaced the entry wholesale would throw all of that away for a crash
+    in the last few statements, and the ledger is the only place some of it exists. So the crash is
+    always appended as a flag, and the STATUS is forced to `error` only when the entry is still the
+    `running` sentinel, i.e. nothing was recorded for this attempt.
+    """
+    with LEDGER_LOCK:
+        entry = dict(ledger.get(key, {}))
+        entry["flags"] = list(entry.get("flags") or []) + [
+            f"the driver's own worker raised {type(exc).__name__}: {exc}"[:500]]
+        if entry.get("status") in (None, "running"):
+            entry["status"] = "error"
+            entry["attempts"] = entry.get("attempts", 0) + 1
+        entry["last_run"] = datetime.now(timezone.utc).isoformat()
+        ledger[key] = entry
+        save_json(LEDGER, ledger)
+        return entry["status"]
+
+
+def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: Say,
+             bases: dict[str, str]) -> list[tuple[str, str]]:
+    """One wave: every ticket in it at once, one slot each, and nothing returns until all have."""
+    members = {j["ticket"].lstrip("#") for j in jobs}
+
+    def others(job: dict) -> set[str]:
+        return members - {job["ticket"].lstrip("#")}
+
+    if len(jobs) == 1:
+        return [(jobs[0]["key"],
+                 work_ticket(jobs[0], slots[0], cfg, ledger, say, bases, others(jobs[0])))]
+    results: list[tuple[str, str]] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool_exec:
+        futures = {
+            pool_exec.submit(work_ticket, job, slots[i], cfg, ledger, say, bases, others(job)): job
+            for i, job in enumerate(jobs)
+        }
+        for future in concurrent.futures.as_completed(futures):
+            job = futures[future]
+            try:
+                results.append((job["key"], future.result()))
+            except Exception as exc:  # a worker that dies must not take the wave with it
+                say(f"[{job['key']}] ! the worker itself raised {type(exc).__name__}: {exc}")
+                results.append((job["key"], crash_entry(ledger, job["key"], exc)))
+    return results
 
 
 # ────────────────────────────────────────────────────────────────── retro ──
@@ -970,7 +1448,11 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
 
 
 def retro_forecast(count: int, pending: int, cfg: dict) -> dict[int, list[str]]:
-    """Which queue positions a retro will follow, and which run reads what it changed.
+    """Which WAVE a retro will follow, and which wave is the first to read what it changed.
+
+    Keyed on the wave and not the ticket, because that is where the retro can actually run: it
+    rewrites the skills, and a run already in flight has read the old ones. With one worker a wave is
+    one ticket and this is the mark it always printed.
 
     A FORECAST, not a fact. It assumes each run leaves exactly one record — which holds on the normal
     path, since the driver writes one when a run does not — and that each retro advances `LAST`. A
@@ -986,15 +1468,17 @@ def retro_forecast(count: int, pending: int, cfg: dict) -> dict[int, list[str]]:
     if not cfg["retro"]["enabled"]:
         return {}
     need = max(1, int(cfg["retro"]["min_records"]))
+    width = max(1, int(cfg["parallel"]["max_workers"]))
+    waves = plan_waves(list(range(count)), width)
     marks: dict[int, list[str]] = {}
     records = pending
-    for i in range(1, count + 1):
-        records += 1
+    for i, wave in enumerate(waves, 1):
+        records += len(wave)
         if records >= need:
-            marks.setdefault(i, []).append("retro fires after this")
+            marks.setdefault(i, []).append("retro fires after this wave")
             records = 0
-            if i < count:
-                marks.setdefault(i + 1, []).append("first run reading changed skills")
+            if i < len(waves):
+                marks.setdefault(i + 1, []).append("first wave reading changed skills")
     return marks
 
 
@@ -1103,6 +1587,9 @@ def main() -> int:
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--retro-now", action="store_true")
     ap.add_argument("--no-retro", action="store_true")
+    ap.add_argument("--workers", type=int, default=0,
+                    help="how many tickets to work AT ONCE; overrides parallel.max_workers. Bounded "
+                         "by parallel.standalones — one OpenMRS instance per worker")
     ap.add_argument("--init", action="store_true")
     ap.add_argument("--outcomes", action="store_true",
                     help="refresh what became of every PR the ledger knows about, and stop")
@@ -1111,6 +1598,8 @@ def main() -> int:
     cfg = merge(DEFAULTS, load_json(Path(args.config).expanduser(), {}))
     if args.no_retro:
         cfg["retro"]["enabled"] = False
+    if args.workers:
+        cfg["parallel"]["max_workers"] = args.workers
     LOGS.mkdir(parents=True, exist_ok=True)
     say = Say(LOGS / f"pool-{utc_stamp()}.md")
     say(f"# pool-run · {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
@@ -1152,18 +1641,20 @@ def main() -> int:
     stopping = {"flag": False}
 
     def on_signal(signum, _frame):
-        proc = CURRENT["proc"]
-        if stopping["flag"] and proc and proc.poll() is None:
-            say(f"\nsignal {signum} again — killing the session now. Its branch is left as it is; "
-                "the next run will refuse the checkout until you commit or clean it.")
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except OSError:
-                pass
+        procs = live_procs()
+        if stopping["flag"] and procs:
+            say(f"\nsignal {signum} again — killing {len(procs)} live session(s) now. Their "
+                "branches are left as they are, and any worktree still holding uncommitted work is "
+                "kept and named, for you to read before the ticket can be started again.")
+            for proc in procs:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except OSError:
+                    pass
             return
         stopping["flag"] = True
-        say(f"\ncaught signal {signum} — will stop after the current session finishes. "
-            "Signal again to kill it instead.")
+        say(f"\ncaught signal {signum} — will stop after the current wave finishes "
+            f"({len(procs)} session(s) in flight). Signal again to kill them instead.")
 
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
@@ -1174,6 +1665,8 @@ def main() -> int:
             return 0
 
         ledger = load_json(LEDGER, {})
+        if not args.dry_run:
+            reap_running(ledger, say)
         if not args.dry_run and any(e.get("pr") for e in ledger.values()):
             say("")
             say("outcomes of earlier tickets")
@@ -1190,10 +1683,15 @@ def main() -> int:
             queue = queue[: args.limit]
         if args.once:
             queue = queue[:1]
+        workers = max(1, int(cfg["parallel"]["max_workers"]))
+        waves = plan_waves(queue, workers)
         pending = len(un_retroed())
         marks = retro_forecast(len(queue), pending, cfg)
-        for n, job in enumerate(queue, 1):
-            say(f"  {job['key']}  {job['title'][:76]}")
+        for n, wave in enumerate(waves, 1):
+            prefix = f"  wave {n}: " if workers > 1 else "  "
+            for job in wave:
+                say(f"{prefix}{job['key']}  {job['title'][:70]}")
+                prefix = " " * len(prefix)
             for mark in marks.get(n, []):
                 say(f"        \u21b3 {mark}")
         if cfg["retro"]["enabled"]:
@@ -1204,20 +1702,59 @@ def main() -> int:
         if not queue:
             say(f"  (nothing to work — label an issue {cfg['label']!r} to queue it)")
             return 0
+        slots = build_slots(cfg, workers)
+        if workers > 1:
+            say("")
+            say(f"slots ({workers} tickets at once)")
+            for slot in slots:
+                say(f"  {slot.describe()}")
+
+        # Printed BEFORE the dry-run exits: which standalone a ticket will take is exactly the kind
+        # of thing worth previewing, and it is the setting most likely to be wrong the first time.
         if args.dry_run:
             say("")
             say("--dry-run: preflight passed and the queue is above. Nothing was started.")
             return 0
 
+        # One fetch per repository per invocation, here rather than per ticket: every worktree in
+        # every wave is cut from the sha resolved now, so the whole invocation works one base and
+        # concurrent workers never fetch into one object store at the same time.
+        bases: dict[str, str] = {}
+        seen: set[str] = set()
+        for job in queue:
+            repo = str(job["path"])
+            if repo in seen:
+                continue
+            seen.add(repo)
+            failure, where, sha = prepare_repo(job["path"], say)
+            if failure:
+                say(f"  x {job['slug']}: {where.splitlines()[0]}")
+                say(f"    {PREPARE_REMEDY[failure]}")
+                for blocked in [j for j in queue if str(j["path"]) == repo]:
+                    write_ledger(ledger, blocked["key"],
+                                 {**ledger.get(blocked["key"], {}), "status": failure,
+                                  "note": where[:500],
+                                  "last_run": datetime.now(timezone.utc).isoformat()})
+                continue
+            bases[repo] = sha
+            say(f"  {job['slug']}: {where}")
+        queue = [j for j in queue if str(j["path"]) in bases]
+        waves = plan_waves(queue, workers)
+        if not queue:
+            say("")
+            say("no repository in the queue could be prepared; nothing was started.")
+            return 1
+
         results = []
-        for i, job in enumerate(queue, 1):
+        for i, wave in enumerate(waves, 1):
             if stopping["flag"]:
                 say("stopping as asked; the rest of the queue is untouched.")
                 break
             say("")
-            say(f"[{i}/{len(queue)}]")
-            status = work_ticket(job, cfg, ledger, say)
-            results.append((job["key"], status))
+            say(f"[wave {i}/{len(waves)}]" if workers > 1 else f"[{i}/{len(waves)}]")
+            results += run_wave(wave, slots, cfg, ledger, say, bases)
+            # The barrier. `skill-retro` rewrites the skills that a run reads, so it runs only when
+            # nothing is in flight — which a wave boundary is and a rolling pool never is.
             if not stopping["flag"]:
                 run_retro(cfg, say, force=False)
 

@@ -214,16 +214,12 @@ the gate cannot tell your entry from one a co-located run left in the same direc
 **State** section carries that reasoning as well:
 
 ```bash
-# usage:  awaiting.py await "phase2 quality"   |   awaiting.py clear
-import json, os, sys, time, pathlib
-p = pathlib.Path.home()/".claude/harden-state.json"
-s = json.loads(p.read_text()); e = s[os.getcwd()]
-if sys.argv[1] == "await":
-    e.setdefault("awaiting", []).append({"agent": sys.argv[2], "since": int(time.time())})
-else:
-    e["awaiting"] = []
-e["ts"] = int(time.time()); p.write_text(json.dumps(s, indent=2))
+~/.claude/pipeline/gate-state --owner $PPID await "phase2 quality" --only harden
+~/.claude/pipeline/gate-state --owner $PPID clear-await --only harden
 ```
+
+Drop `--only harden` and it writes BOTH gates' entries, which is what a `/harden` cycle nested inside
+a `resolve-ticket` run needs — see that skill's Step 7.
 
 Record it immediately before spawning and **clear it on ANY terminal outcome** — a result, or the
 harness reporting the agent died, stalled or was killed. A stale entry lets the run stop for real,
@@ -231,24 +227,21 @@ which is what the gate exists to prevent, so the gate's allow is bounded by an h
 has not returned inside it is treated as dead rather than outstanding.
 
 ```bash
-python3 - "$PPID" <<'PY'
-import json, os, subprocess, sys, time, pathlib
-CYCLE, OVERRIDE = 4, False          # <- this cycle's number; True only with the labelled override
-OWNER = int(sys.argv[1])            # $PPID from a tool shell IS this session's claude process
-d = subprocess.run(["git","status","--porcelain"], capture_output=True, text=True).stdout.strip()
-n = len(d.splitlines()) + int(subprocess.run(
-    ["git","rev-list","--count","@{u}..HEAD"], capture_output=True, text=True).stdout.strip() or 0)
-p = pathlib.Path.home()/".claude/harden-state.json"
-s = json.loads(p.read_text()) if p.exists() else {}
-e = s.get(os.getcwd(), {})
-e.update({"cycle": CYCLE, "edits": n, "ts": int(time.time()), "override": OVERRIDE,
-           "owner": OWNER})
-e.setdefault("awaiting", [])        # written by the await one-liner above; never clobbered here
-s[os.getcwd()] = e
-p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(s, indent=2))
-print(f"cycle {CYCLE}: {n} edit(s) recorded")
-PY
+~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 4 --count-edits
 ```
+
+`--count-edits` is what counts them: uncommitted lines plus commits not yet pushed, both halves,
+because a cycle that commits its work has still changed something. It is counted THERE and not here
+so that the number the gate reads and the number you report cannot be two different numbers.
+
+**Why a helper rather than the inline `python3` this used to be.** The read, the change and the write
+are one critical section, and they were not: every writer read the whole file, changed its own entry
+and wrote the whole file back, with no lock. One session at a time made that merely fragile. Several
+make it lossy — and lossy in the direction that kills runs, because the entry that vanishes is
+somebody's `awaiting`, and their gate then sees a run that quit with agents outstanding. Measured with
+20 concurrent writers to 20 different working trees: the inline form kept **3 of the 20** entries,
+valid JSON throughout, nothing raised. `gate-state` holds an exclusive `flock` across both state files
+and writes atomically. Do not retype the mechanism; call the helper.
 
 `harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says `edits > 0`. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, non-numeric count), so it can only ever add a cycle you owed — it cannot wedge a session.
 

@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+"""gate-state — the one writer for the two Stop-gate state files.
+
+WHY THIS EXISTS AND WHY IT IS NOT A CONVENIENCE. `~/.claude/pr-harden-state.json` and
+`~/.claude/harden-state.json` are single files holding one entry per working tree. Every skill that
+wrote them did its own read-modify-write, retyped from the SKILL.md text. With one run on the machine
+that is merely fragile; with several it is lossy, and lossy in the direction that kills a run: two
+runs writing at once and the later read wins, so one run's `awaiting` disappears, its Stop gate then
+sees a run that has quit with findings outstanding, and an unattended session dies mid-phase with its
+work unpublished. Nothing errors when that happens — the file stays valid JSON, just missing an entry
+somebody needed. So the read and the write happen here, under an exclusive `flock` held across BOTH
+files, and no skill retypes the mechanism.
+
+The lock is held across both files on purpose, not per file: `await` has to land in both or the armed
+`pr-harden` gate refuses the very yield a `/harden` cycle needs in order to wait for its own agents
+(`resolve-ticket` Step 7). Two locks would make that pair interruptible, which is the same defect one
+level down.
+
+The KEY is the PHYSICAL path of the working directory — symlinks resolved — and both hooks resolve it
+the same way. That is not pedantry: the hooks used to key on the shell's `$PWD`, which is LOGICAL,
+while every writer used the resolved cwd, so on any path with a symlink in it (`/tmp` on macOS, a
+symlinked home) the writer and the reader used different keys and the gate found no entry — which is
+its fail-OPEN case, so a run with findings outstanding could stop and nothing would say why. One
+canonical key, resolved on both sides.
+
+Under the pool driver each ticket runs in its own git worktree, so the key is per-run and the file is
+genuinely multi-tenant; in an interactive session it is whatever checkout you are in, as before.
+
+Writes are atomic (temp file, then rename), so the hooks — which read without locking, because a Stop
+hook must never block on someone else's lock — always see one whole version or the other.
+
+  gate-state --owner $PPID pr-set --pr 93 --round 2 --phase reviewed --blocking 1 [--override]
+  gate-state --owner $PPID harden-set --cycle 3 --count-edits [--override]
+  gate-state await "review r3" [--only pr|harden|both]
+  gate-state clear-await [--only pr|harden|both]
+  gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"
+  gate-state reviewed-sha <sha>
+  gate-state show
+  gate-state clear [--only pr|harden|both]
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+CLAUDE = Path(os.environ.get("CLAUDE_HOME") or (Path.home() / ".claude"))
+FILES = {"pr": CLAUDE / "pr-harden-state.json", "harden": CLAUDE / "harden-state.json"}
+LOCK = CLAUDE / "gate-state.lock"
+
+PHASES = ("building", "init", "fixing", "reviewed")
+
+
+class Held:
+    """The exclusive lock, plus both files read inside it and written inside it."""
+
+    def __init__(self, key: str, write: bool = True):
+        self.key = key
+        self.write = write
+        self.fh = None
+        self.data: dict[str, dict] = {}
+
+    def __enter__(self) -> "Held":
+        CLAUDE.mkdir(parents=True, exist_ok=True)
+        self.fh = open(LOCK, "a+")
+        try:
+            fcntl.flock(self.fh, fcntl.LOCK_EX)
+        except OSError:
+            self.fh.close()          # never hold a descriptor for a lock we did not get
+            raise
+        for which, path in FILES.items():
+            try:
+                loaded = json.loads(path.read_text())
+                self.data[which] = loaded if isinstance(loaded, dict) else {}
+            except (OSError, ValueError):
+                # A missing file is the normal first write. A CORRUPT one is not something to
+                # silently rebuild from empty while holding everyone else's entries hostage, but it
+                # is also not something to die on inside a run — so it is reported and replaced,
+                # which is the same "report, never refuse" remedy the loader rules take.
+                if path.exists():
+                    print(f"gate-state: {path.name} was unreadable and has been replaced",
+                          file=sys.stderr)
+                self.data[which] = {}
+        return self
+
+    def entry(self, which: str) -> dict:
+        return self.data[which].setdefault(self.key, {})
+
+    def __exit__(self, exc_type, *_) -> None:
+        # A read-only command still takes the lock — it must not read a half-written file — but it
+        # must not rewrite one either, or `show` would reformat two files it was only asked to print.
+        #
+        # An exception on its way out writes NOTHING. A command that raised part-way through its
+        # changes has an entry in whatever half-applied state it reached, and persisting that is
+        # worse than persisting nothing: the caller sees a failure and would reasonably assume the
+        # file was untouched.
+        write = self.write and exc_type is None
+        for which, path in (FILES.items() if write else ()):
+            tmp = path.with_suffix(path.suffix + f".tmp{os.getpid()}")
+            tmp.write_text(json.dumps(self.data[which], indent=2, sort_keys=True) + "\n")
+            tmp.replace(path)
+        fcntl.flock(self.fh, fcntl.LOCK_UN)
+        self.fh.close()
+
+
+def stamp(entry: dict, owner: int | None = None) -> None:
+    entry["ts"] = int(time.time())
+    if owner:
+        entry["owner"] = owner
+
+
+def count_edits(cwd: str) -> int:
+    """What a `/harden` cycle changed: uncommitted lines plus commits not yet pushed.
+
+    Both halves, because a cycle that commits its work has still changed something and a gate reading
+    only `git status` would let it stop. Unpushed commits are counted against the upstream branch; a
+    branch with no upstream has nothing to compare against, so that half is zero rather than an error.
+    """
+    def out(*args: str) -> str:
+        try:
+            return subprocess.run(args, cwd=cwd, capture_output=True, text=True).stdout.strip()
+        except OSError:
+            return ""
+    dirty = len([l for l in out("git", "status", "--porcelain").splitlines() if l.strip()])
+    ahead = out("git", "rev-list", "--count", "@{u}..HEAD")
+    return dirty + (int(ahead) if ahead.isdigit() else 0)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--cwd", default=None, help="the tenant key; defaults to the working directory")
+    ap.add_argument("--owner", type=int, default=None,
+                    help="the pid of the claude session this entry belongs to. Pass $PPID from a "
+                         "tool shell — that IS this session's process, and both gates use it to tell "
+                         "your entry from one a co-located session left in the same directory. An "
+                         "UNSTAMPED entry keeps the behaviour that predates the check, so omitting "
+                         "it relaxes nothing; it just gives up the discrimination.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("pr-set", help="write the pr-harden gate entry")
+    p.add_argument("--pr", type=int)
+    p.add_argument("--ticket")
+    p.add_argument("--round", type=int, required=True)
+    p.add_argument("--phase", required=True, choices=PHASES)
+    p.add_argument("--blocking", type=int, required=True)
+    p.add_argument("--override", action="store_true")
+    p.add_argument("--reason", help="required by the skill when --override is taken")
+
+    h = sub.add_parser("harden-set", help="write the harden gate entry")
+    h.add_argument("--cycle", type=int, required=True)
+    h.add_argument("--edits", type=int, help="the edit count; or use --count-edits")
+    h.add_argument("--count-edits", action="store_true",
+                   help="count them here instead: uncommitted changes plus commits not yet pushed. "
+                        "One definition of 'what this cycle changed', so a retyped one cannot drift "
+                        "from the gate's reading of it.")
+    h.add_argument("--override", action="store_true")
+    h.add_argument("--reason")
+
+    a = sub.add_parser("await", help="record a background agent this run is waiting on")
+    a.add_argument("agent")
+    a.add_argument("--only", default="both", choices=("pr", "harden", "both"))
+
+    c = sub.add_parser("clear-await", help="clear the await the moment the result arrives")
+    c.add_argument("--only", default="both", choices=("pr", "harden", "both"))
+
+    d = sub.add_parser("declined", help="append a declined finding to this run's ledger")
+    d.add_argument("--round", type=int, required=True)
+    d.add_argument("--id", required=True)
+    d.add_argument("--finding", required=True)
+    d.add_argument("--reason", required=True)
+
+    r = sub.add_parser("reviewed-sha", help="record the sha a round reviewed")
+    r.add_argument("sha")
+
+    sub.add_parser("show", help="print both entries for this working tree")
+
+    x = sub.add_parser("clear", help="remove this working tree's entries")
+    x.add_argument("--only", default="both", choices=("pr", "harden", "both"))
+
+    args = ap.parse_args()
+    key = os.path.realpath(args.cwd) if args.cwd else os.path.realpath(os.getcwd())
+    which = {"pr": ["pr"], "harden": ["harden"], "both": ["pr", "harden"]}
+
+    with Held(key, write=args.cmd != "show") as held:
+        if args.cmd == "pr-set":
+            e = held.entry("pr")
+            e.update({"round": args.round, "phase": args.phase, "blocking": args.blocking,
+                      "override": bool(args.override)})
+            if args.pr is not None:
+                e["pr"] = args.pr
+            if args.ticket:
+                e["ticket"] = args.ticket
+            if args.reason:
+                e["override_reason"] = args.reason
+            e.setdefault("pr", None)
+            e.setdefault("awaiting", [])
+            e.setdefault("declined", [])
+            e.setdefault("reviewed_shas", [])
+            stamp(e, args.owner)
+            print(f"round {args.round}: phase={args.phase} blocking={args.blocking}"
+                  + (" OVERRIDE" if args.override else ""))
+
+        elif args.cmd == "harden-set":
+            if args.count_edits:
+                edits = count_edits(key)
+            elif args.edits is None:
+                ap.error("harden-set needs --edits N or --count-edits")
+            else:
+                edits = args.edits
+            e = held.entry("harden")
+            e.update({"cycle": args.cycle, "edits": edits, "override": bool(args.override)})
+            if args.reason:
+                e["override_reason"] = args.reason
+            e.setdefault("awaiting", [])
+            stamp(e, args.owner)
+            print(f"cycle {args.cycle}: edits={edits}" + (" OVERRIDE" if args.override else ""))
+
+        elif args.cmd == "await":
+            for w in which[args.only]:
+                e = held.entry(w)
+                e.setdefault("awaiting", []).append({"agent": args.agent, "since": int(time.time())})
+                stamp(e, args.owner)
+            print(f"awaiting: {args.agent} ({args.only})")
+
+        elif args.cmd == "clear-await":
+            for w in which[args.only]:
+                e = held.entry(w)
+                e["awaiting"] = []
+                stamp(e, args.owner)
+            print(f"awaiting cleared ({args.only})")
+
+        elif args.cmd == "declined":
+            e = held.entry("pr")
+            e.setdefault("declined", []).append(
+                {"round": args.round, "id": args.id, "finding": args.finding, "reason": args.reason})
+            stamp(e, args.owner)
+            print(f"declined {args.id} recorded")
+
+        elif args.cmd == "reviewed-sha":
+            e = held.entry("pr")
+            shas = e.setdefault("reviewed_shas", [])
+            if args.sha not in shas:
+                shas.append(args.sha)
+            stamp(e, args.owner)
+            print(f"reviewed {args.sha[:12]} ({len(shas)} round(s))")
+
+        elif args.cmd == "show":
+            for w in ("pr", "harden"):
+                print(f"{w}: " + json.dumps(held.data[w].get(key, {}), indent=2, sort_keys=True))
+
+        elif args.cmd == "clear":
+            for w in which[args.only]:
+                held.data[w].pop(key, None)
+            print(f"cleared {args.only} for {key}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

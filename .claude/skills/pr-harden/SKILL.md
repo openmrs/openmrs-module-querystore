@@ -308,6 +308,11 @@ Its procedure, and each step is where a specific mistake gets made:
    `openmrs-standalone.jar` — never a hardcoded path, since more than one standalone usually exists.
    Port from `<standalone>/openmrs-runtime.properties` (`tomcatport`), which is **not always 8080**.
    State all three before doing anything.
+
+   **When `$OPENMRS_STANDALONE_HOME` is set it is not a hint, it is the assignment.** Do not search,
+   do not compare it against what is running, do not pick a different one because this one looks
+   busy. The pool driver sets it per run precisely so that concurrent runs each have an instance of
+   their own, and a run that "helpfully" takes a quieter one takes a sibling's.
 2. **Build.** The round's root `mvn -o clean install` already produced
    `omod/target/<id>-<version>.omod`; note its timestamp. Build under the JDK the pom targets — a
    module on Java 1.8 fails its test gate under a newer default JDK, and the signature is a wall of
@@ -318,13 +323,18 @@ Its procedure, and each step is where a specific mistake gets made:
    **remove any other `.omod` of the same module** — the loader reads every `*.omod` and two versions
    of one module is a startup failure, not a warning. `*.omod.bak-*` files are not loaded and are
    harmless clutter, so deleting one never fixes a startup failure; find the rogue `.omod` instead.
-4. **Restart, and just take the standalone.** Modules load at startup, so a running instance picks
+4. **Restart, and just take YOUR standalone.** Modules load at startup, so a running instance picks
    up nothing until restarted. **These are throwaway demo instances** (owner's instruction,
-   2026-08-27): stop whichever one you need, running or not, without confirmation. Do not enumerate
-   candidates hunting for an idle port, do not stop to attribute pids, and never report
-   `unrepairable` because the only standalone was in use — "in use" is not a blocker here. Launch
-   from the standalone directory, backgrounded, teeing to a log you can tail:
+   2026-08-27): stop the one you resolved in step 1, running or not, without confirmation. Do not
+   enumerate candidates hunting for an idle port, do not stop to attribute pids, and never report
+   `unrepairable` because it was in use — "in use" is not a blocker here. Launch from the standalone
+   directory, backgrounded, teeing to a log you can tail:
    `java -jar openmrs-standalone.jar -commandline`.
+
+   **"Whichever one you need" means the one you were given.** That phrase used to be unqualified, and
+   unqualified it is a licence to stop a server another run is mid-query against — which became
+   reachable the moment the pool could work two tickets at once. The instance is yours; every other
+   one on the machine is somebody's.
 
    *This rule used to say the opposite* — never restart a server that was already running — written
    after a run nearly killed what it took to be the user's own session. That caution was wrong about
@@ -351,6 +361,17 @@ built from.
 **It owns the environment and repairs it.** Kill the orphaned `llama-server` holding the port, delete
 the stale omod and redeploy from the root install, set `log.level`, allow for cold load on the first
 query, wait out a slow boot. Do it without asking.
+
+**Unless `$CLAUDE_PIPELINE_SLOT` is set, in which case it owns ITS SHARE of the environment.** That
+variable is the pool driver telling this run it has co-tenants — other `resolve-ticket` runs working
+other tickets on this machine, right now. What stays yours: the standalone at
+`$OPENMRS_STANDALONE_HOME`, your own worktree, and the maven repository `$MAVEN_ARGS` points at. What
+stops being yours is everything the repairs above reach for by *symptom* rather than by name — a
+process holding a port you did not resolve, a `java` you cannot attribute, and above all the shared
+inference server, which every co-tenant is mid-query against and which nothing here restarts. Repair
+what you were given; report the rest as an environment finding and say a co-tenant may own it. The
+un-scoped version of this paragraph is correct alone and destructive beside a sibling, and the
+difference is not visible from inside a run — only the variable says which world you are in.
 
 **A repair may only touch the environment, never the artifact under test.** No redeploying the
 previous omod, no reverting the round's commit, no flipping a global property to route around the
@@ -571,9 +592,19 @@ run it.
 
 ## State
 
-`~/.claude/pr-harden-state.json`, keyed by the repo directory. **Under `$HOME`, never in the repo** —
-an in-repo file would show up in the `git status --porcelain` the round measures, and would be swept
-into the round's own commit.
+`~/.claude/pr-harden-state.json`, keyed by the WORKING TREE's physical path — `pwd -P`, symlinks
+resolved, which is what both hooks key on and what `gate-state` writes. Resolved on both sides or the
+two disagree wherever a path component is a symlink (`/tmp` on macOS, a symlinked home), and
+"no entry" is the gate's fail-OPEN case: a run with findings outstanding stops and nothing says why.
+Measured — the hook suites reported 4 of 12 and 3 of 11 cases silently inverted before both sides
+resolved.
+
+**Under `$HOME`, never in the repo** — an in-repo file would show up in the `git status --porcelain`
+the round measures, and would be swept into the round's own commit.
+
+Keying on the working tree is also what makes this multi-tenant. Under the pool driver each ticket is
+worked in its own `git worktree`, so two runs on one repository have two keys and two entries; only
+two sessions sharing ONE directory still share one entry, and `owner` is what tells those apart.
 
 ```json
 { "/abs/path/to/repo": {
@@ -709,36 +740,34 @@ explicitly.
 Write it at every transition:
 
 ```bash
-python3 - "$PPID" <<'PY'
-import json, os, sys, time, pathlib
-PR, ROUND, PHASE, BLOCKING, OVERRIDE = 93, 2, "reviewed", 1, False
-OWNER = int(sys.argv[1])            # $PPID from a tool shell IS this session's claude process
-p = pathlib.Path.home()/".claude/pr-harden-state.json"
-s = json.loads(p.read_text()) if p.exists() else {}
-e = s.get(os.getcwd(), {})
-e.update({"pr": PR, "round": ROUND, "phase": PHASE, "blocking": BLOCKING,
-          "ts": int(time.time()), "override": OVERRIDE, "owner": OWNER})
-e.setdefault("declined", []); e.setdefault("reviewed_shas", [])
-s[os.getcwd()] = e
-p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(s, indent=2))
-print(f"round {ROUND}: phase={PHASE} blocking={BLOCKING}")
-PY
+~/.claude/pipeline/gate-state --owner $PPID pr-set --pr 93 --round 2 --phase reviewed --blocking 1
 ```
+
+`--owner $PPID` is this session's own claude process, which is how both gates tell your entry from
+one a co-located session left in the same directory. Add `--override --reason "…"` only when taking
+the labelled override. `declined` and `reviewed_shas` have their own subcommands — `gate-state
+declined --round 1 --id r1-2 --finding "…" --reason "…"` and `gate-state reviewed-sha 3085ff02` — so a
+transition write never has to restate them and cannot drop them.
+
+**Why a helper rather than the inline `python3` this used to be.** The read, the change and the write
+are one critical section, and they were not: every writer read the whole file, changed its own entry
+and wrote the whole file back, unlocked. With one run on the machine that is fragile; with several it
+is lossy, and lossy in the direction that kills a run — the entry that disappears is somebody's
+`awaiting`, and their gate then sees a run that quit with agents outstanding. Measured with 20
+concurrent writers to 20 different working trees: the inline form kept **3 of the 20**, valid JSON
+throughout, nothing raised. `gate-state` holds an exclusive `flock` across both state files and
+writes atomically. Do not retype the mechanism.
 
 Recording and clearing an await is its own one-liner, kept apart from the transition write above so
 that a spawn never has to restate the phase:
 
 ```bash
-# usage:  awaiting.py await "review r3"   |   awaiting.py clear
-import json, os, sys, time, pathlib
-p = pathlib.Path.home()/".claude/pr-harden-state.json"
-s = json.loads(p.read_text()); e = s[os.getcwd()]
-if sys.argv[1] == "await":
-    e.setdefault("awaiting", []).append({"agent": sys.argv[2], "since": int(time.time())})
-else:
-    e["awaiting"] = []
-e["ts"] = int(time.time()); p.write_text(json.dumps(s, indent=2))
+~/.claude/pipeline/gate-state --owner $PPID await "review r3" --only pr
+~/.claude/pipeline/gate-state --owner $PPID clear-await --only pr
 ```
+
+Kept apart from the transition write above so that a spawn never has to restate the phase. Drop
+`--only pr` and it writes both gates at once, which is what a nested `/harden` cycle needs.
 
 When the run finishes — converged or overridden — the entry must say so (`blocking: 0`, or
 `override: true`). A stale `blocking > 0` left behind is what the 6-hour expiry exists to clean up

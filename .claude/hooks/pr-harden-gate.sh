@@ -131,9 +131,16 @@ owns_this_session() {
 # A DEAD owner allows, because no session can advance an entry whose writer is gone and blocking then
 # offers only the two damaging remedies above; `STALE_AFTER` used to reach that case six hours later.
 #
-# WHAT THIS DOES NOT FIX: the state is still keyed on `$PWD`, so two runs in one checkout share one
-# entry and the later writer wins — the loser's stamp is simply overwritten. This tells one session's
-# entry from another's; it does not give them one entry each.
+# WHAT THIS DOES AND DOES NOT FIX, restated after worktrees. The key is the WORKING TREE, not the
+# repository, and under the pool driver each ticket is worked in its own `git worktree` — so two runs
+# on one repository have two keys and two entries, which is what makes concurrent tickets safe. What
+# is NOT fixed is two sessions in the SAME directory, which is the interactive case: they key alike
+# and the later writer wins, the loser's stamp simply overwritten. `owner` tells one session's entry
+# from another's there; it does not give them one entry each.
+#
+# The key is also the PHYSICAL path now (`pwd -P`), matching `gate-state`, which writes it with
+# `realpath`. They used to disagree — logical here, resolved there — and a mismatch finds no entry,
+# which is this hook's fail-OPEN case.
 OWNER_PID=$(jq -r '.owner // empty' <<<"$ENTRY" 2>/dev/null) || OWNER_PID=""
 case "$OWNER_PID" in
   ''|*[!0-9]*) ;;   # unstamped: block per the contract, exactly as before this check existed

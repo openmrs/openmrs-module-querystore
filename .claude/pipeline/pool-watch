@@ -10,7 +10,7 @@ It only ever READS. It is safe to run against a session in flight, which is the 
 one that is still running.
 
 Usage:
-  pool-watch                 follow the newest session
+  pool-watch                 follow the live session; lists them if several are live
   pool-watch 310             follow the newest session for that ticket
   pool-watch <file.jsonl>    follow that file
   pool-watch --replay        print what is there and exit, do not follow
@@ -35,6 +35,16 @@ def sessions() -> list[Path]:
     return sorted(LOGS.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
 
 
+LIVE_WINDOW = 120   # a stream written to within this many seconds is treated as still running
+
+
+def live_sessions() -> list[Path]:
+    """The streams still being written to. With one worker there is at most one; with several there
+    is one per ticket in the wave, and "the newest" then silently picks whichever wrote last."""
+    now = time.time()
+    return [s for s in sessions() if now - s.stat().st_mtime < LIVE_WINDOW]
+
+
 def pick(target: str | None) -> Path | None:
     if target:
         p = Path(target)
@@ -42,6 +52,18 @@ def pick(target: str | None) -> Path | None:
             return p
         hits = [s for s in sessions() if target in s.name]
         return hits[0] if hits else None
+    live = live_sessions()
+    if len(live) > 1:
+        # Do not guess. Under a parallel pool "the newest session" is whichever of the wave last
+        # flushed a line, which changes second to second — following it would hop between tickets
+        # mid-render and read as one incoherent run.
+        print(f"{len(live)} sessions are live right now — name the one you want:\n")
+        for s in live:
+            print(f"  pool-watch {s.stem}")
+        print("\n(or `pool-watch <ticket>`; `--list` shows every session on disk)")
+        return None
+    if live:
+        return live[0]
     all_ = sessions()
     return all_[0] if all_ else None
 
