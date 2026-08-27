@@ -512,11 +512,53 @@ def active_leases() -> dict[str, dict]:
     live = {}
     for path in sorted(SLOTS.glob("*.json")) if SLOTS.is_dir() else []:
         lease = load_json(path, {})
-        if lease.get("worktree") and Path(lease["worktree"]).is_dir():
-            live[path.stem] = lease
-        else:
+        gone = not (lease.get("worktree") and Path(lease["worktree"]).is_dir())
+        # A `--work` lease also records the session it belongs to, and a session that is gone cannot
+        # give its slot back: SIGINT, SIGHUP and SIGTERM are absorbed so the release still runs, but
+        # SIGKILL cannot be, and one `kill -9` would otherwise cost that slot until somebody noticed.
+        # A `--claim` lease records no session — the operator starts `claude` afterwards, so there is
+        # no pid to record — and its liveness stays the worktree. Absence of a pid is not death.
+        pid = lease.get("session_pid")
+        if not gone and isinstance(pid, int):
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                gone = True
+        if gone:
             path.unlink(missing_ok=True)
+        else:
+            live[path.stem] = lease
     return live
+
+
+def all_leases() -> dict[str, dict]:
+    """Every lease file, with no liveness filtering at all.
+
+    `release_claim` reads THIS, not `active_leases`. The liveness filter exists so that another
+    process can discover an abandoned slot — but applied to an owner releasing its own lease it is
+    actively wrong: by then the session it names has exited, the filter calls the lease abandoned and
+    deletes it, and the release finds nothing to do, so the worktree is never cleaned up. Measured by
+    doing it: `no claim is held for o/r#266`, worktree left behind, on the normal exit path.
+    """
+    out = {}
+    for path in sorted(SLOTS.glob("*.json")) if SLOTS.is_dir() else []:
+        lease = load_json(path, {})
+        if lease:
+            out[path.stem] = lease
+    return out
+
+
+def record_session(slot: str, pid: int) -> None:
+    """Attach the session's pid to its lease, once the session exists.
+
+    Written after the spawn rather than at claim time, because the claim is what creates the worktree
+    the session will run in — there is no process to point at until it has been started.
+    """
+    path = SLOTS / f"{slot}.json"
+    lease = load_json(path, {})
+    if lease:
+        lease["session_pid"] = pid
+        save_json(path, lease)
 
 
 def claim_slot(cfg: dict, slug: str, ticket: str, repo: Path, base: str,
@@ -604,7 +646,7 @@ def release_claim(cfg: dict, ticket: str, say) -> dict | None:
     # would delete a worktree belonging to a session that is still running.
     slug, _, number = ticket.rpartition("#")
     want = (number or ticket).lstrip("#")
-    matches = {n: l for n, l in active_leases().items()
+    matches = {n: l for n, l in all_leases().items()
                if l.get("ticket") == want and (not slug or l.get("slug") == slug)}
     if len(matches) > 1:
         say(f"  x #{want} is claimed in {len(matches)} repositories — name which one:")
@@ -695,17 +737,35 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
 
     previous = {sig: signal.signal(sig, absorb)
                 for sig in (signal.SIGINT, signal.SIGHUP, signal.SIGTERM)}
+    key = f"{slug}#{ticket.lstrip('#')}"
+    ledger = load_json(LEDGER, {})
+    started_at = now()
+    write_ledger(ledger, key, {**ledger.get(key, {}), "status": "running", "launched_by": "work",
+                               "slot": claim["slot"].name, "worktree": str(claim["worktree"]),
+                               "last_run": datetime.now(timezone.utc).isoformat()})
+    code = 1
     try:
-        proc = subprocess.run(argv, cwd=str(claim["worktree"]), env=claim["env"])
-        return proc.returncode
+        proc = subprocess.Popen(argv, cwd=str(claim["worktree"]), env=claim["env"])
+        record_session(claim["slot"].name, proc.pid)
+        code = proc.wait()
+        return code
     finally:
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+        # The ledger is how "is that ticket done?" gets answered later. A hand-launched run used to
+        # leave no trace in it at all, so two tickets worked to ready PRs were invisible to
+        # `--status` and had to be reconstructed from GitHub and the gate file by hand.
+        # Guarded: recording what happened must never be able to cost the release below it. An
+        # exception raised inside a `finally` skips the rest of that `finally`.
+        try:
+            record_work_outcome(cfg, ledger, key, slug, ticket, claim, code, started_at, say)
+        except Exception as exc:
+            say(f"! could not record the outcome in the ledger: {type(exc).__name__}: {exc}")
         # In `finally` deliberately: the release is the half an operator forgets, and it has to
         # happen on the paths they forget it on — a session that errored, or one that was killed.
         # QUALIFIED with the repository: a bare number is ambiguous once two repos are configured,
         # and an ambiguous release is refused — which would leave this session's own slot held.
-        release_claim(cfg, f"{slug}#{ticket.lstrip('#')}", say)
+        release_claim(cfg, key, say)
 
 
 def driver_problems() -> list[str]:
@@ -1723,6 +1783,42 @@ def reap_running(ledger: dict, say: Say) -> list[str]:
         for line in reaped:
             say(f"  ! a previous driver died mid-ticket: {line}")
     return reaped
+
+
+def record_work_outcome(cfg: dict, ledger: dict, key: str, slug: str, ticket: str, claim: dict,
+                        code: int, started_at: int, say) -> None:
+    """What became of a hand-launched run, decided the way the driver decides it: from evidence.
+
+    The same order the driver uses — a ready PR, else a draft, else the gate entry, else the exit
+    status — so a `--work` row and a driven row mean the same thing in the same ledger.
+    """
+    gate = read_gate_state(claim["worktree"])
+    try:
+        pr = pr_for_ticket(open_prs(slug), ticket, since=started_at)
+    except Exception:
+        pr = None
+    if pr and not pr.get("isDraft"):
+        status = "ready"
+    elif pr:
+        status = "draft"
+    elif gate.get("awaiting"):
+        status = "died-yielding"
+    elif code != 0:
+        status = "error"
+    else:
+        status = "no-pr"
+    entry = ledger.get(key, {})
+    write_ledger(ledger, key, {
+        **entry, "status": status, "launched_by": "work",
+        "attempts": entry.get("attempts", 0) + 1 if entry.get("status") == "running"
+                    else entry.get("attempts", 0),
+        "pr": pr["number"] if pr else entry.get("pr"),
+        "pr_url": pr.get("url") if pr else entry.get("pr_url"),
+        "slot": claim["slot"].name,
+        "standalone": str(claim["slot"].standalone) if claim["slot"].standalone else None,
+        "duration_s": now() - started_at, "exit": code,
+        "last_run": datetime.now(timezone.utc).isoformat()})
+    say(f"recorded in the ledger as {status}")
 
 
 def crash_entry(ledger: dict, key: str, exc: BaseException) -> str:

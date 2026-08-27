@@ -1262,6 +1262,70 @@ def test_platform_floor(tmp: Path) -> None:
               "repos": {"o/x": str(tmp)}, "parallel": {"standalones": [str(old)]}}), 1) == [])
 
 
+def test_work_reaches_the_ledger(tmp: Path) -> None:
+    """A hand-launched run must leave the same trace a driven one does.
+
+    Measured the hard way: two tickets were worked to ready PRs by `--work`, and answering "is it
+    done?" afterwards meant querying GitHub and parsing gate state by hand, because `--status` knew
+    nothing about either. The ledger exists to answer exactly that question.
+    """
+    print("\na --work run in the ledger")
+    origin, work = git_fixture(tmp)
+    one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
+    stub = tmp / "stub"
+    stub.write_text("#!/bin/bash\nexit 0\n"); stub.chmod(0o755)
+    cfg = pool.merge(pool.DEFAULTS, {"repos": {"o/r": str(work)}, "claude": {"binary": str(stub)},
+                                     "parallel": {"max_workers": 1, "standalones": [str(one)]}})
+    with isolated(tmp):
+        say = pool.Say(tmp / "l.md")
+        pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
+        led = pool.load_json(pool.LEDGER, {})
+        e = led.get("o/r#266")
+        check("the run is in the ledger at all", e is not None, str(sorted(led)))
+        if not e:
+            return
+        check("with a terminal status, not the running sentinel",
+              e.get("status") not in (None, "running"), str(e.get("status")))
+        check("and it records how it was launched", e.get("launched_by") == "work", str(e))
+        check("with the slot it used", e.get("slot") == "slot-1", str(e.get("slot")))
+        check("and it spends an attempt like any other run", e.get("attempts") == 1, str(e))
+
+
+def test_dead_owner_lease_is_reclaimable(tmp: Path) -> None:
+    """The last leak path: a launcher killed with SIGKILL never runs its release.
+
+    SIGINT, SIGHUP and SIGTERM are absorbed so the release still happens; SIGKILL cannot be. A lease
+    whose recorded session is gone therefore has to be reclaimable, or one `kill -9` costs a slot
+    until somebody notices and runs `--release`.
+    """
+    print("\na lease whose session is gone")
+    origin, work = git_fixture(tmp)
+    one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
+    two = standalone_fixture(tmp / "sa", "sa2", 8083, 3318)
+    cfg = pool.merge(pool.DEFAULTS, {"repos": {"o/r": str(work)},
+                                     "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]}})
+    with isolated(tmp):
+        say = pool.Say(tmp / "d.md")
+        base = pool.remote_head(work)
+        c = pool.claim_slot(cfg, "o/r", "266", work, base, say)
+        check("claimed", c is not None)
+
+        # A --claim lease records no session, because the operator starts `claude` afterwards. Its
+        # liveness rule stays the worktree, and it must NOT be reclaimed just for lacking a pid.
+        check("a lease with no recorded session survives", len(pool.active_leases()) == 1)
+
+        live = subprocess.Popen(["sleep", "30"])
+        try:
+            pool.record_session(c["slot"].name, live.pid)
+            check("a lease whose session is alive survives", len(pool.active_leases()) == 1)
+        finally:
+            live.kill(); live.wait()
+        check("a lease whose session is gone is reclaimed", pool.active_leases() == {},
+              "one kill -9 would cost that slot until somebody ran --release")
+        check("but its worktree is left alone, since it may hold unseen work",
+              c["worktree"].is_dir())
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1280,7 +1344,9 @@ def main() -> int:
                          ("ctrl-c", test_ctrl_c_reaches_the_session),
                          ("collisions", test_double_claim_and_live_driver),
                          ("two repos", test_same_ticket_number_in_two_repos),
-                         ("platform floor", test_platform_floor)]:
+                         ("platform floor", test_platform_floor),
+                         ("work ledger", test_work_reaches_the_ledger),
+                         ("dead lease", test_dead_owner_lease_is_reclaimable)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
