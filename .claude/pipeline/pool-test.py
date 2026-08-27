@@ -884,6 +884,25 @@ def test_work_one_command(tmp: Path) -> None:
               line[4].strip() == "/resolve-ticket https://example/266", repr(line[4]))
 
         check("the slot is given back when the session exits", pool.active_leases() == {})
+
+        # Remote Control is a flag on the LAUNCH, so a launcher that does not pass it silently costs
+        # the operator phone monitoring — with nothing in the session to say why it is missing.
+        seen.unlink()
+        rc_cfg = pool.merge(cfg, {"claude": {"remote_control": True}})
+        pool.work_in_session(rc_cfg, "o/r", "266",
+                             {"url": "https://example/266"}, work, say)
+        args = seen.read_text().strip().split("|")[4]
+        check("remote control is passed to the session", "--remote-control" in args, args)
+        check("named for the ticket, not the host, so two are tellable apart on a phone",
+              "-266" in args.split("--remote-control")[1].split()[0], args)
+        check("and the skill invocation survives beside it",
+              "/resolve-ticket https://example/266" in args, args)
+
+        seen.unlink()
+        pool.work_in_session(pool.merge(cfg, {"claude": {"remote_control": False}}), "o/r", "266",
+                             {"url": "https://example/266"}, work, say)
+        check("and it is off unless asked for",
+              "--remote-control" not in seen.read_text(), seen.read_text())
         check("and the clean worktree with it",
               not (pool.WORKTREES / "o-r-266").is_dir())
 

@@ -83,8 +83,11 @@ DEFAULTS = {
     "source_repo": None,
     "retro": {"enabled": True, "min_records": 2, "timeout_seconds": 7200},
     "ticket": {"timeout_seconds": 28800, "max_attempts": 2, "quiet_seconds": 5400},
+    # `remote_control` applies to `--work` only: it is a flag on an INTERACTIVE session, so it means
+    # nothing to the headless driver. The name is per ticket rather than per host, because the point
+    # of monitoring two sessions from a phone is being able to tell which is which.
     "claude": {"model": None, "effort": None, "max_budget_usd": None, "extra_args": [],
-               "binary": "claude"},
+               "binary": "claude", "remote_control": False},
     # `max_workers` is how many tickets run AT ONCE, and it is bounded by `standalones`, not by
     # cores: the verifier restarts a real OpenMRS instance and drives a real query against it, so two
     # runs sharing one instance would restart it underneath each other and each would grade the
@@ -543,6 +546,13 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         return 1
 
     prompt = f"/resolve-ticket {issue.get('url') or claim['url']}"
+    argv = [cfg["claude"].get("binary") or "claude"]
+    if cfg["claude"].get("remote_control"):
+        # Named for the ticket. `--remote-control [name]` takes an optional value, and a name that
+        # does not start with `-` binds to it, leaving the prompt as the positional it was.
+        argv += ["--remote-control", f"{slug.split('/')[-1].replace('openmrs-module-', '')}"
+                                     f"-{ticket.lstrip('#')}"]
+    argv.append(prompt)
     say(f"{slug}#{ticket.lstrip('#')} on {claim['slot'].name} "
         f"({claim['slot'].describe().split(': ', 1)[1]})")
     say(f"  {claim['worktree']}")
@@ -566,8 +576,7 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
 
     previous = signal.signal(signal.SIGINT, absorb)
     try:
-        proc = subprocess.run([cfg["claude"].get("binary") or "claude", prompt],
-                              cwd=str(claim["worktree"]), env=claim["env"])
+        proc = subprocess.run(argv, cwd=str(claim["worktree"]), env=claim["env"])
         return proc.returncode
     finally:
         signal.signal(signal.SIGINT, previous)
@@ -1917,6 +1926,12 @@ def main() -> int:
                     help="work ONE ticket in this terminal: claims a worktree and a standalone, "
                          "starts an ordinary interactive claude in it with /resolve-ticket already "
                          "invoked, and gives the slot back when you are done. One per terminal")
+    ap.add_argument("--remote-control", action="store_true", default=None,
+                    help="with --work: start the session with Remote Control enabled, named for the "
+                         "ticket, so it can be monitored from a phone. Also settable as "
+                         "claude.remote_control in pool.json")
+    ap.add_argument("--no-remote-control", dest="remote_control", action="store_false",
+                    help="with --work: override claude.remote_control for this one session")
     ap.add_argument("--claim", metavar="TICKET",
                     help="set up a worktree and lease a standalone for a HAND-LAUNCHED session, then "
                          "print the cd and exports to paste before starting `claude`")
@@ -1931,6 +1946,8 @@ def main() -> int:
         cfg["retro"]["enabled"] = False
     if args.workers:
         cfg["parallel"]["max_workers"] = args.workers
+    if args.remote_control is not None:
+        cfg["claude"]["remote_control"] = args.remote_control
     LOGS.mkdir(parents=True, exist_ok=True)
     say = Say(LOGS / f"pool-{utc_stamp()}.md")
     say(f"# pool-run · {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
