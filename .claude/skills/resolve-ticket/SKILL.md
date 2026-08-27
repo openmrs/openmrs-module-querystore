@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.12.0
+version: 0.13.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -108,14 +108,12 @@ is also condition 1.
 **Pre-flight the verifier here, not at the end.** This pipeline's terminal state is a PR marked ready,
 and `pr-harden` will not mark one ready that no verifier could run — so an unavailable standalone blocks
 the whole run's finish line, and finding that out in the last round wastes the chance to fix it. One
-command: enumerate the standalones (a directory holding `openmrs-standalone.jar`), read each one's
-`tomcatport` from its `openmrs-runtime.properties`, and check what is listening there. **The question
-is not "is a port free" — it is "is there a standalone I can attribute and restart, or one already
-running the module under test".** A busy port is the normal state on a machine that does this work,
-and a running, attributable `java -jar openmrs-standalone` is a usable target, not a blocker; what
-blocks is a port held by something you cannot attribute. Say so NOW if nothing qualifies — the loop's
-own rule forbids a verifier taking a server it did not start, so this is the moment the user can free
-one while the work proceeds. Measured on this skill's fourth run: both standalones were held by
+command: confirm a standalone exists (a directory holding `openmrs-standalone.jar`) and read its
+`tomcatport` from `openmrs-runtime.properties`, which is **not always 8080**. **Do not check whether
+the port is free** — these are throwaway demo instances (owner's instruction, 2026-08-27), a busy
+port is the normal state, and the verifier simply takes and restarts whichever it needs. What would
+actually block the run is having no standalone on disk at all, or no LLM endpoint for a module that
+needs one. Say so NOW if either is missing, so the user can fix it while the work proceeds. Measured on this skill's fourth run: both standalones were held by
 pre-existing processes, discovered at round 2, and the run reached its final round unable to mark the
 PR ready for a reason that had nothing to do with the code. Measured on the sixth, the opposite
 mistake — both ports busy at pre-flight, both by our own standalones, and neither a blocker.
