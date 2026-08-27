@@ -85,8 +85,9 @@ work owed while reading as deference. If a phase is owed, run it.
 
 ## You may not be the only run on this machine
 
-`$CLAUDE_PIPELINE_SLOT` is set when the pool driver is working several tickets at once. If it is set,
-other `resolve-ticket` runs are in flight right now, and three things are yours alone while
+`$CLAUDE_PIPELINE_SLOT` is set when this run has co-tenants — either the pool driver is working
+several tickets at once, or an operator claimed a slot for this session with `pool-run --claim <n>`.
+Either way other `resolve-ticket` runs are in flight right now, and three things are yours alone while
 everything else is shared:
 
 | yours | given as | shared, and not yours to reclaim |
@@ -100,6 +101,11 @@ strip it, do not add `-Dmaven.repo.local` of your own, and do not be surprised t
 `chartsearchai-api-1.0.0-SNAPSHOT.jar` installs somewhere under `~/.claude/pipeline/m2/`. That is the
 point — it is the jar `omod` unpacks over `omod/target/classes`, so two runs sharing it means one
 run's classes silently under the other's tests.
+
+If the variable is UNSET you are the only run, and nothing here applies — but note what that means
+for an operator starting a second session by hand: without a claim it would share your checkout, your
+maven repository and your standalone, and the two of you would share one gate entry. `pool-run
+--claim` is how a hand-launched session gets what the driver would have given it.
 
 The rule that follows from all of it: **repair what you were given, and report the rest.** A process
 holding a port you did not resolve, a `java` you cannot attribute, the shared inference server — a

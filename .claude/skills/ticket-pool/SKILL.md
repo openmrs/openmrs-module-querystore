@@ -1,8 +1,8 @@
 ---
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
-argument-hint: "[--once] [--limit N] [--workers N] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.9.1
+argument-hint: "[--once] [--limit N] [--workers N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
+version: 0.10.0
 ---
 
 # Ticket pool — the loop that learns
@@ -82,6 +82,8 @@ conversation, use the read-only forms below and hand over the command for the re
 | `~/.claude/pipeline/pool-run` | works the pool until it is empty, retroing when records allow |
 | `pool-run --once` / `--limit N` | one ticket / at most N |
 | `pool-run --workers 2` | work two tickets AT ONCE; see **Working several at once** |
+| `pool-run --claim 266` | set a HAND-LAUNCHED session up to work one ticket safely beside another |
+| `pool-run --release 266` / `--claims` | give that slot back / list the ones held |
 | `pool-run --ticket 310,297,266` | those tickets, **in that order**, labelled or not, past every skip |
 | `pool-run --dry-run` | preflight and print the queue; starts nothing |
 | `pool-run --status` | the ledger, and how many records the next retro is waiting for |
@@ -265,6 +267,39 @@ Each run is told it has co-tenants through `$CLAUDE_PIPELINE_SLOT`, and the skil
 a run repairs the standalone, worktree and maven repository it was given and reports everything else
 rather than killing by symptom. Without that scoping a verifier's ordinary "kill whatever holds the
 port" is a licence to stop a sibling's server mid-query.
+
+## Two sessions by hand
+
+Everything above is the driver working tickets unattended. If you would rather drive two `claude`
+sessions yourself — to watch them, or to interrupt one — the isolation still has to come from
+somewhere, because **a session started by hand has none of it**. It inherits no
+`OPENMRS_STANDALONE_HOME`, no `MAVEN_ARGS` and no `CLAUDE_PIPELINE_SLOT`, and if you start both in
+your checkout they share one working tree. Measured: two sessions in one directory share ONE gate
+entry, and the first ticket's is silently gone — the later writer wins. Give them a worktree each and
+both entries survive.
+
+So claim a slot per session:
+
+```bash
+pool-run --claim 266     # prints the cd and the three exports; paste them, then start claude
+pool-run --claim 297     # in the other terminal
+pool-run --claims        # what is held right now
+pool-run --release 266   # when that session is finished
+```
+
+A claim is a worktree cut from `origin/<default>` plus a leased standalone and maven head — the same
+three things the driver hands a worker. The lease is taken with an exclusive create, so two claims
+racing cannot pick one standalone; that is the part that is easy to get wrong by hand and the reason
+this is a command rather than a paragraph of instructions.
+
+A lease is released by `--release`, or reclaimed automatically once its worktree is gone — it cannot
+be pid-owned, because you claim first and start `claude` afterwards, so there is no process to point
+at when the lease is written. `--release` also clears that worktree's gate entry, because a re-claim
+of the same ticket reuses the same path and would otherwise inherit a stale `phase: building` and
+block the new session's Stop gate for six hours.
+
+**The driver refuses to start while any claim is held**, naming them. Both would be using the same
+standalones and the driver cannot see what a session it did not start is doing with one.
 
 ## Anti-patterns
 

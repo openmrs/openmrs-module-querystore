@@ -60,6 +60,7 @@ LEDGER = PIPELINE / "ledger.json"
 LOCK = PIPELINE / "pool.lock"
 WORKTREES = PIPELINE / "worktrees"     # one per in-flight ticket; see `make_worktree`
 SLOT_M2 = PIPELINE / "m2"              # one maven repository head per slot; see `Slot`
+SLOTS = PIPELINE / "slots"             # leases held by hand-launched sessions; see `claim_slot`
 SHARED_M2 = HOME / ".m2/repository"
 LESSONS = CLAUDE / "skill-lessons"
 LAST = LESSONS / "LAST"
@@ -427,6 +428,113 @@ def slot_problems(cfg: dict, workers: int) -> list[str]:
     return problems
 
 
+# ────────────────────────────────────────────────────────────────── claims ──
+
+
+def active_leases() -> dict[str, dict]:
+    """Slot leases held by hand-launched sessions, minus the ones whose session is gone.
+
+    A lease cannot be pid-owned: the operator claims first and starts `claude` afterwards, so there is
+    no process to point at when the lease is written. What stands in for liveness is the WORKTREE — a
+    lease whose worktree no longer exists belonged to a session that ended without releasing, and
+    holding its standalone forever would be worse than reclaiming it.
+    """
+    live = {}
+    for path in sorted(SLOTS.glob("*.json")) if SLOTS.is_dir() else []:
+        lease = load_json(path, {})
+        if lease.get("worktree") and Path(lease["worktree"]).is_dir():
+            live[path.stem] = lease
+        else:
+            path.unlink(missing_ok=True)
+    return live
+
+
+def claim_slot(cfg: dict, slug: str, ticket: str, repo: Path, base: str,
+               say) -> dict | None:
+    """Hand a hand-launched session the three things the driver gives a worker.
+
+    A `claude` started by hand has no `OPENMRS_STANDALONE_HOME`, no `MAVEN_ARGS` and no
+    `CLAUDE_PIPELINE_SLOT` — so two of them share one standalone, install the module's own jar over
+    each other in `~/.m2`, and never engage the co-tenancy scoping in the skills, which is keyed on
+    that last variable. They also share a checkout, and two sessions in one directory share ONE gate
+    entry: the later writer wins and the first ticket's is silently gone.
+
+    A claim is a worktree plus a leased slot. The lease is taken with an exclusive create, so two
+    claims racing cannot pick one standalone — which is the part that is easy to get wrong by hand and
+    the reason this exists at all rather than a page of instructions.
+    """
+    workers = max(1, int(cfg["parallel"]["max_workers"]))
+    slots = build_slots(cfg, workers)
+    held = active_leases()
+    SLOTS.mkdir(parents=True, exist_ok=True)
+
+    for slot in slots:
+        if slot.name in held:
+            continue
+        lease_path = SLOTS / f"{slot.name}.json"
+        try:
+            fd = os.open(lease_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            continue          # somebody claimed it between the listing and now
+        wt, why = make_worktree(repo, slug, ticket, base, say)
+        if wt is None:
+            os.close(fd)
+            lease_path.unlink(missing_ok=True)
+            say(f"  x {why}")
+            return None
+        with os.fdopen(fd, "w") as fh:
+            json.dump({"slot": slot.name, "ticket": ticket.lstrip("#"), "slug": slug,
+                       "worktree": str(wt), "repo": str(repo), "since": now()}, fh, indent=2)
+        return {"slot": slot, "worktree": wt, "env": slot.env(),
+                "url": f"https://github.com/{slug}/issues/{ticket.lstrip('#')}"}
+
+    say(f"  x every slot is claimed ({', '.join(sorted(held))}). Release one, or configure more "
+        "standalones and raise parallel.max_workers.")
+    return None
+
+
+def release_claim(cfg: dict, ticket: str, say) -> dict | None:
+    """Give a slot back. The worktree goes with it unless it still holds uncommitted work.
+
+    The lease is freed either way, and deliberately: what the lease reserves is the STANDALONE, and
+    that is idle the moment the session ends. A worktree kept for its unsaved changes only blocks
+    re-claiming THAT ticket, which is the refusal it should be.
+    """
+    want = ticket.lstrip("#")
+    for name, lease in active_leases().items():
+        if lease.get("ticket") != want:
+            continue
+        wt = Path(lease["worktree"])
+        released = drop_worktree(Path(lease["repo"]), wt, say)
+        # The gate entry goes with the worktree, exactly as it does on the driver's path. A claim of
+        # the same ticket reuses the same PATH, so a leftover `phase: building` would be inherited by
+        # the next session in it and block its Stop gate for the full six-hour expiry — a wedge with
+        # nothing wrong with the run. Only when the directory is actually gone: a worktree kept for
+        # its unsaved changes may still be somebody's, and its entry is theirs.
+        if released.startswith("removed"):
+            clear_gate_state(wt, say)
+        (SLOTS / f"{name}.json").unlink(missing_ok=True)
+        say(f"  released {name} ({released})")
+        return {"slot": name, "worktree": released}
+    say(f"  no claim is held for {ticket}")
+    return None
+
+
+def claim_problems(cfg: dict) -> list[str]:
+    """The driver must not run while hand-launched sessions hold slots.
+
+    Both would be using the same standalones, and the driver cannot see what a session it did not
+    start is doing with one. Refusing is the only honest answer; the remedy is one command.
+    """
+    held = active_leases()
+    if not held:
+        return []
+    lines = ", ".join(f"{n} (#{l.get('ticket')})" for n, l in sorted(held.items()))
+    return [f"{len(held)} slot claim(s) are outstanding — {lines}. A hand-launched session is using "
+            f"that standalone. Finish those and `pool-run --release <ticket>`, or run "
+            f"`pool-run --claims` to see them"]
+
+
 # ────────────────────────────────────────────────────────────── preflight ──
 
 
@@ -489,8 +597,15 @@ def parity_problems(cfg: dict) -> list[str]:
     return problems
 
 
-def preflight(cfg: dict, say: Say, want_label: bool) -> list[str]:
-    """Returns a list of fatal problems. Non-fatal ones are said and carried."""
+def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True) -> list[str]:
+    """Returns a list of fatal problems. Non-fatal ones are said and carried.
+
+    `driving` is False for a command that is not about to work tickets itself. It gates exactly one
+    check — the outstanding-claims refusal — because that refusal is about the DRIVER and a
+    hand-launched session sharing standalones. Applied to `--claim` it refuses the second claim, which
+    is the entire feature: measured by doing it, `--claim 297` after `--claim 266` failed with the
+    driver's own message and set nothing up.
+    """
     fatal: list[str] = []
 
     for tool in ("claude", "gh", "jq", "git"):
@@ -516,6 +631,8 @@ def preflight(cfg: dict, say: Say, want_label: bool) -> list[str]:
 
     workers = max(1, int(cfg["parallel"]["max_workers"]))
     fatal += slot_problems(cfg, workers)
+    if driving:
+        fatal += claim_problems(cfg)
     if workers > 1:
         # The per-slot maven repository is a SPLIT repository, which Maven only understands from
         # 3.9. Under an older one `maven.repo.local.tail` is ignored, the head repository is empty,
@@ -1629,6 +1746,70 @@ def cmd_status(cfg: dict, say: Say) -> int:
     return 0
 
 
+def cmd_claim(cfg: dict, say: Say, token: str) -> int:
+    """Set a hand-launched session up the way the driver sets up a worker, then print how to start it."""
+    problems = preflight(cfg, say, want_label=False, driving=False)
+    for problem in problems:
+        say(f"  x {problem}")
+    if problems:
+        return 1
+    for slug, path in cfg["repos"].items():
+        issue = resolve_named(token, slug)
+        if issue is None:
+            continue
+        repo = Path(path).expanduser()
+        failure, where, base = prepare_repo(repo, say)
+        if failure:
+            say(f"  x {where}")
+            say(f"    {PREPARE_REMEDY[failure]}")
+            return 1
+        prs = open_prs(slug)
+        existing = pr_for_ticket(prs, token)
+        if existing:
+            say(f"  ! #{existing['number']} is already open for this ticket — that is `pr-harden`'s "
+                "entry point, not `resolve-ticket`'s. Claiming anyway, since you asked by name.")
+        claim = claim_slot(cfg, slug, token, repo, base, say)
+        if not claim:
+            return 1
+        env = claim["env"]
+        say("")
+        say(f"slot {claim['slot'].name} is yours for {slug}#{token.lstrip('#')} "
+            f"({claim['slot'].describe().split(': ', 1)[1]})")
+        say("")
+        say("Paste this into the terminal you want the session in:")
+        say("")
+        say(f"cd {claim['worktree']}")
+        say(f"export OPENMRS_STANDALONE_HOME={env['OPENMRS_STANDALONE_HOME']}")
+        say(f'export MAVEN_ARGS="{env["MAVEN_ARGS"]}"')
+        say(f"export CLAUDE_PIPELINE_SLOT={env['CLAUDE_PIPELINE_SLOT']}")
+        say("claude")
+        say("")
+        say(f"then, in that session:   /resolve-ticket {issue.get('url') or claim['url']}")
+        say("")
+        say(f"When it is done:         pool-run --release {token.lstrip('#')}")
+        return 0
+    say(f"  x no configured repo has issue {token}")
+    return 1
+
+
+def cmd_release(cfg: dict, say: Say, token: str) -> int:
+    return 0 if release_claim(cfg, token, say) else 1
+
+
+def cmd_claims(cfg: dict, say: Say) -> int:
+    held = active_leases()
+    if not held:
+        say("no slots are claimed; the driver is free to run.")
+        return 0
+    for name, lease in sorted(held.items()):
+        say(f"{name}  #{lease.get('ticket')}  {lease.get('slug')}  "
+            f"since {datetime.fromtimestamp(lease.get('since', 0), timezone.utc).isoformat(timespec='minutes')}")
+        say(f"{'':6s}  {lease.get('worktree')}")
+    say("")
+    say("`pool-run --release <ticket>` gives one back. The driver will not start while any is held.")
+    return 0
+
+
 def cmd_init(cfg: dict, say: Say) -> int:
     for slug in cfg["repos"]:
         got = sh(["gh", "label", "create", cfg["label"], "--repo", slug, "--color", "5319e7",
@@ -1652,6 +1833,11 @@ def main() -> int:
                     help="how many tickets to work AT ONCE; overrides parallel.max_workers. Bounded "
                          "by parallel.standalones — one OpenMRS instance per worker")
     ap.add_argument("--init", action="store_true")
+    ap.add_argument("--claim", metavar="TICKET",
+                    help="set up a worktree and lease a standalone for a HAND-LAUNCHED session, then "
+                         "print the cd and exports to paste before starting `claude`")
+    ap.add_argument("--release", metavar="TICKET", help="give a claimed slot back")
+    ap.add_argument("--claims", action="store_true", help="list the slots hand-launched sessions hold")
     ap.add_argument("--outcomes", action="store_true",
                     help="refresh what became of every PR the ledger knows about, and stop")
     args = ap.parse_args()
@@ -1668,8 +1854,14 @@ def main() -> int:
 
     if args.status:
         return cmd_status(cfg, say)
+    if args.claims:
+        return cmd_claims(cfg, say)
     if args.init:
         return cmd_init(cfg, say)
+    if args.claim:
+        return cmd_claim(cfg, say, args.claim.strip())
+    if args.release:
+        return cmd_release(cfg, say, args.release.strip())
 
     say("")
     say("preflight")

@@ -94,19 +94,32 @@ def isolated(tmp: Path):
     suite, it is a second pipeline. Measured while writing this one: an earlier version left a
     driver-capture record in `~/.claude/skill-lessons`, where it counted towards the retro threshold.
     """
+    # EVERY path the driver writes. A constant added to `pool-run` and forgotten here is a suite that
+    # writes the operator's real state: measured — omitting `SLOTS` let a case read the real leases
+    # and RELEASE two slots a hand-launched session was holding, removing their worktrees.
     names = ["LEDGER", "LOGS", "LESSONS", "LAST", "PR_STATE", "HARDEN_STATE", "UNATTENDED_DIR",
-             "WORKTREES", "SLOT_M2", "LOCK"]
+             "WORKTREES", "SLOT_M2", "SLOTS", "LOCK"]
     saved = {n: getattr(pool, n) for n in names}
     root = tmp / "state"
     for n in names:
         setattr(pool, n, root / Path(saved[n]).name)
     pool.LOGS.mkdir(parents=True, exist_ok=True)
     pool.LESSONS.mkdir(parents=True, exist_ok=True)
+    # The driver reaches the gate files ONLY through the `gate-state` subprocess now, which resolves
+    # them from $CLAUDE_HOME or $HOME — so rebinding `pool.PR_STATE` alone stopped isolating anything
+    # and a case driving `clear_gate_state` wrote the operator's real state. Point the helper at the
+    # same root the module constants name, so the two cannot disagree about which file is under test.
+    prior_claude_home = os.environ.get("CLAUDE_HOME")
+    os.environ["CLAUDE_HOME"] = str(root)
     try:
         yield root
     finally:
         for n, v in saved.items():
             setattr(pool, n, v)
+        if prior_claude_home is None:
+            os.environ.pop("CLAUDE_HOME", None)
+        else:
+            os.environ["CLAUDE_HOME"] = prior_claude_home
 
 
 # ───────────────────────────────────────────────────────────── worktrees ──
@@ -692,6 +705,144 @@ def test_save_json_temp_is_private(tmp: Path) -> None:
     check("no temp file is left behind", not list(tmp.glob("x.json.tmp*")))
 
 
+def test_claim_and_release(tmp: Path) -> None:
+    """Hand-launched sessions: the setup the driver would otherwise hand out.
+
+    Two `claude` sessions started by hand share a checkout, a maven repository and a standalone, and
+    none of the co-tenancy scoping engages because `$CLAUDE_PIPELINE_SLOT` is unset. A claim is how an
+    operator gets the same three things the driver gives a worker, without a driver.
+    """
+    print("\nclaiming a slot for a hand-launched session")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/r": str(work)},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]},
+    })
+
+    with isolated(tmp):
+        say = pool.Say(tmp / "claim.md")
+        base = pool.remote_head(work)
+
+        a = pool.claim_slot(cfg, "o/r", "266", work, base, say)
+        b = pool.claim_slot(cfg, "o/r", "297", work, base, say)
+        check("two claims get two slots", a and b and a["slot"].name != b["slot"].name,
+              f"{a and a['slot'].name} / {b and b['slot'].name}")
+        check("each claim gets its own worktree", a["worktree"] != b["worktree"])
+        check("the worktree is real and at the remote head",
+              (a["worktree"] / "README.md").is_file()
+              and sh(["git", "-C", str(a["worktree"]), "rev-parse", "HEAD"]).stdout.strip() == base)
+        check("each claim gets its own standalone",
+              a["slot"].standalone != b["slot"].standalone)
+
+        # The whole point: the three variables a hand-launched session does not have.
+        env = a["env"]
+        check("the claim hands over a standalone", env["OPENMRS_STANDALONE_HOME"] == str(one))
+        check("the claim hands over a private maven head",
+              f"-Dmaven.repo.local={a['slot'].m2}" in env["MAVEN_ARGS"])
+        check("the claim declares co-tenancy, which is what engages the skills' scoping",
+              env["CLAUDE_PIPELINE_SLOT"] == a["slot"].name)
+
+        # A third claim has nowhere to go, and must say so rather than double-book a standalone.
+        third = pool.claim_slot(cfg, "o/r", "310", work, base, say)
+        check("a claim with no slot left is refused, not double-booked", third is None)
+
+        # The driver and hand-launched sessions must not both be using the standalones.
+        check("an outstanding claim is a fatal preflight problem for the driver",
+              any("claim" in x for x in pool.claim_problems(cfg)), str(pool.claim_problems(cfg)))
+
+        # resolve-ticket writes a gate entry at its Step 1, keyed on the worktree. A claim of the
+        # same ticket reuses that path, so a leftover would block the NEXT session's Stop gate.
+        import subprocess as _sp
+        _sp.run([str(HERE / "gate-state"), "--owner", "9", "pr-set", "--ticket", "297",
+                 "--round", "1", "--phase", "building", "--blocking", "0"],
+                cwd=str(b["worktree"]), capture_output=True)
+        key = str(b["worktree"].resolve())
+        check("the session's gate entry exists before release",
+              key in json.loads(pool.PR_STATE.read_text()), "nothing to clean up")
+
+        freed = pool.release_claim(cfg, "297", say)
+        check("releasing a removed worktree takes its gate entry with it",
+              key not in json.loads(pool.PR_STATE.read_text()),
+              "a stale `building` entry would block the next session in that path for 6h")
+        check("releasing frees the slot", freed and not (pool.SLOTS / f"{b['slot'].name}.json").exists(),
+              str(freed))
+        check("and removes its clean worktree", not b["worktree"].is_dir())
+        again = pool.claim_slot(cfg, "o/r", "310", work, base, say)
+        check("the freed slot can be claimed again", again is not None)
+        check("and it is the one that was freed", again["slot"].name == b["slot"].name)
+
+        # A run that left work behind: the worktree is kept and named, but the STANDALONE is free.
+        (a["worktree"] / "UNSAVED.md").write_text("mid-edit\n")
+        out = pool.release_claim(cfg, "266", say)
+        check("a release reports a worktree it could not remove",
+              out and "kept" in out["worktree"], str(out))
+        check("but the slot is freed anyway, because the standalone is idle now",
+              not (pool.SLOTS / f"{a['slot'].name}.json").exists())
+
+        # A lease whose worktree is gone is a session that ended without releasing.
+        pool.claim_slot(cfg, "o/r", "401", work, base, say)
+        lease = next(pool.SLOTS.glob("*.json"))
+        import shutil as _sh
+        _sh.rmtree(json.loads(lease.read_text())["worktree"], ignore_errors=True)
+        sh(["git", "-C", str(work), "worktree", "prune"])
+        check("a lease whose worktree is gone is reclaimed, not held forever",
+              pool.claim_slot(cfg, "o/r", "402", work, base, say) is not None)
+
+
+def test_claim_cli(tmp: Path) -> None:
+    """`--claim` twice, through the real CLI, because that is where the defect was.
+
+    `claim_slot` never had it: the outstanding-claims refusal lived in the shared `preflight`, so the
+    DRIVER's "a hand-launched session is using that standalone" check fired on the second CLAIM and
+    the feature worked exactly once. A test that calls `claim_slot` directly cannot see that.
+    """
+    print("\nclaiming twice through the CLI")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    home = tmp / "home"
+    (home / ".claude").mkdir(parents=True)
+    cfgpath = tmp / "cfg.json"
+    cfgpath.write_text(json.dumps({
+        "label": "x", "repos": {"o/r": str(work)}, "source_repo": str(work),
+        # slug parity and the GitHub label are the driver's business, not this case's
+        "retro": {"enabled": False},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]},
+    }))
+
+    with isolated(tmp):
+        say = pool.Say(tmp / "cli.md")
+        base = pool.remote_head(work)
+        cfg = pool.merge(pool.DEFAULTS, json.loads(cfgpath.read_text()))
+        first = pool.claim_slot(cfg, "o/r", "266", work, base, say)
+        check("the first claim is taken", first is not None)
+
+        # The real question: does the SHARED preflight refuse the second one?
+        REFUSAL = "slot claim(s) are outstanding"
+        driving = pool.preflight(cfg, say, want_label=False, driving=True)
+        claiming = pool.preflight(cfg, say, want_label=False, driving=False)
+        check("the driver is refused while a claim is held",
+              any(REFUSAL in x for x in driving), str(driving))
+        check("a second CLAIM is not refused by the first",
+              not any(REFUSAL in x for x in claiming), str(claiming))
+        check("and that refusal is the ONLY difference between the two",
+              [x for x in driving if x not in claiming]
+              and all(REFUSAL in x for x in driving if x not in claiming),
+              str([x for x in driving if x not in claiming]))
+
+        second = pool.claim_slot(cfg, "o/r", "297", work, base, say)
+        check("so the second claim goes through", second is not None)
+        check("on the other standalone",
+              second and second["slot"].standalone != first["slot"].standalone)
+        pool.release_claim(cfg, "266", say)
+        pool.release_claim(cfg, "297", say)
+        check("and both give their slots back", pool.active_leases() == {})
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -702,7 +853,9 @@ def main() -> int:
                          ("nothing ran", test_nothing_ran), ("maven tail", test_shared_maven_repo), ("db ports", test_db_port_hosts),
                          ("skill commands", test_skills_commands_run),
                          ("driver gate-state", test_pool_gate_state_via_helper),
-                         ("save_json temp", test_save_json_temp_is_private)]:
+                         ("save_json temp", test_save_json_temp_is_private),
+                         ("claims", test_claim_and_release),
+                         ("claim cli", test_claim_cli)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
