@@ -1,13 +1,14 @@
 #!/bin/bash
 # PreToolUse(Bash) safety net for `git checkout -- <path>` / `git restore <path>`.
 #
-# WHY THIS IS A BACKUP AND NOT A BLOCKER. The failure it exists for is measured across seven records
-# and nine incidents (~/.claude/skill-lessons: #302, #284, #268, #269 twice, #250 twice, #308, #317;
-# REJECTED.md's running count is authoritative and stood at 5 incidents / 4 records when this was
-# written, which is why this line is dated rather than trusted): a mutation probe undone with
+# WHY THIS IS A BACKUP AND NOT A BLOCKER. The failure it exists for: a mutation probe undone with
 # `git checkout -- <path>` on a file that also carried uncommitted INTENDED work discarded that work
-# too. In #302 it shipped a commit whose message described changes absent from its diff; in #269 it
-# reverted a javadoc correction that then survived three review passes before an agent re-found it.
+# too. It is REJECTED.md's largest recurrence class — 9 incidents across 7 records when that ledger was
+# read on 2026-08-27 (#302, #284, #268, #269 twice, #250 twice, #308, #317), where this comment had
+# stood at 5/4 since it was written. Read the ledger, not this line; it is a count in a comment, which
+# is what the figure above went stale as. In #302 it shipped a commit whose message described changes
+# absent from its diff; in #269 it reverted a javadoc correction that then survived three review passes
+# before an agent re-found it.
 #
 # The obvious hook — refuse when the path has uncommitted modifications — is WRONG, and that matters
 # enough to record here so nobody "fixes" this script into it. At the moment of a legitimate

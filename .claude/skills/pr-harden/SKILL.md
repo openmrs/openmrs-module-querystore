@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.12.2
+version: 0.12.3
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -578,7 +578,7 @@ into the round's own commit.
 ```json
 { "/abs/path/to/repo": {
     "pr": 93, "round": 2, "blocking": 1, "phase": "reviewed",
-    "ts": 1755400000, "override": false,
+    "ts": 1755400000, "override": false, "owner": 51039,
     "awaiting": [ { "agent": "fix r2", "since": 1755400000 } ],
     "reviewed_shas": ["<r1 sha>", "<r2 sha>"],
     "declined": [ { "round": 1, "id": "r1-2", "finding": "…", "reason": "…" } ] } }
@@ -587,10 +587,30 @@ into the round's own commit.
 `phase` is `"init"` before the first review, `"reviewed"` once a reviewer's count is recorded,
 `"fixing"` from the moment the fixer is spawned until the next reviewer reports. On `init` and
 `fixing` the gate blocks regardless of `blocking`, so leave the last measured value there for the
-record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts` and `override`; `declined` and
+record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts`, `override` and `owner`; `declined` and
 `reviewed_shas` are the orchestrator's own ledger, carried in the same entry so one write keeps both
 in step. `reviewed_shas` is not only a record: step 1 compares the incoming head against its last
 entry, because two rounds reviewing one sha is a round spent on bytes already reviewed.
+
+**`owner` is what tells your entry from somebody else's, and it is not the unattended marker's job.**
+This file is keyed on the CHECKOUT, so a pool run and an interactive session in the same directory read
+one entry. Measured live 2026-08-26: an interactive session was stopped with "resolve-ticket is mid-run
+and has not opened its pull request yet" over an entry belonging to a live `claude -p /resolve-ticket`
+run, and both remedies the block offers damage that run — `override: true` disarms its gate for the rest
+of its life, and "continue the phases" puts a second session in one worktree. So stamp `owner` with
+`$PPID`, which from a tool shell is this session's own `claude` process; the gate allows the stop when
+that pid is alive and is not an ancestor of the stopping session, and when it is DEAD, since no session
+can advance a run whose writer is gone. An UNSTAMPED entry is held to the contract exactly as before,
+so nothing is relaxed on a missing field.
+
+**Do not answer this question with the unattended marker.** The first version of that check inferred
+entry ownership from marker ownership, and review measured the cost within the hour: a live foreign
+marker allowed EVERY block path, so an interactive `/harden` or `/pr-harden` in a pool-worked checkout
+silently lost its own termination contract — `edits: 7` allowed, `phase: fixing` allowed. The marker
+answers whether THIS session is unattended; the two questions coincide only in the incident above.
+`gate-test.sh`'s "foreign marker but the entry is OURS -> block" is that regression, pinned in both
+suites. What none of it fixes: two runs in one checkout still share one entry and the later writer
+wins — this tells one session's entry from another's, it does not give them one each.
 
 **`awaiting` is not optional bookkeeping — without it an unattended run cannot proceed at all.**
 Every phase here delegates to a background subagent, and while one is outstanding the orchestrator
@@ -689,14 +709,15 @@ explicitly.
 Write it at every transition:
 
 ```bash
-python3 - <<'PY'
-import json, os, time, pathlib
+python3 - "$PPID" <<'PY'
+import json, os, sys, time, pathlib
 PR, ROUND, PHASE, BLOCKING, OVERRIDE = 93, 2, "reviewed", 1, False
+OWNER = int(sys.argv[1])            # $PPID from a tool shell IS this session's claude process
 p = pathlib.Path.home()/".claude/pr-harden-state.json"
 s = json.loads(p.read_text()) if p.exists() else {}
 e = s.get(os.getcwd(), {})
 e.update({"pr": PR, "round": ROUND, "phase": PHASE, "blocking": BLOCKING,
-          "ts": int(time.time()), "override": OVERRIDE})
+          "ts": int(time.time()), "override": OVERRIDE, "owner": OWNER})
 e.setdefault("declined", []); e.setdefault("reviewed_shas", [])
 s[os.getcwd()] = e
 p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(s, indent=2))

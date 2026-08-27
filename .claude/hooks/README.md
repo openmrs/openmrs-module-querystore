@@ -17,4 +17,12 @@ Registration lives in the user's own `~/.claude/settings.json` (`Stop` for the t
 matcher `Bash` for the backup) and is not vendored — it is user configuration, not pipeline code.
 
 Tests: `bash .claude/skills/harden/gate-test.sh .claude/hooks/harden-cycle-gate.sh` and the pr-harden
-equivalent. `git-restore-backup.sh` has none; it is a fail-open `cp` with no decision to assert.
+equivalent (either path form works; the harness resolves it and exits 2 on a hook it cannot find).
+
+`git-restore-backup.sh` has no tests, and that is a gap rather than a property of the script. It looks
+like a fail-open `cp`, but it decides which commands are destructive, and review measured that decision
+missing real forms: `git checkout HEAD <path>` (a path form without `--`), and anything prefixed
+`git -C <dir>` or `git -c k=v`, because the prefix pattern expects every leading token to start with a
+dash and a value does not. It also always backs up `$CWD`'s repo, so a `-C` target would copy the wrong
+one. Under-copying is the whole failure it exists to prevent, so these are worth closing — with cases,
+since a regex is exactly the thing that should not be changed on inspection alone.

@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.19.1
+version: 0.19.2
 ---
 
 # Harden
@@ -209,9 +209,9 @@ nothing to do but yield — and a yield is exactly what the gate refuses. Measur
 added this: a Phase 2 pass blocked on a background agent tripped the gate on every yield, and the
 only way to stay alive was two ten-minute in-turn wait loops, which is pure waste. `pr-harden` solved
 this first and its **State** section carries the reasoning; the field and the semantics are the same.
-Since 2026-08-27 the same marker also decides which session OWNS an entry — this state is keyed on the
-checkout, not the session, so the gate allows a stop where a live marker pid is not an ancestor of the
-stopping session — and that reasoning lives there too:
+**Stamp `owner` with `$PPID` too.** This state is keyed on the checkout, not the session, so without it
+the gate cannot tell your entry from one a co-located run left in the same directory; `pr-harden`'s
+**State** section carries that reasoning as well:
 
 ```bash
 # usage:  awaiting.py await "phase2 quality"   |   awaiting.py clear
@@ -231,16 +231,18 @@ which is what the gate exists to prevent, so the gate's allow is bounded by an h
 has not returned inside it is treated as dead rather than outstanding.
 
 ```bash
-python3 - <<'PY'
-import json, os, subprocess, time, pathlib
+python3 - "$PPID" <<'PY'
+import json, os, subprocess, sys, time, pathlib
 CYCLE, OVERRIDE = 4, False          # <- this cycle's number; True only with the labelled override
+OWNER = int(sys.argv[1])            # $PPID from a tool shell IS this session's claude process
 d = subprocess.run(["git","status","--porcelain"], capture_output=True, text=True).stdout.strip()
 n = len(d.splitlines()) + int(subprocess.run(
     ["git","rev-list","--count","@{u}..HEAD"], capture_output=True, text=True).stdout.strip() or 0)
 p = pathlib.Path.home()/".claude/harden-state.json"
 s = json.loads(p.read_text()) if p.exists() else {}
 e = s.get(os.getcwd(), {})
-e.update({"cycle": CYCLE, "edits": n, "ts": int(time.time()), "override": OVERRIDE})
+e.update({"cycle": CYCLE, "edits": n, "ts": int(time.time()), "override": OVERRIDE,
+           "owner": OWNER})
 e.setdefault("awaiting", [])        # written by the await one-liner above; never clobbered here
 s[os.getcwd()] = e
 p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(s, indent=2))

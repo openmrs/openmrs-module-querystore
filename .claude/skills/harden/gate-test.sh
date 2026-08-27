@@ -13,7 +13,10 @@ case "$HOOK" in
   *) HOOK="$(cd "$(dirname "$HOOK")" 2>/dev/null && pwd)/$(basename "$HOOK")" ;;
 esac
 [ -f "$HOOK" ] || { echo "gate-test: no such hook: $1" >&2; exit 2; }
-TMP=$(mktemp -d); PASS=0; FAIL=0; NOW=$(date +%s)
+# The PHYSICAL temp dir. The hook keys on `pwd -P`, so a fixture keyed on the logical path
+# (`/var/...` for macOS's `/private/var/...`) writes an entry the hook cannot find — and
+# "not found" is its fail-OPEN case, so every block case would silently read as a pass.
+TMP=$(cd "$(mktemp -d)" && pwd -P); PASS=0; FAIL=0; NOW=$(date +%s)
 mkdir -p "$TMP/.claude"; STATE="$TMP/.claude/harden-state.json"
 
 run_case() { # name expected entry_json [marker_pid]
@@ -43,15 +46,26 @@ run_case "awaiting fresh, unattended FIELD -> block" block "{\"cycle\":2,\"edits
 run_case "marker live but edits 0 -> allow" allow "{\"cycle\":2,\"edits\":0,\"ts\":$NOW}" $$
 run_case "override -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"override\":true}"
 
-# OWNERSHIP (2026-08-26-pwd-keyed-gate-false-positive.md). A LIVE marker whose pid is not an ancestor
-# of the hook is a co-located run that owns this checkout and is not us. Both cases below BLOCK without
-# the ownership check — that is what they are for; the `marker LIVE` cases above pass either way,
-# because the harness passes its own $$, which IS an ancestor.
+# OWNERSHIP (2026-08-26-pwd-keyed-gate-false-positive.md). The question is whose ENTRY this is, which
+# the entry's own `owner` stamp answers; the unattended MARKER answers a different question about a
+# different file. The first version of this check conflated them, and the third case below is what that
+# cost: a live foreign marker allowed every block path, so an interactive cycle in a pool-worked
+# checkout lost its own termination contract.
 sleep 300 >/dev/null 2>&1 &
 FOREIGN=$!
 disown "$FOREIGN" 2>/dev/null || true
-run_case "marker live but FOREIGN owner, edits 3 -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW}" "$FOREIGN"
-run_case "marker live but FOREIGN owner, awaiting -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" "$FOREIGN"
+run_case "entry owned by a LIVE foreign session, edits 3 -> allow" allow \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"owner\":$FOREIGN}"
+run_case "entry owned by a LIVE foreign session, awaiting -> allow" allow \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"owner\":$FOREIGN,\"awaiting\":$AW}"
+run_case "foreign marker but the entry is OURS -> block (contract holds)" block \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"owner\":$$}" "$FOREIGN"
+run_case "entry owner DEAD -> allow (nobody can advance it)" allow \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"owner\":999999}"
+run_case "entry UNSTAMPED, edits 3 -> block (unchanged by ownership)" block \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW}"
+run_case "foreign marker, entry ours, awaiting -> allow (we are attended)" allow \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"owner\":$$,\"awaiting\":$AW}" "$FOREIGN"
 kill "$FOREIGN" 2>/dev/null
 
 echo "passed=$PASS failed=$FAIL"; rm -rf "$TMP"; [ "$FAIL" -eq 0 ]

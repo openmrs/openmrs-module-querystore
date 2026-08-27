@@ -71,7 +71,11 @@ allow() { exit 0; }
 [ -f "$STATE" ] || allow
 command -v jq >/dev/null 2>&1 || allow
 
-KEY="$PWD"
+# The PHYSICAL path, symlinks resolved. `$PWD` is LOGICAL, and every writer of this file keys on
+# the resolved cwd — so with a symlink anywhere in the path (`/tmp` on macOS, a symlinked home) the
+# two disagreed and no entry was found, which is this hook's fail-OPEN case: a run with findings
+# outstanding could stop and nothing would say why. Resolve on both sides or neither.
+KEY="$(pwd -P)"
 
 ENTRY=$(jq -c --arg k "$KEY" '.[$k] // empty' "$STATE" 2>/dev/null) || allow
 [ -n "$ENTRY" ] || allow
@@ -83,6 +87,67 @@ TS=$(jq -r '.ts // 0' <<<"$ENTRY" 2>/dev/null) || allow
 case "$TS" in ''|*[!0-9]*) allow ;; esac
 NOW=$(date +%s)
 [ "$((NOW - TS))" -lt "$STALE_AFTER" ] || allow
+
+# Is PID an ancestor of this hook process? 0 = yes, 1 = the walk reached the top without meeting it
+# (positively somebody else's), 2 = could not be established. The three stay distinct because only 1
+# may relax anything. Callers validate PID first; the numeric guard is belt-and-braces for a later one.
+owns_this_session() {
+  local target="$1" p=$$ up depth=0
+  case "$target" in ''|*[!0-9]*) return 2 ;; esac
+  while [ "$depth" -lt 40 ]; do
+    [ "$p" = "$target" ] && return 0
+    up=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d '[:space:]')
+    case "$up" in
+      ''|*[!0-9]*) return 2 ;;   # ps told us nothing usable — indeterminate, never "somebody else's"
+      0|1) return 1 ;;          # reached the top without meeting the target
+    esac
+    p="$up"; depth=$((depth + 1))
+  done
+  return 2
+}
+
+# WHOSE ENTRY IS THIS? Measured live 2026-08-26
+# (~/.claude/skill-lessons/2026-08-26-pwd-keyed-gate-false-positive.md): this state is keyed on the
+# CHECKOUT, so an interactive session opened in a checkout the pool was working was stopped by an entry
+# belonging to a different live `claude -p /resolve-ticket` run. The entry was present, fresh and
+# parseable, so every fail-open case here correctly declined to cover it — they enumerate the cases
+# where the ENTRY is unusable, never the case where it is perfectly good and somebody else's. Both
+# remedies the block then offers damage the owner: `override: true` disarms the live run's gate for the
+# rest of its life, and "continue the phases" puts a second session in one worktree.
+#
+# So the skill stamps `owner` with its own claude pid (`$PPID` from a tool shell IS that process, and
+# the hook is a child of it, so the ancestry test above answers "did I write this entry").
+#
+# ASK IT OF THE ENTRY, NEVER OF THE UNATTENDED MARKER. The first version of this check inferred entry
+# ownership from marker ownership, and review measured what that costs: a live foreign marker allowed
+# EVERY block path, so an interactive `/harden` in a pool-worked checkout silently lost its own
+# termination contract — `edits: 7` allowed, `phase: fixing` allowed. The marker answers whether THIS
+# session is unattended and nothing else; it is a different question about a different file, and the
+# two coincide only in the incident above.
+#
+# An UNSTAMPED entry keeps the behaviour that predates this check, so nothing is relaxed on the
+# strength of a missing field, and an indeterminate walk keeps it too: losing the unattended guard back
+# is the more expensive direction, since that guard exists for a run that died at 1365 turns with no PR.
+# A DEAD owner allows, because no session can advance an entry whose writer is gone and blocking then
+# offers only the two damaging remedies above; `STALE_AFTER` used to reach that case six hours later.
+#
+# WHAT THIS DOES NOT FIX: the state is still keyed on `$PWD`, so two runs in one checkout share one
+# entry and the later writer wins — the loser's stamp is simply overwritten. This tells one session's
+# entry from another's; it does not give them one entry each.
+OWNER_PID=$(jq -r '.owner // empty' <<<"$ENTRY" 2>/dev/null) || OWNER_PID=""
+case "$OWNER_PID" in
+  ''|*[!0-9]*) ;;   # unstamped: block per the contract, exactly as before this check existed
+  *)
+    if kill -0 "$OWNER_PID" 2>/dev/null; then
+      owns_this_session "$OWNER_PID"
+      case $? in
+        1) allow ;;   # a LIVE session that is not this one owns this entry
+      esac            # 0 = ours, 2 = cannot tell: fall through and hold us to the contract
+    else
+      allow           # the owning session is gone; nobody here can advance its run
+    fi
+    ;;
+esac
 
 # A background agent this run is waiting on. Checked before the phase switch on purpose: a yield is
 # equally correct whether the awaited agent is the refutation gate (phase "building"), a reviewer
@@ -104,69 +169,25 @@ case "$UNATTENDED" in true|false) ;; *) UNATTENDED=false ;; esac
 # in this checkout unattended. The field above is checked first and NOTHING WRITES IT TODAY — it is
 # there for a caller that can set it without the skill clobbering it, and until one exists the
 # marker is the only live producer. Do not read the pair as redundancy.
-# Is PID an ancestor of this hook process? 0 = yes (this session belongs to that run), 1 = the walk
-# reached the top without finding it (positively foreign), 2 = could not be established. The three are
-# kept distinct because only 1 may relax anything; see the ownership block below.
-owns_this_session() {
-  local target="$1" p=$$ up depth=0
-  case "$target" in ''|*[!0-9]*) return 2 ;; esac
-  while [ "$depth" -lt 40 ]; do
-    [ "$p" = "$target" ] && return 0
-    up=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d '[:space:]')
-    case "$up" in
-      ''|*[!0-9]*) return 2 ;;   # ps told us nothing usable — indeterminate, never "foreign"
-      0|1) return 1 ;;          # reached the top without meeting the target
-    esac
-    p="$up"; depth=$((depth + 1))
-  done
-  return 2
-}
-
 MARKER="$HOME/.claude/pipeline/unattended/$(printf '%s' "$PWD" | tr '/' '_' | sed 's/^_*//').json"
-FOREIGN=0
 if [ -f "$MARKER" ]; then
   OWNER=$(jq -r '.pid // empty' "$MARKER" 2>/dev/null)
   case "$OWNER" in
     ''|*[!0-9]*) ;;
     *)
       if kill -0 "$OWNER" 2>/dev/null; then
+        # A live marker in this checkout is only OURS if its driver is an ancestor of this process. A
+        # co-located pool run does not make an interactive session unattended — that session has a next
+        # turn. Indeterminate keeps the old answer, which is the conservative one here.
         owns_this_session "$OWNER"
         case $? in
-          0) UNATTENDED=true ;;   # this session IS that run
-          1) FOREIGN=1 ;;         # a LIVE co-located run owns this checkout, and it is not us
-          *) UNATTENDED=true ;;   # indeterminate: keep the behaviour that predates this check
+          1) ;;
+          *) UNATTENDED=true ;;
         esac
       fi
       ;;
   esac
 fi
-
-# OWNERSHIP. Measured live 2026-08-26 (~/.claude/skill-lessons/2026-08-26-pwd-keyed-gate-false-positive.md):
-# an interactive session in a checkout the pool was working was stopped by an entry belonging to a
-# DIFFERENT live session (`claude -p /resolve-ticket .../297`). The entry was present, fresh and
-# parseable, so every fail-open case here correctly declined to cover it — the header enumerated the
-# cases where the ENTRY is unusable and never the case where it is perfectly good and somebody else's.
-# Worse, both remedies the block then offers damage the owner: `override: true` disarms the live run's
-# gate for the rest of its life, and "continue the phases" puts a second session in one worktree.
-#
-# The relaxation is deliberately narrow. Ownership is only ever established POSITIVELY — a live marker
-# pid that is not an ancestor of this process — so an indeterminate `ps`, a missing marker, or a dead
-# one all keep exactly the previous behaviour. That direction matters: the unattended block exists
-# because a yield mid-await killed a run at 1365 turns with no PR, so this must not become a way to
-# lose it back.
-#
-# WHAT THIS DOES NOT FIX: the state file is still keyed on $PWD alone, so two runs in one checkout
-# share one entry and the later writer wins. This narrows the false POSITIVE; it does not make the
-# state multi-tenant. Two interactive sessions in one checkout are indistinguishable to this check.
-# No message is emitted on this path — every other allow here is a bare `exit 0`, and a novel output
-# shape on a path that must not block is not worth the risk.
-#
-# AND THE INDETERMINATE BRANCH IS UNPINNED. Measured by mutation 2026-08-27: changing `return 2`'s
-# handling to treat an indeterminate walk as foreign leaves every case in gate-test.sh green, because
-# nothing there can make `ps` fail mid-walk. The two FOREIGN cases pin the relaxation itself — they
-# block without this block and pass with it — but the conservative direction rests on this comment, not
-# on a test. Do not read the suite as covering it.
-[ "$FOREIGN" -eq 1 ] && allow
 
 if [ "$AWAITING" -gt 0 ]; then
   NEWEST=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | max' <<<"$ENTRY" 2>/dev/null) || allow
