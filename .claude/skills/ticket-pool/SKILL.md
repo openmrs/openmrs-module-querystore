@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.12.1
+version: 0.12.2
 ---
 
 # Ticket pool — the loop that learns
@@ -316,14 +316,26 @@ how you interrupt a tool call, so that is the most-pressed key in the product, n
 launcher now absorbs SIGINT with a no-op HANDLER — not `SIG_IGN`, which `exec` would leave inherited
 and so disable Ctrl-C inside the session too.
 
-If a terminal is closed outright rather than exited, the lease survives its session. `--claims` shows
-it and `--release <ticket>` gives it back.
+Closing the terminal is handled too. SIGHUP's default action kills the launcher outright, so the
+release never ran and the lease outlived the session — measured, the lease file and the worktree were
+both left behind. SIGHUP and SIGTERM are now absorbed for that reason, exactly as SIGINT is for its
+own: the launcher outlives the signal by the moment it takes the session to die, then releases.
+`--claims` and `--release` remain for anything that gets past all of it.
 
 **One claim per ticket, and it is a safety check rather than tidiness.** The worktree path is derived
 from the ticket, so a second claim for the same one resolves to the SAME directory — and creating a
 worktree releases whatever it finds there first. A running session that has just committed has a
 clean tree, so that release succeeds: measured, the second claim deleted the live session's committed
 file and left two leases pointing at one directory, silently.
+
+**A lease is per REPOSITORY and ticket, not per number.** Issue numbers collide across repos freely,
+so `o/b#266` is a different ticket from `o/a#266` and both may be claimed at once. `--release 266`
+works while the number is unambiguous and is REFUSED, naming the candidates, once it is not —
+`--release o/b#266` picks one. Guessing there would delete a worktree belonging to a live session.
+
+**A lease also records the INSTANCE it reserves, not just the slot name.** Editing
+`parallel.standalones` under a running session re-points a name at a different standalone, and a free
+name could then carry an instance somebody was already using.
 
 **And a claim refuses to start while a driver is running**, which is the mirror of the driver
 refusing while a claim is held. Without both halves the symmetry is decorative — a claim would take a

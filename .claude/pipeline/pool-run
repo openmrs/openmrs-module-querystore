@@ -478,16 +478,28 @@ def claim_slot(cfg: dict, slug: str, ticket: str, repo: Path, base: str,
     # the first session's checkout out from under it. Measured: the live session's committed file was
     # deleted and two leases were left pointing at one directory, which then made `release_claim`
     # ambiguous. Nothing errored on either count.
+    # Matched on the REPOSITORY as well as the number. Issue numbers collide across repos freely, so
+    # a ticket-only match refuses `o/b#266` because `o/a#266` is running — a legitimate claim turned
+    # away, and the worktree paths were never in conflict since those carry the slug too.
     want = ticket.lstrip("#")
     for name, lease in sorted(held.items()):
-        if lease.get("ticket") == want:
-            say(f"  x #{want} is already claimed on {name} ({lease.get('worktree')}). One claim per "
-                f"ticket: a second one resolves to that same worktree and would remove it. If that "
-                f"session is finished, `pool-run --release {want}`.")
+        if lease.get("ticket") == want and lease.get("slug") == slug:
+            say(f"  x {slug}#{want} is already claimed on {name} ({lease.get('worktree')}). One "
+                f"claim per ticket: a second one resolves to that same worktree and would remove it. "
+                f"If that session is finished, `pool-run --release {want}`.")
             return None
 
+    # A lease reserves a STANDALONE, and the slot name is only how it is addressed. Editing
+    # `parallel.standalones` while a session runs re-points that name at a different instance — and
+    # then a free slot NAME can carry an instance somebody is already using. So the instance itself is
+    # checked, not just the name it currently answers to.
+    leased_instances = {l.get("standalone") for l in held.values() if l.get("standalone")}
     for slot in slots:
         if slot.name in held:
+            continue
+        if slot.standalone and str(slot.standalone) in leased_instances:
+            say(f"  ! {slot.name} now points at {slot.standalone.name}, which another claim already "
+                "holds — parallel.standalones changed under a running session. Skipping it.")
             continue
         lease_path = SLOTS / f"{slot.name}.json"
         try:
@@ -502,7 +514,9 @@ def claim_slot(cfg: dict, slug: str, ticket: str, repo: Path, base: str,
             return None
         with os.fdopen(fd, "w") as fh:
             json.dump({"slot": slot.name, "ticket": ticket.lstrip("#"), "slug": slug,
-                       "worktree": str(wt), "repo": str(repo), "since": now()}, fh, indent=2)
+                       "worktree": str(wt), "repo": str(repo),
+                       "standalone": str(slot.standalone) if slot.standalone else None,
+                       "since": now()}, fh, indent=2)
         return {"slot": slot, "worktree": wt, "env": slot.env(),
                 "url": f"https://github.com/{slug}/issues/{ticket.lstrip('#')}"}
 
@@ -518,10 +532,19 @@ def release_claim(cfg: dict, ticket: str, say) -> dict | None:
     that is idle the moment the session ends. A worktree kept for its unsaved changes only blocks
     re-claiming THAT ticket, which is the refusal it should be.
     """
-    want = ticket.lstrip("#")
-    for name, lease in active_leases().items():
-        if lease.get("ticket") != want:
-            continue
+    # `--release 266` or `--release owner/repo#266`. The qualified form exists because the bare
+    # number is ambiguous the moment two repositories are configured, and picking one at random there
+    # would delete a worktree belonging to a session that is still running.
+    slug, _, number = ticket.rpartition("#")
+    want = (number or ticket).lstrip("#")
+    matches = {n: l for n, l in active_leases().items()
+               if l.get("ticket") == want and (not slug or l.get("slug") == slug)}
+    if len(matches) > 1:
+        say(f"  x #{want} is claimed in {len(matches)} repositories — name which one:")
+        for n, l in sorted(matches.items()):
+            say(f"      pool-run --release {l.get('slug')}#{want}   ({n})")
+        return None
+    for name, lease in matches.items():
         wt = Path(lease["worktree"])
         released = drop_worktree(Path(lease["repo"]), wt, say)
         # The gate entry goes with the worktree, exactly as it does on the driver's path. A claim of
@@ -586,18 +609,29 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
     # would silently disable Ctrl-C inside the session as well. With a handler, the parent absorbs it
     # (PEP 475 resumes the interrupted wait) and the session gets the default disposition — its own
     # Ctrl-C, behaving exactly as it does when you start `claude` yourself.
+    # SIGHUP and SIGTERM are absorbed for a DIFFERENT reason from SIGINT, and both are worth having.
+    # They are delivered to the group as well, and their default action terminates this launcher
+    # outright — so the `finally` never runs and the lease outlives the session that held it.
+    # Measured: closing the terminal left `slot-1.json` and the worktree behind, and the operator had
+    # to notice and `--release` by hand. Absorbed, the launcher outlives the signal by the moment it
+    # takes the session (which received the same signal) to die, sees the wait return, and releases.
+    # It cannot linger: it has nothing to do but wait, and the session is already going.
     def absorb(_signum, _frame):
         pass
 
-    previous = signal.signal(signal.SIGINT, absorb)
+    previous = {sig: signal.signal(sig, absorb)
+                for sig in (signal.SIGINT, signal.SIGHUP, signal.SIGTERM)}
     try:
         proc = subprocess.run(argv, cwd=str(claim["worktree"]), env=claim["env"])
         return proc.returncode
     finally:
-        signal.signal(signal.SIGINT, previous)
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
         # In `finally` deliberately: the release is the half an operator forgets, and it has to
         # happen on the paths they forget it on — a session that errored, or one that was killed.
-        release_claim(cfg, ticket, say)
+        # QUALIFIED with the repository: a bare number is ambiguous once two repos are configured,
+        # and an ambiguous release is refused — which would leave this session's own slot held.
+        release_claim(cfg, f"{slug}#{ticket.lstrip('#')}", say)
 
 
 def driver_problems() -> list[str]:
@@ -1929,6 +1963,7 @@ def cmd_claims(cfg: dict, say: Say) -> int:
         return 0
     for name, lease in sorted(held.items()):
         say(f"{name}  #{lease.get('ticket')}  {lease.get('slug')}  "
+            f"{Path(lease['standalone']).name if lease.get('standalone') else '(no standalone)'}  "
             f"since {datetime.fromtimestamp(lease.get('since', 0), timezone.utc).isoformat(timespec='minutes')}")
         say(f"{'':6s}  {lease.get('worktree')}")
     say("")

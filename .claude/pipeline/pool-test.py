@@ -784,6 +784,19 @@ def test_claim_and_release(tmp: Path) -> None:
         check("but the slot is freed anyway, because the standalone is idle now",
               not (pool.SLOTS / f"{a['slot'].name}.json").exists())
 
+        # Editing parallel.standalones under a running session re-points a slot NAME at a different
+        # instance, so a free name can carry an instance somebody is already using.
+        swapped = pool.merge(cfg, {"parallel": {"standalones": [str(two), str(one)]}})
+        before = {l["standalone"] for l in pool.active_leases().values()}
+        moved = pool.claim_slot(swapped, "o/r", "555", work, base, say)
+        if moved:
+            check("a reordered config never hands out an instance already claimed",
+                  str(moved["slot"].standalone) not in before,
+                  f"{moved['slot'].standalone} was already leased")
+            pool.release_claim(swapped, "555", say)
+        else:
+            check("a reordered config never hands out an instance already claimed", True)
+
         # A lease whose worktree is gone is a session that ended without releasing.
         pool.claim_slot(cfg, "o/r", "401", work, base, say)
         lease = next(pool.SLOTS.glob("*.json"))
@@ -883,7 +896,9 @@ def test_work_one_command(tmp: Path) -> None:
         check("and the skill already invoked, so there is nothing left to type",
               line[4].strip() == "/resolve-ticket https://example/266", repr(line[4]))
 
-        check("the slot is given back when the session exits", pool.active_leases() == {})
+        check("the slot is given back when the session exits", pool.active_leases() == {},
+              "an unqualified release is ambiguous once two repos are configured, and refusing "
+              "would leave this session's own slot held")
 
         # Remote Control is a flag on the LAUNCH, so a launcher that does not pass it silently costs
         # the operator phone monitoring — with nothing in the session to say why it is missing.
@@ -994,6 +1009,23 @@ def test_ctrl_c_reaches_the_session(tmp: Path) -> None:
     check("the launcher did NOT abandon it — the session ran to its own end",
           "finished" in body, body or "the launcher returned while the session was still alive")
     check("the launcher waited for it before releasing", "RC" in out, out[-200:])
+
+    # Closing the terminal is SIGHUP, whose DEFAULT action kills the launcher outright — so the
+    # release never runs and the lease outlives the session. Measured before this was handled: the
+    # lease file and the worktree were both left behind for the operator to find.
+    log.unlink()
+    proc = subprocess.Popen([sys.executable, str(runner), str(tmp / "runner-cfg.json")],
+                            start_new_session=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    deadline = time.time() + 10
+    while time.time() < deadline and "started" not in (log.read_text() if log.exists() else ""):
+        time.sleep(0.1)
+    os.killpg(os.getpgid(proc.pid), signal.SIGHUP)
+    proc.communicate(timeout=30)
+    slots = tmp / "state/slots"
+    check("a closed terminal does not leave its slot held",
+          not (list(slots.glob("*.json")) if slots.is_dir() else []),
+          "the lease outlived the session")
     check("and only then gave the slot back",
           not list((tmp / "state/slots").glob("*.json")) if (tmp / "state/slots").is_dir() else True)
 
@@ -1065,6 +1097,62 @@ def test_double_claim_and_live_driver(tmp: Path) -> None:
         pool.release_claim(cfg, "266", say)
 
 
+def test_same_ticket_number_in_two_repos(tmp: Path) -> None:
+    """`pool.json` maps MANY repos, and issue numbers collide across them freely.
+
+    Leases were matched on the ticket number alone while recording the repo they belonged to, so #266
+    in one repo was indistinguishable from #266 in another: the one-claim-per-ticket guard refused a
+    legitimate claim, and `--release 266` freed whichever lease happened to be found first.
+    """
+    print("\nthe same ticket number in two repositories")
+    origin_a, repo_a = git_fixture(tmp / "a")
+    origin_b, repo_b = git_fixture(tmp / "b")
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/a": str(repo_a), "o/b": str(repo_b)},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]}})
+
+    with isolated(tmp):
+        say = pool.Say(tmp / "two-repos.md")
+        a = pool.claim_slot(cfg, "o/a", "266", repo_a, pool.remote_head(repo_a), say)
+        check("the first repo's #266 is claimed", a is not None)
+        b = pool.claim_slot(cfg, "o/b", "266", repo_b, pool.remote_head(repo_b), say)
+        check("the OTHER repo's #266 is a different ticket and may also be claimed",
+              b is not None, "refused a legitimate claim as a duplicate")
+        if b:
+            check("and they get different worktrees", a["worktree"] != b["worktree"],
+                  str(a["worktree"]))
+
+        # Releasing an ambiguous number must not pick one at random.
+        out = pool.release_claim(cfg, "266", say)
+        check("an ambiguous release is refused rather than guessed",
+              out is None and len(pool.active_leases()) == 2, str(pool.active_leases()))
+        out = pool.release_claim(cfg, "o/b#266", say)
+        check("the qualified form releases exactly one", out is not None
+              and len(pool.active_leases()) == 1, str(pool.active_leases()))
+        check("and it is the one named",
+              next(iter(pool.active_leases().values())).get("slug") == "o/a",
+              str(pool.active_leases()))
+        # And `--work`'s OWN release must be qualified too, or a session in the second repo cannot
+        # give its slot back while the first repo's #266 is still running: the release would be
+        # ambiguous, be refused, and silently hold the slot.
+        stub = tmp / "stub"
+        stub.write_text("#!/bin/bash\nexit 0\n")
+        stub.chmod(0o755)
+        rc_cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+        held_before = set(pool.active_leases())
+        pool.work_in_session(rc_cfg, "o/b", "266", {"url": "https://example/b266"}, repo_b, say)
+        after = set(pool.active_leases())
+        check("a session releases its own slot even when the number is claimed elsewhere",
+              len(after) == len(held_before), f"{held_before} -> {after}")
+        check("and the OTHER repo's claim on that number is untouched",
+              any(l.get("slug") == "o/a" for l in pool.active_leases().values()),
+              str(pool.active_leases()))
+        pool.release_claim(cfg, "o/a#266", say)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1080,7 +1168,8 @@ def main() -> int:
                          ("claim cli", test_claim_cli),
                          ("one command", test_work_one_command),
                          ("ctrl-c", test_ctrl_c_reaches_the_session),
-                         ("collisions", test_double_claim_and_live_driver)]:
+                         ("collisions", test_double_claim_and_live_driver),
+                         ("two repos", test_same_ticket_number_in_two_repos)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
