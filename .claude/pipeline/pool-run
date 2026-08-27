@@ -520,6 +520,45 @@ def release_claim(cfg: dict, ticket: str, say) -> dict | None:
     return None
 
 
+def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, say) -> int:
+    """Claim a slot, start an ordinary interactive `claude` in it, and release when it exits.
+
+    `--claim` prints four lines to paste and `--release` takes them back, which is correct and is
+    three things to remember at the moment you are trying to start work. This is the same sequence
+    with the operator taken out of the middle: the cd, the three exports and the skill invocation all
+    happen here, and the release happens when the session ends — including when it fails, or the
+    terminal is interrupted, because a slot nobody gave back is a slot the next session cannot have.
+
+    The session is a NORMAL interactive one. It inherits this terminal, so it looks and behaves
+    exactly like starting `claude` by hand; the only difference is the directory it starts in and the
+    three variables it starts with.
+    """
+    failure, where, base = prepare_repo(repo, say)
+    if failure:
+        say(f"  x {where}")
+        say(f"    {PREPARE_REMEDY[failure]}")
+        return 1
+    claim = claim_slot(cfg, slug, ticket, repo, base, say)
+    if not claim:
+        return 1
+
+    prompt = f"/resolve-ticket {issue.get('url') or claim['url']}"
+    say(f"{slug}#{ticket.lstrip('#')} on {claim['slot'].name} "
+        f"({claim['slot'].describe().split(': ', 1)[1]})")
+    say(f"  {claim['worktree']}")
+    say("")
+    try:
+        proc = subprocess.run([cfg["claude"].get("binary") or "claude", prompt],
+                              cwd=str(claim["worktree"]), env=claim["env"])
+        return proc.returncode
+    except KeyboardInterrupt:
+        return 130
+    finally:
+        # In `finally` deliberately: the release is the half an operator forgets, and it has to
+        # happen on the paths they forget it on — a session that errored, or one they interrupted.
+        release_claim(cfg, ticket, say)
+
+
 def claim_problems(cfg: dict) -> list[str]:
     """The driver must not run while hand-launched sessions hold slots.
 
@@ -1792,6 +1831,30 @@ def cmd_claim(cfg: dict, say: Say, token: str) -> int:
     return 1
 
 
+def cmd_work(cfg: dict, say: Say, token: str) -> int:
+    """One command per terminal: `pool-run --work 266`."""
+    problems = preflight(cfg, say, want_label=False, driving=False)
+    for problem in problems:
+        say(f"  x {problem}")
+    if problems:
+        return 1
+    if os.environ.get("CLAUDE_PIPELINE_SLOT"):
+        say(f"  x this terminal is already inside {os.environ['CLAUDE_PIPELINE_SLOT']}. Start the "
+            "second ticket from a fresh terminal, not from inside a session.")
+        return 1
+    for slug, path in cfg["repos"].items():
+        issue = resolve_named(token, slug)
+        if issue is None:
+            continue
+        existing = pr_for_ticket(open_prs(slug), token)
+        if existing:
+            say(f"  ! #{existing['number']} is already open for this ticket — `pr-harden` owns it "
+                "from here, not `resolve-ticket`. Starting anyway, since you named it.")
+        return work_in_session(cfg, slug, token, issue, Path(path).expanduser(), say)
+    say(f"  x no configured repo has issue {token}")
+    return 1
+
+
 def cmd_release(cfg: dict, say: Say, token: str) -> int:
     return 0 if release_claim(cfg, token, say) else 1
 
@@ -1833,6 +1896,10 @@ def main() -> int:
                     help="how many tickets to work AT ONCE; overrides parallel.max_workers. Bounded "
                          "by parallel.standalones — one OpenMRS instance per worker")
     ap.add_argument("--init", action="store_true")
+    ap.add_argument("--work", metavar="TICKET",
+                    help="work ONE ticket in this terminal: claims a worktree and a standalone, "
+                         "starts an ordinary interactive claude in it with /resolve-ticket already "
+                         "invoked, and gives the slot back when you are done. One per terminal")
     ap.add_argument("--claim", metavar="TICKET",
                     help="set up a worktree and lease a standalone for a HAND-LAUNCHED session, then "
                          "print the cd and exports to paste before starting `claude`")
@@ -1858,6 +1925,8 @@ def main() -> int:
         return cmd_claims(cfg, say)
     if args.init:
         return cmd_init(cfg, say)
+    if args.work:
+        return cmd_work(cfg, say, args.work.strip())
     if args.claim:
         return cmd_claim(cfg, say, args.claim.strip())
     if args.release:

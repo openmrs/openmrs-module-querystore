@@ -843,6 +843,67 @@ def test_claim_cli(tmp: Path) -> None:
         check("and both give their slots back", pool.active_leases() == {})
 
 
+def test_work_one_command(tmp: Path) -> None:
+    """`pool-run --work 266` — claim, launch the session, release when it exits.
+
+    The claim/export/launch/release sequence is correct and nobody will remember it. This is the same
+    sequence with the operator taken out of the middle: whatever they would have pasted, the driver
+    sets, and whatever they would have released, it releases.
+    """
+    print("\nworking one ticket with one command")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    seen = tmp / "launched.txt"
+    stub = tmp / "claude-stub"
+    stub.write_text("#!/bin/bash\n"
+                    f'echo "$PWD|$OPENMRS_STANDALONE_HOME|$CLAUDE_PIPELINE_SLOT|$MAVEN_ARGS|$*" >> {seen}\n'
+                    'exit ${STUB_EXIT:-0}\n')
+    stub.chmod(0o755)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/r": str(work)},
+        "claude": {"binary": str(stub)},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]},
+    })
+
+    with isolated(tmp):
+        say = pool.Say(tmp / "work.md")
+        rc = pool.work_in_session(cfg, "o/r", "266",
+                                  {"url": "https://example/266", "number": 266}, work, say)
+        check("it exits with the session's own status", rc == 0, str(rc))
+        line = seen.read_text().strip().split("|")
+        check("the session was launched in the ticket's worktree",
+              line[0].endswith("o-r-266"), line[0])
+        check("with a standalone of its own", line[1] == str(one), line[1])
+        check("with co-tenancy declared", line[2] == "slot-1", line[2])
+        check("with a private maven head", "m2/slot-1" in line[3], line[3])
+        check("and the skill already invoked, so there is nothing left to type",
+              line[4].strip() == "/resolve-ticket https://example/266", repr(line[4]))
+
+        check("the slot is given back when the session exits", pool.active_leases() == {})
+        check("and the clean worktree with it",
+              not (pool.WORKTREES / "o-r-266").is_dir())
+
+        # A session that fails must still release, or the next one has nowhere to go.
+        import os as _os
+        _os.environ["STUB_EXIT"] = "3"
+        try:
+            rc = pool.work_in_session(cfg, "o/r", "297",
+                                      {"url": "https://example/297", "number": 297}, work, say)
+        finally:
+            _os.environ.pop("STUB_EXIT", None)
+        check("a session that exits non-zero reports that status", rc == 3, str(rc))
+        check("and still gives its slot back", pool.active_leases() == {})
+
+        # Uncommitted work is the one thing worth keeping, and the release says so.
+        held = pool.claim_slot(cfg, "o/r", "310", work, pool.remote_head(work), say)
+        (held["worktree"] / "MID-EDIT.md").write_text("x\n")
+        pool.release_claim(cfg, "310", say)
+        check("a worktree with unsaved work survives its release",
+              held["worktree"].is_dir())
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -855,7 +916,8 @@ def main() -> int:
                          ("driver gate-state", test_pool_gate_state_via_helper),
                          ("save_json temp", test_save_json_temp_is_private),
                          ("claims", test_claim_and_release),
-                         ("claim cli", test_claim_cli)]:
+                         ("claim cli", test_claim_cli),
+                         ("one command", test_work_one_command)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

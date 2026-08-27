@@ -1,8 +1,8 @@
 ---
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
-argument-hint: "[--once] [--limit N] [--workers N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.10.0
+argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
+version: 0.11.0
 ---
 
 # Ticket pool — the loop that learns
@@ -82,7 +82,8 @@ conversation, use the read-only forms below and hand over the command for the re
 | `~/.claude/pipeline/pool-run` | works the pool until it is empty, retroing when records allow |
 | `pool-run --once` / `--limit N` | one ticket / at most N |
 | `pool-run --workers 2` | work two tickets AT ONCE; see **Working several at once** |
-| `pool-run --claim 266` | set a HAND-LAUNCHED session up to work one ticket safely beside another |
+| `pool-run --work 266` | work ONE ticket in this terminal, in an ordinary interactive session. One per terminal |
+| `pool-run --claim 266` | the same setup, printed to paste yourself, if you want to start `claude` your own way |
 | `pool-run --release 266` / `--claims` | give that slot back / list the ones held |
 | `pool-run --ticket 310,297,266` | those tickets, **in that order**, labelled or not, past every skip |
 | `pool-run --dry-run` | preflight and print the queue; starts nothing |
@@ -278,21 +279,34 @@ your checkout they share one working tree. Measured: two sessions in one directo
 entry, and the first ticket's is silently gone — the later writer wins. Give them a worktree each and
 both entries survive.
 
-So claim a slot per session:
+So: **one command per terminal.**
 
 ```bash
-pool-run --claim 266     # prints the cd and the three exports; paste them, then start claude
-pool-run --claim 297     # in the other terminal
-pool-run --claims        # what is held right now
-pool-run --release 266   # when that session is finished
+pool-run --work 266      # terminal 1
+pool-run --work 297      # terminal 2
 ```
+
+That is the whole procedure. Each starts an ORDINARY interactive `claude` — your terminal, your
+session, watch and interrupt it as always — already in the ticket's worktree, already holding a
+standalone and a maven repository of its own, with `/resolve-ticket <url>` already invoked. When you
+finish, the slot is given back automatically: on a clean exit, on a failure, and on an interrupt,
+because the release is the half a person forgets and it has to happen on the paths they forget it on.
+
+`--work` refuses to run from inside a session that already holds a slot, since that is the mistake
+that puts two runs in one worktree.
+
+The pieces are still there if you want to drive them yourself — `--claim 266` prints the `cd` and the
+three exports instead of launching anything, `--claims` lists what is held, `--release 266` gives one
+back by hand. Reach for those if you start `claude` some other way; otherwise `--work` is the whole
+of it.
 
 A claim is a worktree cut from `origin/<default>` plus a leased standalone and maven head — the same
 three things the driver hands a worker. The lease is taken with an exclusive create, so two claims
 racing cannot pick one standalone; that is the part that is easy to get wrong by hand and the reason
 this is a command rather than a paragraph of instructions.
 
-A lease is released by `--release`, or reclaimed automatically once its worktree is gone — it cannot
+A lease is released when `--work`'s session exits, by `--release`, or reclaimed automatically once
+its worktree is gone — it cannot
 be pid-owned, because you claim first and start `claude` afterwards, so there is no process to point
 at when the lease is written. `--release` also clears that worktree's gate entry, because a re-claim
 of the same ticket reuses the same path and would otherwise inherit a stale `phase: building` and
