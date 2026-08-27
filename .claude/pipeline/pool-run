@@ -239,7 +239,7 @@ def take_lock(say: Say) -> bool:
         holder = load_json(LOCK, {})
         pid = holder.get("pid")
         alive = False
-        if isinstance(pid, int):
+        if isinstance(pid, int) and pid > 0:   # kill(0)/kill(-n) signal a GROUP and always succeed
             try:
                 os.kill(pid, 0)
                 alive = True
@@ -520,7 +520,7 @@ def active_leases() -> dict[str, dict]:
         # A `--claim` lease records no session — the operator starts `claude` afterwards, so there is
         # no pid to record — and its liveness stays the worktree. Absence of a pid is not death.
         pid = lease.get("session_pid")
-        if not gone and isinstance(pid, int):
+        if not gone and isinstance(pid, int) and pid > 0:   # 0 and negatives address a group
             try:
                 os.kill(pid, 0)
             except OSError:
@@ -780,7 +780,7 @@ def driver_problems() -> list[str]:
     if not LOCK.exists():
         return []
     pid = load_json(LOCK, {}).get("pid")
-    if not isinstance(pid, int) or pid == os.getpid():
+    if not isinstance(pid, int) or pid <= 0 or pid == os.getpid():
         return []
     try:
         os.kill(pid, 0)
@@ -1510,6 +1510,82 @@ def record_written(before: dict[Path, float], ticket: str | None = None,
 # The ledger is one dict and one file, mutated by every worker. Read-modify-write it under this.
 LEDGER_LOCK = threading.Lock()
 LEDGER_FLOCK = PIPELINE / "ledger.lock"
+_LEDGER_DEPTH = threading.local()
+FLOCK_NOTE_AFTER = 5      # seconds of waiting before saying so
+FLOCK_GIVE_UP_AFTER = 60  # then proceed unlocked rather than wedge an unattended driver
+
+
+def _open_ledger_lock():
+    """Open the lock file for locking only — read mode, because nothing is ever written to it.
+
+    `"a+"` demanded write permission the lock never uses, so a lock file on a read-only mount or owned
+    by another user made EVERY ledger write raise; `flock(LOCK_EX)` works fine on an O_RDONLY
+    descriptor. If it cannot be opened at all we proceed with the threading lock alone and say so:
+    losing cross-process exclusion is the behaviour that shipped for months, whereas refusing to write
+    the ledger loses the run's own record of itself.
+    """
+    try:
+        if not LEDGER_FLOCK.exists():
+            LEDGER_FLOCK.touch()
+        return open(LEDGER_FLOCK, "r")
+    except OSError as exc:
+        print(f"! ledger lock unusable ({exc}) — writing with in-process locking only", file=sys.stderr)
+        return None
+
+
+def _wait_for_flock(fh) -> None:
+    """Bounded wait. An unbounded one lets any stale holder wedge every worker thread forever.
+
+    A foreign holder is not hypothetical: deleting the lock file while it is held drops exclusion
+    silently, and a killed process can leave one. So this says it is waiting, then after a minute
+    proceeds without the flock rather than hanging an unattended driver — loudly, because an unlocked
+    write is the defect this whole helper removes and nobody should discover it from a lost entry.
+    """
+    waited = 0.0
+    while True:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except OSError:
+            if waited >= FLOCK_GIVE_UP_AFTER:
+                print(f"! ledger lock held by another process for {waited:.0f}s — proceeding WITHOUT "
+                      "cross-process locking; a concurrent write may be lost", file=sys.stderr)
+                return
+            if waited and abs(waited % FLOCK_NOTE_AFTER) < 0.01:
+                print(f"  waiting for the ledger lock ({waited:.0f}s)", file=sys.stderr)
+            time.sleep(0.1)
+            waited += 0.1
+
+
+def _read_ledger_preserving_corruption() -> dict:
+    """Never let an unreadable ledger become an empty one.
+
+    `load_json` answers {} for a truncated or unparseable file, and per-key publishing then writes a
+    one-key ledger — where the old whole-file write accidentally repaired the file from the driver's
+    snapshot on the next write. Removing that redundancy without replacing it turned a bad read into
+    permanent, silent data loss: measured, 5 keys on disk became 1 after a single ordinary write.
+    So the bytes are kept aside and the loss is announced. `gate-state` reports the same case; this
+    dropped the report when it copied the shape.
+    """
+    try:
+        raw = LEDGER.read_text()
+    except OSError:
+        return {}
+    if not raw.strip():
+        return {}
+    try:
+        return json.loads(raw)
+    except ValueError as exc:
+        keep = LEDGER.with_name(f"{LEDGER.name}.corrupt.{os.getpid()}")
+        try:
+            keep.write_text(raw)
+            where = str(keep)
+        except OSError:
+            where = "nowhere — it could not be copied aside"
+        print(f"! {LEDGER} is unreadable ({exc}). The bytes are at {where}. Continuing from an EMPTY "
+              "ledger, so entries it held are not in the file any more — recover from that copy.",
+              file=sys.stderr)
+        return {}
 
 
 @contextlib.contextmanager
@@ -1518,39 +1594,58 @@ def ledger_held():
 
     A `threading.Lock` alone was not enough, and the reason is the re-read rather than the lock. Every
     writer here held one long-lived in-memory snapshot of the WHOLE ledger — read once at startup, kept
-    for the life of the run — and published all of it on every write. So any change another process
-    made in between was silently reverted, however short the write itself was: `pool.lock` keeps two
-    drivers apart, but `pool-run --outcomes`, a `mark`, or any other subcommand run beside a live pool
-    is a second process by design, and the operator is invited to run them. Locking without re-reading
-    would have serialised the writes and lost exactly the same data.
+    for the life of the run — and published all of it on every write, so any change another process made
+    in between was silently reverted. Locking without re-reading would have serialised those writes and
+    lost exactly the same data. Measured against the code before this: 8 processes each holding a
+    snapshot and writing one key lost 7 of the 8 writes, six trials out of six.
+
+    **Which processes can actually overlap: two `--work` terminals.** An earlier version of this
+    docstring said "`--outcomes`, a `mark`, or any other subcommand run beside a live pool", and review
+    measured all three claims false — `--outcomes` takes the machine-wide `pool.lock` before it runs and
+    is refused while a driver or a `--work` session is live, `--status` writes nothing, and there is no
+    `mark` subcommand at all (it is a label `retro_forecast` prints). `cmd_work` checks only
+    `driver_problems`, so a second `--work` in a second terminal passes — which the skill documents as
+    "one per terminal". That is the pair this serialises. The fix is worth having on its own; the reason
+    printed here was not, and a rule defended by a false reason is one measurement from being discarded
+    with it.
 
     This yields what the file currently holds; a caller mutates that and it is written back before the
     lock drops. On an exception nothing is written — a half-applied mutation is not a state the ledger
-    should record.
+    should record. Do not hold it across network I/O: `refresh_outcomes` calls `gh` per PR.
 
-    **The file is authoritative for OTHER keys, never for the one you are writing.** A caller recording
-    an outcome for a ticket it just ran holds the freshest entry for that key, and it may not be in the
-    file at all; the lock exists to stop that write clobbering everybody ELSE's keys. Reading the key's
-    own content back out of the file instead was measured wrong — it dropped a recorded `pr` and turned
-    a `ready` ticket into an `error`, reddening four cases in `pool-test.py`. So: decide from the
-    caller's view, publish per key. And do not hold this across network I/O — `refresh_outcomes` calls
-    `gh` per PR, and the lock would be held against a live pool for the duration.
-
-    Order is threads-then-file everywhere, so no caller can invert it. Reads outside this are left
-    unlocked: `save_json` renames atomically, so a reader sees one whole version or the other, and a
-    Stop hook or a status print must never block on somebody else's lock.
+    Reads outside this are left unlocked, and `save_json` renames atomically so a reader sees one whole
+    version or the other. Every such read is print-only or holds `pool.lock`, except `work_in_session`'s,
+    which holds its snapshot for the session's whole lifetime — that staleness is what `write_ledger`'s
+    per-field rule exists to contain.
     """
+    # Nesting deadlocks: LEDGER_LOCK is not reentrant, and flock conflicts across two open file
+    # descriptions in one process, so the flock would deadlock too. Both are silent and permanent, and
+    # `write_ledger` is one line away from being called inside a body. Fail loudly instead.
+    if getattr(_LEDGER_DEPTH, "held", False):
+        raise RuntimeError(
+            "ledger_held() is already held by this thread — it is not reentrant and nesting it "
+            "deadlocks. Mutate the dict this yields; do not call write_ledger/merge_ledger_changes "
+            "from inside the body.")
     LEDGER_FLOCK.parent.mkdir(parents=True, exist_ok=True)
     with LEDGER_LOCK:
-        fh = open(LEDGER_FLOCK, "a+")
+        _LEDGER_DEPTH.held = True
+        fh = _open_ledger_lock()
         try:
-            fcntl.flock(fh, fcntl.LOCK_EX)
-            data = load_json(LEDGER, {})
+            if fh is not None:
+                _wait_for_flock(fh)
+            data = _read_ledger_preserving_corruption()
             yield data
             save_json(LEDGER, data)
         finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
-            fh.close()
+            _LEDGER_DEPTH.held = False
+            if fh is not None:
+                fcntl.flock(fh, fcntl.LOCK_UN)   # redundant with close(), kept as the explicit release
+                fh.close()
+
+
+def ledger_snapshot(ledger: dict) -> dict:
+    """A DEEP before-image, for `merge_ledger_changes` to compare against. See why in its docstring."""
+    return json.loads(json.dumps(ledger))
 
 
 def merge_ledger_changes(before: dict, after: dict) -> list[str]:
@@ -1559,6 +1654,15 @@ def merge_ledger_changes(before: dict, after: dict) -> list[str]:
     The alternative — writing every key of the caller's snapshot — is what the whole-file write did,
     one level down: a key another process changed in the meantime is overwritten with this snapshot's
     older value. Comparing tells the keys this run has an opinion about from the ones it merely read.
+
+    **`before` must come from `ledger_snapshot`, and a shallow copy silently publishes NOTHING.**
+    `refresh_outcomes` mutates its entries in place, so with `dict(ledger)` the two sides are the same
+    objects, every comparison is equal, and every outcome refresh is discarded without a word. That is
+    a one-word edit away from here and no test could see it until one was written for it.
+
+    It cannot express a DELETION either — it iterates `after` — and today nothing removes a ledger key
+    (no `del`, no `pop`, no prune subcommand), so that costs nothing. It is stated because the next
+    caller that wants one will not otherwise be warned.
     """
     changed = [k for k, v in after.items() if before.get(k) != v]
     if changed:
@@ -1569,15 +1673,33 @@ def merge_ledger_changes(before: dict, after: dict) -> list[str]:
 
 
 def write_ledger(ledger: dict, key: str, entry: dict) -> None:
-    """Merge ONE key into the file, never the caller's whole snapshot.
+    """Merge ONE key into the file, and within that key, only the FIELDS this caller knows about.
 
-    `ledger` is updated too, so the caller's own scheduling decisions see what it just wrote. It stays
-    a private view for every OTHER key — this driver's tickets are its own, and `pool.lock` stops a
-    second driver — but it is no longer what gets published.
+    Per-key was not enough. Every caller builds its entry as `{**ledger.get(key, {}), ...}` — a spread
+    of its own stale snapshot of that key — so a field another process added since was reverted by
+    exactly the mechanism that lost whole keys, one level down. Measured: a `--work` session finishing
+    on a stale snapshot erased the `outcome` block `--outcomes` had just recorded, which is the only
+    field in the ledger that says whether the pipeline's work was any good.
+
+    So three sets, and the middle one is the point:
+      * fields in `entry`                                     -> the caller's, and they win
+      * fields on disk the caller NEVER SAW                   -> somebody else's, and they survive
+      * fields the caller saw and left out of `entry`          -> dropped on purpose, and stay dropped
+
+    That last one is why this is not a plain `{**disk, **entry}`: `nothing_ran` deliberately strips
+    `RUN_FIELDS` so an entry cannot report a runtime for an attempt that never started, and merging the
+    disk copy over the top would resurrect every one of them. The caller's own before-image
+    (`ledger[key]`) is what separates "never saw it" from "meant to remove it".
+
+    `ledger` is updated too, so the caller's own scheduling decisions see what it just wrote.
     """
+    seen = ledger.get(key) or {}
     with ledger_held() as data:
-        data[key] = entry
-    ledger[key] = entry
+        current = data.get(key) or {}
+        foreign = {k: v for k, v in current.items() if k not in seen and k not in entry}
+        merged = {**foreign, **entry}
+        data[key] = merged
+    ledger[key] = merged
 
 
 # What describes ONE run rather than the ticket. A status that means "nothing ran" has to clear
@@ -1847,9 +1969,26 @@ def reap_running(ledger: dict, say: Say) -> list[str]:
     if touched:
         # Per key, not the whole snapshot: a ticket nobody here touched keeps whatever another process
         # recorded for it while this pass was deciding.
+        #
+        # And this is the one caller whose DECISION belongs to the file rather than to the caller — it
+        # is a predicate on the stored status, not knowledge only this process holds — so it is
+        # re-asserted here. Measured against the version that did not: a `--work` session recorded
+        # `status: ready, pr: 99` for its own ticket while this pass was deciding, and the reap
+        # published `status: error` over it, destroying a real PR and telling the operator no outcome
+        # was ever recorded. `reap_running`'s soundness note leans on `pool.lock`, and `--work` does
+        # not take it. A key ABSENT from the file is still published: there is nothing to conflict
+        # with, and the caller's view is all there is.
         with ledger_held() as data:
-            for key in touched:
-                data[key] = ledger[key]
+            for key in list(touched):
+                current = data.get(key)
+                if current is None or current.get("status") == "running":
+                    data[key] = ledger[key]
+                else:
+                    touched.remove(key)
+                    reaped[:] = [r for r in reaped if not r.startswith(f"{key} ")]
+                    ledger[key] = current
+                    say(f"    {key} was left running but another process has since recorded "
+                        f"{current.get('status')!r} — left alone")
     for line in reaped:
         say(f"  ! a previous driver died mid-ticket: {line}")
     return reaped
@@ -1936,7 +2075,17 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
                 results.append((job["key"], future.result()))
             except Exception as exc:  # a worker that dies must not take the wave with it
                 say(f"[{job['key']}] ! the worker itself raised {type(exc).__name__}: {exc}")
-                results.append((job["key"], crash_entry(ledger, job["key"], exc)))
+                # And neither must the recording of that death. `crash_entry` writes the ledger, which
+                # can now raise on its own (an unusable lock file, a failed rename), and an exception
+                # escaping this handler would take the wave AND the driver — under the comment above
+                # saying it must not. `work_in_session` wraps its equivalent for the same reason.
+                try:
+                    status = crash_entry(ledger, job["key"], exc)
+                except Exception as inner:
+                    say(f"[{job['key']}] ! and the ledger write for it raised "
+                        f"{type(inner).__name__}: {inner} — the outcome is unrecorded")
+                    status = "error"
+                results.append((job["key"], status))
     return results
 
 
@@ -2336,7 +2485,7 @@ def main() -> int:
             say("")
             say("outcomes")
             led = load_json(LEDGER, {})
-            before = json.loads(json.dumps(led))
+            before = ledger_snapshot(led)
             n = refresh_outcomes(led, say)
             merge_ledger_changes(before, led)
             say(f"  ({n} PR(s) checked)")
@@ -2370,7 +2519,7 @@ def main() -> int:
             return 0
 
         ledger = load_json(LEDGER, {})
-        ledger_before = json.loads(json.dumps(ledger))
+        ledger_before = ledger_snapshot(ledger)
         if not args.dry_run:
             reap_running(ledger, say)
         if not args.dry_run and any(e.get("pr") for e in ledger.values()):

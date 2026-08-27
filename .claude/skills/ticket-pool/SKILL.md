@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.14.2
+version: 0.14.3
 ---
 
 # Ticket pool — the loop that learns
@@ -93,14 +93,21 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-run --init` | create the label in each configured repo |
 | `pool-run --config <path>` | a config other than the default |
 | `pool-run --outcomes` | refresh what became of every PR the ledger knows about, and stop |
-
-These are safe to run beside a live pool. They were not: each held one in-memory copy of the whole
-ledger and wrote all of it back, so whatever the pool recorded in between was reverted silently —
-measured, 7 of 8 concurrent writes lost. Every write now merges the keys it actually changed under a
-lock the driver and its subcommands share, and `--outcomes` does its `gh` calls outside that lock so a
-network round trip cannot stall the pool.
 | `pool-watch` | render the newest session's stream the way an interactive session reads |
 | `pool-watch 310 --results` | that ticket's session, tool results included |
+
+**Most of these refuse to run beside a live pool, and that is the design.** `--outcomes` takes the
+machine-wide `pool.lock` before it does anything, and both it and `--work` are refused while a driver
+or another session's claim is outstanding. What CAN overlap is two `--work` terminals — one per
+terminal is how the workflow above uses them — and until recently that lost data: each held one
+in-memory copy of the whole ledger and wrote all of it back, so whatever the other recorded in between
+was reverted silently. Measured, 7 of 8 concurrent writes lost. A write now merges only the keys, and
+within a key only the fields, that the caller actually changed, under a lock shared by everything that
+writes the ledger; `--status`, `--claims`, `--dry-run` and `pool-watch` never write it at all.
+
+*This paragraph previously said "these are safe to run beside a live pool", which was false of every
+row above it — they refuse — and it was inserted inside the table, orphaning the two `pool-watch` rows
+from their header.*
 
 `~/.claude/pipeline/pool.json` holds the label, a repo→checkout map, the source repo the retro pushes
 to, the retro's record threshold and timeout, the per-ticket timeout, quiet window and attempt cap, a

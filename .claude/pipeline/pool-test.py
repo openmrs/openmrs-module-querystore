@@ -463,6 +463,16 @@ def test_record_attribution(tmp: Path) -> None:
 
 def test_crash_does_not_clobber(tmp: Path) -> None:
     print("\na worker that raises after recording its outcome")
+    # EVERYTHING here runs inside `isolated`. `crash_entry` writes LEDGER unconditionally, and these
+    # three fixtures used to sit above the `with`, so running the suite as documented left `o/r#1`,
+    # `o/r#2` and `o/r#3` in the operator's real ledger — found there, with `pr: 412`, making every
+    # subsequent driver start query a PR that does not exist. A case that writes real state is not a
+    # case, it is a second pipeline.
+    with isolated(tmp):
+        _crash_cases(tmp)
+
+
+def _crash_cases(tmp: Path) -> None:
     done = {"o/r#1": {"status": "ready", "pr": 412, "attempts": 1, "cost_usd": 3.2,
                       "session_id": "abc"}}
     status = pool.crash_entry(done, "o/r#1", RuntimeError("boom"))
@@ -484,7 +494,7 @@ def test_crash_does_not_clobber(tmp: Path) -> None:
           pool.crash_entry(fresh, "o/r#3", RuntimeError("boom")) == "error", str(fresh))
 
     # A driver killed outright writes no record of its own death, and the sentinel is the only trace.
-    with isolated(tmp):
+    if True:
         left = {"o/r#4": {"status": "running", "attempts": 1, "last_run": "2026-01-01T00:00:00"},
                 "o/r#5": {"status": "ready", "pr": 9, "attempts": 1}}
         reaped = pool.reap_running(left, pool.Say(tmp / "reap.md"))
@@ -1383,21 +1393,26 @@ def test_ledger_cross_process(tmp: Path) -> None:
     child.write_text(LEDGER_CHILD)
     pool.save_json(ledger, {"seed": {"status": "kept"}})
 
+    # 12 children and NO stagger. With 8 and a 0.5/0.05 stagger this case passed twice in eight runs
+    # with the flock deleted — `time.sleep` decided whether it overlapped. Measured at these
+    # parameters: 6 trials in 6 lose data without the flock, 0 in 6 with it.
     procs = [subprocess.Popen(
-        [sys.executable, str(child), str(HERE / "pool-run"), str(ledger), str(flock),
-         f"k{i}", "0.5" if i % 2 else "0.05"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        for i in range(8)]
+        [sys.executable, str(child), str(HERE / "pool-run"), str(ledger), str(flock), f"k{i}", "0"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        for i in range(12)]
     for pr in procs:
         pr.wait()
     bad = [pr.stderr.read().decode()[-300:] for pr in procs if pr.returncode]
     check("every child exited cleanly", not bad, str(bad[:1]))
 
     data = json.loads(ledger.read_text())
-    missing = [f"k{i}" for i in range(8) if f"k{i}" not in data]
+    missing = [f"k{i}" for i in range(12) if f"k{i}" not in data]
     check("no write is lost to another process's snapshot", not missing, f"lost {missing}")
+    # Not a sensitive check — the pre-fix whole-snapshot write passes it too, since `seed` was in
+    # every writer's snapshot. Kept as a statement of intent, not as a guard.
     check("a key nobody wrote is left alone", data.get("seed", {}).get("status") == "kept")
     check("each write kept its own value",
-          all(data.get(f"k{i}", {}).get("who") == f"k{i}" for i in range(8)))
+          all(data.get(f"k{i}", {}).get("who") == f"k{i}" for i in range(12)))
 
     saved = (pool.LEDGER, pool.LEDGER_FLOCK)
     pool.LEDGER, pool.LEDGER_FLOCK = ledger, flock
@@ -1426,6 +1441,100 @@ def test_ledger_cross_process(tmp: Path) -> None:
         pool.LEDGER, pool.LEDGER_FLOCK = saved
 
 
+
+def test_ledger_field_merge(tmp: Path) -> None:
+    """Per KEY was not enough; the fields inside a key are the same defect one level down."""
+    print("\nthe ledger merges fields, not just keys")
+    with isolated(tmp):
+        # Another process records an outcome for a ticket this caller is holding a stale copy of.
+        pool.save_json(pool.LEDGER, {"o/r#1": {"status": "draft", "pr": 5, "attempts": 1}})
+        stale = {"o/r#1": {"status": "draft", "pr": 5, "attempts": 1}}
+        with pool.ledger_held() as d:
+            d["o/r#1"]["outcome"] = {"pr_state": "MERGED", "reviews": 2}
+
+        pool.write_ledger(stale, "o/r#1", {**stale["o/r#1"], "status": "ready", "attempts": 2})
+        end = json.loads(pool.LEDGER.read_text())["o/r#1"]
+        check("a field this caller never saw survives its write", end.get("outcome") is not None,
+              str(end))
+        check("and the caller's own fields win", end["status"] == "ready" and end["attempts"] == 2,
+              str(end))
+        check("the caller's in-memory copy agrees with the file", stale["o/r#1"] == end, str(stale))
+
+        # nothing_ran strips RUN_FIELDS on purpose. A plain {**disk, **entry} resurrects them.
+        pool.save_json(pool.LEDGER, {"o/r#2": {"status": "running", "duration_s": 99, "turns": 7,
+                                               "attempts": 1}})
+        held = {"o/r#2": {"status": "running", "duration_s": 99, "turns": 7, "attempts": 1}}
+        pool.write_ledger(held, "o/r#2", pool.nothing_ran(held["o/r#2"], "worktree-blocked", "why"))
+        end2 = json.loads(pool.LEDGER.read_text())["o/r#2"]
+        check("a field the caller dropped on purpose stays dropped",
+              "duration_s" not in end2 and "turns" not in end2, str(end2))
+
+
+def test_reap_respects_a_newer_status(tmp: Path) -> None:
+    """`reap_running`'s decision is a predicate on the STORED status, so it is re-asserted under the
+    lock. `--work` writes `status: running` and does not take `pool.lock`, so it can move underneath."""
+    print("\nreaping does not overwrite an outcome recorded under it")
+    with isolated(tmp):
+        pool.save_json(pool.LEDGER, {"o/r#7": {"status": "ready", "pr": 99, "attempts": 2}})
+        stale = {"o/r#7": {"status": "running", "attempts": 1, "last_run": "2026-01-01T00:00:00"}}
+        reaped = pool.reap_running(stale, pool.Say(tmp / "r.md"))
+        end = json.loads(pool.LEDGER.read_text())["o/r#7"]
+        check("a ticket another process finished is not reaped", end["status"] == "ready", str(end))
+        check("its PR survives", end.get("pr") == 99, str(end))
+        check("and it is not reported as closed out", reaped == [], str(reaped))
+
+        # Absent from the file: nothing to conflict with, so it is still closed out.
+        pool.save_json(pool.LEDGER, {})
+        only = {"o/r#8": {"status": "running", "attempts": 1, "last_run": "2026-01-01T00:00:00"}}
+        reaped2 = pool.reap_running(only, pool.Say(tmp / "r2.md"))
+        check("a ticket the file has never seen is still closed out",
+              len(reaped2) == 1 and only["o/r#8"]["status"] == "error", str(only))
+
+
+def test_ledger_corruption_is_not_silent(tmp: Path) -> None:
+    """An unreadable ledger must not become an empty one — per-key publishing removed the accidental
+    whole-file repair, and nothing replaced it."""
+    print("\nan unreadable ledger is preserved, not emptied")
+    with isolated(tmp):
+        pool.save_json(pool.LEDGER, {f"k{i}": {"v": i} for i in range(5)})
+        pool.LEDGER.write_text("{ truncated")
+        pool.write_ledger({}, "k0", {"v": 0})
+        kept = list(pool.LEDGER.parent.glob(f"{pool.LEDGER.name}.corrupt.*"))
+        check("the unreadable bytes are kept aside", len(kept) == 1, str(kept))
+        check("and they are the bytes that were there",
+              kept and kept[0].read_text() == "{ truncated")
+
+
+def test_ledger_held_is_not_reentrant(tmp: Path) -> None:
+    """Nesting deadlocks silently and permanently; `write_ledger` is one line from doing it."""
+    print("\nnesting the ledger lock raises instead of hanging")
+    with isolated(tmp):
+        raised = ""
+        try:
+            with pool.ledger_held():
+                with pool.ledger_held():
+                    pass
+        except RuntimeError as exc:
+            raised = str(exc)
+        check("a nested ledger_held raises", "not reentrant" in raised, raised or "(no exception)")
+        # and the guard is cleared, so the next writer is not locked out by the failed attempt
+        pool.write_ledger({}, "after", {"v": 1})
+        check("the lock is usable afterwards", "after" in json.loads(pool.LEDGER.read_text()))
+
+
+def test_ledger_snapshot_is_deep(tmp: Path) -> None:
+    """`merge_ledger_changes` compares against `before`; a shallow copy publishes NOTHING, silently,
+    because `refresh_outcomes` mutates its entries in place."""
+    print("\nthe before-image is deep")
+    with isolated(tmp):
+        pool.save_json(pool.LEDGER, {"a": {"v": 1}})
+        led = {"a": {"v": 1}}
+        before = pool.ledger_snapshot(led)
+        led["a"]["v"] = 2                      # in place, exactly as refresh_outcomes does
+        check("an in-place change is detected", pool.merge_ledger_changes(before, led) == ["a"])
+        check("and it reaches the file", json.loads(pool.LEDGER.read_text())["a"]["v"] == 2)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1438,6 +1547,11 @@ def main() -> int:
                          ("driver gate-state", test_pool_gate_state_via_helper),
                          ("save_json temp", test_save_json_temp_is_private),
                          ("ledger cross-process", test_ledger_cross_process),
+                         ("ledger field merge", test_ledger_field_merge),
+                         ("reap vs newer status", test_reap_respects_a_newer_status),
+                         ("ledger corruption", test_ledger_corruption_is_not_silent),
+                         ("ledger reentrancy", test_ledger_held_is_not_reentrant),
+                         ("ledger snapshot", test_ledger_snapshot_is_deep),
                          ("claims", test_claim_and_release),
                          ("needs a tty", test_work_needs_a_terminal),
                          ("claim cli", test_claim_cli),
