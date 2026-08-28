@@ -33,8 +33,8 @@ hook must never block on someone else's lock — always see one whole version or
   gate-state --owner $PPID harden-set --cycle 3 --count-edits [--override]
   gate-state await "review r3" [--only pr|harden|both]
   gate-state clear-await [--only pr|harden|both]
-  gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"
-  gate-state reviewed-sha <sha>
+  gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"   # writes the pr entry; no --only
+  gate-state reviewed-sha <sha>                                        # writes the pr entry; no --only
   gate-state show [--json]
   gate-state clear [--only pr|harden|both] [--json]        # --json prints what it REMOVED
 """

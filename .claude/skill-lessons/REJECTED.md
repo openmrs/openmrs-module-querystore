@@ -855,3 +855,138 @@ reading only that section would have changed a correct rule.
   "on every pass, forever"; the refuter cut all three. Still worth a rule only if one ever survives the
   gate — the gate is still the mechanism.
 - Every other count in the previous block stands unchanged.
+
+## 2026-08-28 — window #234 / #236 / #297 / FM2-700 (4 records; two refutation rounds)
+
+Records: `2026-08-28-openmrs-module-chartsearchai-234.md` (PR 326),
+`…-236.md` (PR 324), `…-297.md` (PR 325), `2026-08-28-openmrs-module-fhir2-FM2-700.md` (PR 629).
+Linter: 10 files, 0 findings. **Applied: P1 (harden 0.21.0), P2 (`gate-state` usage block).**
+Two proposals of the proposer's died in round 1; two the round-1 refuter raised itself died in
+round 2, to a second fresh adversary.
+
+**P3 · narrow Step 6's hooks `cmp` from "every file" to "every `.sh` file".** Died on three
+blocking objections. Clause 3 is unavailable: `skill-retro:66-68` grants it "because the
+contradiction is a fact about the document", and which files sit in two directories is a fact about
+two filesystems — the ruling at `:773-775` and `:434-440`. Read whole the clause names its own
+subject in the next sentence, `skill-retro:128` "That directory is what `settings.json` actually
+runs", the same read-whole failure as `:792-793`. And the unchecked "reports a difference every
+retro forever" is the identical claim cut at `:799`. Round 2 corrected round 1's second citation —
+`:786-801` killed a narrowing of `:118`'s glob, not of `:127`'s "every file", a different clause
+with a different loss profile — and confirmed the death stands on the other two. **Coverage note
+kept:** narrowing would drop `hooks/README.md` from any mirror obligation, and that file has already
+been wrong once (`2026-08-27-retro-authored-hook-regression.md:45`).
+
+**P4 · add `.claude/pipeline/` to the Step 6 sync list.** Died: 0 records, and the proposal said so
+itself ("no observed drift"), verified — all four pipeline files byte-identical live-vs-repo.
+Clause 3 unavailable per `:775`. Round 2 corrected round 1's second objection: `pool-run:836-838`'s
+"the same definition for both" means the two *invocation moments* `parity_problems` serves, not that
+a skill's prose may not state a check — and `skill-retro:127-132` and `:137-143` already state two
+checks `parity_problems` does not implement. P4 dies on the bar alone.
+
+**P5 (round-1 refuter's own finding) · "Step 6 and `pool-run` disagree about who checks
+`gate-state`".** Died on four blocking objections from the round-2 adversary. `pool-run:835` does
+not say what was claimed once its docstring is read whole: `:831-838` names its subject first — the
+skills, the registered hooks, and the repo mirror — and Step 6 carries all three (`:116-120`,
+`:121-126`, `:127-132`); the `pool-run`/`pool-watch` tuple is coverage the docstring
+**under**-describes, not an obligation handed off. Clause 3 does not reach it either: `pool-run` is
+`ticket-pool`'s driver, skill-retro has no gate script, and `:527-528` already refused clause 3 on
+this shape. Stripped of clause 3 it is round 1's P4 again. **What survived is the remedy, and it is
+not prose:** `"gate-state"` was added to `pool-run:848`'s parity tuple, which both refuters
+independently named. Proved live — with the live copy edited and the mirror not yet updated,
+`parity_problems` reported `gate-state differs from the source repo`, which it structurally could
+not do before. Governance surface unchanged.
+
+**P6 (round-1 refuter's own finding) · "a mutation survives because every covering fixture is
+degenerate".** Died on four blocking objections. The standing objection at `:836` was rebutted
+against the wrong line — that rule is `harden:61-63`, not `:192`, and at its own site it asks the
+proposed question directly, arriving with `harden:46-52` ("ask what the FIXTURE can express … A
+premise no fixture can falsify is not covered") and `:54-56`; all three cited cases are reached.
+The edit's antecedent does not fire on two of its three: `#234:46-50` records no mutation (a reviewer
+found it by reading `Concept.getName()`'s semantics) and `FM2-700:28-30` is tagged "cost: 0
+(explanatory)". The one genuine surviving-mutation case, `#266:12`, is the existing rule working and
+diagnosing its own cause unprompted — the shape already ruled at `:846-849`. And the proposed text
+broke the grammar rule it was submitted under ("all three", "every concept"), the sixth consecutive
+retro to do so (`:853-856`). **Better witness recorded for a future pass:** `FM2-700:35-37`, a real
+surviving mutation on a degenerate fixture at a cycle's cost — objections 1 and 3 still bite on it.
+
+**P1 · applied, harden 0.21.0 — an idle output or transcript file is not evidence an agent has
+stopped.** Clause 1, two records ruled independent (two repos, two dates, two harms), meeting
+`:828`'s reopen condition verbatim. Round 1 cut two blocking wording defects: "both runs … until the
+agent finishes" misattributed `#293:27`'s observation to FM2-700, whose agents were "killed
+mid-investigation" and never finished; and "the harness reports completion, so wait for that" is
+what `#293:27` provably could not do ("In-turn waiting had to be blind `sleep` loops"). Round 2 cut
+two more: the terminal-outcome sentence had to be scoped to the gate's allow, because past it
+`harden:236-237` and `harden-cycle-gate.sh:27`/`:45` hand the decision to a clock — and `:237` must
+NOT be deleted, since it mirrors its own gate script and `skill-retro:121-126` exists so those do not
+diverge; and the bullet closes only the false-death half, since FM2-700's `target/` remedy
+presupposes isolation while `#293`'s does not. **The claimed closure of the `:588-590` park was
+withdrawn**: that preference is about a *past-bound* agent, a clock trigger, and FM2-700 killed on
+file idleness rather than at `AWAIT_TTL`, so that entry's own reopen condition is still unmet.
++11 lines, retiring nothing; the recorded cost is two destroyed live agents.
+
+**P2 · applied, `gate-state` usage block.** Clause 1, `#293:28` and `#297:32`. Comment text verified
+against the script by both refuters (`gate-state:244`, `:251` both write `held.entry("pr")`;
+`:172-179` define no `--only`) and then empirically — `reviewed-sha` on a scratch tenant wrote
+`{"pr": {"reviewed_shas": [...]}}` and no harden entry. Applied to the live copy and the repo mirror
+in one commit. **Parked, round-2 non-blocking:** four subcommands take no `--only`, not two
+(`pr-set` and `harden-set` at `:32-33`), so annotating two invites the reading that the others do —
+untested, and the records name only `reviewed-sha`. Also parked: whether `pr-harden`'s State section
+should say it too, since `pr-harden:757-759` already shows the correct invocation fifteen lines
+above the `--only` examples it was evidently generalized from.
+
+## Running parked counts (superseding the previous block where they differ)
+- **`git checkout -- <path>` losing uncommitted work: 11 incidents / 9 records** (#302, #284, #268,
+  #269 x2, #250 x2, #308, #317, +#234, +FM2-700). Blocking remedies stay killed and neither new
+  incident meets the reopen condition — both are probes on files carrying uncommitted work
+  (`#234:56-58`, `FM2-700:48-50`). **Correction to this entry's own wording: "remedies stay killed"
+  is now incomplete.** A remedy SHIPPED — `~/.claude/hooks/git-restore-backup.sh`, registered in
+  `settings.json` under `PreToolUse`/`Bash` and populating `~/.claude/restore-backups/` — and neither
+  incident used it: `#234:56-58` records "one reapply" and `FM2-700:48-50` "Restoring from a `cp`
+  copy", the author's own copy rather than the hook's. **A shipped net not reaching the operator is
+  a different lesson from the killed remedies, at 2 records**, and is the shape to propose next time
+  rather than re-proposing the `cp` aside (killed at `:52-100`, objection 1: a `cp` taken at mutation
+  time reverts a concurrent edit exactly as a remembered copy does). No count is recorded for the
+  backup directory: a draft carried one and it was stale within the same session.
+- **Prose-correction cycles: 12 records** — previous figure 9 at `:843`, plus FM2-700 ("SIX separate
+  false sentences … five of them written while correcting the previous one · cost: 5 harden cycles"),
+  #297:30 (cycles 2-4, escaped by the shipped delete-rather-than-reword rule, "cycle 4's only edit
+  was a deletion") and #236 (a round-3 correction that "made a vague-but-true sentence sharper and
+  false"). Remedy killed on the walk-forward at `:32-40`; the shipped rule is what converged #297.
+- **Cross-session interference on a live run's shared state: 3 records** — `:811-818` at 2, plus
+  `#297:43` (a round-1 verifier "killed a co-tenant's standalone (pool-slots/standalone-8082) by
+  misattributing its PIDs before checking their cwd… One co-tenant request lost"). Third distinct
+  harm and a third surface. The brief already required the cwd check and the agent did it only after
+  the first kill, so the candidate remedy is mechanical rather than more brief text.
+- **A published count that does not reproduce from its own stated predicate: 1 record, 3 sightings**
+  (#236:9, :10, :13, one Phase 2 pass each). `:776-777` settles that a pass is neither a round nor a
+  cycle, so clause 2 is unmet. Plausibly already reached by `harden:299`.
+- **No progress signal for parallel Phase 2 agents: CLOSED for the false-death half** by P1 above.
+  The progress half — #293's blind `sleep` loops — is open at 1 record; `pr-harden:669` makes in-turn
+  waiting the shipped rule there, so it may not be a defect at all.
+- **`gate-state reviewed-sha`/`declined` reject `--only`: CLOSED** by P2 above (2 records).
+- **New at 1 record each, verified against the records:** `gh issue view` returning EMPTY where
+  `gh api repos/<o>/<r>/issues/<n>` works (#236:26 — and `:596` has ruled against writing a machine
+  fact into a skill); a stale jar in `.openmrs-lib-cache/<module>/lib/` shadowing a deployed fix
+  (FM2-700:18-20, 1 restart); `mvn install` re-dirtying the tree between a spotless revert and the
+  commit so `git add -A` takes 27 unrelated files (FM2-700:45-47, 1 amend); a python slice
+  replacement whose `end` anchor had moved above `start`, silently duplicating a block (#234:60-62,
+  cost 0, and the record notes `harden:300`'s "count what should still be there" is aimed at
+  deletions); inserting a constant between a javadoc and the member it documents (#234:39-40, two
+  incidents in one slice, both silent); harden's confirming-cycle cost against where the blocking
+  findings come from (#236:27 — 5 Phase 2 passes over a 15-line change found no blocking item, while
+  both guard bypasses came from pr-harden's clean-context rounds).
+- **Existing rules exercised and working, recorded so a later pass does not read them as gaps:**
+  #297:29, the refutation gate returning TWO blocking objections that both settled and converged on
+  one design, handled correctly by the three-outcome rule ("the naive reading is 'two blockers =
+  deadlock = abort'"); #297:31, pr-harden Step 1's sha comparison firing usefully as a no-op; and
+  #234:44-45 with FM2-700:35-37, tests passing for a different reason than their names claim, found
+  by the mutation check that `harden:192` requires.
+- **Ledger citation corrections** (round 2, verified): `:834`'s "#266:16" is `#266:12`, and `:846`'s
+  "#266:17" is `#266:13` — two individual errors, not an offset, since `:843`'s "#266 … (:14)" is
+  correct.
+- **The proposer not verifying its own citations: 8 cycles / 7 records** — this pass added one at the
+  retro level (a `skill-retro:126-127` line cite that is `:130-132`), cut at the gate.
+- **A retro submitting wording that breaks the counts/universals rule it enforces: 6 consecutive
+  retros.** This pass shipped "all three recorded cases", "every concept" and "every covering
+  fixture"; the round-2 gate cut all three with P6. The gate is still the mechanism.
+- Every other count in the previous block stands unchanged.

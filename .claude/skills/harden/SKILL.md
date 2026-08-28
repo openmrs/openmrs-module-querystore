@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.20.0
+version: 0.21.0
 ---
 
 # Harden
@@ -118,6 +118,17 @@ Run simplify passes until polish opportunities converge. Each pass:
      branch existed but git refused it to a second worktree because the main one held it, so agents
      needed `git checkout --ignore-other-worktrees`. Both cost a detour per agent and no round or
      cycle, which is why this is one sentence in the brief rather than a step.
+   - **An idle output or transcript file is not evidence an agent has stopped.** Two runs measured it
+     from opposite ends: on #293 the agent output files "stay at 201 bytes until the agent finishes",
+     so there was no progress signal to wait on and the run burned blind `sleep` loops; on FM2-700
+     `isolation: "worktree"` agents "produced 156-byte transcripts that never grew", that was read as
+     a stall, and two were killed mid-investigation — their kill notices showed both working, at a
+     cost of two discarded agents and about twenty minutes. So do not infer death from a file's size
+     or mtime. Inside the gate's allow a terminal outcome is one the harness reports, and it is the
+     signal *Record the cycle so the gate can enforce it* has you clear the `awaiting` entry on; past
+     that allow what decides is the bound, which is a clock rather than a liveness check. Where you
+     need progress sooner, watch something the agent's WORK touches — FM2-700 used the worktree's own
+     `target/`, which presupposes isolation, so #293's half of this is not closed.
    - **Commit before anything mutates the tree — the cycle's work before spawning them, and your own
      measurement probes too — and do not edit the tree while they run.** `git checkout -- <path>` to
      undo a probe restores HEAD, so on a file carrying uncommitted intended work it discards that work

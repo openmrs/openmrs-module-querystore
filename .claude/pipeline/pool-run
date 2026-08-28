@@ -845,7 +845,7 @@ def parity_problems(cfg: dict) -> list[str]:
     src = cfg.get("source_repo")
     if not src:
         return problems
-    for script in ("pool-run", "pool-watch"):
+    for script in ("pool-run", "pool-watch", "gate-state"):
         mine, mirrored = PIPELINE / script, Path(src).expanduser() / ".claude/pipeline" / script
         if not mirrored.is_file():
             problems.append(f"{script} is not mirrored in the source repo")
