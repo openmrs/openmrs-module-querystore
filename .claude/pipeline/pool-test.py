@@ -297,10 +297,10 @@ def test_legacy_ticket_state(tmp: Path) -> None:
     """State the pre-normalisation driver wrote must still be findable.
 
     A lease or ledger row written before `ticket_id` existed stores the RAW token, so normalising
-    only the INPUT never matches it: the slot stays held forever and `attempts` silently resets —
-    and `needs-human` with it, which is the one status that exists to stop an identical retry. No
-    input the operator can type reaches those rows, because normalising what they type cannot
-    retroactively normalise what was stored. Both reads therefore normalise BOTH sides.
+    only the INPUT never matches it: the slot stays held forever, and the ledger row's whole history
+    goes — `attempts`, and the `aborted` status that stops an identical second attempt. No input the
+    operator can type reaches those rows, because normalising what they type cannot retroactively
+    normalise what was stored. Both reads therefore normalise BOTH sides.
     """
     print("\nlegacy ticket state")
     url = "https://github.com/o/r/issues/238"
@@ -336,12 +336,16 @@ def test_legacy_ticket_state(tmp: Path) -> None:
               "released nothing, or released the wrong repo's slot")
 
     # The ledger half: a row under the raw key still carries its history to the normalised one.
-    ledger = {"o/r#" + url: {"status": "needs-human", "attempts": 2}}
+    # `aborted` is the value NEEDS_HUMAN actually holds, and attempts is left at 0 deliberately: with
+    # the fallback removed the row is invisible, no skip applies, and a job comes back. An earlier
+    # version of this case used a status NEEDS_HUMAN does not contain and attempts at the cap, so it
+    # passed through the ATTEMPTS branch and would have passed with the fallback gone too.
+    ledger = {"o/r#" + url: {"status": "aborted", "attempts": 0}}
     job = pool.consider("o/r", str(tmp), {"number": 238, "title": "t", "url": url},
                         [], ledger, pool.Say(tmp / "say-ledger.md"),
                         {"ticket": {"max_attempts": 2}}, forced=False)
-    check("a ledger row under the raw key still stops a third attempt",
-          job is None, "attempts reset to 0 and the ticket would be retried")
+    check("a ledger row under the raw key still carries its aborted verdict",
+          job is None, "the row was invisible, so an aborted ticket would be retried")
 
 
 # ───────────────────────────────────────────────────────────────── slots ──
