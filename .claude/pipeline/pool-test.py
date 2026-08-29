@@ -226,8 +226,8 @@ def test_ticket_identity(tmp: Path) -> None:
     check("a bare JIRA key still passes through",
           (pool.resolve_named("O3-1234", "o/r") or {}).get("key") == "O3-1234")
 
-    # The path is the funnel both call sites go through, so it is guarded in its own right — a
-    # future caller passing something unsanitised must not be able to reach the filesystem with it.
+    # Sanitising lives in `safe_component`, which the lesson record and the log stem call too, so a
+    # caller passing something unsanitised cannot reach the filesystem through any of the three.
     for raw in [url, jira, "238", "#238", "TRUNK-6429", "weird/../thing", "a:b"]:
         leaf = pool.worktree_path("o/r", raw).name
         check(f"the worktree leaf for {raw!r} is filesystem-safe",
@@ -291,6 +291,57 @@ def test_ticket_identity(tmp: Path) -> None:
     # it the ownership check silently falls through and every repo is asked instead.
     check("a whitespace-padded URL still names its repo",
           pool.ticket_repo("  " + url + "  ") == "o/r", pool.ticket_repo("  " + url + "  "))
+
+
+def test_legacy_ticket_state(tmp: Path) -> None:
+    """State the pre-normalisation driver wrote must still be findable.
+
+    A lease or ledger row written before `ticket_id` existed stores the RAW token, so normalising
+    only the INPUT never matches it: the slot stays held forever and `attempts` silently resets —
+    and `needs-human` with it, which is the one status that exists to stop an identical retry. No
+    input the operator can type reaches those rows, because normalising what they type cannot
+    retroactively normalise what was stored. Both reads therefore normalise BOTH sides.
+    """
+    print("\nlegacy ticket state")
+    url = "https://github.com/o/r/issues/238"
+
+    with isolated(tmp):
+        pool.SLOTS.mkdir(parents=True, exist_ok=True)
+        (pool.SLOTS / "slot-9.json").write_text(json.dumps({
+            "slot": "slot-9", "ticket": url, "slug": "o/r",      # written by the OLD code
+            "worktree": str(tmp / "gone"), "repo": str(tmp / "repo"), "standalone": None}))
+        leases = pool.all_leases()
+        check("precondition: the lease really stores the raw token",
+              leases["slot-9"]["ticket"] == url, leases["slot-9"]["ticket"])
+
+        say = pool.Say(tmp / "say-legacy.md")
+        freed = pool.release_claim({"repos": {}}, "238", say)
+        check("a lease written under a raw URL is released by the ticket's number",
+              freed is not None and not (pool.SLOTS / "slot-9.json").exists(),
+              "the slot would stay held with nothing able to reach it")
+
+    # `--release <url>` with no `#` must narrow to the repo the URL names, rather than reporting the
+    # number as ambiguous across every repo that happens to hold one.
+    with isolated(tmp):
+        pool.SLOTS.mkdir(parents=True, exist_ok=True)
+        for slot, slug in [("slot-1", "o/r"), ("slot-2", "x/y")]:
+            (pool.SLOTS / f"{slot}.json").write_text(json.dumps({
+                "slot": slot, "ticket": "238", "slug": slug,
+                "worktree": str(tmp / slot), "repo": str(tmp / "repo"), "standalone": None}))
+        say = pool.Say(tmp / "say-narrow.md")
+        freed = pool.release_claim({"repos": {}}, url, say)
+        check("a bare URL releases the lease of the repo IT names, not an ambiguity error",
+              freed is not None and not (pool.SLOTS / "slot-1.json").exists()
+              and (pool.SLOTS / "slot-2.json").exists(),
+              "released nothing, or released the wrong repo's slot")
+
+    # The ledger half: a row under the raw key still carries its history to the normalised one.
+    ledger = {"o/r#" + url: {"status": "needs-human", "attempts": 2}}
+    job = pool.consider("o/r", str(tmp), {"number": 238, "title": "t", "url": url},
+                        [], ledger, pool.Say(tmp / "say-ledger.md"),
+                        {"ticket": {"max_attempts": 2}}, forced=False)
+    check("a ledger row under the raw key still stops a third attempt",
+          job is None, "attempts reset to 0 and the ticket would be retried")
 
 
 # ───────────────────────────────────────────────────────────────── slots ──
@@ -1690,6 +1741,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         for name, fn in [("ticket-identity", test_ticket_identity),
+                         ("legacy-ticket-state", test_legacy_ticket_state),
                          ("worktrees", test_worktrees), ("slots", test_slots),
                          ("gate-state", test_gate_state_locking), ("waves", test_waves),
                          ("parallel run", test_parallel_run), ("say", test_say_is_thread_safe),
