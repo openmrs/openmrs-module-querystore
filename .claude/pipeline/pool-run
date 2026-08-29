@@ -651,8 +651,17 @@ def release_claim(cfg: dict, ticket: str, say) -> dict | None:
     # `rpartition` hands the whole thing back as the number — and the lease it is looking for was
     # written under the IDENTIFIER, so comparing the raw URL finds nothing and the slot stays held.
     want = ticket_id(number or ticket)
+    # A URL names its own repository, so it narrows the search exactly as it does for `--claim`.
+    # Without this, `--release <url>` on a ticket number claimed in two repos hits the "name which
+    # one" ambiguity instead of releasing the one the URL actually named.
+    slug = slug or (ticket_repo(ticket) or "")
+    # Both sides through `ticket_id`, not just the input. A lease written BEFORE this normalisation
+    # existed stored the raw token, so comparing it against a normalised `want` never matches and
+    # that slot stays held forever — no input the operator can type reaches it, because normalising
+    # what they type cannot retroactively normalise what was stored.
     matches = {n: l for n, l in all_leases().items()
-               if l.get("ticket") == want and (not slug or l.get("slug") == slug)}
+               if ticket_id(l.get("ticket") or "") == want
+               and (not slug or l.get("slug") == slug)}
     if len(matches) > 1:
         say(f"  x #{want} is claimed in {len(matches)} repositories — name which one:")
         for n, l in sorted(matches.items()):
@@ -1031,6 +1040,15 @@ def consider(slug: str, path: str, issue: dict, prs: list[dict], ledger: dict, s
     ticket = str(issue.get("number") or issue.get("key"))
     key = f"{slug}#{ticket}"
     entry = ledger.get(key, {})
+    if not entry:
+        # Rows written before `ticket_id` existed are keyed on the RAW token (`slug#<url>`), so the
+        # normalised key misses them: `attempts` resets to 0 and a `needs-human` verdict is lost,
+        # which is the one status that exists to stop an identical second attempt. Matched on the
+        # first `#` because a slug cannot contain one while a pasted URL can (`#issuecomment-…`).
+        # Read-side only — nothing here rewrites the ledger, so a live driver's writes are not raced.
+        entry = next((v for k, v in ledger.items()
+                      if k.partition("#")[0] == slug
+                      and ticket_id(k.partition("#")[2]) == ticket), {})
     url = issue.get("url") or (
         ticket if not ticket.isdigit() else f"https://github.com/{slug}/issues/{ticket}")
 
@@ -1265,6 +1283,25 @@ _JIRA_BROWSE = re.compile(
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
+def safe_component(raw: str) -> str:
+    """One path COMPONENT from an arbitrary string, collision-free.
+
+    Sanitising is many-to-one — `PROJ:123` and `PROJ/123` both reduce to `PROJ-123` — so anything
+    this had to rewrite carries a digest of the ORIGINAL. `raw` comes back untouched when it is
+    already a usable component — no disallowed character, and no leading or trailing `-` or `.` —
+    which is every number, every JIRA key and every URL `ticket_id` reduces; a string that is
+    character-safe but ends in `-` or `.` IS rewritten, and gains a digest with it. Shared because
+    `ticket_id`
+    deliberately passes an UNRECOGNISED token through almost unchanged, and three places then put
+    that string in a filename: this ticket's worktree, its lesson record and its log stem. Guarding
+    only the worktree left the same defect at the other two.
+    """
+    safe = _UNSAFE.sub("-", raw).strip("-.")
+    if safe == raw:
+        return raw
+    return f"{safe or 'ticket'}-{hashlib.sha1(raw.encode()).hexdigest()[:8]}"
+
+
 def worktree_path(slug: str, ticket: str) -> Path:
     """One ticket, one directory, and the leaf is always a single safe component.
 
@@ -1273,17 +1310,7 @@ def worktree_path(slug: str, ticket: str) -> Path:
     from reaching the filesystem at all. The guard is here, at the funnel both call sites go through,
     rather than at each of them.
     """
-    leaf = f"{slug.replace('/', '-')}-{ticket_id(ticket)}"
-    safe = _UNSAFE.sub("-", leaf).strip("-.")
-    if safe != leaf:
-        # Sanitising is many-to-one — `PROJ:123` and `PROJ-123` both reduce to `PROJ-123` — so an
-        # identifier this had to rewrite carries a digest of the ORIGINAL. Otherwise two tickets
-        # share one directory and `make_worktree` releases and recreates the first one's tree under
-        # the second, which is the defect `ticket-pool 0.14.4` removed. Appended only where the
-        # rewrite actually happened, so every token that was already safe — every number, every JIRA
-        # key, every URL these patterns reduce — keeps the path it has always had.
-        safe = f"{safe or 'ticket'}-{hashlib.sha1(leaf.encode()).hexdigest()[:8]}"
-    return WORKTREES / safe
+    return WORKTREES / safe_component(f"{slug.replace('/', '-')}-{ticket_id(ticket)}")
 
 
 def make_worktree(repo: Path, slug: str, ticket: str, base: str, say) -> tuple[Path | None, str]:
@@ -1874,7 +1901,7 @@ def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, 
         return own
 
     LESSONS.mkdir(parents=True, exist_ok=True)
-    path = LESSONS / f"{utc_date()}-{slug.split('/')[-1]}-{ticket}-driver.md"
+    path = LESSONS / (safe_component(f"{utc_date()}-{slug.split('/')[-1]}-{ticket}") + "-driver.md")
     path.write_text(
         f"# pool-run · {slug} · {ticket} · {utc_date()}\n"
         f"outcome: {outcome}\n"
@@ -1934,7 +1961,7 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
 
     before = lesson_files()
     started_at = now()
-    stem = LOGS / f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}"
+    stem = LOGS / safe_component(f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}")
     say(f"running /resolve-ticket {job['url']}")
     with unattended_marker(wt):
         run = Session(f"/resolve-ticket {job['url']}", wt, cfg, stem,

@@ -258,6 +258,32 @@ def test_ticket_identity(tmp: Path) -> None:
               pool.worktree_path("o/r", safe).name == f"o-r-{safe}",
               pool.worktree_path("o/r", safe).name)
 
+    # The digest is taken from the ORIGINAL, not from the sanitised result. Hashing the result makes
+    # two genuinely different unsafe tokens collide again, which the PROJ:123/PROJ-123 pair above
+    # cannot see because PROJ-123 never enters the digest branch at all.
+    check("two DIFFERENT unsafe tokens that sanitise alike stay apart",
+          pool.worktree_path("o/r", "PROJ:123") != pool.worktree_path("o/r", "PROJ/123"),
+          f"{pool.worktree_path('o/r', 'PROJ:123').name} vs {pool.worktree_path('o/r', 'PROJ/123').name}")
+
+    # `.strip("-.")` and the `or "ticket"` fallback: without them a leaf can be empty, a bare dot, or
+    # start with `-`. All three are usable-looking directory names that are not what anyone meant.
+    for nasty in ["", ".", "..", "-", "????", "#"]:
+        leaf = pool.worktree_path("o/r", nasty).name
+        check(f"a leaf for {nasty!r} is a single ordinary component",
+              re.fullmatch(r"[A-Za-z0-9._-]+", leaf) is not None
+              and leaf not in (".", "..") and not leaf.startswith((".", "-")),
+              leaf)
+
+    check("a component that is already safe is returned unchanged",
+          pool.safe_component("o-r-238") == "o-r-238")
+    check("and one that only LOOKS safe but ends in punctuation is not",
+          pool.safe_component("o-r-238-") != "o-r-238-", pool.safe_component("o-r-238-"))
+
+    # ticket_repo strips, so a padded paste still narrows resolve_named to the owning repo. Without
+    # it the ownership check silently falls through and every repo is asked instead.
+    check("a whitespace-padded URL still names its repo",
+          pool.ticket_repo("  " + url + "  ") == "o/r", pool.ticket_repo("  " + url + "  "))
+
 
 # ───────────────────────────────────────────────────────────────── slots ──
 

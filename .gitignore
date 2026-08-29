@@ -23,3 +23,8 @@ Thumbs.db
 
 # the test suite loads pool-run/pool-watch with SourceFileLoader
 .claude/pipeline/__pycache__/
+
+# Isolated worktrees for review subagents. Created per agent, removed when it ends —
+# never part of the source, and `git add -A` from the main checkout sweeps them in as
+# embedded repositories if they are not ignored.
+.claude/worktrees/
