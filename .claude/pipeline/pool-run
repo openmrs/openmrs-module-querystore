@@ -1042,8 +1042,8 @@ def consider(slug: str, path: str, issue: dict, prs: list[dict], ledger: dict, s
     entry = ledger.get(key, {})
     if not entry:
         # Rows written before `ticket_id` existed are keyed on the RAW token (`slug#<url>`), so the
-        # normalised key misses them: `attempts` resets to 0 and a `needs-human` verdict is lost,
-        # which is the one status that exists to stop an identical second attempt. Matched on the
+        # normalised key misses them and the row's whole history goes with it: `attempts` resets to
+        # 0, and so does the `aborted` verdict that stops an identical second attempt. Matched on the
         # first `#` because a slug cannot contain one while a pasted URL can (`#issuecomment-…`).
         # Read-side only — nothing here rewrites the ledger, so a live driver's writes are not raced.
         entry = next((v for k, v in ledger.items()
