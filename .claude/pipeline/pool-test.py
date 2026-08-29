@@ -276,6 +276,14 @@ def test_ticket_identity(tmp: Path) -> None:
 
     check("a component that is already safe is returned unchanged",
           pool.safe_component("o-r-238") == "o-r-238")
+    # Asserted on the helper directly: through `worktree_path` the slug prefix always survives
+    # sanitising, so no ticket can drive `safe` empty and the fallback is unreachable from there.
+    # It is reachable at this API, which is where a future caller would meet it.
+    for allbad in ["????", "", "..", "///"]:
+        comp = pool.safe_component(allbad)
+        check(f"safe_component({allbad!r}) is still an ordinary component",
+              re.fullmatch(r"[A-Za-z0-9._-]+", comp) is not None
+              and not comp.startswith((".", "-")), comp)
     check("and one that only LOOKS safe but ends in punctuation is not",
           pool.safe_component("o-r-238-") != "o-r-238-", pool.safe_component("o-r-238-"))
 

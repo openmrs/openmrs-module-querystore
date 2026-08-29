@@ -1297,7 +1297,7 @@ def safe_component(raw: str) -> str:
     only the worktree left the same defect at the other two.
     """
     safe = _UNSAFE.sub("-", raw).strip("-.")
-    if safe == raw:
+    if safe and safe == raw:
         return raw
     return f"{safe or 'ticket'}-{hashlib.sha1(raw.encode()).hexdigest()[:8]}"
 
