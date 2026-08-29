@@ -1309,8 +1309,9 @@ def worktree_path(slug: str, ticket: str) -> Path:
 
     Normalised THEN sanitised, and both halves earn their place: normalising is what makes a URL and
     its number the same tree rather than two, and sanitising is what keeps a token nobody thought of
-    from reaching the filesystem at all. The guard is here, at the funnel both call sites go through,
-    rather than at each of them.
+    from reaching the filesystem at all. The sanitising itself lives in `safe_component`, which
+    the lesson record and the log stem call too — this used to hold it inline, and holding it here is
+    what left those two unguarded.
     """
     return WORKTREES / safe_component(f"{slug.replace('/', '-')}-{ticket_id(ticket)}")
 
