@@ -1287,14 +1287,16 @@ def safe_component(raw: str) -> str:
     """One path COMPONENT from an arbitrary string, collision-free.
 
     Sanitising is many-to-one — `PROJ:123` and `PROJ/123` both reduce to `PROJ-123` — so anything
-    this had to rewrite carries a digest of the ORIGINAL. `raw` comes back untouched when it is
-    already a usable component — no disallowed character, and no leading or trailing `-` or `.` —
-    which is every number, every JIRA key and every URL `ticket_id` reduces; a string that is
-    character-safe but ends in `-` or `.` IS rewritten, and gains a digest with it. Shared because
-    `ticket_id`
-    deliberately passes an UNRECOGNISED token through almost unchanged, and three places then put
-    that string in a filename: this ticket's worktree, its lesson record and its log stem. Guarding
-    only the worktree left the same defect at the other two.
+    this had to rewrite carries a digest of the ORIGINAL. `raw` comes back untouched only when it is
+    already a usable component — non-empty, no disallowed character, no leading or trailing `-` or
+    `.` — which is every number, every JIRA key and every URL `ticket_id` reduces. A string that is
+    character-safe but ends in `-` or `.` IS rewritten and gains a digest, and so is the EMPTY
+    string, which the equality test would otherwise hand back unchanged as a component that is not
+    one.
+
+    Shared because `ticket_id` deliberately passes an UNRECOGNISED token through almost unchanged,
+    and three places then put that string in a filename: this ticket's worktree, its lesson record
+    and its log stem. Guarding only the worktree left the same defect at the other two.
     """
     safe = _UNSAFE.sub("-", raw).strip("-.")
     if safe and safe == raw:
