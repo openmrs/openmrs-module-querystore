@@ -96,6 +96,11 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-watch` | render the newest session's stream the way an interactive session reads |
 | `pool-watch 310 --results` | that ticket's session, tool results included |
 
+Wherever a table row above shows a ticket number, the same command takes a `#266`, a JIRA key
+(`O3-1234`, `TRUNK-6429`), or the URL of the issue — including the one your address bar
+carries after you scroll to a comment. All of them reduce to the same identifier, so a
+ticket named two ways is still one worktree, one lease and one ledger row.
+
 **Most of these refuse to run beside a live pool, and that is the design.** `--outcomes` takes the
 machine-wide `pool.lock` before it does anything, and both it and `--work` are refused while a driver
 or another session's claim is outstanding. What CAN overlap is two `--work` terminals — one per
