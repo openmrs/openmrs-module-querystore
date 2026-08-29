@@ -197,7 +197,15 @@ def test_ticket_identity(tmp: Path) -> None:
     # would be asserting that this machine can reach GitHub, which is not what is under test.
     for token, want in [(url, "238"), ("https://github.com/o/r/pull/238", "238"),
                         (jira, "TRUNK-6429"), ("238", "238"), ("#238", "238"),
-                        ("O3-1234", "O3-1234"), ("  #238  ", "238")]:
+                        ("O3-1234", "O3-1234"), ("  #238  ", "238"),
+                        # What an operator's paste actually varies. The fragment is the likeliest of
+                        # all — the address bar carries `#issuecomment-…` the moment you scroll to a
+                        # comment — and the first cut of this fix recognised none of these four.
+                        (url + "#issuecomment-2412", "238"), (url + "?foo=bar", "238"),
+                        ("HTTPS://GitHub.com/o/r/issues/238", "238"),
+                        ("github.com/o/r/issues/238", "238"),
+                        (jira + "?filter=1", "TRUNK-6429"),
+                        ("openmrs.atlassian.net/browse/TRUNK-6429", "TRUNK-6429")]:
         check(f"{token.strip()!r} reduces to {want!r}", pool.ticket_id(token) == want,
               pool.ticket_id(token))
     check("an unparseable token is not expanded into one",
@@ -230,8 +238,25 @@ def test_ticket_identity(tmp: Path) -> None:
     check("a URL and its number land in the SAME worktree, so one ticket is never two trees",
           pool.worktree_path("o/r", url) == pool.worktree_path("o/r", "238"),
           f"{pool.worktree_path('o/r', url).name} vs {pool.worktree_path('o/r', '238').name}")
+    check("and so does the same URL carrying a comment fragment",
+          pool.worktree_path("o/r", url + "#issuecomment-2412")
+          == pool.worktree_path("o/r", "238"))
     check("two different tickets still get two trees",
           pool.worktree_path("o/r", "238") != pool.worktree_path("o/r", "239"))
+
+    # Sanitising is many-to-one, so on its own it would give two tickets one directory — and
+    # `make_worktree` would release and recreate the first one's tree under the second, the defect
+    # ticket-pool 0.14.4 removed. A rewritten identifier therefore carries a digest of the original.
+    check("two tokens that sanitise alike do NOT share a worktree",
+          pool.worktree_path("o/r", "PROJ:123") != pool.worktree_path("o/r", "PROJ-123"),
+          f"{pool.worktree_path('o/r', 'PROJ:123').name} vs {pool.worktree_path('o/r', 'PROJ-123').name}")
+    check("and the token that needed no rewriting keeps the path it always had",
+          pool.worktree_path("o/r", "PROJ-123").name == "o-r-PROJ-123",
+          pool.worktree_path("o/r", "PROJ-123").name)
+    for safe in ["238", "O3-1234", "TRUNK-6429"]:
+        check(f"{safe!r} is untouched by the sanitiser",
+              pool.worktree_path("o/r", safe).name == f"o-r-{safe}",
+              pool.worktree_path("o/r", safe).name)
 
 
 # ───────────────────────────────────────────────────────────────── slots ──

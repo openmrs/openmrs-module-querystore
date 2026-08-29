@@ -40,6 +40,7 @@ import argparse
 import concurrent.futures
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -1228,10 +1229,10 @@ def ticket_id(token: str) -> str:
     nobody can parse is how one ticket becomes two directories.
     """
     token = (token or "").strip().lstrip("#")
-    gh = re.match(r"^https?://(?:www\.)?github\.com/[^/]+/[^/]+/(?:issues|pull)/(\d+)/?$", token)
+    gh = _GH_ISSUE.match(token)
     if gh:
-        return gh.group(1)
-    jira = re.match(r"^https?://[^/]+/browse/([A-Za-z][A-Za-z0-9]*-\d+)/?$", token)
+        return gh.group(2)
+    jira = _JIRA_BROWSE.match(token)
     if jira:
         return jira.group(1)
     return token
@@ -1244,10 +1245,20 @@ def ticket_repo(token: str) -> str | None:
     turn, which is what `resolve_named` already does — so returning None here means "ask them all",
     the behaviour every non-URL token has always had.
     """
-    got = re.match(r"^https?://(?:www\.)?github\.com/([^/]+/[^/]+)/(?:issues|pull)/\d+/?$",
-                   (token or "").strip())
+    got = _GH_ISSUE.match((token or "").strip())
     return got.group(1) if got else None
 
+
+# One pattern for both questions a GitHub issue URL answers — which ticket, and which repo — so the
+# two can never disagree about what counts as one. The scheme is optional and the host matched
+# case-insensitively because those are what an operator's paste actually varies, and a trailing
+# `?query` or `#fragment` is allowed and discarded: the address bar carries `#issuecomment-…` the
+# moment you scroll to a comment, which is the likeliest paste of all and the one the first cut of
+# this fix did not recognise.
+_GH_ISSUE = re.compile(
+    r"^(?:https?://)?(?:www\.)?github\.com/([^/]+/[^/]+)/(?:issues|pull)/(\d+)(?:[/?#].*)?$", re.I)
+_JIRA_BROWSE = re.compile(
+    r"^(?:https?://)?[^/\s]+/browse/([A-Za-z][A-Za-z0-9]*-\d+)(?:[/?#].*)?$", re.I)
 
 # Anything outside this cannot go in a path component. It is not only about the colon that started
 # this: a `/` silently NESTS the tree somewhere else entirely, and `..` walks out of WORKTREES.
@@ -1263,8 +1274,16 @@ def worktree_path(slug: str, ticket: str) -> Path:
     rather than at each of them.
     """
     leaf = f"{slug.replace('/', '-')}-{ticket_id(ticket)}"
-    leaf = _UNSAFE.sub("-", leaf).strip("-.") or "ticket"
-    return WORKTREES / leaf
+    safe = _UNSAFE.sub("-", leaf).strip("-.")
+    if safe != leaf:
+        # Sanitising is many-to-one — `PROJ:123` and `PROJ-123` both reduce to `PROJ-123` — so an
+        # identifier this had to rewrite carries a digest of the ORIGINAL. Otherwise two tickets
+        # share one directory and `make_worktree` releases and recreates the first one's tree under
+        # the second, which is the defect `ticket-pool 0.14.4` removed. Appended only where the
+        # rewrite actually happened, so every token that was already safe — every number, every JIRA
+        # key, every URL these patterns reduce — keeps the path it has always had.
+        safe = f"{safe or 'ticket'}-{hashlib.sha1(leaf.encode()).hexdigest()[:8]}"
+    return WORKTREES / safe
 
 
 def make_worktree(repo: Path, slug: str, ticket: str, base: str, say) -> tuple[Path | None, str]:
