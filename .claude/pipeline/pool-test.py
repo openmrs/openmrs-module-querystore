@@ -177,6 +177,63 @@ def test_worktrees(tmp: Path) -> None:
     pool.drop_worktree(work, b, say, force=True)
 
 
+def test_ticket_identity(tmp: Path) -> None:
+    """A ticket named as a URL must reduce to its identifier before it reaches a path or a key.
+
+    Measured on the #238 run: the pool was handed
+    `https://github.com/openmrs/openmrs-module-chartsearchai/issues/238`, `resolve_named` returned it
+    verbatim as the ticket, and `worktree_path` interpolated it — producing a directory containing
+    `https:` and three extra path components. javac splits its classpath on `:`, so `mvn test` could
+    not compile anything in that tree: main compiled, and every test failed with "cannot find symbol"
+    against classes that were sitting in `target/classes`. The run lost three build cycles to it.
+    """
+    print("\nticket identity")
+
+    url = "https://github.com/o/r/issues/238"
+    jira = "https://openmrs.atlassian.net/browse/TRUNK-6429"
+
+    # The identifier itself is asserted on `ticket_id`, not through `resolve_named`: the digit branch
+    # of that function verifies the issue with a real `gh issue view`, so asserting the number there
+    # would be asserting that this machine can reach GitHub, which is not what is under test.
+    for token, want in [(url, "238"), ("https://github.com/o/r/pull/238", "238"),
+                        (jira, "TRUNK-6429"), ("238", "238"), ("#238", "238"),
+                        ("O3-1234", "O3-1234"), ("  #238  ", "238")]:
+        check(f"{token.strip()!r} reduces to {want!r}", pool.ticket_id(token) == want,
+              pool.ticket_id(token))
+    check("an unparseable token is not expanded into one",
+          pool.ticket_id("not a ticket") == "not a ticket", pool.ticket_id("not a ticket"))
+
+    # Only a URL says which repo owns it; everything else is asked of each repo in turn, as before.
+    check("a github URL names its own repo", pool.ticket_repo(url) == "o/r", pool.ticket_repo(url))
+    check("a bare number names no repo", pool.ticket_repo("238") is None)
+    check("a URL is refused by a repo that does not own it",
+          pool.resolve_named(url, "other/repo") is None,
+          repr(pool.resolve_named(url, "other/repo")))
+
+    key = pool.resolve_named(jira, "o/r")
+    check("a JIRA browse URL resolves to its key",
+          key is not None and key.get("key") == "TRUNK-6429", repr(key))
+    check("and keeps the browsable URL it was given",
+          (key or {}).get("url") == jira, repr(key))
+    check("a bare JIRA key still passes through",
+          (pool.resolve_named("O3-1234", "o/r") or {}).get("key") == "O3-1234")
+
+    # The path is the funnel both call sites go through, so it is guarded in its own right — a
+    # future caller passing something unsanitised must not be able to reach the filesystem with it.
+    for raw in [url, jira, "238", "#238", "TRUNK-6429", "weird/../thing", "a:b"]:
+        leaf = pool.worktree_path("o/r", raw).name
+        check(f"the worktree leaf for {raw!r} is filesystem-safe",
+              re.fullmatch(r"[A-Za-z0-9._-]+", leaf) is not None
+              and pool.worktree_path("o/r", raw).parent == pool.WORKTREES,
+              leaf)
+
+    check("a URL and its number land in the SAME worktree, so one ticket is never two trees",
+          pool.worktree_path("o/r", url) == pool.worktree_path("o/r", "238"),
+          f"{pool.worktree_path('o/r', url).name} vs {pool.worktree_path('o/r', '238').name}")
+    check("two different tickets still get two trees",
+          pool.worktree_path("o/r", "238") != pool.worktree_path("o/r", "239"))
+
+
 # ───────────────────────────────────────────────────────────────── slots ──
 
 
@@ -1573,7 +1630,8 @@ def test_queue_never_repeats_a_ticket(tmp: Path) -> None:
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        for name, fn in [("worktrees", test_worktrees), ("slots", test_slots),
+        for name, fn in [("ticket-identity", test_ticket_identity),
+                         ("worktrees", test_worktrees), ("slots", test_slots),
                          ("gate-state", test_gate_state_locking), ("waves", test_waves),
                          ("parallel run", test_parallel_run), ("say", test_say_is_thread_safe),
                          ("records", test_record_attribution), ("crash", test_crash_does_not_clobber),
