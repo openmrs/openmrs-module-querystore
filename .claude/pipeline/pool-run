@@ -1232,7 +1232,7 @@ def ticket_id(token: str) -> str:
     """The identifier a ticket is KNOWN by, from whatever the operator typed.
 
     One normaliser because the token reaches four things that must agree about what ticket this is —
-    the worktree path, the ledger key, the claim file and the log stem — and it used to reach all of
+    the worktree path, the ledger key, the lease file and the log stem — and it used to reach all of
     them raw. Measured on the #238 run: the pool was handed
     `https://github.com/openmrs/openmrs-module-chartsearchai/issues/238`, and since `resolve_named`
     returns a non-digit token verbatim, `worktree_path` interpolated the whole URL. `Path` then ate
