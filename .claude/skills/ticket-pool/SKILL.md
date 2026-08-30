@@ -1,8 +1,8 @@
 ---
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
-argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.14.3
+argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
+version: 0.15.2
 ---
 
 # Ticket pool — the loop that learns
@@ -93,6 +93,9 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-run --init` | create the label in each configured repo |
 | `pool-run --config <path>` | a config other than the default |
 | `pool-run --outcomes` | refresh what became of every PR the ledger knows about, and stop |
+| `pool-run --pause` | ask the RUNNING driver to stop at the next ticket boundary, leaving a resume plan |
+| `pool-run --pause --now` | the same, but suspending the sessions in flight within seconds, resumably |
+| `pool-run --resume` | continue a paused pool: the suspended sessions first, then the queue it had left |
 | `pool-watch` | render the newest session's stream the way an interactive session reads |
 | `pool-watch 310 --results` | that ticket's session, tool results included |
 
@@ -103,7 +106,9 @@ ticket named two ways is still one worktree, one lease and one ledger row.
 
 **Most of these refuse to run beside a live pool, and that is the design.** `--outcomes` takes the
 machine-wide `pool.lock` before it does anything, and both it and `--work` are refused while a driver
-or another session's claim is outstanding. What CAN overlap is two `--work` terminals — one per
+or another session's claim is outstanding. `--pause` is the one row that inverts this: it exists to
+be typed beside a working pool, takes no lock and writes no ledger, and refuses when NO driver is
+live — a request with nothing to read it would sit on disk and stop the next driver in its first wave. What CAN overlap is two `--work` terminals — one per
 terminal is how the workflow above uses them — and until recently that lost data: each held one
 in-memory copy of the whole ledger and wrote all of it back, so whatever the other recorded in between
 was reverted silently. Measured, 7 of 8 concurrent writes lost. A write now merges only the keys, and
@@ -120,6 +125,68 @@ to, the retro's record threshold and timeout, the per-ticket timeout, quiet wind
 repository is not `~/.m2/repository`), and a `claude` block — `model`, `effort`, `max_budget_usd`,
 `binary`, and `extra_args` passed through to every
 session. Logs, the ledger and the per-session streams are under `~/.claude/pipeline/`.
+
+### Pausing, and picking it up later
+
+`pool-run --pause`, from any second terminal. Without `--now` the driver finishes the ticket(s) in
+flight and stops at the wave boundary; with it, every session in flight is suspended within about
+five seconds. Either way it writes `~/.claude/pipeline/paused.json` and `pool-run --resume` carries
+on from there.
+
+**What a suspended ticket keeps.** SIGTERM to the session's process group, and then four things that
+together are the whole feature: its transcript (kept under its own session id, which `--resume`
+re-enters with `claude --resume`), its worktree, its gate state, and its ATTEMPT — a pause is the
+middle of a try, not a failed one, and spending the attempt would let two pauses exhaust
+`ticket.max_attempts` and leave the ticket needing a human. No run record is written either: a record
+counts towards the retro threshold, and this run has not finished to be learned from.
+
+**Resuming continues the conversation; it does not start a second one.** Measured 2026-08-30 outside
+the suite, because the whole feature rests on it: a headless session killed with SIGTERM after 4 of
+12 steps resumed from `--resume <session-id>` and did steps 5–12 only, signing off with a token that
+only the ORIGINAL prompt defined — so the transcript was inherited, not re-derived from the files on
+disk. The driver's half of that is what `pool-test.py`'s `test_pause_now_suspends_and_resumes` pins:
+that the worktree is re-entered rather than recreated (a fresh `make_worktree` would remove the tree
+and cut a new checkout under a session whose whole context is the old one), and that the second start
+carries `--resume <id>` and not `--session-id`.
+
+**A resume re-screens what never started.** A pause is an invitation to come back much later, and
+the un-started tail of the queue was screened when the pause was taken, not now. So `--resume` puts
+it back through `consider` — the same predicate a fresh run uses — which is what stops it opening a
+SECOND PR for a ticket somebody took to one by hand in the meantime. It screens as the PAUSED run
+would have, forced or not, because the operator's `--ticket` decision belongs to the queue and it is
+the same queue. A SUSPENDED ticket is deliberately not re-screened: it is mid-attempt with its
+worktree and session open, and the ledger row it would be judged against is its own.
+
+**The plan is the only place the remaining ORDER survives.** Everything else could be re-derived —
+the label query would find the unworked tickets again — but an operator who typed
+`--ticket 310,297,266` chose that sequence, and which tickets run first decides what evidence the
+retro reads. `--resume` therefore replays the saved queue rather than rebuilding one, and reuses the
+width and retro setting the paused run was using unless this invocation names its own.
+
+**A paused ticket is skipped by a plain `pool-run`**, and told to use `--resume`. Working it would
+open a second session on the same branch while the first is suspended with hours of context in it,
+and nothing would report the loss — a fresh session in a worktree that already holds work looks
+exactly like a run that got a long way. `pool-run --status` names what is paused; `--dry-run
+--resume` prints what would be picked up without consuming the plan; `pool-watch <ticket>` shows the
+newest stream for a ticket, which after a resume is the resumed half — the first half is still on
+disk beside it, and the SESSION's own transcript spans both. To abandon a paused ticket instead, name
+it with `--ticket`: that is forced past the skip and says so, naming the session it is abandoning.
+Whether the restart then begins is the worktree's answer, not the pause's — `make_worktree` refuses
+while uncommitted work is in it, printing the `git worktree remove --force` that releases it, and
+removes and recreates it where it is clean. Either way the branch survives, because removing a
+worktree does not delete a ref, and the abandoned transcript stays on disk under its session id.
+
+**The retro is not interruptible, and that is deliberate.** A pause suspends a session only where
+something can resume it, and what carries a suspended session back is its ledger row. The retro has
+no row, so suspending it would end it — losing the work, leaving the source repo mid-checkout for the
+next retro to refuse as dirty, and reporting itself as "no commit landed", which is true and is not
+the reason. The loop will not START one while a pause is outstanding, so what an immediate pause
+meets is a retro already running: it waits for it, then stops at the next wave. A pause the run
+outruns entirely is cleared and said, not left on disk for the next driver.
+
+**Ctrl-C is unchanged and is not this.** One interrupt still stops after the current wave and leaves
+the queue to be re-derived; a second still kills the sessions outright, spending their attempts. Use
+`--pause` when you mean to come back.
 
 ### Watching a session
 

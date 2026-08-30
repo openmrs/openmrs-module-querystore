@@ -32,6 +32,9 @@ Usage:
   pool-run --retro-now     run only the retro (ignores the record threshold)
   pool-run --no-retro      work tickets, never retro
   pool-run --init          create the pool label in each configured repo
+  pool-run --pause         ask the running driver to stop at the next ticket boundary
+  pool-run --pause --now   ... and suspend the sessions in flight, resumably, within seconds
+  pool-run --resume        continue a paused pool from where it stopped
 """
 
 from __future__ import annotations
@@ -63,6 +66,8 @@ LOCK = PIPELINE / "pool.lock"
 WORKTREES = PIPELINE / "worktrees"     # one per in-flight ticket; see `make_worktree`
 SLOT_M2 = PIPELINE / "m2"              # one maven repository head per slot; see `Slot`
 SLOTS = PIPELINE / "slots"             # leases held by hand-launched sessions; see `claim_slot`
+PAUSE = PIPELINE / "pause.json"        # a pause the operator has ASKED for; see `pause_requested`
+PAUSED = PIPELINE / "paused.json"      # what a paused driver left behind; see `write_pause_plan`
 SHARED_M2 = HOME / ".m2/repository"
 LESSONS = CLAUDE / "skill-lessons"
 LAST = LESSONS / "LAST"
@@ -130,6 +135,12 @@ NOT_OURS = {"has-open-pr"}
 # finding. A second identical attempt is guaranteed to reach the same place, so an abort waits for a
 # human instead of consuming the attempt budget.
 NEEDS_HUMAN = {"aborted"}
+# A ticket the operator paused. Neither an outcome nor a failure: its session is suspended with its
+# transcript intact and `--resume` re-enters it with `claude --resume <session-id>`. A plain run must
+# not pick it up — starting it again opens a SECOND session on the same branch and abandons the first
+# one's context, which nothing would report, because a fresh session in a worktree that already holds
+# work looks exactly like a run that got a long way.
+SUSPENDED = {"paused"}
 
 
 # ─────────────────────────────────────────────────────────────── plumbing ──
@@ -230,6 +241,153 @@ def merge(base: dict, over: dict) -> dict:
     for k, v in (over or {}).items():
         out[k] = merge(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
     return out
+
+
+# ─────────────────────────────────────────────────────────────────── pause ──
+
+
+def ask_pause(immediate: bool) -> None:
+    """Record that the operator wants the run to stop. Called from ANOTHER terminal, never the driver.
+
+    A file rather than a signal, for two reasons. A signal can only be sent by something that knows
+    the driver's pid and is allowed to signal it, while a pause has to be askable from any terminal —
+    and, more importantly, SIGINT and SIGTERM already mean something here (stop after the wave, then
+    kill), and overloading either would make the existing behaviour un-typable.
+    """
+    save_json(PAUSE, {"asked": now(), "now": bool(immediate), "by": os.getpid()})
+
+
+def pause_requested() -> dict | None:
+    """The outstanding pause request, or None. Read by the wave loop and by every live watchdog."""
+    if not PAUSE.exists():
+        return None
+    ask = load_json(PAUSE, {})
+    return ask if isinstance(ask, dict) and ask.get("asked") else None
+
+
+def clear_pause_request() -> None:
+    """Consume the request. The driver does this the moment it ACTS on it, never before.
+
+    A request that outlived the pause it caused would stop the resumed run in its first wave, which
+    reads as "resume does not work" rather than as a stale file. A driver also clears one at startup:
+    the lock it has just taken proves no other driver is alive, so anything still on disk was asked
+    of a driver that is gone.
+    """
+    try:
+        PAUSE.unlink()
+    except OSError:
+        pass
+
+
+def write_pause_plan(cfg_path: str, workers: int, no_retro: bool, remaining: list[dict],
+                     suspended: list[dict], say: Say, forced: bool = False) -> Path:
+    """What a paused run leaves for `--resume`: the queue it had left, in the order it had it.
+
+    The ORDER is the reason this file exists at all. Everything else could be re-derived — the label
+    query would find the unworked tickets again — but an operator who typed `--ticket 310,297,266`
+    chose that sequence, and `build_queue` would hand back the label path's ascending default. Which
+    tickets ran first decides what evidence the retro reads, so re-sorting a resumed queue is a
+    decision about the work, and the driver does not get to make those.
+
+    A job carries a `Path`, which JSON does not, so paths go out as strings and `resume_jobs` puts
+    them back. The ledger is deliberately NOT copied in here: what a suspended ticket needs to be
+    re-entered — its session id and its worktree — is written there by `work_ticket`, and a second
+    copy is one that can disagree with it.
+
+    `forced` records whether the paused queue came from `--ticket`, which is not bookkeeping: the
+    resume re-screens the un-started tail through `consider`, and that predicate answers differently
+    for a queue the operator named. Recording it is what makes the resumed run behave as the paused
+    one would have, rather than as whichever kind the resume happens to look like.
+    """
+    def portable(job: dict) -> dict:
+        return {k: (str(v) if isinstance(v, Path) else v) for k, v in job.items()}
+
+    save_json(PAUSED, {"at": now(), "config": cfg_path, "workers": workers,
+                       "no_retro": bool(no_retro), "forced": bool(forced),
+                       "suspended": [portable(j) for j in suspended],
+                       "queue": [portable(j) for j in remaining]})
+    say(f"    wrote the resume plan to {PAUSED}")
+    return PAUSED
+
+
+def read_pause_plan() -> dict:
+    plan = load_json(PAUSED, {})
+    return plan if isinstance(plan, dict) else {}
+
+
+def clear_pause_plan() -> None:
+    try:
+        PAUSED.unlink()
+    except OSError:
+        pass
+
+
+def paused_from_ledger(cfg: dict, ledger: dict, already: set[str], say: Say) -> list[dict]:
+    """Tickets the LEDGER calls paused that the plan does not name.
+
+    The two records are written at different moments and only one of them is written the instant the
+    session stops. `work_ticket` marks the ticket paused as its session ends; the plan is written
+    afterwards, by the wave loop, once the whole wave is back. A driver that dies in that gap — or at
+    any point after it — leaves a paused ticket with no plan naming it, and that ticket is then
+    stuck: a plain run skips it because it is paused, and a resume that trusted the plan alone cannot
+    see it. So the plan is treated as what it is, an extra (the un-started queue, and its order), and
+    the ledger as the durable half.
+    """
+    jobs = []
+    for key, entry in sorted(ledger.items()):
+        if entry.get("status") not in SUSPENDED or key in already:
+            continue
+        slug, _, ticket = key.partition("#")
+        path = cfg.get("repos", {}).get(slug)
+        if not path:
+            # Paused under a repo this config does not carry. Left alone rather than guessed at:
+            # another pool.json owns it, and working it here would cut its worktree from a checkout
+            # nobody asked about.
+            say(f"  - {key}: paused, but {slug} is not in this config — left for the pool that owns it.")
+            continue
+        say(f"  - {key}: paused in the ledger but not named by the plan — resuming it anyway.")
+        jobs.append({"slug": slug, "path": str(Path(path).expanduser()), "ticket": ticket,
+                     "url": entry.get("url") or (f"https://github.com/{slug}/issues/{ticket}"
+                                                 if ticket.isdigit() else ticket),
+                     "title": "", "key": key})
+    return jobs
+
+
+def resume_jobs(plan: dict, ledger: dict, cfg: dict, say: Say) -> list[dict]:
+    """The queue a `--resume` works: suspended tickets first, then what never started.
+
+    Suspended first because a suspended session is the perishable thing here — it is holding a
+    worktree and a slot, and every wave worked ahead of it is another chance for something to release
+    one underneath it.
+
+    A suspended ticket is re-entered ONLY while the ledger still calls it paused. That is not
+    belt-and-braces: `--resume` can be run twice, or run after the operator worked the ticket by hand
+    with `--work`, and re-entering a session that has since finished would start over in a worktree
+    holding somebody else's completed work. Where the ledger has moved on it is dropped from the
+    queue and said, rather than restarted, because "it is no longer paused" is not the same as "it
+    needs working" and only the ledger knows which.
+    """
+    jobs: list[dict] = []
+    named = plan.get("suspended") or []
+    for job in named + paused_from_ledger(cfg, ledger, {j.get("key") for j in named}, say):
+        entry = ledger.get(job.get("key"), {})
+        if entry.get("status") not in SUSPENDED:
+            say(f"  - {job.get('key')}: no longer paused (the ledger says "
+                f"{entry.get('status')!r}) — not re-entered.")
+            continue
+        rebuilt = {**job, "path": Path(job["path"]).expanduser()}
+        if entry.get("session_id") and entry.get("worktree"):
+            rebuilt["resume"] = {"session_id": entry["session_id"], "worktree": entry["worktree"]}
+        else:
+            # Paused, but with nothing to re-enter. It is still queued — the ticket is unworked and
+            # that has not changed — but from the start, and said, because a resume that quietly
+            # began a ticket again would be indistinguishable from one that continued it.
+            say(f"  - {job.get('key')}: paused, but no session and worktree were recorded for it "
+                "— it will be worked from the start.")
+        jobs.append(rebuilt)
+    for job in plan.get("queue") or []:
+        jobs.append({**job, "path": Path(job["path"]).expanduser()})
+    return jobs
 
 
 # ───────────────────────────────────────────────────────────────── locking ──
@@ -1052,8 +1210,19 @@ def consider(slug: str, path: str, issue: dict, prs: list[dict], ledger: dict, s
     url = issue.get("url") or (
         ticket if not ticket.isdigit() else f"https://github.com/{slug}/issues/{ticket}")
 
+    # Forced past the skip below, and the operator is entitled to do that — but not to do it
+    # unknowingly. The suspended session is abandoned here, and whether the restart even begins
+    # depends on the worktree, so both are said rather than discovered afterwards.
+    if forced and entry.get("status") in SUSPENDED:
+        say(f"  ! {key}: named explicitly while PAUSED. This abandons the suspended session "
+            f"{entry.get('session_id')} and works the ticket from the start; its transcript stays "
+            "on disk under that id. `pool-run --resume` continues it instead.")
     if not forced:
         if entry.get("status") in DONE or entry.get("status") in NOT_OURS:
+            return None
+        if entry.get("status") in SUSPENDED:
+            say(f"  - {key}: paused with its session suspended — `pool-run --resume` continues it "
+                "where it stopped. Skipping.")
             return None
         if entry.get("status") in NEEDS_HUMAN:
             say(f"  - {key}: the run aborted and handed back — one of resolve-ticket's six "
@@ -1498,7 +1667,8 @@ class Session:
     """One headless `claude -p` run, streamed to a .jsonl and watched for death."""
 
     def __init__(self, prompt: str, cwd: Path, cfg: dict, log_stem: Path, timeout: int,
-                 quiet: int, say, env: dict | None = None):
+                 quiet: int, say, env: dict | None = None, resume: str | None = None,
+                 pausable: bool = True):
         self.prompt, self.cwd, self.cfg = prompt, cwd, cfg
         # The slot's environment, or this process's. Everything a run must not share with a sibling
         # travels here rather than in the prompt: the skills read it, and a pipeline instruction
@@ -1507,8 +1677,22 @@ class Session:
         self.jsonl = log_stem.with_suffix(".jsonl")
         self.err = log_stem.with_suffix(".err")
         self.timeout, self.quiet, self.say = timeout, quiet, say
-        self.session_id = str(uuid.uuid4())
+        # A resumed session keeps the id it was paused under, deliberately: the id IS the transcript,
+        # and a fresh one (`--fork-session`) would resume the conversation into a second file the
+        # ledger's `session_id` no longer names.
+        self.resume = resume
+        # A pause suspends a session only where something can RESUME it, which means a ticket: the
+        # ledger row is what carries the session id and the worktree back. The retro has no row, so
+        # suspending it would end it — losing the work AND leaving the source repo mid-checkout for
+        # the next retro to refuse as dirty — while reporting it through `run_retro`'s problem list
+        # as "no commit landed", which is true and is not the reason. It is bounded and runs between
+        # waves, so an immediate pause simply waits for it and stops at the next wave.
+        self.pausable = pausable
+        self.session_id = resume or str(uuid.uuid4())
         self.killed_for = None
+        # Told apart from `killed_for` everywhere, because they mean opposite things about the work:
+        # a kill is the end of an attempt and a pause is the middle of one.
+        self.paused_for = None
         self.turns = 0
         self.last_tool = ""
         self.result = {}
@@ -1521,7 +1705,10 @@ class Session:
         # there the prompt reaches somebody who can answer it — see `work_in_session`.
         argv = [c.get("binary") or "claude",
                 "-p", self.prompt, "--output-format", "stream-json", "--verbose",
-                "--dangerously-skip-permissions", "--session-id", self.session_id]
+                "--dangerously-skip-permissions"]
+        # `--resume` and `--session-id` are alternatives, not a pair: one continues a conversation
+        # that exists and the other names a new one.
+        argv += ["--resume", self.resume] if self.resume else ["--session-id", self.session_id]
         return argv + common_claude_args(self.cfg)
 
     def run(self) -> dict:
@@ -1534,8 +1721,18 @@ class Session:
             last_line = [now()]
             live_add(proc)
 
-            def kill(why: str) -> None:
-                self.killed_for = why
+            def stop(why: str, paused: bool = False) -> None:
+                """End the session's process group. The reason is the whole difference.
+
+                One mechanism, because there is only one way to stop a `claude -p` and inventing a
+                second for a pause would be two code paths that must agree about process groups. What
+                a pause changes is what the DRIVER does next: it keeps the worktree, keeps the
+                session id, spends no attempt, and comes back with `--resume`.
+                """
+                if paused:
+                    self.paused_for = why
+                else:
+                    self.killed_for = why
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
                     time.sleep(20)
@@ -1545,11 +1742,18 @@ class Session:
 
             def watchdog() -> None:
                 while proc.poll() is None:
-                    time.sleep(15)
+                    time.sleep(5)
+                    # Asked before the two death checks so a session already past its quiet window
+                    # when the operator pauses is still recorded as PAUSED rather than as dead. The
+                    # tick is what bounds how long `--pause --now` takes to bite; it is short because
+                    # everything in this loop is a stat and a subtraction.
+                    ask = pause_requested() if self.pausable else None
+                    if ask and ask.get("now"):
+                        return stop("the operator asked for an immediate pause", paused=True)
                     if now() - started > self.timeout:
-                        return kill(f"exceeded the ticket timeout of {hms(self.timeout)}")
+                        return stop(f"exceeded the ticket timeout of {hms(self.timeout)}")
                     if now() - last_line[0] > self.quiet:
-                        return kill(f"produced nothing for {hms(self.quiet)}")
+                        return stop(f"produced nothing for {hms(self.quiet)}")
 
             threading.Thread(target=watchdog, daemon=True).start()
             last_report = now()
@@ -1566,7 +1770,8 @@ class Session:
             live_drop(proc)
 
         return {"exit": code, "seconds": now() - started, "session_id": self.session_id,
-                "killed_for": self.killed_for, "turns": self.turns, "jsonl": str(self.jsonl),
+                "killed_for": self.killed_for, "paused_for": self.paused_for,
+                "turns": self.turns, "jsonl": str(self.jsonl),
                 "cost_usd": self.result.get("total_cost_usd"),
                 "is_error": bool(self.result.get("is_error")) or code != 0,
                 "summary": (self.result.get("result") or "")[-1200:]}
@@ -1593,6 +1798,19 @@ class Session:
 
 
 DRIVER_HEADER = "## Driver capture (pool-run)"
+
+# What a resumed session is told. It is addressed to a conversation that ALREADY holds the ticket, the
+# plan and whatever it had built — so it says what changed (nothing) rather than restating the task,
+# and the one thing it must rule out is a re-run: a `/resolve-ticket` typed again here would re-enter
+# the skill at Step 1 and re-do work whose evidence is sitting in its own context.
+RESUME_PROMPT = (
+    "The pool driver paused this run, and has now resumed it. Nothing was cancelled and nothing has "
+    "changed underneath you: this is the same session, the same working tree and the same branch, "
+    "and the pause was the operator's, not a judgement about the work. Continue the /resolve-ticket "
+    "run for {url} exactly where you stopped. Do not start the skill again and do not repeat work "
+    "you have already done — pick up from your last step, re-reading state from disk if you need to "
+    "confirm where that was."
+)
 
 
 def lesson_files() -> dict[Path, float]:
@@ -1944,32 +2162,82 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
     say_all("")
     say_all(f"── {key}  {job['title'][:80]}   ({slot.name})")
 
-    wt, why = make_worktree(repo, job["slug"], ticket, bases[str(repo)], say)
-    if wt is None:
-        say(f"skipped: {why}")
-        say(PREPARE_REMEDY["worktree-blocked"])
-        # Nothing ran, so there is nothing to have failed twice: no attempt is spent.
-        write_ledger(ledger, key, nothing_ran(ledger.get(key, {}), "worktree-blocked", why))
-        return "worktree-blocked"
-    say(f"worktree: {wt.name} @ {bases[str(repo)][:8]}  ·  {slot.describe()}")
-    cleared = clear_gate_state(wt, say)
+    # A resumed ticket re-ENTERS the tree it was paused in; it does not get a new one. `make_worktree`
+    # would be wrong twice over here: on a tree holding the paused run's uncommitted work it refuses
+    # the ticket outright, and on a clean one it removes and recreates it — cutting a fresh checkout
+    # at today's base under a session whose whole context is the old one. Its gate state is left alone
+    # for the same reason: it is this very run's, not a previous run's leftover.
+    resume = job.get("resume") or {}
+    if resume and not Path(resume.get("worktree") or "/nonexistent").is_dir():
+        # Nowhere to resume INTO. A `claude --resume` needs the working tree the conversation is
+        # about, so this session cannot be re-entered by anything, ever — and leaving the ticket
+        # paused would strand it: a plain run skips a paused ticket and every later `--resume` would
+        # fail here again. So the resume is dropped and the ticket is worked from the start, which
+        # loses the context and keeps nothing false. The branch is unaffected — removing a worktree
+        # does not delete a ref — and the abandoned transcript stays on disk under its session id.
+        say(f"! the worktree it was paused in is gone ({resume.get('worktree')}), so session "
+            f"{resume.get('session_id')} cannot be re-entered. Working it from the start; its "
+            "transcript stays on disk under that id.")
+        resume = {}
+    if resume.get("session_id"):
+        wt = Path(resume["worktree"])
+        cleared = []
+        say(f"resuming session {resume['session_id']} in {wt.name}  ·  {slot.describe()}")
+    else:
+        wt, why = make_worktree(repo, job["slug"], ticket, bases[str(repo)], say)
+        if wt is None:
+            say(f"skipped: {why}")
+            say(PREPARE_REMEDY["worktree-blocked"])
+            # Nothing ran, so there is nothing to have failed twice: no attempt is spent.
+            write_ledger(ledger, key, nothing_ran(ledger.get(key, {}), "worktree-blocked", why))
+            return "worktree-blocked"
+        say(f"worktree: {wt.name} @ {bases[str(repo)][:8]}  ·  {slot.describe()}")
+        cleared = clear_gate_state(wt, say)
     # Mark it running BEFORE the session starts. Two reasons, and the second is the load-bearing one:
     # `--status` during a parallel run would otherwise show each in-flight ticket's PREVIOUS outcome,
     # and the wave's crash handler needs to be able to tell "this worker died before recording
     # anything" from "it recorded an outcome and then died" — without that it overwrites a complete
     # entry, PR number and all, with a bare error.
-    write_ledger(ledger, key, {**ledger.get(key, {}), "status": "running", "slot": slot.name,
-                               "worktree": str(wt),
+    # `run_started` is the whole attempt's clock, not this process's. A resumed run that dated its
+    # PR search from the moment it resumed would miss a PR the FIRST half of the same attempt opened:
+    # `pr_for_ticket`'s body-mention tier accepts a PR only if it was created after the run started,
+    # and for a paused ticket that instant is on the far side of the pause. Preserved rather than
+    # rewritten on resume, which is why it is a field of its own beside `last_run`.
+    entry_now = ledger.get(key, {})
+    run_started = (entry_now.get("run_started") if resume else None) \
+        or datetime.now(timezone.utc).isoformat()
+    write_ledger(ledger, key, {**entry_now, "status": "running", "slot": slot.name,
+                               "worktree": str(wt), "url": job.get("url"),
+                               "run_started": run_started,
                                "last_run": datetime.now(timezone.utc).isoformat()})
 
     before = lesson_files()
-    started_at = now()
+    started_at = iso_to_epoch(run_started) or now()
     stem = LOGS / safe_component(f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}")
-    say(f"running /resolve-ticket {job['url']}")
+    prompt = RESUME_PROMPT.format(url=job["url"]) if resume else f"/resolve-ticket {job['url']}"
+    say(("resuming" if resume else "running") + f" /resolve-ticket {job['url']}")
     with unattended_marker(wt):
-        run = Session(f"/resolve-ticket {job['url']}", wt, cfg, stem,
+        run = Session(prompt, wt, cfg, stem,
                       cfg["ticket"]["timeout_seconds"], cfg["ticket"]["quiet_seconds"], say,
-                      env=slot.env()).run()
+                      env=slot.env(), resume=resume.get("session_id")).run()
+
+    # A pause is the middle of an attempt, so nothing that closes one out runs: no `gh pr list`, no
+    # record (a record counts towards the retro threshold, and this run has not finished to be
+    # learned from), no attempt spent, and above all no `drop_worktree` — the session resumes into
+    # that tree. Asked before `is_error`, because SIGTERM leaves a non-zero exit and every branch
+    # below would read it as a death.
+    if run.get("paused_for"):
+        write_ledger(ledger, key, {**ledger.get(key, {}), "status": "paused",
+                                   "session_id": run["session_id"], "worktree": str(wt),
+                                   "url": job.get("url"),
+                                   "slot": slot.name, "stream": run["jsonl"],
+                                   "turns": run["turns"], "duration_s": run["seconds"],
+                                   "cost_usd": run.get("cost_usd"),
+                                   "paused_at": datetime.now(timezone.utc).isoformat(),
+                                   "last_run": datetime.now(timezone.utc).isoformat()})
+        say(f"paused: the session is suspended with its transcript intact "
+            f"({hms(run['seconds'])}, {run['turns']} turns) — `pool-run --resume` continues it")
+        return "paused"
 
     # Outcome from evidence, never from the session's own closing prose.
     gate = read_gate_state(wt)
@@ -2290,7 +2558,7 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
 
     stem = LOGS / f"{utc_stamp()}-retro"
     run = Session("/skill-retro", src, cfg, stem, cfg["retro"]["timeout_seconds"],
-                  cfg["ticket"]["quiet_seconds"], say).run()
+                  cfg["ticket"]["quiet_seconds"], say, pausable=False).run()
 
     after_head = sh(["git", "-C", str(src), "rev-parse", "HEAD"]).stdout.strip()
     ahead = sh(["git", "-C", str(src), "status", "-sb"]).stdout.splitlines()[:1]
@@ -2434,11 +2702,53 @@ def cmd_status(cfg: dict, say: Say) -> int:
                 + f", {o.get('reviews')} review(s), checked {str(o.get('checked'))[:10]}")
         for f in e.get("flags") or []:
             say(f"{'':52s} ! {f}")
+    plan = read_pause_plan()
+    if not plan and any(e.get("status") in SUSPENDED for e in ledger.values()):
+        say("")
+        say("PAUSED tickets are in the ledger with no resume plan beside them — a driver died after "
+            "the pause. `pool-run --resume` continues them anyway.")
+    if plan:
+        say("")
+        say(f"PAUSED {hms(now() - plan.get('at', now()))} ago — `pool-run --resume` continues it")
+        for job in plan.get("suspended") or []:
+            say(f"  suspended mid-run: {job.get('key')}")
+        for job in plan.get("queue") or []:
+            say(f"  never started:     {job.get('key')}")
     pending = un_retroed()
     say("")
     say(f"un-retroed records: {len(pending)} (threshold {cfg['retro']['min_records']})")
     for p in pending:
         say(f"  {p.name}")
+    return 0
+
+
+def cmd_pause(cfg: dict, say: Say, immediate: bool) -> int:
+    """Ask the running driver to stop. This runs in a SECOND terminal, beside a working pool.
+
+    It takes no lock and writes no ledger, deliberately: the pool it is talking to holds the lock and
+    is mid-ticket. All it does is leave the request where the driver's wave loop and every live
+    session watchdog already look.
+
+    It refuses when no driver is live, and that refusal is the useful half of the command. A request
+    written with nothing to read it sits on disk until the NEXT driver starts, which would then pause
+    in its first wave for a reason nobody remembers asking for.
+    """
+    if not driver_problems():
+        say("no pool driver is running, so there is nothing to pause.")
+        if read_pause_plan():
+            say("a resume plan is already on disk — `pool-run --resume` continues from it.")
+        return 1
+    ask_pause(immediate)
+    if immediate:
+        say("asked the running driver to pause NOW.")
+        say("Every session in flight is suspended within seconds: SIGTERM to its process group, its "
+            "transcript kept under its session id, its worktree kept, its gate state kept, and no "
+            "attempt spent. `--resume` re-enters each one with `claude --resume`.")
+    else:
+        say("asked the running driver to pause at the next ticket boundary.")
+        say("The tickets in flight run to their own end first, which can be hours. `--pause --now` "
+            "stops them where they are instead, and loses nothing by it.")
+    say("`pool-run --resume` picks the pool up from where it stopped.")
     return 0
 
 
@@ -2598,7 +2908,23 @@ def main() -> int:
     ap.add_argument("--claims", action="store_true", help="list the slots hand-launched sessions hold")
     ap.add_argument("--outcomes", action="store_true",
                     help="refresh what became of every PR the ledger knows about, and stop")
+    ap.add_argument("--pause", action="store_true",
+                    help="ask the RUNNING driver to stop and leave a resume plan behind. Run this "
+                         "from a second terminal; without --now the tickets in flight finish first")
+    ap.add_argument("--now", action="store_true",
+                    help="with --pause: suspend the sessions in flight too, within seconds, keeping "
+                         "each transcript and worktree so --resume can re-enter them")
+    ap.add_argument("--resume", action="store_true",
+                    help="continue a paused pool from its plan: the suspended sessions first, then "
+                         "the queue it had left, in the order it had it")
     args = ap.parse_args()
+    if args.now and not args.pause:
+        ap.error("--now says HOW to pause; it means nothing without --pause")
+    if args.pause and args.resume:
+        ap.error("--pause asks a running driver to stop and --resume starts one; pick one")
+    if args.resume and args.ticket:
+        ap.error("--resume works the queue the pause left, in the order it left it; --ticket names "
+                 "a new one. Pick one")
 
     cfg = merge(DEFAULTS, load_json(Path(args.config).expanduser(), {}))
     if args.no_retro:
@@ -2614,6 +2940,8 @@ def main() -> int:
     say(f"# pool-run · {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
     say(f"config: {args.config}")
 
+    if args.pause:
+        return cmd_pause(cfg, say, args.now)
     if args.status:
         return cmd_status(cfg, say)
     if args.claims:
@@ -2629,7 +2957,10 @@ def main() -> int:
 
     say("")
     say("preflight")
-    fatal = preflight(cfg, say, want_label=not (args.ticket or args.retro_now))
+    # A resume works a queue it already has, so it no more needs the label to exist than a named
+    # run does — and refusing to resume because a label was renamed mid-pool would strand the
+    # suspended sessions.
+    fatal = preflight(cfg, say, want_label=not (args.ticket or args.retro_now or args.resume))
     for f in fatal:
         say(f"  x {f}")
     if fatal:
@@ -2644,6 +2975,16 @@ def main() -> int:
     # (temp file, then replace), so a concurrent reader sees one version or the other, never a torn one.
     if not args.dry_run and not take_lock(say):
         return 1
+    # The lock we now hold proves no other driver is alive, so a pause request still on disk was
+    # asked of one that is gone. Clearing it here is what stops this run pausing in its first wave
+    # for a reason nobody remembers asking for — and `cmd_pause` refuses to write one with no driver
+    # to read it, so reaching this is already a sign something died.
+    if not args.dry_run:
+        stale = pause_requested()
+        if stale:
+            say(f"clearing a pause request asked {hms(now() - stale.get('asked', now()))} ago — the "
+                "driver it was meant for is gone.")
+            clear_pause_request()
     if args.outcomes:
         try:
             say("")
@@ -2692,19 +3033,99 @@ def main() -> int:
             refresh_outcomes(ledger, say)
         say("")
         say("queue")
-        named = [t.strip() for t in args.ticket.split(",") if t.strip()] if args.ticket else None
-        queue = build_queue(cfg, ledger, say, named)
+        if args.resume:
+            plan = read_pause_plan()
+            if not (plan.get("queue") or plan.get("suspended")
+                    or any(e.get("status") in SUSPENDED for e in ledger.values())):
+                say("  nothing is paused — no resume plan on disk, and no ticket the ledger calls "
+                    "paused.")
+                return 1
+            if plan.get("at"):
+                say(f"  resuming a pool paused {hms(now() - plan['at'])} ago")
+            else:
+                say("  no resume plan on disk — resuming what the ledger itself calls paused")
+            if plan.get("config") and plan["config"] != args.config:
+                say(f"  ! it was paused under {plan['config']} and this is {args.config}. The queue "
+                    "carries its own repo paths, but which repos a LEDGER-only pause can be resumed "
+                    "into is read from the config in use.")
+            # The plan carries the width and the retro setting the paused run was using, so a resume
+            # typed with no flags continues on the same terms rather than on the defaults. A flag
+            # given HERE still wins: it is this invocation's instruction, and the plan is only a
+            # memory of the last one.
+            if not args.workers and plan.get("workers"):
+                cfg["parallel"]["max_workers"] = int(plan["workers"])
+            if plan.get("no_retro"):
+                cfg["retro"]["enabled"] = False
+            queue = dedupe_queue(resume_jobs(plan, ledger, cfg, say), say)
+            # The un-started tail was screened at PAUSE time, and a pause is an invitation to come
+            # back much later. Re-screening it through the same predicate a fresh run uses is what
+            # stops a resume opening a SECOND PR for a ticket somebody took to one by hand in the
+            # meantime — which is `consider`'s own stated reason for existing, and which the plan
+            # cannot know about because it was written before it happened. Screened as the PAUSED
+            # run would have screened it (`forced`), not as this invocation looks: the operator's
+            # `--ticket` decision belongs to the queue, and it is the same queue.
+            #
+            # A SUSPENDED ticket is deliberately not re-screened. It is mid-attempt with its
+            # worktree and session open, the ledger row it would be judged against is its own
+            # `paused`, and every skip would fire on it.
+            open_by_slug: dict[str, list[dict]] = {}
+            screened = []
+            for job in queue:
+                if job.get("resume"):
+                    screened.append(job)
+                    continue
+                if job["slug"] not in open_by_slug:
+                    open_by_slug[job["slug"]] = open_prs(job["slug"])
+                token = str(job.get("ticket") or "")
+                still = consider(job["slug"], str(job["path"]),
+                                 {"number": int(token) if token.isdigit() else None,
+                                  "key": token, "title": job.get("title", ""),
+                                  "url": job.get("url")},
+                                 open_by_slug[job["slug"]], ledger, say, cfg,
+                                 forced=bool(plan.get("forced")))
+                if still:
+                    screened.append(still)
+            queue = screened
+            # Consumed here rather than at the end: a resume that dies mid-way has already written
+            # each ticket's own state, and re-reading a plan whose tickets have moved on would work
+            # the queue twice. What survives a death is the ledger, which is where it belongs.
+            # Not on a dry run, which starts nothing and must therefore consume nothing — the same
+            # rule that keeps it from taking the lock, and `--dry-run --resume` is exactly how you
+            # look at what a pause left before committing to it.
+            if not args.dry_run:
+                clear_pause_plan()
+            queue_forced = bool(plan.get("forced"))
+        else:
+            named = [t.strip() for t in args.ticket.split(",") if t.strip()] if args.ticket else None
+            queue = build_queue(cfg, ledger, say, named)
+            queue_forced = bool(named)
         if not args.dry_run:
             # build_queue records what it skipped (a ticket whose PR now exists, say). That is a real
             # observation worth keeping — but only when this invocation is going to act on it. Merged
             # by CHANGED key, so a subcommand running beside this one keeps everything it recorded —
             # publishing every key of this snapshot would clobber those just as the whole file did.
             merge_ledger_changes(ledger_before, ledger)
+        full_queue = list(queue)
         if args.limit:
             queue = queue[: args.limit]
         if args.once:
             queue = queue[:1]
         workers = max(1, int(cfg["parallel"]["max_workers"]))
+        # A resume that is ALSO limited leaves tickets the plan held and this run will not reach.
+        # The plan was consumed when it was read, so the remainder is written straight back: for a
+        # labelled pool it would be re-found, but a `--ticket` queue is recorded nowhere else, and
+        # its ORDER is recorded nowhere else at all.
+        if args.resume and not args.dry_run and len(queue) < len(full_queue):
+            held = full_queue[len(queue):]
+            # Split by what they ARE, not by where they sat. `resume_jobs` puts suspended tickets
+            # first, so a limit smaller than their number holds one back — and writing it into the
+            # un-started queue would have the next resume work it from scratch, abandoning the very
+            # session the pause was taken to keep.
+            write_pause_plan(args.config, workers, not cfg["retro"]["enabled"],
+                             [j for j in held if not j.get("resume")],
+                             [j for j in held if j.get("resume")], say, forced=queue_forced)
+            say(f"  ({len(full_queue) - len(queue)} ticket(s) of the paused queue are held back by "
+                "--once/--limit and stay in the plan)")
         waves = plan_waves(queue, workers)
         pending = len(un_retroed())
         marks = retro_forecast(len(queue), pending, cfg)
@@ -2721,7 +3142,12 @@ def main() -> int:
         else:
             say("  (retro disabled for this invocation)")
         if not queue:
-            say(f"  (nothing to work — label an issue {cfg['label']!r} to queue it)")
+            # A resume that empties says why in its own terms: its tickets were worked, or handed
+            # back, while it was paused. Telling that operator to label an issue would be an answer
+            # to a question they did not ask.
+            say("  (everything the pause left has since been worked or handed back — nothing to "
+                "resume)" if args.resume
+                else f"  (nothing to work — label an issue {cfg['label']!r} to queue it)")
             return 0
         slots = build_slots(cfg, workers)
         if workers > 1:
@@ -2764,25 +3190,69 @@ def main() -> int:
             say("no repository in the queue could be prepared; nothing was started.")
             return 1
 
+        def pause_here(remaining: list[dict], suspended: list[dict]) -> None:
+            """Stop, and leave behind everything `--resume` needs to carry on.
+
+            The request is consumed at the same moment the plan is written, so the two cannot
+            disagree about whether the pause has happened: a request that survived its own pause
+            would stop the resumed run in its first wave.
+            """
+            clear_pause_request()
+            if not (remaining or suspended):
+                # Asked for during the last wave, which then finished. There is nothing to resume,
+                # and writing an empty plan would leave `--resume` reporting a pause that never
+                # cost anything.
+                say("")
+                say("a pause was asked for, but the queue finished first — nothing is left to "
+                    "resume.")
+                return
+            write_pause_plan(args.config, workers, not cfg["retro"]["enabled"],
+                             remaining, suspended, say, forced=queue_forced)
+            say("")
+            say(f"paused: {len(suspended)} ticket(s) suspended mid-run, {len(remaining)} not "
+                "started. `pool-run --resume` continues from here.")
+
         results = []
         for i, wave in enumerate(waves, 1):
             if stopping["flag"]:
                 say("stopping as asked; the rest of the queue is untouched.")
                 break
+            if pause_requested():
+                pause_here([j for w in waves[i - 1:] for j in w], [])
+                break
             say("")
             say(f"[wave {i}/{len(waves)}]" if workers > 1 else f"[{i}/{len(waves)}]")
-            results += run_wave(wave, slots, cfg, ledger, say, bases)
+            outcome = run_wave(wave, slots, cfg, ledger, say, bases)
+            results += outcome
+            # Two ways a wave can end in a pause, and the plan is the same either way: its own
+            # sessions suspended themselves on an immediate pause, or a boundary pause was asked for
+            # while it worked. Asked AFTER the wave rather than only before the next one so the last
+            # wave of a queue can pause too — otherwise `--pause` during it is silently ignored and
+            # the pool reports itself finished.
+            suspended = [j for j in wave if dict(outcome).get(j["key"]) == "paused"]
+            if suspended or pause_requested():
+                pause_here([j for w in waves[i:] for j in w], suspended)
+                break
             # The barrier. `skill-retro` rewrites the skills that a run reads, so it runs only when
             # nothing is in flight — which a wave boundary is and a rolling pool never is.
             if not stopping["flag"]:
                 run_retro(cfg, say, force=False)
+
+        # Asked for while the last wave, or the retro after it, was still running. The retro is
+        # deliberately not interruptible, so this is the ordinary way a pause arrives too late.
+        if pause_requested():
+            clear_pause_request()
+            say("")
+            say("a pause was asked for, but the run finished first — nothing is left to resume.")
 
         say("")
         say("## summary")
         for key, status in results:
             e = load_json(LEDGER, {}).get(key, {})
             say(f"  {status:13s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
-        needs = [k for k, s in results if s != "ready"]
+        # A paused ticket is not a ticket that needs a human: it needs `--resume`, and listing it
+        # here would put every pause on the same line as an abort.
+        needs = [k for k, s in results if s not in ("ready", "paused")]
         if needs:
             say("")
             say("needs a human: " + ", ".join(needs))
