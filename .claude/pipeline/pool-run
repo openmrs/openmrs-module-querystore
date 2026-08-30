@@ -40,6 +40,7 @@ import argparse
 import concurrent.futures
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -646,9 +647,21 @@ def release_claim(cfg: dict, ticket: str, say) -> dict | None:
     # number is ambiguous the moment two repositories are configured, and picking one at random there
     # would delete a worktree belonging to a session that is still running.
     slug, _, number = ticket.rpartition("#")
-    want = (number or ticket).lstrip("#")
+    # Through `ticket_id` so `--release` accepts every form `--claim` does. A URL carries no `#`, so
+    # `rpartition` hands the whole thing back as the number — and the lease it is looking for was
+    # written under the IDENTIFIER, so comparing the raw URL finds nothing and the slot stays held.
+    want = ticket_id(number or ticket)
+    # A URL names its own repository, so it narrows the search exactly as it does for `--claim`.
+    # Without this, `--release <url>` on a ticket number claimed in two repos hits the "name which
+    # one" ambiguity instead of releasing the one the URL actually named.
+    slug = slug or (ticket_repo(ticket) or "")
+    # Both sides through `ticket_id`, not just the input. A lease written BEFORE this normalisation
+    # existed stored the raw token, so comparing it against a normalised `want` never matches and
+    # that slot stays held forever — no input the operator can type reaches it, because normalising
+    # what they type cannot retroactively normalise what was stored.
     matches = {n: l for n, l in all_leases().items()
-               if l.get("ticket") == want and (not slug or l.get("slug") == slug)}
+               if ticket_id(l.get("ticket") or "") == want
+               and (not slug or l.get("slug") == slug)}
     if len(matches) > 1:
         say(f"  x #{want} is claimed in {len(matches)} repositories — name which one:")
         for n, l in sorted(matches.items()):
@@ -1027,6 +1040,15 @@ def consider(slug: str, path: str, issue: dict, prs: list[dict], ledger: dict, s
     ticket = str(issue.get("number") or issue.get("key"))
     key = f"{slug}#{ticket}"
     entry = ledger.get(key, {})
+    if not entry:
+        # Rows written before `ticket_id` existed are keyed on the RAW token (`slug#<url>`), so the
+        # normalised key misses them and the row's whole history goes with it: `attempts` resets to
+        # 0, and so does the `aborted` verdict that stops an identical second attempt. Matched on the
+        # first `#` because a slug cannot contain one while a pasted URL can (`#issuecomment-…`).
+        # Read-side only — nothing here rewrites the ledger, so a live driver's writes are not raced.
+        entry = next((v for k, v in ledger.items()
+                      if k.partition("#")[0] == slug
+                      and ticket_id(k.partition("#")[2]) == ticket), {})
     url = issue.get("url") or (
         ticket if not ticket.isdigit() else f"https://github.com/{slug}/issues/{ticket}")
 
@@ -1061,13 +1083,28 @@ def consider(slug: str, path: str, issue: dict, prs: list[dict], ledger: dict, s
 
 
 def resolve_named(token: str, slug: str) -> dict | None:
-    """One operator-named ticket against one repo, or None if that repo does not own it."""
-    if token.isdigit():
-        got = sh(["gh", "issue", "view", token, "--repo", slug, "--json", "number,title,url"])
+    """One operator-named ticket against one repo, or None if that repo does not own it.
+
+    The token is reduced to its identifier FIRST (`ticket_id`), so a GitHub issue URL, a JIRA browse
+    URL and a bare number all name the same ticket everything downstream will. Before that a URL came
+    back verbatim as a JIRA `key`, and the whole string then became the ledger key, the log stem and
+    the worktree path — see `ticket_id` for what that cost.
+
+    A GitHub URL also names its own repository, so it is matched against `slug` rather than tried
+    against every repo in the pool: that is the difference between "this repo does not own it" and
+    "no repo owns it", and only the URL form can tell them apart.
+    """
+    owner = ticket_repo(token)
+    if owner and owner.lower() != slug.lower():
+        return None
+    ident = ticket_id(token)
+    if ident.isdigit():
+        got = sh(["gh", "issue", "view", ident, "--repo", slug, "--json", "number,title,url"])
         if got.returncode != 0:
             return None
-        return load_json_str(got.stdout, {"number": int(token), "title": "", "url": ""})
-    return {"key": token, "title": f"JIRA {token}", "url": token}
+        return load_json_str(got.stdout, {"number": int(ident), "title": "", "url": ""})
+    return {"key": ident, "title": f"JIRA {ident}",
+            "url": token.strip() if token.strip().startswith("http") else ident}
 
 
 def build_queue(cfg: dict, ledger: dict, say: Say, named: list[str] | None) -> list[dict]:
@@ -1191,8 +1228,92 @@ def remote_head(path: Path) -> str:
 WORKTREE_LOCK = threading.Lock()
 
 
+def ticket_id(token: str) -> str:
+    """The identifier a ticket is KNOWN by, from whatever the operator typed.
+
+    One normaliser because the token reaches four things that must agree about what ticket this is —
+    the worktree path, the ledger key, the lease file and the log stem — and it used to reach all of
+    them raw. Measured on the #238 run: the pool was handed
+    `https://github.com/openmrs/openmrs-module-chartsearchai/issues/238`, and since `resolve_named`
+    returns a non-digit token verbatim, `worktree_path` interpolated the whole URL. `Path` then ate
+    the slashes, so the tree was created at `<worktrees>/…-https:/github.com/…/issues/238` — outside
+    `WORKTREES`, three components deep, and carrying a COLON. javac splits its classpath on `:`, so
+    nothing in that tree could compile its tests: `mvn` built `target/classes` and then failed every
+    test with "cannot find symbol" against the classes it had just written.
+
+    Accepts a GitHub issue/PR URL, a JIRA browse URL, a bare number, a `#`-prefixed number, or a bare
+    JIRA key, and returns the number or the key. Anything it does not recognise comes back stripped
+    of whitespace and a leading `#` — never expanded, because inventing an identifier for a token
+    nobody can parse is how one ticket becomes two directories.
+    """
+    token = (token or "").strip().lstrip("#")
+    gh = _GH_ISSUE.match(token)
+    if gh:
+        return gh.group(2)
+    jira = _JIRA_BROWSE.match(token)
+    if jira:
+        return jira.group(1)
+    return token
+
+
+def ticket_repo(token: str) -> str | None:
+    """The `owner/repo` a GitHub URL names, or None for any other token.
+
+    Only a URL says which repository it belongs to. Everything else is resolved against each repo in
+    turn, which is what `resolve_named` already does — so returning None here means "ask them all",
+    the behaviour every non-URL token has always had.
+    """
+    got = _GH_ISSUE.match((token or "").strip())
+    return got.group(1) if got else None
+
+
+# One pattern for both questions a GitHub issue URL answers — which ticket, and which repo — so the
+# two can never disagree about what counts as one. The scheme is optional and the host matched
+# case-insensitively because those are what an operator's paste actually varies, and a trailing
+# `?query` or `#fragment` is allowed and discarded: the address bar carries `#issuecomment-…` the
+# moment you scroll to a comment, which is the likeliest paste of all and the one the first cut of
+# this fix did not recognise.
+_GH_ISSUE = re.compile(
+    r"^(?:https?://)?(?:www\.)?github\.com/([^/]+/[^/]+)/(?:issues|pull)/(\d+)(?:[/?#].*)?$", re.I)
+_JIRA_BROWSE = re.compile(
+    r"^(?:https?://)?[^/\s]+/browse/([A-Za-z][A-Za-z0-9]*-\d+)(?:[/?#].*)?$", re.I)
+
+# Anything outside this cannot go in a path component. It is not only about the colon that started
+# this: a `/` silently NESTS the tree somewhere else entirely, and `..` walks out of WORKTREES.
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def safe_component(raw: str) -> str:
+    """One path COMPONENT from an arbitrary string, collision-free.
+
+    Sanitising is many-to-one — `PROJ:123` and `PROJ/123` both reduce to `PROJ-123` — so anything
+    this had to rewrite carries a digest of the ORIGINAL. `raw` comes back untouched only when it is
+    already a usable component — non-empty, no disallowed character, no leading or trailing `-` or
+    `.` — which is every number, every JIRA key and every URL `ticket_id` reduces. A string that is
+    character-safe but ends in `-` or `.` IS rewritten and gains a digest, and so is the EMPTY
+    string, which the equality test would otherwise hand back unchanged as a component that is not
+    one.
+
+    Shared because `ticket_id` deliberately passes an UNRECOGNISED token through almost unchanged,
+    and three places then put that string in a filename: this ticket's worktree, its lesson record
+    and its log stem. Guarding only the worktree left the same defect at the other two.
+    """
+    safe = _UNSAFE.sub("-", raw).strip("-.")
+    if safe and safe == raw:
+        return raw
+    return f"{safe or 'ticket'}-{hashlib.sha1(raw.encode()).hexdigest()[:8]}"
+
+
 def worktree_path(slug: str, ticket: str) -> Path:
-    return WORKTREES / f"{slug.replace('/', '-')}-{ticket.lstrip('#')}"
+    """One ticket, one directory, and the leaf is always a single safe component.
+
+    Normalised THEN sanitised, and both halves earn their place: normalising is what makes a URL and
+    its number the same tree rather than two, and sanitising is what keeps a token nobody thought of
+    from reaching the filesystem at all. The sanitising itself lives in `safe_component`, which
+    the lesson record and the log stem call too — this used to hold it inline, and holding it here is
+    what left those two unguarded.
+    """
+    return WORKTREES / safe_component(f"{slug.replace('/', '-')}-{ticket_id(ticket)}")
 
 
 def make_worktree(repo: Path, slug: str, ticket: str, base: str, say) -> tuple[Path | None, str]:
@@ -1783,7 +1904,7 @@ def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, 
         return own
 
     LESSONS.mkdir(parents=True, exist_ok=True)
-    path = LESSONS / f"{utc_date()}-{slug.split('/')[-1]}-{ticket}-driver.md"
+    path = LESSONS / (safe_component(f"{utc_date()}-{slug.split('/')[-1]}-{ticket}") + "-driver.md")
     path.write_text(
         f"# pool-run · {slug} · {ticket} · {utc_date()}\n"
         f"outcome: {outcome}\n"
@@ -1843,7 +1964,7 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
 
     before = lesson_files()
     started_at = now()
-    stem = LOGS / f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}"
+    stem = LOGS / safe_component(f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}")
     say(f"running /resolve-ticket {job['url']}")
     with unattended_marker(wt):
         run = Session(f"/resolve-ticket {job['url']}", wt, cfg, stem,
@@ -2339,16 +2460,22 @@ def cmd_claim(cfg: dict, say: Say, token: str) -> int:
             say(f"    {PREPARE_REMEDY[failure]}")
             return 1
         prs = open_prs(slug)
-        existing = pr_for_ticket(prs, token)
+        # The IDENTIFIER from here on, never the operator's raw token: it becomes the lease file's
+        # `ticket`, the duplicate-claim comparison against leases already held, the ledger key and
+        # the session's log stem, and a URL in any of those makes one ticket look like two. The
+        # worktree path guards itself (`worktree_path`), which is why this was invisible until the
+        # ledger was read. `ticket_id` is the same reduction `resolve_named` applied a moment ago.
+        ident = ticket_id(token)
+        existing = pr_for_ticket(prs, ident)
         if existing:
             say(f"  ! #{existing['number']} is already open for this ticket — that is `pr-harden`'s "
                 "entry point, not `resolve-ticket`'s. Claiming anyway, since you asked by name.")
-        claim = claim_slot(cfg, slug, token, repo, base, say)
+        claim = claim_slot(cfg, slug, ident, repo, base, say)
         if not claim:
             return 1
         env = claim["env"]
         say("")
-        say(f"slot {claim['slot'].name} is yours for {slug}#{token.lstrip('#')} "
+        say(f"slot {claim['slot'].name} is yours for {slug}#{ident} "
             f"({claim['slot'].describe().split(': ', 1)[1]})")
         say("")
         say("Paste this into the terminal you want the session in:")
@@ -2393,11 +2520,16 @@ def cmd_work(cfg: dict, say: Say, token: str) -> int:
         issue = resolve_named(token, slug)
         if issue is None:
             continue
-        existing = pr_for_ticket(open_prs(slug), token)
+        # The IDENTIFIER onward, never the raw token — this is the entry point that produced the
+        # defect `ticket_id` documents: `pool-run --work https://github.com/o/r/issues/238` put the
+        # whole URL into the lease, the ledger key and the worktree path. `resolve_named` has already
+        # reduced it; passing `token` here is what un-reduced it again.
+        ident = ticket_id(token)
+        existing = pr_for_ticket(open_prs(slug), ident)
         if existing:
             say(f"  ! #{existing['number']} is already open for this ticket — `pr-harden` owns it "
                 "from here, not `resolve-ticket`. Starting anyway, since you named it.")
-        return work_in_session(cfg, slug, token, issue, Path(path).expanduser(), say)
+        return work_in_session(cfg, slug, ident, issue, Path(path).expanduser(), say)
     say(f"  x no configured repo has issue {token}")
     return 1
 

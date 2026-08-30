@@ -177,6 +177,177 @@ def test_worktrees(tmp: Path) -> None:
     pool.drop_worktree(work, b, say, force=True)
 
 
+def test_ticket_identity(tmp: Path) -> None:
+    """A ticket named as a URL must reduce to its identifier before it reaches a path or a key.
+
+    Measured on the #238 run: the pool was handed
+    `https://github.com/openmrs/openmrs-module-chartsearchai/issues/238`, `resolve_named` returned it
+    verbatim as the ticket, and `worktree_path` interpolated it — producing a directory containing
+    `https:` and three extra path components. javac splits its classpath on `:`, so `mvn test` could
+    not compile anything in that tree: main compiled, and every test failed with "cannot find symbol"
+    against classes that were sitting in `target/classes`. The run lost three build cycles to it.
+    """
+    print("\nticket identity")
+
+    url = "https://github.com/o/r/issues/238"
+    jira = "https://openmrs.atlassian.net/browse/TRUNK-6429"
+
+    # The identifier itself is asserted on `ticket_id`, not through `resolve_named`: the digit branch
+    # of that function verifies the issue with a real `gh issue view`, so asserting the number there
+    # would be asserting that this machine can reach GitHub, which is not what is under test.
+    for token, want in [(url, "238"), ("https://github.com/o/r/pull/238", "238"),
+                        (jira, "TRUNK-6429"), ("238", "238"), ("#238", "238"),
+                        ("O3-1234", "O3-1234"), ("  #238  ", "238"),
+                        # What an operator's paste actually varies. The fragment is the likeliest of
+                        # all — the address bar carries `#issuecomment-…` the moment you scroll to a
+                        # comment — and the first cut of this fix recognised none of these four.
+                        (url + "#issuecomment-2412", "238"), (url + "?foo=bar", "238"),
+                        ("HTTPS://GitHub.com/o/r/issues/238", "238"),
+                        ("github.com/o/r/issues/238", "238"),
+                        (jira + "?filter=1", "TRUNK-6429"),
+                        ("openmrs.atlassian.net/browse/TRUNK-6429", "TRUNK-6429")]:
+        check(f"{token.strip()!r} reduces to {want!r}", pool.ticket_id(token) == want,
+              pool.ticket_id(token))
+    check("an unparseable token is not expanded into one",
+          pool.ticket_id("not a ticket") == "not a ticket", pool.ticket_id("not a ticket"))
+
+    # Only a URL says which repo owns it; everything else is asked of each repo in turn, as before.
+    check("a github URL names its own repo", pool.ticket_repo(url) == "o/r", pool.ticket_repo(url))
+    check("a bare number names no repo", pool.ticket_repo("238") is None)
+    check("a URL is refused by a repo that does not own it",
+          pool.resolve_named(url, "other/repo") is None,
+          repr(pool.resolve_named(url, "other/repo")))
+
+    key = pool.resolve_named(jira, "o/r")
+    check("a JIRA browse URL resolves to its key",
+          key is not None and key.get("key") == "TRUNK-6429", repr(key))
+    check("and keeps the browsable URL it was given",
+          (key or {}).get("url") == jira, repr(key))
+    check("a bare JIRA key still passes through",
+          (pool.resolve_named("O3-1234", "o/r") or {}).get("key") == "O3-1234")
+
+    # Sanitising lives in `safe_component`, which the lesson record and the log stem call too, so a
+    # caller passing something unsanitised cannot reach the filesystem through any of the three.
+    for raw in [url, jira, "238", "#238", "TRUNK-6429", "weird/../thing", "a:b"]:
+        leaf = pool.worktree_path("o/r", raw).name
+        check(f"the worktree leaf for {raw!r} is filesystem-safe",
+              re.fullmatch(r"[A-Za-z0-9._-]+", leaf) is not None
+              and pool.worktree_path("o/r", raw).parent == pool.WORKTREES,
+              leaf)
+
+    check("a URL and its number land in the SAME worktree, so one ticket is never two trees",
+          pool.worktree_path("o/r", url) == pool.worktree_path("o/r", "238"),
+          f"{pool.worktree_path('o/r', url).name} vs {pool.worktree_path('o/r', '238').name}")
+    check("and so does the same URL carrying a comment fragment",
+          pool.worktree_path("o/r", url + "#issuecomment-2412")
+          == pool.worktree_path("o/r", "238"))
+    check("two different tickets still get two trees",
+          pool.worktree_path("o/r", "238") != pool.worktree_path("o/r", "239"))
+
+    # Sanitising is many-to-one, so on its own it would give two tickets one directory — and
+    # `make_worktree` would release and recreate the first one's tree under the second, the defect
+    # ticket-pool 0.14.4 removed. A rewritten identifier therefore carries a digest of the original.
+    check("two tokens that sanitise alike do NOT share a worktree",
+          pool.worktree_path("o/r", "PROJ:123") != pool.worktree_path("o/r", "PROJ-123"),
+          f"{pool.worktree_path('o/r', 'PROJ:123').name} vs {pool.worktree_path('o/r', 'PROJ-123').name}")
+    check("and the token that needed no rewriting keeps the path it always had",
+          pool.worktree_path("o/r", "PROJ-123").name == "o-r-PROJ-123",
+          pool.worktree_path("o/r", "PROJ-123").name)
+    for safe in ["238", "O3-1234", "TRUNK-6429"]:
+        check(f"{safe!r} is untouched by the sanitiser",
+              pool.worktree_path("o/r", safe).name == f"o-r-{safe}",
+              pool.worktree_path("o/r", safe).name)
+
+    # The digest is taken from the ORIGINAL, not from the sanitised result. Hashing the result makes
+    # two genuinely different unsafe tokens collide again, which the PROJ:123/PROJ-123 pair above
+    # cannot see because PROJ-123 never enters the digest branch at all.
+    check("two DIFFERENT unsafe tokens that sanitise alike stay apart",
+          pool.worktree_path("o/r", "PROJ:123") != pool.worktree_path("o/r", "PROJ/123"),
+          f"{pool.worktree_path('o/r', 'PROJ:123').name} vs {pool.worktree_path('o/r', 'PROJ/123').name}")
+
+    # `.strip("-.")` and the `or "ticket"` fallback: without them a leaf can be empty, a bare dot, or
+    # start with `-`. All three are usable-looking directory names that are not what anyone meant.
+    for nasty in ["", ".", "..", "-", "????", "#"]:
+        leaf = pool.worktree_path("o/r", nasty).name
+        check(f"a leaf for {nasty!r} is a single ordinary component",
+              re.fullmatch(r"[A-Za-z0-9._-]+", leaf) is not None
+              and leaf not in (".", "..") and not leaf.startswith((".", "-")),
+              leaf)
+
+    check("a component that is already safe is returned unchanged",
+          pool.safe_component("o-r-238") == "o-r-238")
+    # Asserted on the helper directly: through `worktree_path` the slug prefix always survives
+    # sanitising, so no ticket can drive `safe` empty and the fallback is unreachable from there.
+    # It is reachable at this API, which is where a future caller would meet it.
+    for allbad in ["????", "", "..", "///"]:
+        comp = pool.safe_component(allbad)
+        check(f"safe_component({allbad!r}) is still an ordinary component",
+              re.fullmatch(r"[A-Za-z0-9._-]+", comp) is not None
+              and not comp.startswith((".", "-")), comp)
+    check("and one that only LOOKS safe but ends in punctuation is not",
+          pool.safe_component("o-r-238-") != "o-r-238-", pool.safe_component("o-r-238-"))
+
+    # ticket_repo strips, so a padded paste still narrows resolve_named to the owning repo. Without
+    # it the ownership check silently falls through and every repo is asked instead.
+    check("a whitespace-padded URL still names its repo",
+          pool.ticket_repo("  " + url + "  ") == "o/r", pool.ticket_repo("  " + url + "  "))
+
+
+def test_legacy_ticket_state(tmp: Path) -> None:
+    """State the pre-normalisation driver wrote must still be findable.
+
+    A lease or ledger row written before `ticket_id` existed stores the RAW token, so normalising
+    only the INPUT never matches it: the slot stays held forever, and the ledger row's whole history
+    goes — `attempts`, and the `aborted` status that stops an identical second attempt. No input the
+    operator can type reaches those rows, because normalising what they type cannot retroactively
+    normalise what was stored. Both reads therefore normalise BOTH sides.
+    """
+    print("\nlegacy ticket state")
+    url = "https://github.com/o/r/issues/238"
+
+    with isolated(tmp):
+        pool.SLOTS.mkdir(parents=True, exist_ok=True)
+        (pool.SLOTS / "slot-9.json").write_text(json.dumps({
+            "slot": "slot-9", "ticket": url, "slug": "o/r",      # written by the OLD code
+            "worktree": str(tmp / "gone"), "repo": str(tmp / "repo"), "standalone": None}))
+        leases = pool.all_leases()
+        check("precondition: the lease really stores the raw token",
+              leases["slot-9"]["ticket"] == url, leases["slot-9"]["ticket"])
+
+        say = pool.Say(tmp / "say-legacy.md")
+        freed = pool.release_claim({"repos": {}}, "238", say)
+        check("a lease written under a raw URL is released by the ticket's number",
+              freed is not None and not (pool.SLOTS / "slot-9.json").exists(),
+              "the slot would stay held with nothing able to reach it")
+
+    # `--release <url>` with no `#` must narrow to the repo the URL names, rather than reporting the
+    # number as ambiguous across every repo that happens to hold one.
+    with isolated(tmp):
+        pool.SLOTS.mkdir(parents=True, exist_ok=True)
+        for slot, slug in [("slot-1", "o/r"), ("slot-2", "x/y")]:
+            (pool.SLOTS / f"{slot}.json").write_text(json.dumps({
+                "slot": slot, "ticket": "238", "slug": slug,
+                "worktree": str(tmp / slot), "repo": str(tmp / "repo"), "standalone": None}))
+        say = pool.Say(tmp / "say-narrow.md")
+        freed = pool.release_claim({"repos": {}}, url, say)
+        check("a bare URL releases the lease of the repo IT names, not an ambiguity error",
+              freed is not None and not (pool.SLOTS / "slot-1.json").exists()
+              and (pool.SLOTS / "slot-2.json").exists(),
+              "released nothing, or released the wrong repo's slot")
+
+    # The ledger half: a row under the raw key still carries its history to the normalised one.
+    # `aborted` is the value NEEDS_HUMAN actually holds, and attempts is left at 0 deliberately: with
+    # the fallback removed the row is invisible, no skip applies, and a job comes back. An earlier
+    # version of this case used a status NEEDS_HUMAN does not contain and attempts at the cap, so it
+    # passed through the ATTEMPTS branch and would have passed with the fallback gone too.
+    ledger = {"o/r#" + url: {"status": "aborted", "attempts": 0}}
+    job = pool.consider("o/r", str(tmp), {"number": 238, "title": "t", "url": url},
+                        [], ledger, pool.Say(tmp / "say-ledger.md"),
+                        {"ticket": {"max_attempts": 2}}, forced=False)
+    check("a ledger row under the raw key still carries its aborted verdict",
+          job is None, "the row was invisible, so an aborted ticket would be retried")
+
+
 # ───────────────────────────────────────────────────────────────── slots ──
 
 
@@ -1573,7 +1744,9 @@ def test_queue_never_repeats_a_ticket(tmp: Path) -> None:
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        for name, fn in [("worktrees", test_worktrees), ("slots", test_slots),
+        for name, fn in [("ticket-identity", test_ticket_identity),
+                         ("legacy-ticket-state", test_legacy_ticket_state),
+                         ("worktrees", test_worktrees), ("slots", test_slots),
                          ("gate-state", test_gate_state_locking), ("waves", test_waves),
                          ("parallel run", test_parallel_run), ("say", test_say_is_thread_safe),
                          ("records", test_record_attribution), ("crash", test_crash_does_not_clobber),
