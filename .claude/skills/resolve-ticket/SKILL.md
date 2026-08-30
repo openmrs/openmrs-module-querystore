@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.13.0
+version: 0.14.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -345,10 +345,22 @@ have been raised but **whether the objection's citation determines the answer**:
 3. **A blocking objection that leaves the question OPEN** — two defensible readings and no citation
    deciding between them. That is abort condition 3: hand back with both readings, do not pick one.
 
-The distinction is the same one that governs objections in the first place. "An objection without a
-citation is not an objection"; by the same rule, an objection whose citation *determines* the answer
-is a resolution, and one that merely disputes the plan without deciding it is a deadlock. Count
-citations that decide, not objections raised.
+**Check it, do not estimate it — the objection's own numbers included.** Outcome 2 turns on the
+citation's *authority* and hands you no instrument for testing it, and by then there is no third gate
+pass to catch a citation that merely looks like it decides. So where the citation is a count or a
+declaration that a build settles — call sites, a modifier — take it from the compiler or a whole-tree
+search before adopting the design it implies, rather than from a grep of the file in front of you. Two
+runs, and the two costs differ by exactly that check: on #263 gate pass 2 asserted two named methods
+are package-private and callable from a same-package test, where the answer is that all three are
+`private` — verified before applying, cost ~0. On #255 the gate's own estimate, from a grep of one
+file, was 3 test call sites; the run adopted the in-place widening that made cheaper, the compiler
+then reported 33 across three files, and the design went back to an added overload for one
+implementation attempt — neither a round nor a cycle, and spent before any review round. `harden` and
+`pr-harden` both bind this rule on the count that decides a control-flow decision; here the count
+decides a design. It binds the RUN and not the gate, because the gate is read-only by instruction
+above and a call-site count from the compiler means changing a signature and building.
+
+Count citations that decide, not objections raised.
 
 Measured on the first real run of this skill, against issue #285: pass 1 refuted the plan's stated
 reason and left its conclusion intact; the revision reversed the conclusion; pass 2 refuted **that**,

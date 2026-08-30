@@ -1169,3 +1169,75 @@ parenthetical, which is the sibling-home rule harden states.
   retros.** This pass submitted "never returns to zero", "block every stop", "an orphaned javadoc is
   still true" and "no form of the remedy avoids that"; the gate cut all four. Eight for eight caught at
   the gate is still an argument for the gate rather than for a rule.
+
+### Addendum — second pass of the same window, after "anything else" was asked
+
+The ledger has this shape on record twice before (2026-08-25's "second pass, after 'is that the only
+lesson?' was asked twice"). It produced one applied rule and three parked entries the first pass had
+missed, which is the third time that question has paid.
+
+**APPLIED after revision · P5 — resolve-ticket Step 3: an objection's own numbers are claims too**
+(resolve-ticket 0.14.0). Two records, met on the count route: this ledger's parked "A refutation gate
+emitting a factually wrong objection: 1 record (#263)", plus #255 — "'Widening the existing 4-arg
+validate in place breaks 3 test call sites' (refutation gate pass 2's own estimate, from a grep of one
+file) -> the compiler says 33, across three files … · cost: 1 implementation attempt". Independent
+events: different tickets, different PRs, one a visibility claim and one a call-site count. Clause 2 is
+NOT claimed — an implementation attempt is neither a round nor a cycle, the unit ruling this ledger has
+now made four times, and #255's own header says `rounds: 1`.
+
+Four grounds of the submission died at the gate and the applied text uses none of them:
+- **Its central ground cut against itself.** It cited "`CLAUDE.md` and a recorded measurement outrank
+  the plan, so that is a revision, not a debate" as text that pushes the run to adopt an objection
+  unchecked. That sentence's two antecedents are `CLAUDE.md` and *a recorded measurement*; a gate's own
+  grep of one file is neither, so it grants no such licence. Another instance of the proposer not
+  verifying its own citation.
+- **"Neither objection LACKED a citation … passes both"** — an unverified two-member universal. #263's
+  record shows an objection that ASSERTED a visibility fact and records no citation. Cut.
+- **"Telling the gate to be careful is instruction-is-not-the-lever"** — unsupported. Every instance of
+  that shape in this ledger turns on an EXISTING instruction that was ignored; none measures a new rule
+  failing on one side and working on the other. Cut, per Step 4's prefer-deleting rule.
+- **"call sites, callers, visibility"** — "callers" appears in neither record. Cut.
+
+The grounds that replaced them, all citations the refuter supplied: outcome 2 keys on the citation's
+authority and offers no instrument for testing it; outcome 2 forbids a third gate pass, so the final
+pass's objections have no adversarial check but the run's own; `harden` and `pr-harden` both carry
+"Check it, do not estimate it" on the count that decides a control-flow decision and `resolve-ticket`
+carried it nowhere, which is the sibling-home shape this window already applied to P4 at two homes; and
+the rule can only bind the RUN, because Step 3's own "the refutation gate is read-only by instruction …
+Tell it to restore anything it changed" forbids the gate from compiling anything. Step 4 answered:
+subsumes nothing, and the growth is paid for by pruning Step 3's discriminator, which was restated four
+lines below itself — net ~0 on a 661-line document.
+
+**Correction to this ledger's own text, from the record rather than from the summary.** The parked
+entry read "#263 — three methods asserted package-private"; #263's record says gate pass 2 "asserted
+`sharedTherapyClass`/`sharedCrossReactivityClass` are package-private … All three are `private`". Two
+named, three private. The applied text follows the record.
+
+**Running parked counts (superseding the previous block where they differ)**
+- **A refutation gate emitting a factually wrong objection: CLOSED/APPLIED** at 2 records (#263, #255)
+  — previous figure 1. This is the first parked entry in this ledger to cross the bar and ship, which
+  is the argument for keeping counts on lessons that are below it.
+- **The verifier can green a change whose schema half never deployed: 1 record** (#229 — "core runs a
+  module's changelog only on a version change, so a same-version SNAPSHOT redeploy skips it, module
+  started=true, null error, ten minutes serving requests against a table lacking the columns · cost: 1
+  doc commit"). Gap confirmed against the text: `pr-harden`'s VERIFY deploys by "overwriting the same
+  name", nothing in its six steps changes the module version or makes a fresh database, and the only
+  liquibase sentence in the whole skill set is a PERMISSION inside the repairs paragraph ("a platform
+  bump that runs core liquibase … all fair if they unblock the run"). Below the bar at 1 record and a
+  doc commit. A readmit lands at TWO homes — `verify-frontend-change` also says "overwriting the
+  same-named file" — and should grep for `liquibase`/`changeset` rather than "changelog", which also
+  hits `pr-review`'s append-only-files bullet. **REOPEN ON:** a second record.
+- An efficiency lens skipped as a labelled reduction (#250): **not parked as a lesson.** It is the
+  labelled-deviation discipline working, and it saved a pass rather than costing one — the ruling this
+  ledger applied to raising the round cap. Banked instead: **the phrase "labelled reduction" appears in
+  no skill**, so a later retro must not cite it as existing text — the same trap as #250's
+  `pr-harden:"After any mutation rebuild with clean"`, which also exists nowhere.
+- #229's "search the rarest TOKEN, and the files NOT in the diff" and #250's ADR-51/`CLAUDE.md` sweep:
+  **not a gap.** `harden` already says "Search for the claim's rarest single TOKEN, over the whole tree
+  rather than over the docs" and names the project's own instruction file as an easy-to-miss home. Both
+  runs were the shipped rule working.
+- A retro submitting wording that breaks the counts/universals rule it enforces: **8 consecutive
+  retros**, unchanged from the block above — this second pass submitted three more (two universals and
+  an invented list member) and the gate cut all three. The figure counts retros, not proposals.
+- The proposer not verifying its own citations: **11 cycles / 9 records** — previous 10/9, plus this
+  pass's precedent citation that cut against the point it was cited for.
