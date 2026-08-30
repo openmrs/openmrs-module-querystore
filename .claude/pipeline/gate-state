@@ -132,8 +132,31 @@ def count_edits(cwd: str) -> int:
     return dirty + (int(ahead) if ahead.isdigit() else 0)
 
 
+class _Parser(argparse.ArgumentParser):
+    """An `ArgumentParser` whose error message says where `--only` is accepted.
+
+    Four runs in a row (#293, #256, #263, #330) invoked a write subcommand with `--only pr`, read
+    `error: unrecognized arguments: --only pr`, and re-ran without it. Two prose remedies had already
+    been shipped and neither reached them: the correct `reviewed-sha` invocation sits fifteen lines
+    above the `--only` examples in `pr-harden`'s State section, and the usage block in this file's
+    module docstring never reaches `--help`, because the parser is built with
+    `description=__doc__.splitlines()[0]` and argparse prints an epilog on `--help` alone -- never on
+    the unrecognized-argument path this actually fails on. So the guidance is attached to the error
+    itself, which is the one text the caller is certain to read. Accepting and ignoring the flag was
+    the other candidate and is fail-open: `reviewed-sha --only harden` would silently write the pr
+    entry.
+    """
+
+    def error(self, message: str):
+        if "--only" in message:
+            message += ("\n--only is accepted by await, clear-await and clear. The subcommands that "
+                        "write an entry -- pr-set, harden-set, declined, reviewed-sha -- each write "
+                        "the one entry they are named for, and show reads both. Re-run without it.")
+        super().error(message)
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = _Parser(description=__doc__.splitlines()[0])
     ap.add_argument("--cwd", default=None, help="the tenant key; defaults to the working directory")
     ap.add_argument("--owner", type=int, default=None,
                     help="the pid of the claude session this entry belongs to. Pass $PPID from a "

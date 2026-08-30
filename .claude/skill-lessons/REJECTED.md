@@ -829,7 +829,10 @@ reading only that section would have changed a correct rule.
 - **`gate-state reviewed-sha` / `declined` reject `--only`: 1 record** (#293). ~0 cost, and the script is
   right by construction — both write only the `pr` entry (`gate-state`:250-256, :244-248). Candidate
   remedy is one line in the usage block saying they are pr-scoped. Not clause 3: the skill documents
-  `--only` for `await`/`clear-await` only (pr-harden:768-773, harden:217-221).
+  `--only` for `await`/`clear-await` only (the `await "review r3" --only pr` example in pr-harden's
+  **State** section, and the `await "phase2 quality" --only harden` example in harden's Phase 2). Both
+  line citations this entry originally carried had rotted within two days of being written, which is
+  the evidence for naming a target rather than locating it.
 - **A mutation surviving because the only covering case sits in a degenerate state: 1 record, 1 cycle**
   (#266:16 — hardcoding four of the crossReactivity map's five keys left the suite green, because the
   only case reading it drives the DISABLED state where all five equal the mutation). Possibly already
@@ -990,3 +993,94 @@ above the `--only` examples it was evidently generalized from.
   retros.** This pass shipped "all three recorded cases", "every concept" and "every covering
   fixture"; the round-2 gate cut all three with P6. The gate is still the mechanism.
 - Every other count in the previous block stands unchanged.
+
+## 2026-08-30 — window #296 / #238 / #256 / #263 / #330 (5 records; two refutation rounds)
+
+Records: `2026-08-28-openmrs-module-chartsearchai-296.md` (PR 328),
+`2026-08-29-…-238.md` (PR 327), `2026-08-29-…-256.md` (PR 329),
+`2026-08-30-chartsearchai-263.md` (PR 331), `2026-08-30-…-330.md` (PR 332).
+Linter: 10 files, 0 findings. **Applied: harden 0.22.0, pr-harden 0.13.0, `gate-state` error override.**
+One proposal died in round 1; one died in round 2; one the round-1 refuter raised itself parked in
+round 2 — the same 0-of-2 base rate for refuter-raised proposals this ledger recorded last window.
+
+**KILLED · P6 — resolve-ticket Step 1: pre-flight that the tree BUILDS.** Three blocking objections.
+Clause 1 fails because #296 and #238 are ONE `pool-run` defect seen from two sides — #296's own record
+closes "A sibling worktree for issue 238 has the same defect", and `pool-run`'s `ticket_id()` docstring
+names the single mis-parameterised invocation behind both. Clause 2 is unavailable because "~3 build
+cycles" is not a harden cycle (the unit ruling already recorded in this ledger). And the cause is closed
+in `ticket_id()`, leaving the residual class — an unrecognised token returned verbatim — with no
+observed member, against a per-run cost of a full test-compile on every ticket forever.
+**REOPEN ON:** a second, independent cause of an unbuildable pristine checkout.
+
+**KILLED · P7 — harden Phase 2: tell the four isolated agents not to `mvn install`.** Raised by the
+round-1 refuter on clause 3; round 2 ruled clause 3 unavailable and the ruling is the reusable part.
+skill-retro grants the single-instance exception for "a skill **contradicting itself**, or contradicting
+**its own** gate script … because the contradiction is a fact about **the document**" — reflexive,
+possessive, singular. A `harden`/`resolve-ticket` disagreement is two documents, and settling it needs
+to know what maven does with a shared repository head, which is the inference about the world the clause
+excludes. Two earlier rulings in this ledger turned on the same word ("a fact about two filesystems",
+"a fact about a repository"). Three further defects, recorded so a reopen does not resubmit the text:
+the edit mis-attributes what isolation was chosen to remove (harden's own bullet names a dirty tree, 842
+`NoClassDefFound` errors and two contaminated reports; the record says "the stale-api-jar trap **by
+another route**"); its reason inverts where it matters most, since resolve-ticket says an UNSET
+`$MAVEN_ARGS` means no per-run head at all, so a standalone `/harden`'s four installs land in the shared
+`~/.m2`; and it forbids `mvn install` while harden's Phase 1 prescribes `mvn -pl api install` as the
+verification, naming no substitute — which would MANUFACTURE a genuine self-contradiction.
+**REOPEN ON:** a second record, submitted with a substitute for the Phase 1 build command.
+
+**Revised rather than killed, with the revision each citation forced.** P1 dropped its prose edit
+entirely for a mechanical one after round 2 tested the option round 1 proposed and round 1's revision
+had declined: overriding `ArgumentParser.error` reaches the unrecognized-argument path that an epilog
+never does, is not fail-open the way accept-and-ignore is, and costs zero skill lines at either of the
+two sites that document `--only`. P2 moved from FINISH to the base fetch after round 1 walked all the
+collisions forward and found every one caught at r1 or mid-run; round 2 then struck its count and its
+"each found by a reviewer who was not looking for it", which the records do not support. P3 was killed
+in the submitted form — its premise that harden's next bullet "already names the exit" is false, that
+bullet names two different exits — and applied in the form round 2 prescribed instead: the increment
+the record actually carries, in the bullet's own voice, with no cross-reference. P4 lost the sentence
+that restated "each fix opening the next" three lines above it. P5 lost its line-number pointer.
+
+**A cross-cutting ruling worth more than any single proposal: do not write a `:NNN` cross-reference into
+skill prose.** harden already forbids the weaker form — "a positional cross-reference … is a claim about
+layout that any insertion falsifies: name the target instead of locating it" — and a line number is
+strictly more brittle. Round 2 measured it on this ledger's own last window: of three skill line
+citations written 2026-08-28, two had rotted within two days. Both are repaired above, by naming. Four
+of this window's six proposals carried one and all four were revised.
+
+**Running parked counts (superseding the previous block where they differ)**
+- `main` moving under a run: **4 records** — previous figure 1 (#284), plus #296, #238 and #256. The
+  ADR-number half is **APPLIED** above; the merge-conflict half #284 recorded is still parked at 1.
+- Prose-correction cycles: **14 records** — previous figure 12, plus #330 (cycles 5-15, one ADR section)
+  and #263 (a wrong correction and then its correction). The delete-the-clause remedy stays shipped; the
+  delete-the-claim-SHAPE increment is **APPLIED** above on #330's ten cycles.
+- `git checkout -- <path>` losing uncommitted work: **~14 incidents / 11 records** — previous figure
+  11/9, plus #256 (five production edits, found by a later agent diffing the commit against its claim)
+  and #263 (hit twice). The killed remedies stay killed; the shape this ledger itself named — a shipped
+  net not reaching the operator — is **APPLIED** above at both sites, at 4 records.
+- A text guard defeated by relocating its SUBJECT: **3 records** — previous 1 (#315), plus #256 and
+  #330. The termination half is **APPLIED** above; the applied #315 text said only that no list is
+  closed.
+- `gate-state` write subcommands rejecting `--only`: **5 records** (#293, #256, #263, #330, and the
+  ledger's own earlier count of 2). **CLOSED mechanically** above. Two prose remedies preceded it and
+  neither reached a caller: the correct invocation already sits fifteen lines above the examples agents
+  generalised from, and the usage block applied last window never reaches `--help`, because the parser
+  passes only the docstring's first line as its description.
+- A mutation that ran but did not take effect: **2 records** (#256 did not compile, #263 was not
+  word-split by `zsh`) — **APPLIED** above. Round 2 noted the second record is a measurement sweep
+  rather than a revert check, so the placement leans on the first.
+- A fixer brief that asks an agent to re-measure evidence it was already given: **1 record** (#238,
+  round 5's 600s stall; a retry saying "do not re-measure, edit only" finished in 3 minutes).
+- A model override as the "change something between attempts" after a 429: **1 record** for the lever
+  (#238); the rate-limit death itself is at 2 (#238, #296).
+- A refutation gate emitting a factually wrong objection: **1 record** (#263 — three methods asserted
+  package-private that are all `private`; cost ~0 because the run verified before applying).
+- A DATA guard escaped by an uncovered key or a size-preserving swap: **2 records** (#263 ×2) — the same
+  family as the text-guard relocations but over data. Not folded into the applied text, which is scoped
+  to guards over TEXT.
+- The proposer not verifying its own citations: **9 cycles / 8 records** — this retro added four of its
+  own, all cut at the gates: a superseded ledger range presented as live, a phrase attributed to the
+  wrong line, an off-by-one bullet, and a precedent citation that cut against the point it was cited for.
+- A retro submitting wording that breaks the counts/universals rule it enforces: **7 consecutive
+  retros.** This pass submitted "alone", "any identifier", "no build or test observes", "every
+  replacement", "seven relocations", "two readings", "every modified tracked file" and three invented
+  thresholds; the two gates cut all of them. Still worth a rule only if one ever survives the gate.

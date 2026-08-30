@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.12.5
+version: 0.13.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -122,7 +122,15 @@ having because the cost of the case it catches does not depend on how the case a
 **Tell the reviewer what to diff against, and never let it be a local branch name.** Fetch the base
 too and name it explicitly: `git fetch origin main` then `git diff origin/main...pr-<n>-r<round>` — or
 better, the PR's own base from `gh pr view <n> --json baseRefName`. A local `main` is stale on any
-machine that has not pulled, and the merge base then reaches back to whenever it last did. Measured
+machine that has not pulled, and the merge base then reaches back to whenever it last did.
+
+**Compare the base you just fetched against the one the previous round saw, and where it moved, re-check
+any identifier this branch allocated from a sequence `main` also appends to.** An ADR decision number is
+the observed instance: the branch takes the next free one when it writes the entry, and an upstream PR
+merged since can have taken the same one. Observed on three consecutive runs, twice within a single run.
+When it has moved, correct every home of the old value and not just the one you noticed — they sit in
+javadoc and test names, not only in the ADR file — and search for the number itself rather than for a
+phrasing you wrote, which is how a renumbering sweep left three sites standing on #238. Measured
 on this loop's first real run: `main...` produced **13,602 lines against an 864-line change**, most of
 it other people's commits. That is the worst failure this design has produced, because it is silent —
 the reviewer returns well-formed JSON with a legitimate-looking blocking count, about code the PR
@@ -723,7 +731,12 @@ It restores HEAD, so in a worktree holding uncommitted intended work it silently
 measured on the #302 run, an orchestrator's own mutation probe undone that way took four production
 edits with it, and the empty `git diff --stat` afterwards read as "restored" rather than "reverted", so
 a commit shipped whose message described changes absent from its diff. The axis is the FILE's state,
-not who typed the command — which is the whole reason the commit rule above comes first.
+not who typed the command — which is the whole reason the commit rule above comes first. When it does
+happen, say where to look: the registered PreToolUse hook copies modified tracked files outside the repo
+before the destructive command runs, best-effort and bounded, and prints the destination and count —
+trust that printed message rather than assuming the file is there. It reaches only the agent whose call
+triggered it, and in both incidents of this window the loss was found by somebody else: on #256 by a
+later agent diffing the commit against its claim, on #263 by the orchestrator grepping.
 
 **Tell every agent to restore BEFORE it reports, not after** — a mutation restored late is a mutation
 that ships if the agent dies mid-sentence. On the second run, the eleven agents briefed that way all
