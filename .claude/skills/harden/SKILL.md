@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.22.0
+version: 0.23.0
 ---
 
 # Harden
@@ -265,8 +265,14 @@ has not returned inside it is treated as dead rather than outstanding.
 ~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 4 --count-edits
 ```
 
-`--count-edits` is what counts them: uncommitted lines plus commits not yet pushed, both halves,
-because a cycle that commits its work has still changed something. It is counted THERE and not here
+`--count-edits` is what counts them: uncommitted lines plus commits not yet pushed — or, on a branch
+with no upstream, the commits made since the previous cycle of this run closed — both halves, because
+a cycle that commits its work has still changed something. Pre-PR that second reading is the live one,
+and it is why the helper records this cycle's `head` on every write: on #255 and #229 the first reading
+alone scored `edits=0` for cycles carrying 9 and 3 unpushed commits, and the gate reads 0 as converged.
+Where it cannot measure the commit half — a first cycle with no earlier head, or a recorded head that
+stopped resolving after a rebase or a recreated checkout — the helper prints that, instead of counting
+it as zero; that line is yours to answer with your own `git log`. It is counted THERE and not here
 so that the number the gate reads and the number you report cannot be two different numbers.
 
 **Why a helper rather than the inline `python3` this used to be.** The read, the change and the write
@@ -278,7 +284,7 @@ somebody's `awaiting`, and their gate then sees a run that quit with agents outs
 valid JSON throughout, nothing raised. `gate-state` holds an exclusive `flock` across both state files
 and writes atomically. Do not retype the mechanism; call the helper.
 
-`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says `edits > 0`. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, non-numeric count), so it can only ever add a cycle you owed — it can only ever cost you the cycle you owed. It CAN hold a session, though — an
+`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says `edits > 0`. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, non-numeric count), so it can only ever cost you the cycle you owed. It CAN hold a session, though — an
 entry this session owns and never clears blocks every turn in that directory until the six-hour expiry,
 and the way out is to finish the cycle or take the labelled override, not to wait.
 
@@ -326,7 +332,7 @@ After stopping, summarize:
   with its arrangement and no rule about it. Once a second attempt at a claim of some kind has been
   refuted, the move is to stop making a claim of that kind, not to make a better one.
 - **Don't publish a claim a later cycle must re-measure.** **And the rule is not about tallies — it is about claims you cannot check.** A universal or an exhaustive characterization is the same defect in different grammar, and it slips past a reader watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. Measured on the seventh run, five such claims in three consecutive cycles, each written to correct the previous cycle's false claim and each false in turn — "any looser pattern would reject" (looseness has more than one dimension), "it only re-admits `M01AE0`" (it re-admits any single trailing digit), "matched only the 5- and 7-character shapes" (the old pattern matched 6 too), "exactly the two levels the ladder is known to be handed" (nothing on the path validates a code's shape), and one that mis-numbered the very level it was excluding. So before writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what the thing DOES over what it excludes; and name the residue rather than claiming there is none. A count is the obvious case — prefer *"mutate the line and read the failures"* to any tally — but the universals are the ones that survive review, because nothing about them looks like a measurement.
-- **Don't trust a script's report that it edited something.** Every one of these passes edits by running a short script, and `str.replace` returns the string unchanged when it matches nothing while the script prints success anyway. One false claim survived FIVE cycles of this skill that way. Assert the target text is present before replacing; after a multi-line replacement, count what should still be there (a slice bounded by "this javadoc to the next method" once deleted a whole test method, and it compiled); and verify by reading the file back rather than by believing the script.
+- **Don't trust a script's report that it edited something.** Every one of these passes edits by running a short script, and `str.replace` returns the string unchanged when it matches nothing while the script prints success anyway. One false claim survived FIVE cycles of this skill that way. Assert the target text is present before replacing; after a multi-line replacement, count what should still be there (a slice bounded by "this javadoc to the next method" once deleted a whole test method, and it compiled); and verify by reading the file back rather than by believing the script. **That clause is about a DELETION; an INSERTION has its own silent failure — it separates a javadoc from the member it documents.** After inserting a member into an existing file, read the neighbours of the insertion point and check that each doc comment still sits against the member it names. Three runs paid a review pass each for one: #234 orphaned two javadocs in one slice by inserting constants above them, #229 two more by inserting methods — silent through compile, checkstyle and 1686 tests — and on #255 three agents independently reported the same orphan. It is cheap while you still hold the file open, and otherwise it is found by whoever reads the class next.
 - **Don't stop correcting a claim at the site you noticed it.** A false statement is rarely in one place. Measured on one run of this skill: a correction reached one of seven homes, then five of six, then five of six again, and once the two halves of a single paragraph contradicted each other after one half was fixed. Search for the claim's rarest single TOKEN, over the whole tree rather than over the docs, fix every hit, then grep for the phrasing you just wrote to see where it now lives. Searching the PHRASING is what leaves the last home standing, and it fails two different ways: a phrase the file's own formatting has split — markdown emphasis inside it, a line break falling between a quantifier and its noun — does not match what you typed, while a home that is a DATA file rather than a doc is missed by scope alone. Both were paid for on the #266 run, a cycle per survivor, each hidden by a mechanism the one before it had not used; treat no list of those mechanisms as closed. Two homes are easy to miss — the project's own instruction file, and anything outside the repo (a PR description, an issue comment) that no grep will reach. And a positional cross-reference ("the bullet above") is a claim about layout that any insertion falsifies: name the target instead of locating it.
 - **Don't promote architectural concerns** into in-pass fixes. Items like "this Hibernate proxy hits the DB at backfill scale" are real but belong in the indexer/sync layer, not in the slice being polished — flag and defer.
 - **Don't review the slice in isolation.** Integration bugs hide outside the file diff — at trigger boundaries (a sibling service mutates state without notifying you), classloader boundaries (an optional dep's absence breaks static class resolution), and lifecycle boundaries (a consumer scans before you register). Every Phase 1 pass MUST trace at least one level out on each integration thread (trigger paths, optional deps, lifecycle order, state propagation, invalidated invariants in unchanged neighbors, and re-deriving the merged result from scratch). The slice's correctness contract spans its boundaries — a fix that lives in a sibling service, or in an unchanged neighbor your edit falsified, is still a Phase 1 finding when the slice surfaces or depends on the bug. See "Trace outward" in Phase 1.

@@ -115,21 +115,49 @@ def stamp(entry: dict, owner: int | None = None) -> None:
         entry["owner"] = owner
 
 
-def count_edits(cwd: str) -> int:
-    """What a `/harden` cycle changed: uncommitted lines plus commits not yet pushed.
+def _git(cwd: str, *args: str) -> str:
+    """A git command's stdout, stripped; empty on any failure, since a measurement that could not run
+    is not a measurement. Callers that need to tell "zero" from "did not run" check for empty."""
+    try:
+        return subprocess.run(("git",) + args, cwd=cwd, capture_output=True, text=True).stdout.strip()
+    except OSError:
+        return ""
+
+
+def count_edits(cwd: str, since: str | None = None) -> tuple[int, str]:
+    """What a `/harden` cycle changed: uncommitted lines plus the commits the cycle added.
 
     Both halves, because a cycle that commits its work has still changed something and a gate reading
-    only `git status` would let it stop. Unpushed commits are counted against the upstream branch; a
-    branch with no upstream has nothing to compare against, so that half is zero rather than an error.
+    only `git status` would let it stop. With an upstream the commit half is `@{u}..HEAD`. Without one
+    it is `<since>..HEAD`, where `since` is the head the previous cycle of THIS run recorded.
+
+    That second reading is here because the first silently had no answer: on #255 and #229 this
+    counted `edits=0` for cycles carrying 9 and 3 unpushed commits, because `git rev-list @{u}..HEAD`
+    on a branch with no upstream fails and prints nothing. The gate allows the stop at 0, so that was
+    the fail-open direction -- and pre-PR `/harden`, which is where `resolve-ticket` runs it, is the
+    configuration that has no upstream.
+
+    Per-cycle rather than per-run on purpose. The run's own total (`HEAD --not --remotes`) does not
+    return to zero while nothing has been pushed, so it would block the stop at the close of a pre-PR
+    cycle that changed nothing, and the hook's own header prefers an early stop to a wedged turn.
+
+    Returns the count and a note for the caller to print. Where the commit half cannot be measured --
+    no upstream and no head yet from an earlier cycle, or a recorded head that no longer resolves
+    after a rebase or a recreated checkout -- the note says so, rather than the count reading as a
+    measured zero.
     """
-    def out(*args: str) -> str:
-        try:
-            return subprocess.run(args, cwd=cwd, capture_output=True, text=True).stdout.strip()
-        except OSError:
-            return ""
-    dirty = len([l for l in out("git", "status", "--porcelain").splitlines() if l.strip()])
-    ahead = out("git", "rev-list", "--count", "@{u}..HEAD")
-    return dirty + (int(ahead) if ahead.isdigit() else 0)
+    dirty = len([l for l in _git(cwd, "status", "--porcelain").splitlines() if l.strip()])
+    if _git(cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"):
+        ahead = _git(cwd, "rev-list", "--count", "@{u}..HEAD")
+        return dirty + (int(ahead) if ahead.isdigit() else 0), ""
+    if not since:
+        return dirty, "no upstream, no head from an earlier cycle: commit half not measured"
+    if not _git(cwd, "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"):
+        return dirty, f"no upstream and head {since[:12]} no longer resolves: commit half not measured"
+    ahead = _git(cwd, "rev-list", "--count", f"{since}..HEAD")
+    if not ahead.isdigit():
+        return dirty, f"no upstream and {since[:12]}..HEAD did not count: commit half not measured"
+    return dirty + int(ahead), ""
 
 
 class _Parser(argparse.ArgumentParser):
@@ -179,9 +207,10 @@ def main() -> int:
     h.add_argument("--cycle", type=int, required=True)
     h.add_argument("--edits", type=int, help="the edit count; or use --count-edits")
     h.add_argument("--count-edits", action="store_true",
-                   help="count them here instead: uncommitted changes plus commits not yet pushed. "
-                        "One definition of 'what this cycle changed', so a retyped one cannot drift "
-                        "from the gate's reading of it.")
+                   help="count them here instead: uncommitted changes plus commits not yet pushed, "
+                        "or on a branch with no upstream the commits made since the previous cycle "
+                        "closed. One definition of 'what this cycle changed', so a retyped one "
+                        "cannot drift from the gate's reading of it.")
     h.add_argument("--override", action="store_true")
     h.add_argument("--reason")
 
@@ -235,19 +264,31 @@ def main() -> int:
                   + (" OVERRIDE" if args.override else ""))
 
         elif args.cmd == "harden-set":
+            e = held.entry("harden")
+            note = ""
             if args.count_edits:
-                edits = count_edits(key)
+                # A recorded head belongs to THIS run only when the same owner wrote it at an earlier
+                # cycle. Nothing clears the harden entry -- the skill requires it to survive, saying
+                # `edits: 0` or `override: true` when the run finishes -- so without this test a
+                # fresh `/harden` in a reused checkout would count from the previous run's head.
+                prev = (e.get("head") if (args.owner is not None and e.get("owner") == args.owner
+                                          and isinstance(e.get("cycle"), int)
+                                          and args.cycle > e["cycle"]) else None)
+                edits, note = count_edits(key, prev)
             elif args.edits is None:
                 ap.error("harden-set needs --edits N or --count-edits")
             else:
                 edits = args.edits
-            e = held.entry("harden")
             e.update({"cycle": args.cycle, "edits": edits, "override": bool(args.override)})
+            head = _git(key, "rev-parse", "HEAD")
+            if head:
+                e["head"] = head          # what the NEXT cycle measures its commits against
             if args.reason:
                 e["override_reason"] = args.reason
             e.setdefault("awaiting", [])
             stamp(e, args.owner)
-            print(f"cycle {args.cycle}: edits={edits}" + (" OVERRIDE" if args.override else ""))
+            print(f"cycle {args.cycle}: edits={edits}" + (" OVERRIDE" if args.override else "")
+                  + (f" [{note}]" if note else ""))
 
         elif args.cmd == "await":
             for w in which[args.only]:

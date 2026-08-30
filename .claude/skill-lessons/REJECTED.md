@@ -1084,3 +1084,88 @@ of this window's six proposals carried one and all four were revised.
   retros.** This pass submitted "alone", "any identifier", "no build or test observes", "every
   replacement", "seven relocations", "two readings", "every modified tracked file" and three invented
   thresholds; the two gates cut all of them. Still worth a rule only if one ever survives the gate.
+
+## 2026-08-30 (second window: 3 new records, #255 / #229 / #250) — one parked, three applied, every one of the three revised by the refuter; linter 10 files, 0 findings
+
+Records: `2026-08-30-chartsearchai-255.md` (PR 335), `2026-08-30-…-229.md` (PR 334),
+`2026-08-30-…-250.md` (PR 333). **Applied: harden 0.23.0, pr-harden 0.13.1,
+verify-frontend-change 0.2.1, and `gate-state`'s `count_edits` with four new `pool-test.py` checks.**
+No proposal survived in its submitted form. The refuter also found the pass had UNDER-cited its own
+strongest support, which is worth as much as any kill: this ledger's 2026-08-24 (third) block already
+killed a proposal whose reasoning named the defect P1 rediscovered — "`edits_now()` counts ALL unpushed
+commits and silently scores 0 when the branch has no upstream — the state at Step 7" — five days before
+either record was written. A retro that does not read its own ledger re-derives what the ledger holds.
+
+**PARKED · P3 — the mirror of "a mutation that did not take effect": a revert that did not reach the
+artifact.** #250: "`api/target/classes` held a mutated class from a revert-check, and two probe runs
+silently measured the mutation. Caught only by an impossible answer." Three settled objections. The bar
+is unmet: one record, and the cost is two probe runs — this ledger has twice ruled that a pass is
+neither a round nor a cycle, and clause 3 is unavailable because a gap is not a document contradiction.
+The family framing double-counts: the applied bullet's two records are a mutation that never RAN (#256
+did not compile, #263 was not word-split), while #250 is a RESTORE that never reached the compiled
+class — a third mechanism, not a second direction. And, banked as a correction to the record itself:
+the rule #250 quotes, `pr-harden:"After any mutation rebuild with clean"`, **does not exist in any
+skill** (`grep -ri "after any mutation" ~/.claude/skills` is empty); pr-harden's only clean-rebuild
+instruction is the round's root `mvn -o clean install`, and harden's commit-before-you-probe bullet does
+not reach a stale `target/`. So the record's premise "The rule is in the skill for agents" is unverified.
+**REOPEN ON:** a second record, submitted without that rule title.
+
+**The revisions each citation forced, since the applied text is the refuter's and not the submission's.**
+P1 shipped an ownership test it did not have: the harden entry survives a run — nothing clears it, and
+the skill requires it to say `edits: 0` when the run finishes — so a recorded head is consumed only
+when the same `owner` wrote it at an earlier `cycle`, or cycle 1 of a second run in a reused checkout
+(which is #229's own configuration, a shared checkout rather than a pool worktree) would count an
+arbitrary range. Its named residue covered one of three silent-zero cases: the refuter measured that
+`git rev-list --count <unreachable-sha>..HEAD` prints nothing and lands on the same fail-open, so the
+helper now REPORTS an unmeasured commit half — no earlier head, or a head that stopped resolving —
+instead of returning it as zero. And the fix falsifies the skill sentence the proposal cited as its
+clause-3 evidence, which the submission had not proposed to repair; it now carries the no-upstream
+reading. P2 lost its ground entirely: "an orphaned javadoc is still true, so a truth check passes it"
+is unmeasured and cuts against its own records — read against the member it now sits on the javadoc is
+FALSE, which is what harden's neighbour rule already asks, and all three sightings were in fact found
+by a review pass. It shipped re-grounded as cheaper prevention at edit time, and answering the
+subsumption it owed: the existing clause in that bullet is deletion-scoped, the addition
+insertion-scoped. P4 proposed the one edit the earlier kill forbade — "if readmitted, the edit to test
+is the second signature added BESIDE 1.8, never a prune of it" — so 1.8 stays with its own antecedent
+and both recorded signatures joined it; and it was applied at BOTH homes, because
+`verify-frontend-change` already carried the general instruction paired with the same hardcoded
+parenthetical, which is the sibling-home rule harden states.
+
+**Running parked counts (superseding the previous block where they differ)**
+- **`count_edits` scoring the commit half 0 on a branch with no upstream: APPLIED** at 2 records (#255
+  with 9 unpushed commits, #229 with 3), plus this ledger's own 2026-08-24 naming of it. Mechanical,
+  like the `--only` closure last window; the two prose remedies that preceded that one are why.
+- **An insertion that orphans a javadoc from its member: APPLIED** at 3 records — previous figure 1
+  (#234, two incidents in one slice), plus #255 (three agents independently) and #229 (two orphans,
+  silent through compile, checkstyle and 1686 tests). Readmitted from the parked entry, as the SIBLING
+  rule was.
+- **The JDK example hardcoding 1.8: APPLIED** at 2 records (#266's `invalid target release: 11`, #255's
+  `No compiler is provided in this environment`), meeting the 2026-08-27 kill's own reopen condition
+  ("a second record"). Applied at both homes.
+- A revert that did not reach the measured artifact: **1 record** (#250), parked above.
+- `gh issue view` returning empty (exit 0) where `gh api repos/<o>/<r>/issues/<n>` works: **2 records**
+  — previous figure 1 (#236), plus #255. Still not submitted: the standing ruling against writing a
+  machine fact into a skill covers the two forms considered so far. The pointer a third record should
+  use instead, because it is a fact about the DOCUMENT: the skills prescribe the failing invocation
+  themselves — `resolve-ticket`'s URL table and `pr-harden`'s "A GitHub issue via `gh issue view <m>
+  --comments`".
+- Prose-correction cycles: **16 records** — previous 14, plus #255 (a false claim replaced by another
+  false claim across three cycles, settled by deleting) and #250 ("Second attribution claim of that
+  shape to be wrong; the claim was deleted rather than corrected again"). Both runs record DELETION as
+  the terminating move, which is the shipped remedy behaving as intended; no increment proposed.
+- `git checkout -- <path>` losing uncommitted work: **~15 incidents / 12 records** — previous ~14/11,
+  plus #255, where the orchestrator's own revert of a measurement mutation destroyed three uncommitted
+  javadoc fixes and three later agents each flagged them as defects. NOT a skill gap: harden already
+  says "and your own measurement probes too" and pr-harden "The axis is the FILE's state, not who typed
+  the command", so #255's own diagnosis that the hazard is written only for agents is false. Another
+  instance of instruction-is-not-the-lever, recorded so a later retro does not read it as missing text.
+- The confirming-cycle rule, as POSITIVE evidence: **1 record** (#229 — "every one of the last seven
+  passes found exactly one real defect, all prose, each in a file the change had not edited. Six of them
+  would have shipped under any 'it's basically converged' stop"). Any future proposal to weaken
+  Termination has to pass this.
+- The proposer not verifying its own citations: **10 cycles / 9 records** — this pass carried a rule
+  title from a run record without checking it exists, and under-cited its own ledger.
+- A retro submitting wording that breaks the counts/universals rule it enforces: **8 consecutive
+  retros.** This pass submitted "never returns to zero", "block every stop", "an orphaned javadoc is
+  still true" and "no form of the remedy avoids that"; the gate cut all four. Eight for eight caught at
+  the gate is still an argument for the gate rather than for a rule.

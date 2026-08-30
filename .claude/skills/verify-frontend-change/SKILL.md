@@ -1,7 +1,7 @@
 ---
 name: verify-frontend-change
 description: Verify an OpenMRS module UI change end-to-end before declaring it done — build the .omod, deploy it into a local OpenMRS standalone, (re)start the server, then drive the actual page in a browser. Use for any backend module that renders a UI (legacy/refapp web pages, HTML Form Entry, etc.) — e.g. htmlformentry's date-widget clear button. Trigger phrases include "verify this UI change", "test the module in the browser", "does this render/work in OpenMRS", "verify frontend change".
-version: 0.2.0
+version: 0.2.1
 ---
 
 # Verifying an OpenMRS module UI change
@@ -26,7 +26,7 @@ mvn clean install
 
 from the module root. This runs the tests **and** produces the deployable artifact. A test failure or compile error is a hard stop — surface the real output, fix, do not proceed. On success the artifact is `omod/target/<moduleid>-<version>.omod`. Confirm it exists and note its timestamp.
 
-**Build under a JDK the module targets.** Read `<java.version>` (or `maven.compiler.target`) from the pom. A module targeting Java 1.8 will fail its test gate under a too-new default JDK — the classic signature is a wall of `MockitoException: cannot mock this class ... Java: 21` across otherwise-unrelated tests (the old byte-buddy can't instrument under JDK 17+). This is an environment problem, not a code defect. Find a matching JDK (`/usr/libexec/java_home -v 1.8`) and rebuild with `JAVA_HOME=… mvn clean install`. Don't "fix" it by skipping tests — a green gate under the right JDK is the contract. (The **runtime** JDK the standalone uses can differ; the Mockito issue is test-only.)
+**Build under a JDK the module targets.** Read `<java.version>` (or `maven.compiler.target`) from the pom. A module targeting Java 1.8 will fail its test gate under a too-new default JDK — the classic signature is a wall of `MockitoException: cannot mock this class ... Java: 21` across otherwise-unrelated tests (the old byte-buddy can't instrument under JDK 17+). This is an environment problem, not a code defect. Find a JDK matching the version you just read (`/usr/libexec/java_home -v <that version>` — 1.8 in this sentence is an example, not the value) and rebuild with `JAVA_HOME=… mvn clean install`. Read from the other end the mismatch has its own signatures: `invalid target release: <n>` is a JDK too old for the pom, and `No compiler is provided in this environment` means the home you resolved is a JRE rather than a JDK. Don't "fix" it by skipping tests — a green gate under the right JDK is the contract. (The **runtime** JDK the standalone uses can differ; the Mockito issue is test-only.)
 
 ## 2. Deploy into the standalone
 

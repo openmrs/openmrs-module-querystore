@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.13.0
+version: 0.13.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -322,11 +322,17 @@ Its procedure, and each step is where a specific mistake gets made:
    busy. The pool driver sets it per run precisely so that concurrent runs each have an instance of
    their own, and a run that "helpfully" takes a quieter one takes a sibling's.
 2. **Build.** The round's root `mvn -o clean install` already produced
-   `omod/target/<id>-<version>.omod`; note its timestamp. Build under the JDK the pom targets — a
-   module on Java 1.8 fails its test gate under a newer default JDK, and the signature is a wall of
-   `MockitoException: cannot mock this class … Java: 21` across unrelated tests. That is an
-   environment problem: find a matching JDK (`/usr/libexec/java_home -v 1.8`) and rebuild. Never
-   "fix" it by skipping tests — that is repairing the artifact, which is forbidden below.
+   `omod/target/<id>-<version>.omod`; note its timestamp. Build under the JDK the pom targets — read
+   `maven.compiler.target` (or `<java.version>`) and resolve THAT version. The version in a command
+   here is an example, not the value. A module on Java 1.8 fails its test gate under a newer default
+   JDK, and the signature is a wall of `MockitoException: cannot mock this class … Java: 21` across
+   unrelated tests; for that one `/usr/libexec/java_home -v 1.8` is the fix. Read from the other end
+   the mismatch has its own signatures: `invalid target release: 11` is a Java-11 pom built under JDK
+   8 (#266, one repair attempt spent reaching for 1.8 because this step named it), and `No compiler is
+   provided in this environment` means the home you resolved is a JRE rather than a JDK (#255, where
+   `java_home -v 1.8` resolved this box's applet-plugin JRE for a pom targeting 11). Each of these is
+   an environment problem. Never "fix" one by skipping tests — that is repairing the artifact, which
+   is forbidden below.
 3. **Deploy.** Copy the `.omod` into `<standalone>/appdata/modules/`, overwriting the same name, and
    **remove any other `.omod` of the same module** — the loader reads every `*.omod` and two versions
    of one module is a startup failure, not a warning. `*.omod.bak-*` files are not loaded and are

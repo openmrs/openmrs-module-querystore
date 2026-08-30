@@ -497,6 +497,37 @@ def test_gate_state_locking(tmp: Path) -> None:
           (home / ".claude/harden-state.json").read_text() == snapshot,
           "the error path wrote to the file")
 
+    # A branch with no upstream is the pre-PR configuration, and `@{u}..HEAD` has no answer there:
+    # on #255 and #229 a cycle that committed 9 and 3 commits scored edits=0, which the gate reads as
+    # converged. The commit half is measured against the head the previous cycle of the same run
+    # recorded instead.
+    sh(["git", "add", "-A"], cwd=repo)
+    sh(["git", "commit", "-qm", "cycle one's work"], cwd=repo)
+    got = sh([sys.executable, str(helper), "--owner", "777", "harden-set", "--cycle", "1",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("with no upstream and no earlier cycle, the commit half is reported unmeasured",
+          "commit half not measured" in got, got.strip())
+    (repo / "c").write_text("cycle two\n")
+    sh(["git", "add", "-A"], cwd=repo)
+    sh(["git", "commit", "-qm", "cycle two's work"], cwd=repo)
+    got = sh([sys.executable, str(helper), "--owner", "777", "harden-set", "--cycle", "2",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("a committed cycle on an upstreamless branch counts its commit", "edits=1" in got,
+          got.strip())
+    got = sh([sys.executable, str(helper), "--owner", "888", "harden-set", "--cycle", "3",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("another session's head is not consumed as this run's baseline",
+          "commit half not measured" in got, got.strip())
+    state = json.loads((home / ".claude/harden-state.json").read_text())
+    # keyed by the RESOLVED working directory, which on macOS is not the string we passed as cwd
+    repo_key = next(k for k in state if k.endswith("/repo"))
+    state[repo_key]["head"] = "0" * 40
+    (home / ".claude/harden-state.json").write_text(json.dumps(state))
+    got = sh([sys.executable, str(helper), "--owner", "888", "harden-set", "--cycle", "4",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("a recorded head that no longer resolves is reported, not counted as zero",
+          "no longer resolves" in got, got.strip())
+
 
 # ─────────────────────────────────────────────────────────── scheduling ──
 
