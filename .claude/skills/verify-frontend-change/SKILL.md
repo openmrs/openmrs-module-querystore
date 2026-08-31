@@ -1,7 +1,7 @@
 ---
 name: verify-frontend-change
 description: Verify an OpenMRS module UI change end-to-end before declaring it done — build the .omod, deploy it into a local OpenMRS standalone, (re)start the server, then drive the actual page in a browser. Use for any backend module that renders a UI (legacy/refapp web pages, HTML Form Entry, etc.) — e.g. htmlformentry's date-widget clear button. Trigger phrases include "verify this UI change", "test the module in the browser", "does this render/work in OpenMRS", "verify frontend change".
-version: 0.2.1
+version: 0.3.0
 ---
 
 # Verifying an OpenMRS module UI change
@@ -32,6 +32,13 @@ from the module root. This runs the tests **and** produces the deployable artifa
 
 - Copy the freshly built `.omod` into `<standalone>/appdata/modules/`, overwriting the same-named file.
 - **Remove any *other* `.omod` of the same module** (a different version) from that folder — the loader reads every file ending in `.omod`, and two versions of one module is a startup failure, not a warning. Files that don't end in `.omod` (e.g. `*.omod.bak-*` backups) are *not* loaded, so they don't cause this — they're harmless clutter, not a double-load risk. Don't delete a backup expecting it to fix a startup failure; find the rogue `.omod` instead.
+- **Then delete `<standalone>/appdata/.openmrs-lib-cache/<moduleid>/`.** Replacing the `.omod` does not
+  reliably replace what runs: OpenMRS expands the module into that directory and a redeploy under the
+  same name does not always re-expand it. On FM2-700 it held both the released api jar and the new
+  snapshot and the stale one shadowed the fix; on #340 the first boot ran week-old classes while the
+  omod timestamp, the module status endpoint and the cache's own marker all read current. It is a cache,
+  so there is nothing to preserve — and step 4's `started` check cannot see this, because the module
+  starts perfectly well from stale bytes.
 
 ## 3. (Re)start the server headless
 
@@ -85,7 +92,7 @@ Mirror the empirical-verification discipline: name (1) what was run — the buil
 ## Anti-patterns to catch
 
 - **"Tests pass, so the UI works."** Unit tests don't render the page; a JSP/JS error ships green.
-- **Verifying against a stale `.omod`.** If you didn't rebuild after the edit, or an old version is still in `appdata/modules/`, you're testing the wrong bytes. Always confirm the deployed file's timestamp matches this build.
+- **Verifying against a stale `.omod`.** If you didn't rebuild after the edit, or an old version is still in `appdata/modules/`, you're testing the wrong bytes. Always confirm the deployed file's timestamp matches this build — and remember the timestamp proves the file rather than the bytes that run, which is what step 2's lib-cache deletion is for.
 - **Assuming port 8080.** Read `tomcatport` from the standalone's runtime props.
 - **Skipping the restart.** Editing the source and re-running `mvn install` changes nothing in a server that's already up until it's restarted (or the module is re-uploaded via web admin).
 - **Reporting DOM state as done.** For data-affecting changes, confirm persistence server-side.

@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.23.0
+version: 0.24.0
 ---
 
 # Harden
@@ -111,13 +111,19 @@ Run simplify passes until polish opportunities converge. Each pass:
      the mutating ones serially. Whichever you pick, say it in every brief — "be careful" does not
      survive contact.
    - **If you isolate, do not assume the worktree is on the branch under work.** Name the ref in every
-     brief and have the agent confirm its diff is non-empty before it reviews anything. The cause
+     brief and have the agent confirm its diff is the SIZE of the change before it reviews anything —
+     non-empty is fail-open, and that is the shipped wording being satisfied by the case it exists to
+     catch. The cause
      differs between runs and neither is worth diagnosing here: on the #269 run every agent's worktree
      "opened at origin/main, not the PR branch, so all six had to check the branch out themselves",
      and two reported the diff they were asked for came back empty until they did; on the #250 run the
      branch existed but git refused it to a second worktree because the main one held it, so agents
      needed `git checkout --ignore-other-worktrees`. Both cost a detour per agent and no round or
      cycle, which is why this is one sentence in the brief rather than a step.
+     **And name the BASE, never a local branch name** — on #336 four isolated agents all found the local
+     `main` ref stale by many commits, so `git diff main...HEAD` showed ~15k lines and every brief had to
+     name the base sha explicitly. That is the diff a non-empty check waves through. `pr-harden` Step 1
+     carries this for its reviewer, with its own measurement; the hazard is the same here.
    - **An idle output or transcript file is not evidence an agent has stopped.** Two runs measured it
      from opposite ends: on #293 the agent output files "stay at 201 bytes until the agent finishes",
      so there was no progress signal to wait on and the run burned blind `sleep` loops; on FM2-700
@@ -233,6 +239,13 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
   instead of forbidding spellings. A differently typed question is not a closed one: #256's reflective
   guard still exempted `static final`, and that run left the `getDeclaredMethod`-with-a-string-literal
   shape open on the record, so name the residue.
+- **And the TEXT scoping above leaves out a DATA form of the same attack: a guard that asserts a key is
+  PRESENT passes a placeholder under it.** On #340 a reflective guard asserted only `containsKey`, so a
+  `put` of `null` beside a new public accessor satisfied it while dropping the value — the change's own
+  defect, shipped green under a test that appears to cover it, and closed only by comparing the
+  accessor's own reading against the published value. #263 lost two more, to a key the guard did not
+  cover and to a swap that preserved the size it checked. So mutate the VALUE under an asserted key, not
+  only the key.
 
 ### Record the cycle so the gate can enforce it
 

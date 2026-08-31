@@ -1241,3 +1241,179 @@ named, three private. The applied text follows the record.
   an invented list member) and the gate cut all three. The figure counts retros, not proposals.
 - The proposer not verifying its own citations: **11 cycles / 9 records** — previous 10/9, plus this
   pass's precedent citation that cut against the point it was cited for.
+
+## 2026-08-31 (5 new records, #340 / #336 / #337 / #338 / #339) — 1 killed, 2 parked, 1 half-parked, 4 applied after revision; linter 10 files, 0 findings
+
+Records: `2026-08-31-chartsearchai-340.md` (PR 344), `…-336.md` (PR 341), `…-337.md` (PR 345),
+`…-338.md` (PR 343), `…-339.md` (PR 342). **Applied: harden 0.24.0, pr-harden 0.14.0,
+verify-frontend-change 0.3.0.** Every surviving proposal was revised by the refuter; none shipped as
+submitted. Net +47 lines across three files, which is above the estimate the gate gave (+14) and is
+recorded here rather than rounded down — the overshoot is in P4's and P5a's structure, not in new
+claims.
+
+**KILLED · P2b — import `pr-harden`'s dead-phase contract into harden's Phase 2.** Its own second
+citation refutes the remedy: #339 says the contract "**does not fit** a limit that will refuse every
+retry for hours". So the edit would have prevented neither incident it cited — #338 recovered without
+it, #339 would have burned two further refused retries — and the "clear the `awaiting` entry" half is
+already shipped three sections away ("clear it on ANY terminal outcome — a result, or the harness
+reporting the agent died, stalled or was killed"). **PARKED as:** harden Phase 2 delegates four agents
+and carries no retry contract of its own — **2 records** (#338, #339). **REOPEN ON:** a remedy that
+answers a limit refusing every retry for hours, which #339 says was a cheap capacity probe before
+re-spawning (1 record for that lever).
+
+**PARKED · P1 — "what makes two refuted claims the same kind is their subject and property, not their
+wording".** Three settled objections, and the first is a false claim of the proposal's own: it wrote
+that #340's nine Phase-2 passes "**all** went to the rendered text of one chip", which #340's own
+findings list refutes — a stale javadoc class list, ADR 59 missing from the TOC, a guard failing OPEN
+under `mvn -pl omod test`, and a broken "that last class" referent are four other subjects. Second, the
+premise "a run never counts a second attempt" is contradicted by the line it quotes: #340 says the rule
+was "applied after the second refutation of the same shape". Third, #336 records DELETION as the
+terminating move, which this ledger has three times classified as the shipped remedy working (#297,
+#255, #250) rather than an increment. Clause 2 is unavailable: #340's cost is 9 **Phase-2 passes**, and
+a pass is neither a round nor a cycle. **Parked at 1 record. REOPEN ON:** a run where differently-worded
+claims about ONE subject each took their own pass, and with the rule stated on the subject alone —
+the submission's own definition split its five examples across four different properties.
+
+**PARKED · P5b — the same-version redeploy that runs no liquibase.** #229 and #336 are **one event**,
+not two records: #336's own line says "Inherited from #229's round, not this PR. · non-blocking,
+environment" — one un-run changeset on one standalone, seen by a second run's verifier. This ledger has
+killed exactly that shape before (#296/#238 as "ONE `pool-run` defect seen from two sides"). Cost fails
+clause 2 as well: #229 is 1 doc commit, #336 non-blocking. The entry's earlier **REOPEN ON: a second
+record** therefore stands unmet, and is sharpened: **a run whose OWN schema-bearing changeset failed to
+deploy on a same-version redeploy.**
+
+**APPLIED · P2a — a 429 is a capacity condition and the lever is a cheaper agent** (pr-harden, the
+dead-phase contract). 2 records, both pr-harden deaths: #238 ("round 1's fixer died instantly on a
+session rate limit (429). A retry on a different model succeeded — the model override … is not named in
+the skill's retry contract") and #336 ("retry 1 with a leaner brief and a smaller model completed"). This
+closes the parked entry at 1 record for the lever. Three revisions the citations forced: #338's death is
+a **harden cycle-4** agent, so it is not cited in a document that counts rounds; the model NAMES are
+left in the run records rather than written into a skill, per this ledger's world-fact ruling; and the
+residue is named — #339's limit refused every retry for hours, where nothing here is known to help.
+**Correction to the arithmetic the submission asserted:** the rate-limit death is at **6** records
+(#238, #296, #336, #338, #339, #340), not 7 — #337 matched a grep for `quota` inside the word
+"quotation" and records no rate-limit death.
+
+**APPLIED · P3 — the DATA form of the guard-subject attack** (harden, Termination). 2 records: #340
+(a reflective guard asserting only `containsKey`, so a `put` of `null` beside a new accessor satisfied
+it while dropping the value — "#340's own defect, shipped green under a test that appears to cover it")
+and #263 ×1 record (an uncovered key; a size-preserving swap). **Closes** the parked "A DATA guard
+escaped by an uncovered key or a size-preserving swap", which was parked precisely on the applied text
+being TEXT-scoped. **Revision forced:** the whole-FILE clause was cut. #336's both-keys guard, "read the
+whole FILE, so splitting `putSafetyChips` into two writers passed the guard whose own message forbids
+exactly that", is a TEXT guard defeated by relocating its subject — the bullet's existing territory,
+whose shipped fix already reads "bound the window at the construct it is about rather than at a line
+count". That is the shipped rule unapplied, not a DATA gap. Placement left harden-only and the
+sibling-home question left open on the record: #340's instance was caught by pr-harden's reviewer, whose
+Step-1 brief is narrow "on purpose".
+
+**APPLIED · P4 — a moved base falsifies CLAIMS, not only identifiers** (pr-harden Step 1). 2 records:
+#340 ("A merge can be textually clean and semantically falsifying … Nothing in the merge flagged them")
+and #337 ("both blocking findings were counts the main merge falsified, in four homes … cost: 1 round").
+Four revisions forced, three of them cuts:
+- **the clause-2 claim was invalid** — the submission summed 1 round across #337, #339 and a post-hoc
+  #340 to reach "≥2 rounds"; clause 2 requires two rounds **in one run**;
+- **#339 was dropped from this class's count** — its round-costing findings are the identifier class and
+  a mutation tally the record does not attribute to a merge;
+- **the ledger-closure claim was a citation error** — #284's parked "merge-conflict half" is a 16-conflict
+  MANUAL merge with its remedy in resolve-ticket Step 8, a different mechanism in a different document.
+  It stays parked at 1. This ticks *the proposer not verifying its own citations* to **12 cycles / 10
+  records**;
+- **the identifier-spelling clause (b) was dropped entirely.** #339's sweep searched "Decision 61" — a
+  phrasing — while the shipped sentence already says "search for the number itself rather than for a
+  phrasing you wrote", and #340's post-hoc confirms that shipped rule working and load-bearing. One
+  record of an existing instruction not followed is the *instruction-is-not-the-lever* shape.
+Also repaired while in the passage: the 13,602-line measurement had drifted onto the identifier
+paragraph and belongs to the stale-local-`main` rule above it; it was moved back to its antecedent.
+
+**APPLIED · P5a — the deploy freshness check proves the FILE, not the bytes that run** (pr-harden
+verifier step 3 + step 5, and verify-frontend-change step 2 + its anti-pattern). 2 records: FM2-700
+("`.openmrs-lib-cache/fhir2/lib/` held BOTH … the stale one shadowed the fix. Wiping the module cache
+dir is required, not just replacing the .omod") and #340 ("the first boot ran week-old controller bytes
+while the deployed .omod timestamp, the module status endpoint and the lib-cache marker all read
+current"), meeting the parked entry's reopen. **Deleted:** "Verifying against a stale `.omod` is the
+single most common way this step reports on the wrong bytes" — an unmeasured superlative in a skill that
+forbids them, and #340 cuts against it. **Revision forced:** the submission wrote "delete that directory
+before boot" into step **5**, which is AFTER step 4's restart — the deletion now sits in step 3 (Deploy)
+and only the byte proof is in step 5. "Every freshness signal" became the three #340 names. The
+timestamp check STAYS, framed as necessary-not-sufficient, because this ledger's PARKED-at-0 entry on
+`omod/target` carries #250's counterweight crediting the existing check with a catch. Residue recorded:
+verify-frontend-change step 4 still calls the `started` state check the "Primary (reliable positive
+signal)" — the signal both #340 and #336 show reading green over stale bytes; the new bullet says so at
+the deploy step rather than re-writing step 4.
+
+**APPLIED · P6 — prune pr-harden's copy of harden's five-universal paragraph.** Two claims in the
+submitted justification were false and the gate measured them: the paragraphs are **not** byte-identical
+(harden 1226 chars / 207 words; pr-harden 1026 / 171 — pr-harden's is a prefix, missing harden's closing
+sentence), and "~190 words" was wrong in both directions. The prune shipped on the stronger ground the
+gate supplied instead: **provenance.** pr-harden's copy said "Measured on the seventh run" of a
+measurement that is #298's **harden cycles**, in a document that counts rounds, 88 lines below a
+neighbouring "Measured on **this loop's** seventh run" — the same harm shape as `gate-test.sh`'s header
+quoting harden's hook and harden's numbers. It now names `/harden` and #298, keeps two of the five
+examples, and points at harden for the rest. Verified before pruning: the fixer has no other route to
+harden's text — line 208 enumerates the bullets in pr-harden itself, and naming a section is not routing.
+
+**APPLIED (refuter-raised) · harden Phase 2's diff base.** #336: "four parallel agents in isolated
+worktrees all reported the local `main` ref was stale by many commits, so `git diff main...HEAD` showed
+~15k lines. Every brief had to name `09717dc7...HEAD` explicitly. The skill warns about this for
+pr-harden's reviewer; the same hazard bites harden's Phase 2 agents and is not stated there." 1 record,
+and the cost is a detour per agent rather than a round — so it ships on the DOCUMENT half: harden's
+shipped check is "confirm its diff is non-empty", which a 15k-line diff satisfies, i.e. the check is
+fail-open against the case it exists to catch. That is readable from the file without the record, and it
+is now "confirm its diff is the SIZE of the change", with the base named. The sibling home carries its
+own measurement (pr-harden's 13,602 lines) and this ledger has ruled two homes defensible for this pair.
+Recorded plainly: this is a 1-record readmit justified by a fail-open in the shipped wording, not by
+corroboration.
+
+**Running parked counts (superseding the previous block where they differ)**
+- Prose-correction cycles: **~20 records** — previous 16, plus #340 (9 Phase-2 passes in one cycle),
+  #336 (3), #337 (2) and #339 (rounds 8-11). The delete-the-clause and delete-the-claim-SHAPE remedies
+  stay shipped; P1's attempt to operationalise "the same kind" is parked above.
+- `git checkout -- <path>` losing uncommitted work: **~17 incidents / 13 records** — previous ~15/12,
+  plus #339 ×2 ("once for the orchestrator … and once for a fixer, which replayed its edits"). The
+  shipped net is in place and was verified this pass: `git-restore-backup.sh` IS registered as a
+  PreToolUse hook in `~/.claude/settings.json`. #339's own reading — "the rule is in both skills; it
+  still happened, because the destructive call looks identical to the safe one" — proposes no new
+  remedy and none is applied.
+- The rate-limit death: **6 records** (see P2a's arithmetic correction). The model-override lever:
+  **APPLIED** at 2 pr-harden records.
+- harden's confirming-cycle cost against where the blocking findings come from: **3 records** —
+  previous 1 (#236), plus #337 (5 Phase 2 passes, then pr-harden r1's two blocking findings) and #340
+  (9 passes, then pr-harden r1's `containsKey` defect). Still parked, and the standing counterweight is
+  #229's "six of them would have shipped under any 'it's basically converged' stop". Recorded so the
+  next retro does not re-derive the count.
+- A mutation that ran but did not take effect: **APPLIED, and a third mechanism observed.** #337's
+  "a perl escaping slip left the line unchanged and the check reported green" is harden's shipped
+  "assert the target text is present before replacing" unapplied — *instruction-is-not-the-lever*, not
+  a pending increment.
+- The shared `~/.m2` api jar: **2 records** for the KILLED-P7 family — previous 1 (harden's own 842
+  `NoClassDefFound` errors), plus #340's "the reflective guard fails OPEN under `mvn -pl omod test`
+  (stale ~/.m2 api jar)", a new harm rather than a repeat. The kill's reopen asked for "a second record,
+  submitted with a substitute for the Phase 1 build command"; the record half is met, the substitute is
+  not, so it stays killed.
+- Agent worktrees accumulating until the disk fills: **1 record** (#340 — "162 agent worktrees totalling
+  22G had accumulated under `.claude/worktrees/` across runs"; Bash failed with ENOSPC and a worktree
+  could not be created). Cost is a hard block rather than rounds or cycles. **REOPEN ON:** a second
+  record, or a run that loses work to it.
+- pr-harden's cap raised nine times on a change where each fix legitimately opens the next defect in the
+  same area: **1 record** (#339, 13 rounds over ~16h). Parked, and the record argues AGAINST a stop
+  rule: rounds 8-11 found no behavioural defect and round 12 then found a real one (366 duplicate chips
+  over 610 products), so any rule stopping after four quiet rounds would have shipped it. **REOPEN ON:**
+  a signal that separates this from spinning, not a cap.
+- A brief's own factual claims going unchecked: **1 record** (#338 — "my own verifier brief asserted the
+  check emits a DEBUG line … It does not; that gate is a bare `return`. The verifier caught the brief
+  rather than the code"). Sibling of resolve-ticket 0.14.0's "a gate objection's own numbers are claims
+  too". **REOPEN ON:** a second record.
+- `mode` still has no writer, and the defect pr-harden's State section already names is now verified
+  mechanically: `gate-state` has no `--mode`, no skill writes it, and `pr-harden-gate.sh` reads `.mode`
+  for a distinct `--plan-only` message. No record in this window cites it, so nothing was applied — but
+  a later retro need not re-check the mechanism.
+- A refutation gate emitting a factually wrong objection: **APPLIED**, and #338 adds a positive datum
+  ("gate pass 2's blocking objection settled the question rather than opening one, and no third pass was
+  run") — the three-outcome rule working.
+- The proposer not verifying its own citations: **12 cycles / 10 records** — plus this pass's #284
+  closure claim, cut at the gate.
+- A retro submitting wording that breaks the counts/universals rule it enforces: **9 consecutive
+  retros.** This pass submitted "all went to the rendered text", "never counts a second attempt", "every
+  freshness signal", "byte-identical" and "re-check every claim"; the gate cut or bounded all five. Still
+  worth a rule only if one ever survives the gate.

@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.13.1
+version: 0.14.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -122,19 +122,31 @@ having because the cost of the case it catches does not depend on how the case a
 **Tell the reviewer what to diff against, and never let it be a local branch name.** Fetch the base
 too and name it explicitly: `git fetch origin main` then `git diff origin/main...pr-<n>-r<round>` — or
 better, the PR's own base from `gh pr view <n> --json baseRefName`. A local `main` is stale on any
-machine that has not pulled, and the merge base then reaches back to whenever it last did.
+machine that has not pulled, and the merge base then reaches back to whenever it last did. Measured on
+this loop's first real run: `main...` produced **13,602 lines against an 864-line change**, most of it
+other people's commits. That is the worst failure this design has produced, because it is silent — the
+reviewer returns well-formed JSON with a legitimate-looking blocking count, about code the PR never
+touched, and a fixer then acts on it.
 
 **Compare the base you just fetched against the one the previous round saw, and where it moved, re-check
-any identifier this branch allocated from a sequence `main` also appends to.** An ADR decision number is
-the observed instance: the branch takes the next free one when it writes the entry, and an upstream PR
+what this branch says about the code the move touched.** Two classes, and git flags neither.
+
+The first is **an identifier this branch allocated from a sequence `main` also appends to.** An ADR
+decision number is the observed instance: the branch takes the next free one when it writes the entry, and an upstream PR
 merged since can have taken the same one. Observed on three consecutive runs, twice within a single run.
 When it has moved, correct every home of the old value and not just the one you noticed — they sit in
 javadoc and test names, not only in the ADR file — and search for the number itself rather than for a
-phrasing you wrote, which is how a renumbering sweep left three sites standing on #238. Measured
-on this loop's first real run: `main...` produced **13,602 lines against an 864-line change**, most of
-it other people's commits. That is the worst failure this design has produced, because it is silent —
-the reviewer returns well-formed JSON with a legitimate-looking blocking count, about code the PR
-never touched, and a fixer then acts on it.
+phrasing you wrote, which is how a renumbering sweep left three sites standing on #238.
+
+The second is **a count or a structural claim that git merges cleanly and silently falsifies.** On #340
+`main` refactored three emission sites onto a shared writer; the controller auto-merged correctly and
+three of this branch's claims became false — the ADR's per-site mutation recipe, a test class's javadoc
+and a wire paragraph, all of which described the three sites as naming the serializer directly, and
+"nothing in the merge flagged them". On #337 "two cases fail on a floor of nine" became five when the
+merge brought seven more cases into that file, in four homes, and both of round 1's blocking findings
+were counts the merge had falsified — a round. So grep this branch's own claims about the structures
+`main` changed, and RE-MEASURE each on the merged tree rather than re-reading it for coherence; a
+coherent sentence about a structure that moved is the failure mode, not the check.
 
 What the reviewer is given, and nothing more:
 
@@ -245,7 +257,7 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   to treat the extra failure as a regression they caused. If a count really is load-bearing, name the
   head it was measured on.
 
-  **And the rule is not about tallies — it is about claims you cannot check.** A universal or an exhaustive characterization is the same defect in different grammar, and it slips past a reader watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. Measured on the seventh run, five such claims in three consecutive cycles, each written to correct the previous cycle's false claim and each false in turn — "any looser pattern would reject" (looseness has more than one dimension), "it only re-admits `M01AE0`" (it re-admits any single trailing digit), "matched only the 5- and 7-character shapes" (the old pattern matched 6 too), "exactly the two levels the ladder is known to be handed" (nothing on the path validates a code's shape), and one that mis-numbered the very level it was excluding. So before writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what the thing DOES over what it excludes; and name the residue rather than claiming there is none.
+  **And the rule is not about tallies — it is about claims you cannot check.** A universal or an exhaustive characterization is the same defect in different grammar, and it slips past a reader watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. Measured on a `/harden` run of #298, five such claims in three consecutive cycles, each written to correct the previous cycle's false claim and each false in turn — "it only re-admits `M01AE0`" (it re-admits any single trailing digit), "exactly the two levels the ladder is known to be handed" (nothing on the path validates a code's shape), and three more of the same shape; `harden`'s own anti-pattern carries all five. So before writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what the thing DOES over what it excludes; and name the residue rather than claiming there is none.
 - **Fix every home of a corrected claim, not the one the reviewer named** — see *Correcting a claim
   means finding every home of it*. And edit by script under the rules in *Editing by script*: assert
   before replacing, count neighbours after, verify by reading back.
@@ -337,6 +349,13 @@ Its procedure, and each step is where a specific mistake gets made:
    **remove any other `.omod` of the same module** — the loader reads every `*.omod` and two versions
    of one module is a startup failure, not a warning. `*.omod.bak-*` files are not loaded and are
    harmless clutter, so deleting one never fixes a startup failure; find the rogue `.omod` instead.
+
+   **Then delete `<standalone>/appdata/.openmrs-lib-cache/<id>/`, because replacing the `.omod` does not
+   reliably replace what runs.** OpenMRS expands a module into that directory and a redeploy under the
+   same name does not always re-expand it: on FM2-700 it held both the released api jar and the new
+   snapshot, and the stale one shadowed the fix; on #340 the first boot ran week-old controller classes
+   while the omod timestamp, the module status endpoint and the cache's own marker file all read
+   current. It is a cache, so there is nothing to preserve.
 4. **Restart, and just take YOUR standalone.** Modules load at startup, so a running instance picks
    up nothing until restarted. **These are throwaway demo instances** (owner's instruction,
    2026-08-27): stop the one you resolved in step 1, running or not, without confirmation. Do not
@@ -356,9 +375,11 @@ Its procedure, and each step is where a specific mistake gets made:
    `unrepairable` abort on the only standalone there is. Kept as history so nobody reinstates it from
    the same reasoning; if you are ever in an environment where a standalone is NOT disposable, that
    is a fact the owner has to state, not one to infer from a port being busy.
-5. **Confirm you are testing this build.** The deployed file's timestamp must match the build from
-   step 2. Verifying against a stale `.omod` is the single most common way this step reports on the
-   wrong bytes.
+5. **Confirm you are testing this build — the timestamp proves the FILE, and the file is not what
+   runs.** The deployed `.omod`'s timestamp must match the build from step 2; that is necessary and, per
+   step 3's lib-cache paragraph, not sufficient. Where the change is one you can name in a class, prove
+   the bytes: hash the loaded class under `.openmrs-lib-cache/<id>/` against the same entry in the built
+   omod. The three signals step 3 names all read current over stale bytes, so none of them is the proof.
 6. **Drive the actual behaviour** — the REST call, the query, the page — and capture what came back,
    not that it "looked right". Where the change touches saved data, read the value back out (REST or
    SQL against the bundled DB, creds in `openmrs-runtime.properties`) rather than trusting the
@@ -759,7 +780,13 @@ backstops, not the mechanism.
 **And a dead delegated phase needs a contract, because it is neither an abort condition nor a
 finding.** Left undefined, an unattended run ends on the first agent death. The contract: clear the
 await, retry the phase **twice**, and change something between attempts — an agent that stalled on
-volume gets a leaner brief, one that stalled on nesting is told not to delegate. After the second
+volume gets a leaner brief, one that stalled on nesting is told not to delegate. **A session or quota
+429 is neither of those, and the lever that has worked is a cheaper agent rather than only a shorter
+one** — on #238 round 1's fixer "died instantly on a session rate limit (429)" and a retry on a
+different model succeeded; on #336 the round-1 reviewer died the same way and completed on a smaller
+model with a leaner brief. Either may be what is available. The residue: #339 met a limit that "will
+refuse every retry for hours", where nothing here is known to help and the two attempts are spent on a
+condition that has not changed. After the second
 retry, stop with the labelled deviation naming the phase and the failure mode, exactly as the round
 cap does. A retry is not free of consequence either: on the first run, retrying a reviewer twice is
 what exposed the stale-diff-base defect above, because the third brief had to state the base
