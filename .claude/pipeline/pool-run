@@ -1774,6 +1774,12 @@ class Session:
                 "turns": self.turns, "jsonl": str(self.jsonl),
                 "cost_usd": self.result.get("total_cost_usd"),
                 "is_error": bool(self.result.get("is_error")) or code != 0,
+                # What ENDED the session, straight off the final result record. An outcome status is
+                # read off what was LEFT BEHIND — a PR exists and is draft — which cannot tell a loop
+                # that ran out of rounds from one whose session was killed before its closing steps.
+                # A refusal (`stop_reason: "refusal"`, an API safeguard firing mid-run) is the case
+                # that prompted this; see the draft verdict below for what it is used for.
+                "stop_reason": (self.result.get("stop_reason") or None),
                 "summary": (self.result.get("result") or "")[-1200:]}
 
     def _absorb(self, line: str) -> None:
@@ -2294,6 +2300,7 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
         "last_run": datetime.now(timezone.utc).isoformat(),
         "duration_s": run["seconds"],
         "turns": run["turns"],
+        "ended_by": run.get("stop_reason"),
         "cost_usd": run.get("cost_usd"),
         "session_id": run["session_id"],
         "stream": run["jsonl"],
@@ -2306,8 +2313,17 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
         "killed_for": run.get("killed_for"),
     })
 
+    # The status says what was left behind; it cannot say what ended the run. A session killed
+    # mid-flight and a loop that genuinely ran out of rounds both leave a draft PR, and this line
+    # used to assert the second about both — a false diagnosis rather than a thin one, and one an
+    # operator acts on. Measured on chartsearchai#349: the loop HAD converged (gate: reviewed, 0
+    # blocking) and an API refusal ended the session before it could mark the PR ready.
+    ended = run.get("stop_reason")
+    draft_cause = ("the session was ended by an API " + str(ended) + " before its closing steps, NOT "
+                   "by the loop — read the gate state before retrying") if ended == "refusal" else \
+                  "the loop did not converge"
     verdict = {"ready": f"PR #{pr['number'] if pr else '?'} marked ready for review",
-               "draft": f"PR #{pr['number'] if pr else '?'} left as a DRAFT — the loop did not converge",
+               "draft": f"PR #{pr['number'] if pr else '?'} left as a DRAFT — {draft_cause}",
                "timeout": f"killed — {run.get('killed_for')}",
                "error": "the session errored and opened no PR",
                "no-pr": "ended with no PR — read the run's own report in the stream",
