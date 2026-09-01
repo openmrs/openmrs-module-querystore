@@ -2147,6 +2147,25 @@ def test_a_session_reports_what_ended_it(tmp: Path) -> None:
               "safeguards" in (run.get("summary") or ""), repr(run.get("summary"))[:120])
 
 
+def test_a_draft_is_not_told_the_loop_ran_out_of_rounds(tmp: Path) -> None:
+    """The clause a draft PR is explained by, over every shape of terminal reason.
+
+    Lives in its own function so a case can call it: the verdict it feeds sits inside `work_ticket`,
+    which nothing here executes (the one case that reaches that function reads its SOURCE), so an
+    inline branch there would be a wording nobody can pin — in the one line whose whole job is not
+    misleading an operator.
+    """
+    check("a refusal is named as the thing that ended the session",
+          "refusal" in pool.draft_cause("refusal") and "NOT by" in pool.draft_cause("refusal"),
+          pool.draft_cause("refusal"))
+    check("an abnormal reason nobody has seen yet is named too, not misdiagnosed",
+          "max_tokens" in pool.draft_cause("max_tokens"), pool.draft_cause("max_tokens"))
+    check("a normal end still reads as a loop that did not converge",
+          pool.draft_cause("end_turn") == "the loop did not converge", pool.draft_cause("end_turn"))
+    check("a session that reported no reason is not invented one",
+          pool.draft_cause(None) == "the loop did not converge", pool.draft_cause(None))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -2185,7 +2204,8 @@ def main() -> int:
                          ("lost worktree", test_a_pause_whose_worktree_is_gone_is_not_stranded),
                          ("held back", test_a_held_back_suspended_ticket_stays_suspended),
                          ("paused vs plain run", test_a_paused_ticket_is_not_restarted),
-                         ("ended by", test_a_session_reports_what_ended_it)]:
+                         ("ended by", test_a_session_reports_what_ended_it),
+                         ("draft cause", test_a_draft_is_not_told_the_loop_ran_out_of_rounds)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
