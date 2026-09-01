@@ -49,6 +49,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -616,6 +617,35 @@ def platform_problems(cfg: dict, workers: int) -> list[str]:
     return problems
 
 
+def port_is_held(port: int, host: str = "127.0.0.1", timeout: float = 0.25) -> bool:
+    """Is something listening on this port RIGHT NOW?
+
+    The neighbouring `standalone_ports` check is config-vs-config — two standalones CONFIGURED to
+    bind one port. This is config-vs-reality, and it catches a different failure: `killpg` reaches
+    the session's process group and not a descendant that detached, so a killed, timed-out or paused
+    ticket can leave its standalone running. Measured 2026-09-01: an `openmrs-standalone.jar` with
+    its tomcat and mariadbd, PPID 1, holding 8081 and 3316, in a process group no live `claude`
+    owned — on the home configured as slot 1.
+
+    A run handed that slot can neither use the port nor clear it: `pr-harden` forbids a verifier
+    taking a server it did not start, and that rule is measured and correct. So the only useful place
+    to notice is here, before the slot is handed over.
+
+    CONNECT rather than bind. A bind probe has to choose between `SO_REUSEADDR` — which can succeed
+    while another socket is listening — and not setting it, which then fails on a port merely in
+    TIME_WAIT and reports a free port as held. Connecting asks the question we actually have, and
+    has no side effect on the port. A refused connection is free; a timeout is treated as free
+    because an unreachable host is not evidence of a local holder, and a false "held" would refuse a
+    usable slot.
+    """
+    with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as probe:
+        probe.settimeout(timeout)
+        try:
+            return probe.connect_ex((host, port)) == 0
+        except OSError:
+            return False
+
+
 def slot_problems(cfg: dict, workers: int) -> list[str]:
     """Fatal misconfigurations, reported at preflight rather than discovered by two verifiers.
 
@@ -643,6 +673,19 @@ def slot_problems(cfg: dict, workers: int) -> list[str]:
         ports = standalone_ports(home)
         if not ports["tomcatport"]:
             problems.append(f"{home} has no tomcatport in openmrs-runtime.properties")
+        # At ANY width, unlike the collision check below: a single worker has no co-tenant to
+        # collide with, but a port already held blocks it just as hard.
+        for which in PORT_KEYS:
+            port = ports[which]
+            if port is not None and port_is_held(port):
+                problems.append(
+                    f"{home.name} is configured to bind {which} {port}, but something is already "
+                    f"listening on it, so a run given this slot cannot start its standalone. Most "
+                    f"often that is a standalone which outlived its run — `killpg` reaches the "
+                    f"session's process group, not a descendant that detached — but it may equally "
+                    f"be one you are running deliberately. Identify the holder with "
+                    f"`lsof -nP -iTCP:{port} -sTCP:LISTEN`, then either stop it or give this "
+                    f"standalone a port of its own in openmrs-runtime.properties")
         if workers <= 1:
             continue
         for which in PORT_KEYS:

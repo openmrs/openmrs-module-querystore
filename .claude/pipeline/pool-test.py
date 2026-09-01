@@ -20,6 +20,7 @@ import contextlib
 import shutil
 import time
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -2166,12 +2167,60 @@ def test_a_draft_is_not_told_the_loop_ran_out_of_rounds(tmp: Path) -> None:
           pool.draft_cause(None) == "the loop did not converge", pool.draft_cause(None))
 
 
+
+def test_a_held_port_is_a_preflight_problem(tmp: Path) -> None:
+    """A standalone cannot be handed to a run while something is already listening on its ports.
+
+    The existing check is config-vs-config — two standalones CONFIGURED to bind one port. This is
+    config-vs-reality, and it is a different failure: an orphaned standalone survives its run
+    (`killpg` reaches the session's process group, not a detached descendant), keeps the port, and
+    the next run to claim that slot cannot use it and — by `pr-harden`'s never-take-a-server-you-did-
+    not-start rule — must not clear it either.
+    """
+    print("\nport liveness")
+    root = tmp / "live-ports"
+
+    held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    held.bind(("127.0.0.1", 0))
+    # Backlog well above the number of probes this test makes. With listen(1) the accept queue
+    # fills after the first probe and the next connect is REFUSED, so a held port reads as free and
+    # the test fails intermittently — on load, and on whichever assertion happens to probe second.
+    held.listen(128)
+    tport = held.getsockname()[1]
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.bind(("127.0.0.1", 0))
+    free_port = probe.getsockname()[1]
+    probe.close()
+
+    try:
+        sa = standalone_fixture(root, "held", tport, free_port)
+        cfg = pool.merge(pool.DEFAULTS, {"parallel": {"max_workers": 1, "standalones": [str(sa)]}})
+        probs = pool.slot_problems(cfg, 1)
+        check("a standalone whose tomcat port is already held is a fatal preflight problem",
+              any(str(tport) in p for p in probs), str(probs))
+        check("the problem names the standalone, so an operator knows which one",
+              any("held" in p for p in probs), str(probs))
+
+        dbsa = standalone_fixture(root, "heldb", free_port, tport)
+        dbcfg = pool.merge(pool.DEFAULTS, {"parallel": {"max_workers": 1, "standalones": [str(dbsa)]}})
+        check("the database port is checked too, not only tomcat",
+              any(str(tport) in p for p in pool.slot_problems(dbcfg, 1)),
+              str(pool.slot_problems(dbcfg, 1)))
+    finally:
+        held.close()
+
+    okay = standalone_fixture(root, "okay", free_port, free_port + 1)
+    okcfg = pool.merge(pool.DEFAULTS, {"parallel": {"max_workers": 1, "standalones": [str(okay)]}})
+    check("a standalone whose ports are free raises nothing",
+          pool.slot_problems(okcfg, 1) == [], str(pool.slot_problems(okcfg, 1)))
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         for name, fn in [("ticket-identity", test_ticket_identity),
                          ("legacy-ticket-state", test_legacy_ticket_state),
                          ("worktrees", test_worktrees), ("slots", test_slots),
+                         ("port liveness", test_a_held_port_is_a_preflight_problem),
                          ("gate-state", test_gate_state_locking), ("waves", test_waves),
                          ("parallel run", test_parallel_run), ("say", test_say_is_thread_safe),
                          ("records", test_record_attribution), ("crash", test_crash_does_not_clobber),
