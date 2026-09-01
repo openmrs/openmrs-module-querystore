@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.15.0
+version: 0.16.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -396,6 +396,23 @@ built from.
 **It owns the environment and repairs it.** Kill the orphaned `llama-server` holding the port, delete
 the stale omod and redeploy from the root install, set `log.level`, allow for cold load on the first
 query, wait out a slow boot. Do it without asking.
+
+**Wait on a CONDITION, never on a clock.** "Wait out a slow boot" is not licence to sleep blind.
+`verify-frontend-change`'s *"Wait for real readiness by polling HTTP, not by guessing a sleep"* already
+says poll; what it does not say is that a FOREGROUND poll still costs a turn per look, and a turn here
+is the whole conversation re-sent to do nothing. A fixed sleep cannot exit early and cannot fail
+loudly. Use ONE backgrounded loop that exits when the condition is true — `Bash(run_in_background:
+true)` running `until curl -sf -o /dev/null http://localhost:$PORT/openmrs/; do sleep 5; done` — which
+hands the turn back at once and notifies you when it exits. Give it the failure signatures too
+(`ModuleException` in the log, the java pid gone), or a crashed boot is indistinguishable from a slow
+one, and bound it so a hang cannot outlive the round.
+
+**The harness disagrees with itself here, so read the specific guidance.** `Monitor`'s own description
+routes this case away from itself — *"tell me when the server is ready → use Bash with
+`run_in_background` … You get a single completion notification when it exits"*, and *"Don't use an
+unbounded command for a single notification"*. The `Bash` description's one line pointing the other way
+("use Monitor with an until-loop") is the general steer; Monitor's is the specific one and it wins.
+`Monitor` is for a STREAM of events — every error line in a log, reported as it appears.
 
 **Unless `$CLAUDE_PIPELINE_SLOT` is set, in which case it owns ITS SHARE of the environment.** That
 variable is the pool driver telling this run it has co-tenants — other `resolve-ticket` runs working
@@ -792,6 +809,11 @@ agents left four fresh awaits, and the gate honoured them — measured, it would
 for another 36 minutes with nothing whatsoever running. The harness reports the death, so there is no
 excuse for waiting out a timeout. The one-hour bound and the no-`since`-reads-as-dead rule are
 backstops, not the mechanism.
+
+**And this session must not busy-wait either.** *Wait on a CONDITION, never on a clock* is written into
+the verifier's brief, but the orchestrator is where a blind `sleep` loop costs the most, because its
+context is the largest thing being re-sent per turn. Whatever you are waiting on — a boot, an agent, a
+lock — background the wait and let it notify you.
 
 **And a dead delegated phase needs a contract, because it is neither an abort condition nor a
 finding.** Left undefined, an unattended run ends on the first agent death. The contract: clear the

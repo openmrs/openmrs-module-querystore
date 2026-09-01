@@ -1482,3 +1482,46 @@ parked rate-limit-death entry. **REOPEN ON:** a second record.
 **The proposer not verifying its own citations** — this pass added three, all cut at the gate: #229
 read as seven cycles when it ran two, a parked count taken from a superseded block, and an override
 tally of 6 where the records show at least 8 (#296, #339 also record an overridden cycle).
+
+## 2026-09-02 (second targeted pass: two rules that had shipped to the live skills without ever passing this gate) — 1 applied after revision, 1 dropped; linter 10 files, 0 findings
+
+Found by the Step 6 `cmp` battery during the pass above: `~/.claude/skills/` was ahead of the repo by
+`pr-harden 0.16.0` and `resolve-ticket 0.15.0`, committed to an unpushed branch and recorded in no
+ledger entry. Full evidence in `proposals/2026-09-02-retro-gate-shipped-wait-and-batch-rules.md`.
+
+**Provenance, and it is the finding that reaches both.** The figures both rules quote were checked
+against the RAW published artifact: `429`, `64.4`, `58.9`, `3.03`, `410,406` and the words `busy`,
+`sleep`, `batch` return zero hits; `971,327` is there but means one run's worst peak; `~426k`,
+`~100k` and `~1.1k` are in no source at all. The rest came from an unpublished 2026-09-02 re-measure
+whose only home is a machine-local memory file that gives two numerators for one phenomenon (61.9 h
+and 64.4 h). Step 1 admits run records and nothing else, so **neither rule ever met the Step 3 bar**.
+
+**APPLIED after revision · pr-harden 0.16.0 — "Wait on a CONDITION, never on a clock".** The rule is
+sound and the mechanism was verified against the harness rather than against the claim: `Monitor`'s
+own description routes this case to `Bash(run_in_background: true)` with an until-loop. Not a
+restatement — `verify-frontend-change`'s readiness bullet gives a FOREGROUND poll and no backgrounding.
+Three fixes: the measurement paragraph deleted (Step 4's prefer-deletion), a sibling paragraph added in
+the State section because the rule sat in the VERIFIER's brief while the cost it cited is the
+ORCHESTRATOR's, and the `Bash`/`Monitor` contradiction named rather than left for a reader to trip on.
+Recorded as a 1-record readmit justified by a mechanism gap, **not as corroborated**.
+
+**DROPPED · resolve-ticket back to 0.14.0 — "Don't spend a turn per read-only probe".** The collision
+it was written to avoid is genuinely absent; it dies on five other grounds, any one sufficient: zero
+run records; the harness already mandates the behaviour as a standing instruction, which **P6** settled
+is dispositive against a skill's preference; it landed 17 lines below `resolve-ticket:622`'s own "don't
+publish a count you would have to re-measure", which is **P0/P7** at the line P0/P7 cited; its
+"largest single cost" superlative is refused by the analysis it cites, which declines to partition its
+blocks; and "this session never compacts" promotes a hedge the source states as undetectable.
+**REOPEN ON:** a run record where a probe stretch cost a round or a cycle — not the publication of the
+re-measure, which would only convert unsourced counts into sourced ones in the document that forbids
+counts.
+
+**A skill edit that never reached the repo: 1 incident (2 rules, ~29 lines, live-only for ~1 day).**
+Step 6's mirror obligation is what surfaced it, a pass later and by accident. **REOPEN ON:** a second
+incident — a mechanical check at session start would be the remedy, not more prose.
+
+**A gate's own factual claims are claims too — second instance.** This gate opened by declaring the
+branch commit nonexistent and the rules never committed, calling it dispositive; it had searched one
+checkout and asserted only one existed. `git cat-file -t` in the other returns `commit`. Every
+objection resting on other evidence was verified independently and stands. Sibling of resolve-ticket
+0.14.0's rule about a gate objection's numbers, and of #338's brief-checks-out finding.
