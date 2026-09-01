@@ -1417,3 +1417,68 @@ corroboration.
   retros.** This pass submitted "all went to the rendered text", "never counts a second attempt", "every
   freshness signal", "byte-identical" and "re-check every claim"; the gate cut or bounded all five. Still
   worth a rule only if one ever survives the gate.
+
+## 2026-09-02 (targeted pass, not a window: one question — should harden's cycle gate stop on "no blocking findings" instead of "no edits"?) — 3 proposals, 0 applied; refuted by a fresh read-only agent
+
+Not a window retro: no new records were read for corroboration beyond the two since `LAST`
+(2026-08-31), and nothing was applied, so the running parked counts in the 2026-08-31 block stand
+except where this block says otherwise. Recorded because two of the three proposals had already been
+derived once before, and re-deriving them cost this pass its whole budget.
+
+**P-A · Give `harden` a cycle cap, for symmetry with `pr-harden`'s round cap.** Re-derived
+independently of #298's gap (4), and killed a second time.
+- The parked entry *"pr-harden's cap raised nine times…"* already rules on caps and its reopen
+  condition is **"a signal that separates this from spinning, not a cap."**
+- #298's own ground is *symmetry*, a claim about two documents. It listed the cap as one of three
+  candidate remedies with no cost attached, so the single-instance route in skill-retro Step 3 was
+  never available to it.
+- **The walk-forward that kills it is #298, not #229**, and the proposer got this wrong: #298 ran 5
+  cycles and `outcome: converged`, so a cap of 4 ends a converged run as did-not-converge and loses
+  cycle 5's measured zero — verbatim the first ground on which **P3** died. Other runs past 4 cycles:
+  #302 (10), #330 (15), #266 (7), #308 (6), #293 (6), #234 (6), FM2-700 (6), #297 (5), #250, #315.
+- **REOPEN ON:** unchanged from the existing entry — a spin signal, not a cap.
+
+**P-B · A cycle-level spin signal (a cycle whose only edits are in the previous cycle's prose).**
+Parked, unchanged; the remedy stays killed as **P3**, and the claims-about-claims ruling stays as
+written (the shipped tactic is *delete*, so the recursion terminates — a violated rule, not two rules
+conflicting). The proposer cited the **2026-08-27** block's count of 9; the running count supersedes it
+at ~20. `2026-08-28-…-296.md:26` is a further direct statement of the signature, and names the same
+terminating move (fixes moving from re-wording to deleting and to the root cause).
+
+**P-C · KILLED AT THE GATE · "`pr-harden` is diff-scoped, so 'pr-harden reviews next and is the
+stronger gate' is a false reason to take harden's override."** Two records state that reason for the
+override (#268:59, #337:27) and the observation is real; the *diagnosis* is false, three ways, any one
+sufficient:
+1. `pr-harden`'s reviewer runs `pr-review` **Steps 1-3 in full**, and `pr-review:99-103` is a section
+   headed *"Trace outward — the bugs live outside the diff"* carrying the same unchanged-neighbours
+   sentence as `harden`'s Phase 1. It fetches a branch ref, so it holds the head tree, not a patch.
+2. The fixer's brief carries harden's Phase 1 discipline explicitly (`pr-harden:220-223`), including
+   the whole-tree rarest-token sweep for every home of a claim.
+3. Empirically refuted: `2026-08-28-…-297.md:25` — a pr-harden round-2 finding on
+   "DdiDrugReferenceSource's self-pair guard javadoc, **a home no sweep reached because that file is
+   not in the diff**". The claim was structural, so one instance settles it.
+Two further blocking objections stand on their own: the counterfactual "pr-harden could not have
+caught #229's six" is in no record, and the clause would contradict `pr-harden`'s shipped statement
+that harden "supplies the *weaker* review for this purpose". The surviving true content already has a
+home at `resolve-ticket` Step 7 ("The two are not substitutes") — the restatement objection that
+killed P3.
+- **Parked instead, with no rule attached:** *harden's override taken on the ground that pr-harden
+  covers it — 2 records (#268:59, #337:27).* The ground is already answered by `resolve-ticket` Step 7
+  and `pr-harden`'s *"Where /harden sits"*; the diff-scope justification was refuted at this gate, so
+  no future retro need re-derive it. **REOPEN ON:** a record where the override demonstrably lost a
+  defect pr-harden then failed to catch.
+
+**Clarification to the standing counterweight, which reads as a cycle-level fact and is not one.**
+The entry *"The confirming-cycle rule, as POSITIVE evidence"* quotes #229's "last seven **passes**".
+`2026-08-30-…-229.md:3` records `cycles: 2` and `outcome: converged`, so those passes sit inside a
+non-terminating cycle. A **pass**-level stop is what #229 forbids; a **cycle** cap is forbidden by
+#298 instead. The pass-to-cycle distribution is not recorded, so anything resting on it stays open.
+
+**New observation, parked.** #339's harden override was **failure recovery, not a cost judgment**
+(`2026-08-31-…-339.md:29` — "cycle 1 was overridden (Phase 2 round 3's four agents all died on the
+rate limit)"), a use of the valve harden's override sentence does not model. 1 record; adjacent to the
+parked rate-limit-death entry. **REOPEN ON:** a second record.
+
+**The proposer not verifying its own citations** — this pass added three, all cut at the gate: #229
+read as seven cycles when it ran two, a parked count taken from a superseded block, and an override
+tally of 6 where the records show at least 8 (#296, #339 also record an overridden cycle).
