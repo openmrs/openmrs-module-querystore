@@ -2118,6 +2118,54 @@ def test_a_paused_ticket_is_not_restarted(tmp: Path) -> None:
           "abandons the suspended session" in said and "sid" in said, said[-200:] or "NOTHING SAID")
 
 
+def test_a_session_reports_what_ended_it(tmp: Path) -> None:
+    """What ENDED a session must reach the driver as evidence, not be inferred from the wreckage.
+
+    The outcome status is read off what was LEFT BEHIND — a PR exists and is draft — and that cannot
+    tell a loop which genuinely ran out of rounds from one whose session was killed before its
+    closing steps ran. Measured on chartsearchai#349: the review loop HAD converged (gate state:
+    reviewed, 0 blocking) and an API refusal ended the session before it could mark the PR ready, so
+    the driver reported "the loop did not converge" — a false diagnosis, and one an operator acts on.
+    """
+    with isolated(tmp):
+        stub = tmp / "claude"
+        stub.write_text(
+            "#!/bin/bash\n"
+            "echo '{\"type\":\"assistant\",\"message\":{\"content\":"
+            "[{\"type\":\"text\",\"text\":\"hi\"}]}}'\n"
+            "echo '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,"
+            "\"stop_reason\":\"refusal\",\"result\":\"API Error: safeguards flagged this "
+            "message\",\"total_cost_usd\":0.02}'\n")
+        stub.chmod(0o755)
+        cfg = pool.merge(pool.DEFAULTS, {"claude": {"binary": str(stub)}})
+        run = pool.Session("p", tmp, cfg, tmp / "s", 300, 300, lambda *a, **k: None).run()
+        check("a session carries the stop_reason that ended it",
+              run.get("stop_reason") == "refusal", repr(run.get("stop_reason")))
+        check("a refusal is still reported as an error",
+              run.get("is_error") is True, repr(run.get("is_error")))
+        check("and the session's own closing prose is kept beside it, not instead of it",
+              "safeguards" in (run.get("summary") or ""), repr(run.get("summary"))[:120])
+
+
+def test_a_draft_is_not_told_the_loop_ran_out_of_rounds(tmp: Path) -> None:
+    """The clause a draft PR is explained by, over every shape of terminal reason.
+
+    Lives in its own function so a case can call it: the verdict it feeds sits inside `work_ticket`,
+    which nothing here executes (the one case that reaches that function reads its SOURCE), so an
+    inline branch there would be a wording nobody can pin — in the one line whose whole job is not
+    misleading an operator.
+    """
+    check("a refusal is named as the thing that ended the session",
+          "refusal" in pool.draft_cause("refusal") and "NOT by" in pool.draft_cause("refusal"),
+          pool.draft_cause("refusal"))
+    check("an abnormal reason nobody has seen yet is named too, not misdiagnosed",
+          "max_tokens" in pool.draft_cause("max_tokens"), pool.draft_cause("max_tokens"))
+    check("a normal end still reads as a loop that did not converge",
+          pool.draft_cause("end_turn") == "the loop did not converge", pool.draft_cause("end_turn"))
+    check("a session that reported no reason is not invented one",
+          pool.draft_cause(None) == "the loop did not converge", pool.draft_cause(None))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -2155,7 +2203,9 @@ def main() -> int:
                          ("retro not pausable", test_the_retro_is_not_suspended_by_a_pause),
                          ("lost worktree", test_a_pause_whose_worktree_is_gone_is_not_stranded),
                          ("held back", test_a_held_back_suspended_ticket_stays_suspended),
-                         ("paused vs plain run", test_a_paused_ticket_is_not_restarted)]:
+                         ("paused vs plain run", test_a_paused_ticket_is_not_restarted),
+                         ("ended by", test_a_session_reports_what_ended_it),
+                         ("draft cause", test_a_draft_is_not_told_the_loop_ran_out_of_rounds)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
