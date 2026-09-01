@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.24.0
+version: 0.24.1
 ---
 
 # Harden
@@ -135,6 +135,9 @@ Run simplify passes until polish opportunities converge. Each pass:
      that allow what decides is the bound, which is a clock rather than a liveness check. Where you
      need progress sooner, watch something the agent's WORK touches — FM2-700 used the worktree's own
      `target/`, which presupposes isolation, so #293's half of this is not closed.
+     **And never read that file for the RESULT either** — it is the agent's transcript, not its
+     report; `pr-harden`'s **State** section owns how a delegated agent is collected, and why a
+     poll costs more than it returns.
    - **Commit before anything mutates the tree — the cycle's work before spawning them, and your own
      measurement probes too — and do not edit the tree while they run.** `git checkout -- <path>` to
      undo a probe restores HEAD, so on a file carrying uncommitted intended work it discards that work

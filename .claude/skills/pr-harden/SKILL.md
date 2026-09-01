@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.14.0
+version: 0.15.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -707,6 +707,22 @@ driver holds for the life of the run; the rule is stated here as well because a 
 a stop after the decision to stop has been made, and that decision is what costs the run. And do not
 read a stream with no gate text in it as evidence the gate never ran: hooks DO reach `-p` sessions,
 probed the same day, feedback delivered and captured.
+
+**Collecting in the same turn means the `Agent` call RETURNS the report — never a poll
+afterwards.** Several `Agent` calls in ONE message run concurrently, so a wave keeps its
+parallelism while each result is that agent's own report; Step 3's refutation gate already
+collects this way and its agents run ten to twenty minutes, so length is not what forces a
+background spawn. Launching async and then blocking on `TaskOutput` collects nothing extra — the
+report arrives by itself in the completion notification's `<result>` — while `TaskOutput` is
+DEPRECATED for an agent task precisely because its output file is a symlink to the agent's whole
+JSONL transcript: each poll injects a truncated window of raw agent chatter, the next poll injects
+a different window rather than the rest of the first, and the orchestrator re-sends all of it on
+every later turn. Measured 2026-09-01 over the three tickets of twenty that reached for it: 49
+polls carried 953,119 bytes no round ever used, 23 of them at the 32 KB truncation cap; on one of
+those runs the two agents that WERE collected synchronously returned their whole reports in 9,352 and
+9,956 bytes, so one report is a third of a single poll's window and a polled agent costs several
+windows. Where you need to block on something that is NOT an agent — a build, a server coming up —
+that is a background Bash task, whose output file is its stdout and is safe to read.
 
 **And that marker now decides OWNERSHIP as well as attendedness, because the gate state is keyed on the
 checkout and not on the session.** Measured live 2026-08-26: an interactive session in a checkout the
