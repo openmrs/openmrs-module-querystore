@@ -1657,7 +1657,7 @@ rest.
   #356's session begins 2026-09-01T23:39 — after it.
 - Runs ending without writing a run record: #349 (`claude -p` exited 1, 4h11m, 2011 assistant turns,
   outcome draft). Nothing corroborated from it, by instruction.
-- **The proposer not verifying its own citations: 13 cycles / 11 records** — previous 12/10 (:1320).
+- **The proposer not verifying its own citations: 14 cycles / 12 records** — previous 13/11 (:1320).
   This pass added three of its own, all cut at the gate: the superseded checkout count, the #356/0.16.0
   mis-attribution, and the wrong 2026-08-24 block for the `cp` kill.
 - **A retro submitting wording that breaks the counts/universals rule it enforces: unbroken.** This
@@ -1684,3 +1684,43 @@ rest.
   run in this window — so no record in it was collected under the machine state the paragraph
   describes. **REOPEN ON:** a record of a 429 met under the hook, which is the first evidence about
   what the contract actually has left.
+
+**KILLED · a verifier brief's own factual claims go unchecked** (`proposals/2026-09-02-briefs-own-claims.md`,
+drafted and gated the same evening on the operator's instruction, after this pass reported the entry
+at :1403-1406 reopened). Two blocking objections, either sufficient:
+
+1. **The negative-coverage claim was false, against text this very pass had shipped 9 minutes
+   earlier.** The proposal asserted "Nothing in `pr-harden`, `harden` or `resolve-ticket` addresses a
+   brief's own premises". `harden`:244-246 NARRATES the proposal's own second record — "On #355 a
+   verifier briefed to look for a partner the shipped data does not carry re-drove the contract with
+   one it does, plus a control" — and `pr-harden`:260-262 cites #355 by name. Both are P4, applied
+   above at 0.26.0 / 0.18.0. The four tokens searched (`premise`, `the brief's own`, `brief asserted`,
+   `unverified claim`) structurally could not reach either; `brief`, the word in the proposal's own
+   title, finds `harden`:244 at once. **Verified independently before accepting the objection.**
+2. **The one operative clause contradicted that shipped text, inverted.** The proposal would have had
+   the verifier "treat 'the briefed witness cannot exist' as a result to report"; `harden`:245-246
+   ends "**rather than reporting the absence as a result**", and `pr-harden`:261-262 ships the remedy
+   the proposal omits (construct a witness that can exist, plus a control). Shipping it would have
+   manufactured a fresh instance of the self-contradiction class this skill exists to catch.
+
+Also cut: a comment-provenance clause resting on #355 alone (#338 carries none — its false witness is
+a DEBUG line at a bare `return`); `:492` for a blank line (the bullet is 493-498); a "#339" attribution
+for an example no record carries, which is :1232's own trap; and four universals.
+
+**Two rulings from this gate worth keeping.** The proposal conceded its own weakness as
+*instruction-is-not-the-lever*; **that concession is invalid** — :1196-1198 already cut that shape,
+because "every instance of it in this ledger turns on an EXISTING instruction that was ignored", and
+no such instruction existed during #338 or #355 (`harden`:244-246 landed the same evening). The
+correct shape is :849's *existing mechanism exercised and worked*. And the gate's O7, on text this
+pass applied rather than on the proposal: `harden`:244-246 narrates a **pr-harden verifier** incident
+inside `harden`, which by :1289-1290's own logic is questionable placement. **Not corrected here** —
+it is one observation about freshly-shipped text, and re-editing it tonight is the rewrite-faster-
+than-you-verify shape. **REOPEN ON:** a reader who has to follow the pointer the wrong way.
+
+**Re-parked, with the spent reopen replaced — "a second record" is now used up and re-parking on it
+loops.** A brief's own factual claims going unchecked: **2 records (#338, #355), both caught unprompted
+by the verifier at cost 0.** The catching is `pr-harden`:493-498 working one level up, and #355's
+remedy already shipped at `harden`:238-246 / `pr-harden`:260-262. **REOPEN ON:** a record where a false
+brief claim was NOT caught — a verification reported on the strength of a witness that could not exist
+— or one that cost a round or a cycle. A second zero-cost catch is evidence the verifier step works,
+not that it needs text.
