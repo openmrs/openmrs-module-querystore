@@ -1724,3 +1724,19 @@ remedy already shipped at `harden`:238-246 / `pr-harden`:260-262. **REOPEN ON:**
 brief claim was NOT caught — a verification reported on the strength of a witness that could not exist
 — or one that cost a round or a cycle. A second zero-cost catch is evidence the verifier step works,
 not that it needs text.
+
+**NEW, banked with a remedy applied — the source repo has TWO checkouts, and Step 6's battery proves
+nothing about the one the pipeline writes in.** `skill-retro` Step 6 says to copy the skills into "the
+source repo's `.claude/skills/`" and offers one test of which repo that is: "this pipeline's source is
+`openmrs-module-querystore`; `git remote -v` in that checkout is the authority". Two checkouts on this
+machine answer that test identically — `~/Projects/openmrs/openmrs-module-querystore` and
+`~/Projects/openmrs/querystore`, both `openmrs/openmrs-module-querystore.git`. This pass used the
+first; `~/.claude/pipeline/pool.json`'s `source_repo` names the **second**, so an automated retro run by
+the pool writes there. Measured at the close of this pass: the pool's checkout was clean and **5
+commits behind** origin/main, missing both this window's four commits and the other session's
+`e362818`. Nothing was lost — both are working copies of one remote and every commit was pushed — but
+the `cmp` battery ran against a checkout the pipeline does not use, so its "all four copies identical"
+says nothing about the copy that matters for the next pool run. **Remedy applied: the pool's checkout
+was fast-forwarded to origin/main.** `pool.json` was NOT repointed — it is the pool driver's file and
+naming which checkout is authoritative is that file's job, not a retro's. **REOPEN ON:** a pool-run
+retro that commits on the stale base, or a third checkout.
