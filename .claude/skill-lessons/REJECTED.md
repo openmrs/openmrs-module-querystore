@@ -1663,3 +1663,24 @@ rest.
 - **A retro submitting wording that breaks the counts/universals rule it enforces: unbroken.** This
   pass's P4 shipped "no production mutation reddens it" and P2 "a retry spent before it changes
   nothing"; the gate cut both as unverified universals.
+- **NEW, parked with no proposal — a measured lever retired by a same-day hook rather than by a
+  measurement.** `pr-harden` 0.17.0 (`e362818`, another session, mid-window) rewrote the 429 paragraph
+  to "the lever that used to work is no longer available", retiring the cheaper-agent lever that
+  :1285-1287 APPLIED at 2 records (#238, #336), on the strength of
+  `~/.claude/hooks/no-subagent-model-override.sh`, created and registered the same hour. Two things to
+  watch, neither of which this pass is entitled to fix — the rule is another session's, shipped with
+  its own bump and commit:
+  1. It writes a MACHINE fact (a hook path on this machine) into a skill, which :1148 rules against.
+     The admissible route was available and unused: it is ALSO a fact about the DOCUMENT, since the
+     skill itself prescribes the lever the hook now refuses. A hook is revertable and a skill is
+     copied to other machines, so a reader elsewhere may meet a skill asserting a lever is gone where
+     it is not.
+  2. What is left for a 429 is "a leaner brief" and WAITING — and the WAITING half carries its own
+     stated confound (#354's retry "also changed model, so the reset and the model are not separated
+     by it"), so the paragraph retires its only twice-measured lever in favour of one remedy that is
+     unmeasured alone and one whose witness it disclaims. #339's residue ("nothing here is known to
+     help") is kept beside all of it.
+  Verified by this pass: the hook exists, is registered under `PreToolUse`/`Agent`, and postdates every
+  run in this window — so no record in it was collected under the machine state the paragraph
+  describes. **REOPEN ON:** a record of a 429 met under the hook, which is the first evidence about
+  what the contract actually has left.
