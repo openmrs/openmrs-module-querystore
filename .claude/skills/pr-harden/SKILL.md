@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.16.0
+version: 0.17.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -37,6 +37,20 @@ that round**.
 > is the one thing the loop exists to prevent. Any other subagent type starts clean. It still reads
 > `CLAUDE.md` and the repo's skills — that is intended; what it must not have is the transcript of
 > the code being argued for.
+
+> **And never pass `model`.** A per-call override beats both the agent definition's frontmatter and
+> settings.json, so it is the strongest of the levers and the only one a running round can pull on
+> its own initiative — the others are set outside any session. It is how one of these agents ends up
+> weaker than the run that spawned it — and the round whose verdict it returns is the round that
+> decides whether the loop exits. A
+> `PreToolUse` hook (`~/.claude/hooks/no-subagent-model-override.sh`) refuses such a call, so this is
+> enforced rather than asked; if a different model is genuinely wanted, that is the user's call, not a
+> lever to reach for mid-round.
+>
+> **What that hook does NOT establish is that every subagent runs on the session model.** It refuses
+> the per-call parameter and nothing else, and two other things outrank the session model without
+> producing a call for it to see. The scope lives once, in the hook's own header beside the code —
+> read it there before trusting the property, rather than trusting this sentence.
 
 Reviewer and fixer are always **different agents in the same round**. One agent doing both grades its
 own homework, which is the failure this whole design removes.
@@ -819,12 +833,18 @@ lock — background the wait and let it notify you.
 finding.** Left undefined, an unattended run ends on the first agent death. The contract: clear the
 await, retry the phase **twice**, and change something between attempts — an agent that stalled on
 volume gets a leaner brief, one that stalled on nesting is told not to delegate. **A session or quota
-429 is neither of those, and the lever that has worked is a cheaper agent rather than only a shorter
-one** — on #238 round 1's fixer "died instantly on a session rate limit (429)" and a retry on a
+429 is neither of those, and the lever that used to work is no longer available.** It was a cheaper
+agent — on #238 round 1's fixer "died instantly on a session rate limit (429)" and a retry on a
 different model succeeded; on #336 the round-1 reviewer died the same way and completed on a smaller
-model with a leaner brief. Either may be what is available. The residue: #339 met a limit that "will
-refuse every retry for hours", where nothing here is known to help and the two attempts are spent on a
-condition that has not changed. After the second
+model with a leaner brief. **Do not reach for it: a per-call `model` on the Agent tool is refused by a
+PreToolUse hook (`~/.claude/hooks/no-subagent-model-override.sh`), so a retry cannot downgrade an
+agent from inside the round.** What is left is a leaner brief, and WAITING — a
+session limit states its reset time, so a bounded background wait until that time is a condition
+rather than a clock. Measured on the #354 run, and stated with its confound: two pass-7 agents died on
+a session 429, the retry went out just after the stated reset and both completed — but that retry also
+changed model, so the reset and the model are not separated by it. The residue: #339 met a limit that
+"will refuse every retry for hours", where nothing here is known to help and the two attempts are
+spent on a condition that has not changed. After the second
 retry, stop with the labelled deviation naming the phase and the failure mode, exactly as the round
 cap does. A retry is not free of consequence either: on the first run, retrying a reviewer twice is
 what exposed the stale-diff-base defect above, because the third brief had to state the base

@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.24.1
+version: 0.25.0
 ---
 
 # Harden
@@ -98,6 +98,25 @@ If you cannot truthfully complete ALL THREE sentences, the slice is NOT ready fo
 Run simplify passes until polish opportunities converge. Each pass:
 
 1. Spawn four parallel review agents (reuse, quality, efficiency, integration) over the current diff. After the first pass, brief subsequent passes' agents with the applied and deferred lists from prior passes so they don't re-surface them.
+   - **Never pass `model` to any of them.** A per-call override beats both the agent definition's
+     frontmatter and settings.json, so it is the strongest of the levers and the only one a running
+     pass can pull on its own initiative — the others are set in a file or on the command line,
+     outside any session. It is how a pass ends up reviewed by a weaker agent than the one that
+     wrote the code — and the temptation is strongest on the lenses that keep
+     returning clean, which is exactly where a missed finding is invisible. Two things measured on
+     #354, stated apart because they say different things. The REUSE lens was put on a cheaper model
+     and still returned real findings twice (duplicated test helpers; one measurement restated in
+     three homes), so "this lens is cheap, it can take a cheaper agent" was false of it. The
+     EFFICIENCY lens returned nothing on any of its four runs — but it was never run on the session
+     model, so nothing there separates a quiet lens from a quiet agent, and that pairing is the one
+     the run cannot speak to. Sharper: the pass whose CLEAN verdict closed Phase 2 was a retry moved
+     to a cheaper model, and the next cycle's agent — same head, session model — found a sentence in
+     citable production text that was false. A `PreToolUse` hook
+     (`~/.claude/hooks/no-subagent-model-override.sh`) refuses the call, so this is enforced rather
+     than asked. What it refuses is the per-call parameter and nothing else — an agent definition's
+     `model:` frontmatter and a configured default subagent model both outrank the session model and
+     produce no call for it to see, so do not read the hook as a guarantee that every subagent runs on
+     the session model. That scope is stated once, in the hook's own header beside the code.
    - **Only ONE of them may mutate the worktree, or give each its own.** This is the one place the skill
      contradicted itself: Phase 2 mandates four *parallel* agents and every brief tells them to
      mutate-and-restore for evidence, so the four are the same hazard to each other that the
