@@ -528,6 +528,27 @@ def test_gate_state_locking(tmp: Path) -> None:
     check("a recorded head that no longer resolves is reported, not counted as zero",
           "no longer resolves" in got, got.strip())
 
+    # And with an upstream, which is what `git checkout -b <b> origin/main` gives a pre-PR branch.
+    # `@{u}..HEAD` is a per-BRANCH total there: it does not return to zero until the push, so on #357
+    # cycle 8 the gate read edits=16 on a cycle that committed nothing. The recorded head is what the
+    # gate's question ("what did THIS cycle change?") actually needs, so it wins wherever it resolves.
+    up = tmp / "upstream.git"
+    sh(["git", "init", "-q", "--bare", str(up)], cwd=tmp)
+    sh(["git", "remote", "add", "origin", str(up)], cwd=repo)
+    sh(["git", "push", "-q", "-u", "origin", "HEAD:refs/heads/base"], cwd=repo)
+    sh(["git", "branch", "-q", "--set-upstream-to=origin/base"], cwd=repo)
+    (repo / "d").write_text("cycle five\n")
+    sh(["git", "add", "-A"], cwd=repo)
+    sh(["git", "commit", "-qm", "cycle five's work"], cwd=repo)
+    got = sh([sys.executable, str(helper), "--owner", "999", "harden-set", "--cycle", "5",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("with an upstream and no head yet, the per-branch fallback says what it counted",
+          "rather than this cycle's work" in got, got.strip())
+    got = sh([sys.executable, str(helper), "--owner", "999", "harden-set", "--cycle", "6",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("a converged cycle counts zero even with commits unpushed behind it",
+          "edits=0" in got, got.strip())
+
 
 # ─────────────────────────────────────────────────────────── scheduling ──
 

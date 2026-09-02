@@ -1525,3 +1525,122 @@ branch commit nonexistent and the rules never committed, calling it dispositive;
 checkout and asserted only one existed. `git cat-file -t` in the other returns `commit`. Every
 objection resting on other evidence was verified independently and stands. Sibling of resolve-ticket
 0.14.0's rule about a gate objection's numbers, and of #338's brief-checks-out finding.
+
+## 2026-09-02 (window: 7 records — #346 / #349-driver / #354 / #355 / #356 / #357 / #360) — 1 applied, 3 deferred to a contested file, 1 parked entry found reopened; linter 10 files, 0 findings
+
+Records: `2026-09-01-…-346.md` (PR 351), `2026-09-01-…-349-driver.md` (driver capture, outcome
+draft), `2026-09-02-…-354.md` (PR 365), `2026-09-02-chartsearchai-355.md` (PR 362),
+`2026-09-02-…-356.md` (PR 361), `2026-09-02-…-357.md` (PR 364), `2026-09-02-…-360.md` (PR 363).
+Submission: `proposals/2026-09-02-retro-window-346-354-355-356-357-360.md`.
+
+**A concurrent session was rewriting the governance surface while this pass ran, and none of those
+edits are this pass's.** `~/.claude/skills/pr-harden/SKILL.md` and `harden/SKILL.md` were modified at
+20:58, 21:04, 21:08 and 21:13 by pid 45786 (`claude --dangerously-skip-permissions`, started 20:58:10,
+cwd `openmrs-contrib-gha-workflows`), which also created and registered
+`~/.claude/hooks/no-subagent-model-override.sh` at 21:12. Live is +20 lines on `pr-harden` and +19 on
+`harden` against the repo, with no version bump on either. This retro did NOT apply to those two
+files, deliberately: a live writer owns them, and editing them is the `git checkout --` silent-loss
+class in a different costume. Whoever reconciles them owes the bumps and the `cmp` battery. This is
+NOT counted against the parked "a skill edit that never reached the repo" entry (:1519) — that entry
+is about a retro's own edits, and these are in flight rather than abandoned.
+
+**APPLIED · `gate-state` `count_edits` — the helper implemented the per-run reading its own docstring
+rejects.** Limb: clause 3, a script contradicting itself, plus one record measuring the cost. The
+docstring says "Per-cycle rather than per-run on purpose. The run's own total … does not return to
+zero while nothing has been pushed, so it would block the stop at the close of a pre-PR cycle that
+changed nothing" — and the first branch was `@{u}..HEAD`, which is exactly that reading whenever an
+upstream exists. `2026-09-02-…-357.md:28` measured the consequence: `edits=16` at convergence,
+0 only after the push. The record's own attribution ("on a branch with no upstream") is inverted and
+the fix rests on the code, not on it. The recorded per-cycle head now wins wherever it resolves;
+`@{u}..HEAD` is the fallback and says what it counted. Two new cases in `pool-test.py`, both verified
+to FAIL on the pre-fix helper (`edits=1` on a cycle that committed nothing) and pass after — 343
+passed / 0 failed.
+- **The prune was re-aimed by the gate and this is the part worth keeping.** The submission proposed
+  deleting "because a cycle that commits its work has still changed something". That clause is TRUE
+  and measured — it is #255/#229's justification for counting the commit half at all (:1135) — so
+  deleting it would have been Step 4's "never delete a measured rule". What was actually false is
+  "pre-PR `/harden` … is the configuration that has no upstream", and the gate proved it by reading
+  the branch-cut commands: #357 and #354 used `git checkout -b <b> origin/main` (upstream set, and
+  both pre-PR), #355/#356/#360 passed no start point (none). **No skill prescribes either form**, so
+  which reading a cycle got was decided by an incidental phrasing. That clause is deleted and replaced
+  by the measurement.
+- Residue: `harden`:284-288 repeats the superseded framing and still needs the same correction. It is
+  in the contested file and is owed with the reconciliation above.
+
+**DEFERRED, not killed — three proposals whose home is `pr-harden`/`harden`.** All three survived the
+gate as REVISE; none was applied, for the concurrent-writer reason above. Their revised form:
+- **P1 · commit-first outranks "one commit per round"** (clause 3; `2026-09-02-chartsearchai-355.md:31`
+  verbatim). Survives. Revisions the gate forced: one clause appended at `pr-harden`:509, not two
+  sentences, because :510-511 already gives the rationale (amend/force-push is the named harm); drop
+  the "a round in which a probe is run cannot satisfy both" half, which **no record witnesses** — all
+  four probe incidents lost work because the commit was SKIPPED, none records a second commit; and the
+  `cp`-aside kill is the SECOND 2026-08-24 block (:52), not the first (:9).
+- **P2 · a 429 names a clock.** Survives only in part, and its home was wrong. Both cited deaths are
+  **harden** agents, not pr-harden phases (#356's sits between the cycle-1 and cycle-2 writes; #354's
+  both precede `gh pr create`), so :1289-1290's standing precedent — "#338's death is a harden cycle-4
+  agent, so it is not cited in a document that counts rounds" — refuses them in the pr-harden
+  paragraph. Its real home is the parked harden Phase 2 entry at :1258-1260, whose **REOPEN ON: a
+  remedy that answers a limit refusing every retry for hours** this window meets (2 records → 4).
+  **The submitted wording is also measurably false**: "a retry spent before the reset changes nothing"
+  is refuted by `2026-09-02-…-357.md:27` ("The lever that worked both times was a cheaper model") —
+  only an UNCHANGED pre-reset retry is idle. And the live 21:13 text already carries a WAITING remedy
+  with its confound stated ("that retry also changed model, so the reset and the model are not
+  separated by it"), which removes #354 as a witness and leaves #356 alone.
+- **P4 · a control whose subject the data cannot produce.** Survives at 2 records, but not the two
+  submitted. #355's [r6] matrix is a quantifier over a CONSTRUCTED set, not an empty input — :1104's
+  ruling against merging mechanisms into a family applies and it is dropped. The admissible second
+  sighting is #355's own verifier bullet (a briefed check "could not have witnessed what it was for,
+  and it constructed one that could, plus a positive control") beside #360's typo control. Must be
+  keyed on the POSITIVE CONTROL, not on "show the input is non-empty", and must state its trigger, or
+  it restates `harden`:231 ("ask of it what its inputs could not have produced") — which never fires
+  here, because a negative control is EXPECTED to stay green. The #266 precedent at :849 does not kill
+  it: there the mutation check caught it at cost 0, here it did not and two pr-harden reads did.
+
+**A parked entry this window REOPENS, which the submission missed entirely.** :1403-1406 — "A brief's
+own factual claims going unchecked: **1 record** (#338). REOPEN ON: a second record."
+`2026-09-02-chartsearchai-355.md:17,28` is it: the VERIFIER's brief asserted "warfarin is in
+ibuprofen's compact tail on the shipped KB", measured over the bundled 16-drug excerpt rather than the
+shipped KB, and the verifier caught the brief rather than the code. **Count: 2, reopen met, no
+proposal drafted** — its home is a brief in the contested files, so it goes to the next pass with the
+rest.
+
+### Running parked counts
+- `git checkout -- <path>` losing uncommitted work: **~21 incidents / 17 records** — previous ~17/13
+  (:1372), plus four this window (#346, #356, #357, #360), every one the ORCHESTRATOR's own probe.
+  **The submission published ~19/16, taken from the SUPERSEDED 2026-08-30 block (~15/12)** — the exact
+  defect :1483 recorded one pass ago. Remedies stay killed and :81's reopen ("an incident where
+  'commit before probing' WAS followed") is **still unmet**: all four say the commit was skipped.
+  One new datum, cause unestablished: #346 reports "No PreToolUse backup was found at the paths the
+  skill names" while #357 records recovering FROM that backup on the same class of incident.
+- Rate-limit agent death: **11 records** — previous 6 (:1378), plus all five runs of this window
+  (#354, #355, #356, #357, #360).
+- Prose-correction cycles: **~24 records** — previous ~20, plus #354 (cycles 3-7), #355 (5 cycles,
+  "nine of ~twenty corrections were themselves wrong"), #357 (c5/c8), #360 (four consecutive).
+  Remedy still killed; deletion-over-rewording is the shipped rule, and #354 converged by publishing
+  no mapping at all.
+- pr-harden's round cap raised past its default: **2 records** — previous 1 (#339, :1398), plus #355
+  (4→9, one at a time, each with the signal stated, converged). Banked as the shipped rule working.
+- Dead-agent residue disposition: **3 records, bar met, no rule derivable** — #357 discarded it, #360
+  completed it in-session ("cheaper than the two retries the contract allows"), #355 committed it
+  before retrying. Three dispositions, no discriminator the records settle. #360's is stated AGAINST
+  the shipped contract, which is its own observation. **REOPEN ON:** a record where completing a dead
+  agent's residue in-session shipped something a retry would have caught.
+- The refutation gate APPLYING the plan and running the suite: **1 record** (#357:8, 1 of 1713 red,
+  cost 0 rounds). In tension with `resolve-ticket`:232-233's "read-only by instruction" — though that
+  same passage already anticipates mutation ("Tell it to restore anything it changed before it
+  reports"), so the tension is with silence about applying, not with an unguarded claim. **REOPEN ON:**
+  a second record.
+- A `pr-<n>-r<round>` fetch ref ending up checked out: **1 record** (#355), remedy stated there.
+- A repo size/budget guard overflowed by MERGING the base: **1 record** (#355).
+- An agent stalled with no positive liveness signal: **1 record** (#346). The submission's second
+  sighting was withdrawn at the gate: it claimed #356's run "predates `pr-harden` 0.16.0, which now
+  blesses the bash-task half", but the blessing is **0.15.0**'s (`dd99bb5`, 2026-09-01 22:28) and
+  #356's session begins 2026-09-01T23:39 — after it.
+- Runs ending without writing a run record: #349 (`claude -p` exited 1, 4h11m, 2011 assistant turns,
+  outcome draft). Nothing corroborated from it, by instruction.
+- **The proposer not verifying its own citations: 13 cycles / 11 records** — previous 12/10 (:1320).
+  This pass added three of its own, all cut at the gate: the superseded checkout count, the #356/0.16.0
+  mis-attribution, and the wrong 2026-08-24 block for the `cp` kill.
+- **A retro submitting wording that breaks the counts/universals rule it enforces: unbroken.** This
+  pass's P4 shipped "no production mutation reddens it" and P2 "a retry spent before it changes
+  nothing"; the gate cut both as unverified universals.

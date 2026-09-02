@@ -128,14 +128,20 @@ def count_edits(cwd: str, since: str | None = None) -> tuple[int, str]:
     """What a `/harden` cycle changed: uncommitted lines plus the commits the cycle added.
 
     Both halves, because a cycle that commits its work has still changed something and a gate reading
-    only `git status` would let it stop. With an upstream the commit half is `@{u}..HEAD`. Without one
-    it is `<since>..HEAD`, where `since` is the head the previous cycle of THIS run recorded.
+    only `git status` would let it stop. The commit half is `<since>..HEAD`, where `since` is the head
+    the previous cycle of THIS run recorded; `@{u}..HEAD` is the fallback for a cycle that has no such
+    head yet, and it is a per-BRANCH total rather than this cycle's work.
 
-    That second reading is here because the first silently had no answer: on #255 and #229 this
-    counted `edits=0` for cycles carrying 9 and 3 unpushed commits, because `git rev-list @{u}..HEAD`
-    on a branch with no upstream fails and prints nothing. The gate allows the stop at 0, so that was
-    the fail-open direction -- and pre-PR `/harden`, which is where `resolve-ticket` runs it, is the
-    configuration that has no upstream.
+    Measuring against the recorded head is here because `@{u}..HEAD` failed in both directions. It had
+    no answer at all where there is no upstream: on #255 and #229 this counted `edits=0` for cycles
+    carrying 9 and 3 unpushed commits, because `git rev-list @{u}..HEAD` on such a branch fails and
+    prints nothing, and the gate allows the stop at 0. And where an upstream DOES exist it never
+    returns to zero until the push, which is the opposite failure -- on #357 cycle 8 the gate read
+    `edits=16` on a converged cycle that committed nothing, and reached 0 only after the branch was
+    pushed. Which of the two a run got was decided by how its branch happened to be cut: #357 and #354
+    used `git checkout -b <branch> origin/main`, which sets `@{u}` to `origin/main`, while #355, #356
+    and #360 passed no start point and had no upstream. No skill prescribes either form, and both were
+    pre-PR, so "pre-PR has no upstream" was never a property of the configuration.
 
     Per-cycle rather than per-run on purpose. The run's own total (`HEAD --not --remotes`) does not
     return to zero while nothing has been pushed, so it would block the stop at the close of a pre-PR
@@ -147,17 +153,23 @@ def count_edits(cwd: str, since: str | None = None) -> tuple[int, str]:
     measured zero.
     """
     dirty = len([l for l in _git(cwd, "status", "--porcelain").splitlines() if l.strip()])
-    if _git(cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"):
+    upstream = bool(_git(cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"))
+    resolves = bool(since) and bool(
+        _git(cwd, "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"))
+    if resolves:
+        ahead = _git(cwd, "rev-list", "--count", f"{since}..HEAD")
+        if ahead.isdigit():
+            return dirty + int(ahead), ""
+        if not upstream:
+            return dirty, f"no upstream and {since[:12]}..HEAD did not count: commit half not measured"
+    if upstream:
         ahead = _git(cwd, "rev-list", "--count", "@{u}..HEAD")
-        return dirty + (int(ahead) if ahead.isdigit() else 0), ""
+        return dirty + (int(ahead) if ahead.isdigit() else 0), (
+            "no usable head from an earlier cycle: the commit half is everything unpushed on this "
+            "branch rather than this cycle's work, so it can read non-zero on a converged cycle")
     if not since:
         return dirty, "no upstream, no head from an earlier cycle: commit half not measured"
-    if not _git(cwd, "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"):
-        return dirty, f"no upstream and head {since[:12]} no longer resolves: commit half not measured"
-    ahead = _git(cwd, "rev-list", "--count", f"{since}..HEAD")
-    if not ahead.isdigit():
-        return dirty, f"no upstream and {since[:12]}..HEAD did not count: commit half not measured"
-    return dirty + int(ahead), ""
+    return dirty, f"no upstream and head {since[:12]} no longer resolves: commit half not measured"
 
 
 class _Parser(argparse.ArgumentParser):
