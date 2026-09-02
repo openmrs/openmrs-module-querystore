@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.25.0
+version: 0.26.0
 ---
 
 # Harden
@@ -235,6 +235,15 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
   took the argument the edit used, so nothing compiled and nothing ran; in a compiling form it reddened
   two cases. On #263 three configurations ran unmutated because `zsh` does not word-split an unquoted
   `$var`, and it surfaced only because a figure that should have moved did not.
+- **A guard expected to stay GREEN needs a positive control, and no mutation of production reaches
+  it.** The revert-check and the add-a-guard obligation both test a guard that SHOULD redden; a
+  negative assertion — "nothing was injected", "this name does not appear" — is supposed to pass, so
+  a green suite says nothing about whether its subject could ever have arisen. Build the case it exists for and watch it FAIL.
+  Measured on #360: a control's chart came from a helper that wires no validator, so the collection
+  it asserted was empty could not have held anything, and two successive review rounds — not the
+  mutation check — found it. On #355 a verifier briefed to look for a partner the shipped data does
+  not carry re-drove the contract with one it does, plus a control, rather than reporting the absence
+  as a result.
 - **And ask whether the thing you fixed has a SIBLING. The revert-check above cannot answer that** —
   reverting a fix shows the suite observes it, and says nothing about a second member of the same
   family still carrying the defect. Three runs, and in each one the un-widened sibling left the suite
@@ -300,11 +309,17 @@ has not returned inside it is treated as dead rather than outstanding.
 ~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 4 --count-edits
 ```
 
-`--count-edits` is what counts them: uncommitted lines plus commits not yet pushed — or, on a branch
-with no upstream, the commits made since the previous cycle of this run closed — both halves, because
-a cycle that commits its work has still changed something. Pre-PR that second reading is the live one,
-and it is why the helper records this cycle's `head` on every write: on #255 and #229 the first reading
-alone scored `edits=0` for cycles carrying 9 and 3 unpushed commits, and the gate reads 0 as converged.
+`--count-edits` is what counts them: uncommitted lines plus the commits made since the previous cycle
+of this run closed — both halves, because a cycle that commits its work has still changed something.
+That is why the helper records this cycle's `head` on every write. **Do not read the fallback as the
+same measurement**: where no recorded head resolves, the commit half becomes `@{u}..HEAD`, which is
+everything unpushed on the BRANCH and does not return to zero until the push, so it can read non-zero
+on a cycle that changed nothing. Both directions have been paid for — on #255 and #229 an upstream-only
+reading scored `edits=0` for cycles carrying 9 and 3 unpushed commits, which the gate reads as
+converged; on #357 the branch had an upstream and cycle 8 read `edits=16` at convergence. Which one a
+run met was decided by whether its branch was cut in a form that sets an upstream (`git checkout -b
+<branch> origin/main` does; pulling `main` first and branching off it does not) — a choice
+`resolve-ticket` Step 4 leaves open, and neither form is wrong.
 Where it cannot measure the commit half — a first cycle with no earlier head, or a recorded head that
 stopped resolving after a rebase or a recreated checkout — the helper prints that, instead of counting
 it as zero; that line is yours to answer with your own `git log`. It is counted THERE and not here

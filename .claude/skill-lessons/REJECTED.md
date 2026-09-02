@@ -1526,7 +1526,7 @@ checkout and asserted only one existed. `git cat-file -t` in the other returns `
 objection resting on other evidence was verified independently and stands. Sibling of resolve-ticket
 0.14.0's rule about a gate objection's numbers, and of #338's brief-checks-out finding.
 
-## 2026-09-02 (window: 7 records — #346 / #349-driver / #354 / #355 / #356 / #357 / #360) — 1 applied, 3 deferred to a contested file, 1 parked entry found reopened; linter 10 files, 0 findings
+## 2026-09-02 (window: 7 records — #346 / #349-driver / #354 / #355 / #356 / #357 / #360) — 3 applied, 1 deferred, 1 parked entry found reopened; linter 10 files, 0 findings
 
 Records: `2026-09-01-…-346.md` (PR 351), `2026-09-01-…-349-driver.md` (driver capture, outcome
 draft), `2026-09-02-…-354.md` (PR 365), `2026-09-02-chartsearchai-355.md` (PR 362),
@@ -1537,12 +1537,14 @@ Submission: `proposals/2026-09-02-retro-window-346-354-355-356-357-360.md`.
 edits are this pass's.** `~/.claude/skills/pr-harden/SKILL.md` and `harden/SKILL.md` were modified at
 20:58, 21:04, 21:08 and 21:13 by pid 45786 (`claude --dangerously-skip-permissions`, started 20:58:10,
 cwd `openmrs-contrib-gha-workflows`), which also created and registered
-`~/.claude/hooks/no-subagent-model-override.sh` at 21:12. Live is +20 lines on `pr-harden` and +19 on
-`harden` against the repo, with no version bump on either. This retro did NOT apply to those two
-files, deliberately: a live writer owns them, and editing them is the `git checkout --` silent-loss
-class in a different costume. Whoever reconciles them owes the bumps and the `cmp` battery. This is
-NOT counted against the parked "a skill edit that never reached the repo" entry (:1519) — that entry
-is about a retro's own edits, and these are in flight rather than abandoned.
+`~/.claude/hooks/no-subagent-model-override.sh` at 21:12. At 21:08 live was +20 lines on `pr-harden`
+and +19 on `harden` against the repo with neither version bumped; by 21:19 that session had bumped
+both, committed `e362818` and left live byte-identical with the repo again. **Nothing was applied to
+those two files until it had** — editing them mid-flight is the `git checkout --` silent-loss class in
+a different costume, and a diff-only edit re-opens what their measurements closed. The uncontested
+half (`gate-state`) went first and was committed before any skill edit began, which is P1's own rule
+applied to this pass. Not counted against the parked "a skill edit that never reached the repo" entry
+(:1519): those edits reached it.
 
 **APPLIED · `gate-state` `count_edits` — the helper implemented the per-run reading its own docstring
 rejects.** Limb: clause 3, a script contradicting itself, plus one record measuring the cost. The
@@ -1567,15 +1569,16 @@ passed / 0 failed.
 - Residue: `harden`:284-288 repeats the superseded framing and still needs the same correction. It is
   in the contested file and is owed with the reconciliation above.
 
-**DEFERRED, not killed — three proposals whose home is `pr-harden`/`harden`.** All three survived the
-gate as REVISE; none was applied, for the concurrent-writer reason above. Their revised form:
+**APPLIED once those files settled — `harden` 0.26.0, `pr-harden` 0.18.0.** Both shipped in the
+gate's revised form, never as submitted:
 - **P1 · commit-first outranks "one commit per round"** (clause 3; `2026-09-02-chartsearchai-355.md:31`
   verbatim). Survives. Revisions the gate forced: one clause appended at `pr-harden`:509, not two
   sentences, because :510-511 already gives the rationale (amend/force-push is the named harm); drop
   the "a round in which a probe is run cannot satisfy both" half, which **no record witnesses** — all
   four probe incidents lost work because the commit was SKIPPED, none records a second commit; and the
-  `cp`-aside kill is the SECOND 2026-08-24 block (:52), not the first (:9).
-- **P2 · a 429 names a clock.** Survives only in part, and its home was wrong. Both cited deaths are
+  `cp`-aside kill is the SECOND 2026-08-24 block (:52), not the first (:9). Shipped at the COMMIT
+  step as one clause, on the residue case only.
+- **DEFERRED · P2 · a 429 names a clock.** Survives only in part, and its home was wrong. Both cited deaths are
   **harden** agents, not pr-harden phases (#356's sits between the cycle-1 and cycle-2 writes; #354's
   both precede `gh pr create`), so :1289-1290's standing precedent — "#338's death is a harden cycle-4
   agent, so it is not cited in a document that counts rounds" — refuses them in the pr-harden
@@ -1585,7 +1588,9 @@ gate as REVISE; none was applied, for the concurrent-writer reason above. Their 
   is refuted by `2026-09-02-…-357.md:27` ("The lever that worked both times was a cheaper model") —
   only an UNCHANGED pre-reset retry is idle. And the live 21:13 text already carries a WAITING remedy
   with its confound stated ("that retry also changed model, so the reset and the model are not
-  separated by it"), which removes #354 as a witness and leaves #356 alone.
+  separated by it"), which removes #354 as a witness and leaves #356 alone. **Not applied**: revising
+  text another session wrote minutes earlier, without its reasoning, is what `skill-retro`'s
+  edit-from-the-diff anti-pattern forbids. Carried to the next pass, against :1258-1260.
 - **P4 · a control whose subject the data cannot produce.** Survives at 2 records, but not the two
   submitted. #355's [r6] matrix is a quantifier over a CONSTRUCTED set, not an empty input — :1104's
   ruling against merging mechanisms into a family applies and it is dropped. The admissible second
@@ -1595,6 +1600,20 @@ gate as REVISE; none was applied, for the concurrent-writer reason above. Their 
   it restates `harden`:231 ("ask of it what its inputs could not have produced") — which never fires
   here, because a negative control is EXPECTED to stay green. The #266 precedent at :849 does not kill
   it: there the mutation check caught it at cost 0, here it did not and two pr-harden reads did.
+  Shipped in `harden`'s Termination, with a pointer from `pr-harden`'s guard list.
+
+**Also applied · the doc half of the `gate-state` fix** (`harden`'s `--count-edits` paragraph).
+"Pre-PR that second reading is the live one" is deleted, replaced by both measured directions and by
+what decides which one a run meets. Leaving the code fixed and its account stale is the
+two-resolutions-that-disagree shape the pipeline skills forbid elsewhere.
+
+**Net +22 lines across the two skills, and the pruning is thin — say so rather than dress it up.**
+One false clause deleted with its replacement measured; the other three additions subsume nothing.
+The growth is justified per addition rather than in aggregate: each is a rule with a measurement, and
+P4's is the only class in this window the existing evidence rules provably cannot reach. **Two
+defects in this pass's own additions, both caught by its own review rounds:** a positional
+cross-reference ("the bullet above") written into `harden`, whose own :384 forbids exactly that; and
+a branch-cut claim scoped to "here" when the branch is cut in `resolve-ticket` Step 4.
 
 **A parked entry this window REOPENS, which the submission missed entirely.** :1403-1406 — "A brief's
 own factual claims going unchecked: **1 record** (#338). REOPEN ON: a second record."
