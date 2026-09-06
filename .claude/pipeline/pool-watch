@@ -1,0 +1,409 @@
+#!/usr/bin/env python3
+"""pool-watch — read a pool session's stream the way an interactive session reads.
+
+`pool-run` starts each ticket as `claude -p --output-format stream-json`, so the whole session — every
+assistant message, every tool call, every subagent spawn and its progress — is already on disk as
+newline-delimited JSON under `~/.claude/pipeline/logs/`. This renders it, live or after the fact.
+
+It only ever READS. It is safe to run against a session in flight, which is the point: the alternative,
+`claude --resume <session-id>`, attaches a second writer to a live session and must not be pointed at
+one that is still running.
+
+Usage:
+  pool-watch                 follow the live session; lists them if several are live
+  pool-watch 310             follow the newest session for that ticket
+  pool-watch <file.jsonl>    follow that file
+  pool-watch --replay        print what is there and exit, do not follow
+  pool-watch --results       include tool RESULTS, not just the calls (verbose)
+  pool-watch --thinking      include thinking blocks
+  pool-watch --tail 50       start from the last N events rather than the beginning
+  pool-watch --list          list the sessions on disk, newest first
+  pool-watch --live          what is RUNNING right now: every session, its ticket, its gate
+                             phase, what it is waiting on, and the slot it holds
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import re
+import os
+import sys
+import time
+from pathlib import Path
+
+LOGS = Path.home() / ".claude/pipeline/logs"
+
+
+CLAUDE = Path.home() / ".claude"
+SLOTS = CLAUDE / "pipeline/slots"
+
+
+def _run(args: list[str]) -> str:
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def live_sessions_detail() -> list[dict]:
+    """Every `claude` process running now, with what the pipeline knows about each.
+
+    This exists because it had to be assembled by hand, repeatedly, on a day when several sessions
+    were running at once — and getting it wrong once was enough to delete a live run's worktree. The
+    facts that mattered were never in one place: which processes are sessions, what each is working
+    in, what its Stop gate thinks, whether it is waiting on an agent, and whether it holds a slot.
+
+    Read-only throughout. The gate files are read directly rather than through `gate-state`, because
+    this must never take that lock or write those files while other runs depend on them.
+    """
+    out = []
+    for line in _run(["ps", "-eo", "pid=,etime=,command="]).splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3:
+            continue
+        pid, etime, cmd = parts
+        exe = cmd.split()[0]
+        if not (exe.endswith("/claude") or exe == "claude"):
+            continue
+        if "Helper" in cmd or ".app/" in cmd:
+            continue
+        cwd = ""
+        for l in _run(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"]).splitlines():
+            if l.startswith("n"):
+                cwd = l[1:]
+        out.append({"pid": pid, "etime": etime, "cmd": cmd, "cwd": cwd})
+
+    gates = {}
+    for name in ("pr-harden-state.json", "harden-state.json"):
+        try:
+            gates[name] = json.loads((CLAUDE / name).read_text())
+        except (OSError, ValueError):
+            gates[name] = {}
+    leases = {}
+    for f in sorted(SLOTS.glob("*.json")) if SLOTS.is_dir() else []:
+        try:
+            leases[f.stem] = json.loads(f.read_text())
+        except (OSError, ValueError):
+            pass
+
+    for s in out:
+        key = os.path.realpath(s["cwd"]) if s["cwd"] else ""
+        s["gate"] = gates["pr-harden-state.json"].get(key, {})
+        s["harden"] = gates["harden-state.json"].get(key, {})
+        s["slot"] = next((n for n, l in leases.items() if l.get("worktree") == s["cwd"]), None)
+        # A ticket is knowable from the argv of a `--work` session, or from the gate entry.
+        m = re.search(r"/resolve-ticket\s+\S*?(?:issues/|browse/)?([A-Z]+-\d+|\d+)\b", s["cmd"])
+        s["ticket"] = m.group(1) if m else (s["gate"].get("ticket") or "")
+        # Anchored on the TICKET SEGMENT of the stem, never a bare substring: the driver names a
+        # stream `<utc-stamp>-<slug>-<ticket>.jsonl`, and a bare match puts ticket 293 on a file
+        # whose TIMESTAMP happens to contain "2937".
+        s["stream"] = next((x.name for x in sessions()
+                            if s["ticket"] and x.stem.endswith(f"-{s['ticket']}")), None)
+    return out
+
+
+def pipeline_relevant(s: dict) -> bool:
+    """A session this pipeline has anything to say about.
+
+    Every `claude` on the machine is not the answer to "what is running": there are routinely dozens
+    across unrelated repos, and burying the two that hold slots in that list is how a live run gets
+    mistaken for a leftover. A session qualifies if the pipeline knows something about it — a gate
+    entry, a slot, or a `/resolve-ticket` in its own argv.
+    """
+    return bool(s.get("gate") or s.get("harden") or s.get("slot")
+                or "/resolve-ticket" in s.get("cmd", ""))
+
+
+def print_live(show_all: bool = False) -> int:
+    rows = live_sessions_detail()
+    total = len(rows)
+    if not show_all:
+        rows = [r for r in rows if pipeline_relevant(r)]
+    if not rows:
+        print(f"no pipeline sessions are running ({total} other claude session(s) on this machine; "
+              "--live --all lists them).")
+        return 0
+    now_ts = time.time()
+    for s in sorted(rows, key=lambda r: r["cwd"]):
+        home = str(Path.home())
+        where = (s["cwd"] or "?").replace(home, "~")
+        head = f"pid {s['pid']}  up {s['etime']}"
+        if s["ticket"]:
+            head += f"  ·  #{s['ticket']}"
+        if s["slot"]:
+            head += f"  ·  {s['slot']}"
+        print(head)
+        # A session whose working directory has been deleted underneath it is the single most
+        # important thing this view can say, and the only way I found it before was comparing inodes
+        # by hand. `os.path.exists` is not enough: a directory RECREATED at the same path is a
+        # different inode, and the process still holds the old one.
+        gone = ""
+        if s["cwd"]:
+            try:
+                held = int(_run(["lsof", "-a", "-p", s["pid"], "-d", "cwd", "-Fi"]).split("i")[-1])
+                gone = "" if held == os.stat(s["cwd"]).st_ino else "   <- DELETED underneath it"
+            except (OSError, ValueError, IndexError):
+                gone = "   <- gone" if not os.path.isdir(s["cwd"]) else ""
+        print(f"    {where}{gone}")
+        g = s["gate"]
+        if g:
+            bits = [f"phase={g.get('phase')}", f"blocking={g.get('blocking')}"]
+            if g.get("pr"):
+                bits.append(f"pr={g['pr']}")
+            if g.get("override"):
+                bits.append("OVERRIDE")
+            print("    gate: " + "  ".join(str(b) for b in bits))
+            for a in g.get("awaiting") or []:
+                age = int(now_ts - (a.get("since") or now_ts))
+                warn = "  (past the gate's 1h allowance)" if age > 3600 else ""
+                print(f"    waiting on: {a.get('agent')} — {age // 60}m{age % 60:02d}s{warn}")
+        h = s["harden"]
+        if h.get("edits") is not None:
+            print(f"    harden: cycle={h.get('cycle')} edits={h.get('edits')}")
+        # A `--work` session is an ordinary interactive `claude`; only the headless driver writes a
+        # stream. Saying so is the point — otherwise "no session found" reads like something is lost.
+        if s["stream"]:
+            print(f"    stream: pool-watch {Path(s['stream']).stem}")
+        elif "--remote-control" in s["cmd"] or s["slot"]:
+            print("    stream: none — interactive session, watch its own terminal")
+        print()
+    held = {n: l for n, l in
+            ((f.stem, json.loads(f.read_text())) for f in sorted(SLOTS.glob("*.json"))
+             if SLOTS.is_dir())} if SLOTS.is_dir() else {}
+    orphan = [n for n, l in held.items()
+              if not any(r["slot"] == n for r in rows)]
+    if orphan:
+        print("slots held by no running session: " + ", ".join(
+            f"{n} (#{held[n].get('ticket')})" for n in sorted(orphan)))
+        print("  `pool-run --release <ticket>` gives one back.")
+    if not show_all and total > len(rows):
+        print(f"({total - len(rows)} other claude session(s) on this machine are not pipeline work; "
+              "--live --all shows them)")
+    return 0
+
+
+def sessions() -> list[Path]:
+    return sorted(LOGS.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+LIVE_WINDOW = 120   # a stream written to within this many seconds is treated as still running
+
+
+def live_sessions() -> list[Path]:
+    """The streams still being written to. With one worker there is at most one; with several there
+    is one per ticket in the wave, and "the newest" then silently picks whichever wrote last."""
+    now = time.time()
+    return [s for s in sessions() if now - s.stat().st_mtime < LIVE_WINDOW]
+
+
+def pick(target: str | None) -> Path | None:
+    if target:
+        p = Path(target)
+        if p.is_file():
+            return p
+        hits = [s for s in sessions() if target in s.name]
+        return hits[0] if hits else None
+    live = live_sessions()
+    if len(live) > 1:
+        # Do not guess. Under a parallel pool "the newest session" is whichever of the wave last
+        # flushed a line, which changes second to second — following it would hop between tickets
+        # mid-render and read as one incoherent run.
+        print(f"{len(live)} sessions are live right now — name the one you want:\n")
+        for s in live:
+            print(f"  pool-watch {s.stem}")
+        print("\n(or `pool-watch <ticket>`; `--list` shows every session on disk)")
+        return None
+    if live:
+        return live[0]
+    all_ = sessions()
+    return all_[0] if all_ else None
+
+
+def wrap(text: str, indent: str = "  ") -> str:
+    return "\n".join(indent + line for line in text.rstrip().splitlines())
+
+
+def one_line(value, limit: int) -> str:
+    s = " ".join(str(value).split())
+    return s if len(s) <= limit else s[: limit - 1] + "…"
+
+
+# The argument of the most recent tool call rendered. A backgrounded Bash task emits a progress event
+# whose description is "Running <that same command>", and it carries a subagent_type like a real agent's
+# does — so type cannot tell them apart and the text has to. Without this every Bash call printed twice.
+LAST_TOOL = {"arg": ""}
+
+
+def tool_line(block: dict, width: int) -> str:
+    name = block.get("name", "?")
+    arg = block.get("input", {}) or {}
+    for key in ("command", "file_path", "pattern", "prompt", "skill", "url", "description"):
+        if arg.get(key):
+            LAST_TOOL["arg"] = " ".join(str(arg[key]).split())
+            return f"⏺ {name}({one_line(arg[key], width)})"
+    LAST_TOOL["arg"] = ""
+    return f"⏺ {name}"
+
+
+def echoes_last_tool(description: str) -> bool:
+    text = " ".join(str(description).split())
+    for prefix in ("Running ", "Ran "):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+            break
+    else:
+        return False
+    # The harness truncates its own description with an ellipsis, so a full-string prefix test never
+    # matched and 41 of 42 echoes survived the first attempt. Compare a short head of each, ellipsis
+    # removed from both ends of the shorter one.
+    text = text.rstrip(". …").rstrip("…").strip()
+    last = LAST_TOOL["arg"]
+    head = 40
+    return bool(last) and bool(text) and (
+        last.startswith(text[:head]) or text.startswith(last[:head]))
+
+
+def render(event: dict, opts) -> None:
+    kind = event.get("type")
+
+    if kind == "system":
+        sub = event.get("subtype")
+        if sub == "init":
+            # The full id, not a prefix: it is what `claude --resume <id>` takes, once the run is done.
+            print(f"\n─── session {event.get('session_id','?')} · cwd {event.get('cwd','?')}\n")
+        elif sub == "task_started":
+            # Two different things arrive here and conflating them made a backgrounded Bash command
+            # render as a nameless subagent with its whole heredoc as the description. A real subagent
+            # names its type; a background task does not.
+            kind_of = event.get("subagent_type")
+            what = one_line(event.get("description", ""), opts.width)
+            if kind_of:
+                print(f"\n  ╭ subagent [{kind_of}] {what}")
+            else:
+                print(f"  ⇢ background task: {what}")
+        elif sub == "task_progress":
+            # Only a real subagent's progress is news. A background task's progress line repeats the
+            # tool call printed immediately above it.
+            what = event.get("description", "")
+            if event.get("subagent_type") and not echoes_last_tool(what):
+                print(f"  │ {one_line(what, opts.width)}")
+        elif sub == "task_notification":
+            print(f"  ╰ finished: {event.get('status','?')}\n")
+        return
+
+    if kind == "assistant":
+        for block in event.get("message", {}).get("content", []) or []:
+            btype = block.get("type")
+            if btype == "text" and block.get("text", "").strip():
+                print(wrap(block["text"]))
+                print()
+            elif btype == "thinking" and opts.thinking:
+                print(wrap("(thinking) " + one_line(block.get("thinking", ""), 4000), "  · "))
+            elif btype == "tool_use":
+                print(tool_line(block, opts.width))
+        return
+
+    if kind == "user" and opts.results:
+        for block in event.get("message", {}).get("content", []) or []:
+            if block.get("type") == "tool_result":
+                body = block.get("content")
+                if isinstance(body, list):
+                    body = " ".join(b.get("text", "") for b in body if isinstance(b, dict))
+                mark = "✗" if block.get("is_error") else "↳"
+                print(f"  {mark} {one_line(body or '', opts.width)}")
+        return
+
+    if kind == "result":
+        cost = event.get("total_cost_usd")
+        print("\n─── result: " + str(event.get("subtype", "?"))
+              + (f" · ${cost:.2f}" if isinstance(cost, (int, float)) else "")
+              + f" · {event.get('num_turns','?')} turns")
+        if event.get("result"):
+            print(wrap(str(event["result"])))
+        print()
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="watch a pool session's stream")
+    ap.add_argument("target", nargs="?", help="ticket number, filename fragment, or a path")
+    ap.add_argument("--replay", action="store_true", help="print and exit, do not follow")
+    ap.add_argument("--results", action="store_true", help="include tool results")
+    ap.add_argument("--thinking", action="store_true", help="include thinking blocks")
+    ap.add_argument("--tail", type=int, default=0, help="start from the last N events")
+    ap.add_argument("--width", type=int, default=140, help="truncation width for one-liners")
+    ap.add_argument("--list", action="store_true", help="list sessions, newest first")
+    ap.add_argument("--all", action="store_true",
+                    help="with --live: every claude session, not only pipeline work")
+    ap.add_argument("--live", action="store_true",
+                    help="what is RUNNING right now, across driver, --work and hand-launched "
+                         "sessions, with each one's gate state and slot")
+    opts = ap.parse_args()
+
+    if opts.live:
+        return print_live(opts.all)
+
+    if opts.list:
+        for s in sessions():
+            age = (time.time() - s.stat().st_mtime) / 60
+            print(f"  {s.name}  {s.stat().st_size // 1024}k  touched {age:.0f}m ago")
+        return 0
+
+    path = pick(opts.target)
+    if not path:
+        print(f"no stream found under {LOGS}" + (f" matching {opts.target!r}" if opts.target else ""))
+        # Only the headless driver writes a stream. A ticket worked by `pool-run --work` runs as an
+        # ordinary interactive `claude`, so there is nothing on disk to follow and "not found" would
+        # otherwise read as something lost. Say which it is.
+        live = [r for r in live_sessions_detail()
+                if not opts.target or str(opts.target) in (str(r.get("ticket")) + r.get("cmd", ""))]
+        if live:
+            print("\nbut a session IS running for it — interactive, so it has no stream:")
+            for r in live:
+                print(f"  pid {r['pid']}  up {r['etime']}  {r['cwd'].replace(str(Path.home()), '~')}")
+            print("\nWatch its own terminal, or `pool-watch --live` for the whole picture.")
+        return 1
+    print(f"# {path.name}")
+
+    lines = path.read_text(errors="replace").splitlines()
+    if opts.tail:
+        lines = lines[-opts.tail:]
+    seen = 0
+    with open(path, errors="replace") as f:
+        for raw in lines:
+            seen += 1
+            try:
+                render(json.loads(raw), opts)
+            except ValueError:
+                pass  # the stream carries the occasional non-JSON warning line
+        if opts.replay:
+            return 0
+        f.seek(0)
+        for _ in range(seen if not opts.tail else 0):
+            f.readline()
+        if opts.tail:
+            f.seek(0, 2)
+        print("… following; ctrl-c to stop\n")
+        try:
+            while True:
+                where = f.tell()
+                raw = f.readline()
+                if not raw:
+                    time.sleep(1)
+                    f.seek(where)
+                    continue
+                try:
+                    event = json.loads(raw)
+                except ValueError:
+                    continue
+                render(event, opts)
+                if event.get("type") == "result":
+                    return 0
+        except KeyboardInterrupt:
+            print("\n(stopped watching; the session is unaffected)")
+            return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

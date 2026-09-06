@@ -9,6 +9,7 @@ description: >-
   or for inline comments on an open PR (use pr-review). Trigger phrases:
   "review this module", "review the <name> module", "code review this OpenMRS
   module", "post review comments for this module".
+version: 0.1.0
 ---
 
 # OpenMRS module review

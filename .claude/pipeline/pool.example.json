@@ -1,0 +1,23 @@
+{
+  "label": "claude-pipeline",
+  "repos": {
+    "openmrs/openmrs-module-chartsearchai": "/abs/path/to/your/checkout"
+  },
+  "source_repo": "/abs/path/to/openmrs-module-querystore",
+  "retro": {
+    "enabled": true,
+    "min_records": 2,
+    "timeout_seconds": 7200
+  },
+  "ticket": {
+    "timeout_seconds": 28800,
+    "max_attempts": 2,
+    "quiet_seconds": 5400
+  },
+  "claude": {
+    "model": null,
+    "effort": null,
+    "max_budget_usd": null,
+    "extra_args": []
+  }
+}
