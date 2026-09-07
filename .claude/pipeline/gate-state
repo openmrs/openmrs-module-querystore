@@ -262,6 +262,23 @@ def main() -> int:
             e.update({"round": args.round, "phase": args.phase, "blocking": args.blocking,
                       "override": bool(args.override)})
             if args.pr is not None:
+                # A reused checkout inherits the previous PR's ledger, and `setdefault` below cannot
+                # clear it. `pr-harden` Step 0 adopts an entry only when its `pr` MATCHES the PR being
+                # hardened or is null -- the `resolve-ticket` handoff -- and Step 1 compares the
+                # incoming head against `reviewed_shas`' last entry, so a ledger spanning two PRs is
+                # read as this PR's. Measured on #337/PR375: three shas reviewed on PR 345 survived
+                # into the next run of that ticket in the same worktree. `harden-set` guards the same
+                # reuse for `head`; this is that guard here. The handoff (`pr` null) keeps its ledger,
+                # and `awaiting` is nobody's ledger, so neither is touched.
+                prior = e.get("pr")
+                if prior is not None and prior != args.pr:
+                    shas, dec = e.get("reviewed_shas") or [], e.get("declined") or []
+                    e["reviewed_shas"], e["declined"] = [], []
+                    # Unconditional on the drop, not on the fields being non-empty: after the reset
+                    # the prior number is the only surviving evidence that this entry was another
+                    # PR's, which is what Step 0's take-over report rests on.
+                    print(f"pr {prior} -> {args.pr}: dropped the previous PR's ledger "
+                          f"({len(shas)} reviewed sha(s), {len(dec)} declined finding(s))")
                 e["pr"] = args.pr
             if args.ticket:
                 e["ticket"] = args.ticket

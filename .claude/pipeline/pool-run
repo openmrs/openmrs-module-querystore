@@ -2835,7 +2835,25 @@ def cmd_claim(cfg: dict, say: Say, token: str) -> int:
         say(f"export CLAUDE_PIPELINE_SLOT={env['CLAUDE_PIPELINE_SLOT']}")
         say("claude")
         say("")
-        say(f"then, in that session:   /resolve-ticket {issue.get('url') or claim['url']}")
+        if existing:
+            # The warning above says `pr-harden` owns an open PR, and then this printed
+            # `/resolve-ticket` anyway -- so the operator was told one skill and handed the command
+            # for the other, twice (#353 and #348, reported in two records). The worktree is detached
+            # at the base BY DESIGN (`make_worktree`: git refuses one branch in two worktrees), so
+            # something has to bring the head in for `pr-harden` Step 0, which wants the head branch
+            # TRACKING the remote. The branch form is printed first because it is the one that
+            # satisfies that; the ref form is the fallback for a branch another worktree holds, and
+            # it is detached, so it satisfies the checkout and not the tracking.
+            say("the PR is open, so bring its head into this worktree first:")
+            say(f"git fetch origin {existing['headRefName']} && "
+                f"git checkout -B {existing['headRefName']} --track origin/{existing['headRefName']}")
+            say(f"  (refused where another worktree holds that branch; then "
+                f"git fetch origin pull/{existing['number']}/head && git checkout FETCH_HEAD,")
+            say("   and `pr-harden` Step 0's tracking requirement is what you are trading away)")
+            say("")
+            say(f"then, in that session:   /pr-harden {existing['number']}")
+        else:
+            say(f"then, in that session:   /resolve-ticket {issue.get('url') or claim['url']}")
         say("")
         say(f"When it is done:         pool-run --release {token.lstrip('#')}")
         return 0

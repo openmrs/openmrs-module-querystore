@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.14.0
+version: 0.15.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -125,6 +125,11 @@ Parse the argument:
 ```bash
 curl -s "https://openmrs.atlassian.net/rest/api/2/issue/<KEY>?fields=summary,description,status,comment"
 ```
+
+**Empty output at exit 0 from `gh issue view` is that failure, not an empty ticket** — three runs met
+it (#236, #255, #347), each carrying the workaround into every agent brief, and #347 two wasted calls
+before it. `gh api repos/<owner>/<repo>/issues/<n>` returns the body; fetch the comments separately and
+confirm you got them before briefing anyone.
 
 That endpoint serves **unauthenticated** (verified: `TRUNK-6429` → 200). The `issues.openmrs.org`
 link people paste redirects to a dashboard and will not serve REST, so never reach for it.
@@ -459,6 +464,11 @@ here, where it is one line, rather than discovering it after the loop.
 
 Commit and push, then open the PR **as a draft** — it is about to take several rounds of commits, and
 a draft says that honestly to anyone watching the repo.
+
+**Draft is also what keeps the automatic reviewer off the rounds.** The Claude Code GitHub App
+reviews every push to a NON-draft PR and skips drafts entirely, so opening ready — or marking ready
+early — buys one automatic review per round. `pr-harden`'s FINISH owns the rule that follows from
+that: ready is the LAST action, after the last push. Do not pre-empt it here.
 
 Match the repo's title voice, which is distinctive here: `type(scope): ` followed by a lowercase
 sentence stating **the behaviour after the fix**, not the task performed — *"a long answer is no longer

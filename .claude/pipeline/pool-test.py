@@ -549,6 +549,46 @@ def test_gate_state_locking(tmp: Path) -> None:
     check("a converged cycle counts zero even with commits unpushed behind it",
           "edits=0" in got, got.strip())
 
+    # A reused checkout inherits the previous PR's ledger. `pr-harden` Step 0 adopts an entry only
+    # when its `pr` MATCHES the PR being hardened or is null (the `resolve-ticket` handoff), and Step
+    # 1 compares the incoming head against `reviewed_shas`' last entry — so a ledger spanning two PRs
+    # is read as this PR's. Measured on #337/PR375, where three shas reviewed on PR 345 survived into
+    # the next run in the same worktree. `harden-set` guards the same reuse for `head`; these two are
+    # that guard for the pr entry.
+    led = tmp / "ledger-wt"
+    led.mkdir()
+    sh([sys.executable, str(helper), "pr-set", "--pr", "345", "--round", "2",
+        "--phase", "reviewed", "--blocking", "1"], cwd=led, env=env)
+    sh([sys.executable, str(helper), "reviewed-sha", "a" * 40], cwd=led, env=env)
+    sh([sys.executable, str(helper), "declined", "--round", "1", "--id", "r1-2",
+        "--finding", "f", "--reason", "r"], cwd=led, env=env)
+    got = sh([sys.executable, str(helper), "pr-set", "--pr", "384", "--round", "1",
+              "--phase", "init", "--blocking", "0"], cwd=led, env=env).stdout
+    entry = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(led.resolve())]
+    check("a change of PR drops the previous PR's reviewed shas and declined ledger",
+          entry["reviewed_shas"] == [] and entry["declined"] == [], json.dumps(entry))
+    check("and says which PR's ledger it dropped", "345" in got and "384" in got, got.strip())
+    sh([sys.executable, str(helper), "reviewed-sha", "b" * 40], cwd=led, env=env)
+    sh([sys.executable, str(helper), "pr-set", "--pr", "384", "--round", "2",
+        "--phase", "reviewed", "--blocking", "0"], cwd=led, env=env)
+    entry = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(led.resolve())]
+    check("a transition write on the SAME pr keeps the round's own ledger",
+          entry["reviewed_shas"] == ["b" * 40], json.dumps(entry))
+
+    # The `resolve-ticket` handoff is the case that must NOT be cleared: it writes `pr: null` at Step
+    # 1 and the PR number only at Step 8, and Step 0 tells the loop to adopt that entry as its own.
+    hand = tmp / "handoff-wt"
+    hand.mkdir()
+    sh([sys.executable, str(helper), "pr-set", "--ticket", "379", "--round", "1",
+        "--phase", "building", "--blocking", "0"], cwd=hand, env=env)
+    sh([sys.executable, str(helper), "declined", "--round", "1", "--id", "r1-1",
+        "--finding", "f", "--reason", "r"], cwd=hand, env=env)
+    sh([sys.executable, str(helper), "pr-set", "--pr", "382", "--round", "1",
+        "--phase", "init", "--blocking", "0"], cwd=hand, env=env)
+    entry = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(hand.resolve())]
+    check("the resolve-ticket handoff keeps its ledger when the PR number arrives",
+          [d["id"] for d in entry["declined"]] == ["r1-1"], json.dumps(entry))
+
 
 # ─────────────────────────────────────────────────────────── scheduling ──
 

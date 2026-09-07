@@ -1740,3 +1740,176 @@ says nothing about the copy that matters for the next pool run. **Remedy applied
 was fast-forwarded to origin/main.** `pool.json` was NOT repointed — it is the pool driver's file and
 naming which checkout is authoritative is that file's job, not a retro's. **REOPEN ON:** a pool-run
 retro that commits on the stale base, or a third checkout.
+
+## 2026-09-07 (window: 13 records — #336/PR368, #347/PR367, #354, #366, #348/PR369, #370/PR371, #337/PR375, #338/PR376, #377/PR381, #378, #379/PR382, #337/PR384, #280/PR383) — 9 applied after revision, 1 killed, 2 limbs killed, 8 parked; linter 10 files, 0 findings; `pool-test.py` 347 passed / 0 failed
+
+Submission: `proposals/2026-09-07-retro-window-336-347-354-366-369-370-337-338-377-378-379-280.md`.
+Two refutation rounds, one read-only agent, never a fork. **Every proposal it left standing was
+revised at the gate; not one shipped as submitted.** Two ticket numbers appear twice in this window
+(#336, #337), which is the source of two of this pass's own mis-citations — key them by PR.
+
+**The live skills had drifted from the repo before this pass began, and the drift is not this pass's.**
+`pr-harden/SKILL.md` and `resolve-ticket/SKILL.md` carried the *mark ready only after the last push*
+rule (measured on #381, 2026-09-06, and an owner instruction of 2026-09-07), edited live at 00:56/00:57
+on 2026-09-07 with **neither file's `version:` bumped** and nothing pushed — so the version no longer
+identified the content, which is the parked "a skill edit that never reached the repo" entry (:1519) in
+its other direction. Those hunks are mirrored to the repo in this pass's commit and subsumed by its
+bumps; they are named here so the next reader does not attribute them to this window's records.
+
+**APPLIED · `gate-state` `pr-set` — a reused checkout inherited the previous PR's ledger.** Limb 3, a
+gate script contradicting the contract its skill states, plus `2026-09-04-…-337.md:30` measuring it
+(three `reviewed_shas` from PR 345 surviving into that ticket's next run in the same worktree).
+Mechanical: `pr-set` `setdefault`s `reviewed_shas` and `declined`, so both survive a change of `--pr`,
+while `harden-set` guards the analogous reuse of `head` on same-owner-and-monotonic-cycle. Step 0:71-80
+adopts an entry only on a matching or null `pr`; Step 1:122 reads `reviewed_shas`' last entry. Three new
+`pool-test.py` cases, **verified to fail before the fix** (the handoff case passed before and after, which
+is the half that must not regress). `awaiting` untouched — it is nobody's ledger.
+- **The gate cut the skill clause that came with it.** The submission had the helper's print satisfying
+  Step 0's "say which PR's entry you cleared and what it said"; it cannot — "what it said" is the
+  `round`/`phase`/`blocking` that `pr-set` overwrites in the same call, the obligation attaches to a
+  decision taken *before* the write, and `gate-state clear --json` already exists for exactly this
+  ("reading it first and clearing it second is two operations, and the gap between them is the race
+  this lock removes"). Shipped naming the print a backstop and pointing at `clear --json`.
+
+**APPLIED · `pool-run --claim` printed the command for the skill its own warning had just ruled out.**
+Limb 3 again, at 2 records / 2 invocations — `2026-09-03-…-366.md:56-58` and `2026-09-03-…-369.md:56-57`
+(#353 and #348, the first double-reported). **Cost was zero both times and by luck, not by judgment**
+("Harmless only because the branch was pushed first"), which is why this is a guard rather than a fix
+for a paid failure. Revisions the gate forced: the worktree's reset to the base is `make_worktree`
+BY DESIGN (git refuses one branch in two worktrees), so the edit must not be sold as fixing that — only
+the printed next command was wrong; the branch form is printed first because Step 0 wants the head
+branch *tracking*, with the `pull/<n>/head` form named as the fallback for a branch another worktree
+holds and its lost tracking stated; and `cmd_work`'s identical warning is **not** included, because
+changing what skill that session is launched with is a behaviour change with three existing assertions
+describing only the no-PR path. `open_prs` fetches `headRefName` but not `isCrossRepository`, so no
+claim is made about a fork's branch.
+
+**APPLIED to the skills — `pr-harden` 0.19.0, `harden` 0.27.0, `resolve-ticket` 0.15.0.** Each in the
+gate's revised form:
+- **The 429 contract, now measured under the hook** (`pr-harden`). The parked reopen at :1685-1686 — "a
+  record of a 429 met under the hook" — is met six times (#336/PR368, #366, #348/PR369, #370, #377/PR381,
+  #379/PR382; the hook was born 2026-09-02 20:56 and every one of them postdates it). Three of the
+  gate's objections were fatal to the submission as written and all three are in the shipped text:
+  "four convergences" was false — **#379/PR382 spent no retry at all**, and its own record says the
+  fresh-context read "did not happen and was reported as such"; **#354 predates the hook** (record
+  19:05, hook 20:56), so it cannot be cited as measured under it; and the skill's existing sentence
+  disclaiming #354's wait witness was itself an over-reading — `2026-09-02-…-354.md:53` says both agents
+  completed after the reset with only **one** on a smaller model, so the clean witness the paragraph
+  said it did not have was there all along. #366 and #377 applied brief and wait together and are stated
+  as unable to separate them. The new rule is #370's: a stated reset is not always inside the run's
+  horizon (a WEEKLY cap resetting next day, where a plain leaner-brief retry succeeded anyway), so both
+  retries must not be spent waiting. The retired cheaper-model lever's two measurements are KEPT and its
+  record disambiguated to #336/PR341, because the paragraph now cites two different #336 runs.
+- **A shared BUDGET the base consumed** (`pr-harden` Step 1, a third base-drift class). Submitted at
+  seven records, shipped at **four** — the gate found 369 has no size-budget event at all (the phrase is
+  336:28, already counted separately) and that 347's and 377's are notes with no merge and no overflow.
+  Two further cuts: the paragraph's own "Two classes, and git flags neither" had to become "Three
+  classes, and git flags none of them", and the submitted closing clause forbade what #280/PR383 in fact
+  did (trim its own prose first, then raise with the reasoning written into the guard). **This pass then
+  found a fifth defect in the gate's own replacement wording** — "three of them on `main`'s last hundred
+  bytes of headroom" is four of four (39, 79, 19 and 8 bytes), so the clause was deleted rather than
+  re-counted.
+- **The sequence's own INDEX** (`pr-harden` Step 1, the identifier paragraph). Two failure sightings, not
+  four: 378's TOC was self-caught and #337/PR384's sweep reached the index, so both are the rule working.
+  The submitted "each after a sweep had declared itself done" was supported for neither survivor and is
+  gone — #280/PR383's was a round-3 reviewer finding, and #348/PR369's was `main`'s Decision 70, missing
+  since #367 and surfaced by a fourth merge. The one-record merge fact (two entries at one insertion
+  point resolving to one line) is scoped to #348.
+- **`gh issue view` returning empty at exit 0** (`resolve-ticket` Step 1, `pr-harden` Step 1). Third
+  record (#347) reached the count, and the route was the one :1146-1151 prescribed for it — a fact about
+  the DOCUMENT, since the skills prescribe the failing invocation themselves. The gate cut the `/comments`
+  endpoint (**no record measures it**; prescribing it would re-import the machine fact :1148 rules
+  against) and the claim that all three runs paid wasted calls (only #347 records any).
+- **A brief names the SHA** (`pr-harden` Step 1). Ships as one clause, and only because :83-93's parked
+  reopen prescribed this exact shape ("If a second run records the same detour, the harden-only clause is
+  the right shape — quote the record, and state the cost"). The gate cut "a detour each": #370 records the
+  mechanism and the remedy and states **no** cost, so the clause says so.
+- **A killed run's leftover worktree is a dead agent's tree** (`harden` Phase 2). The submitted REAP half
+  is KILLED and stays killed: both records say the orphans come from **killed** runs ("nothing reaps
+  them"), so a cycle-close reap is executed by the only party that cannot need it, and `ticket-pool`
+  already owns worktree removal. The adoption half survives on #348/PR369's three non-identical orphans,
+  with #377/PR381's dead-agent mutation in the shared tree as the second sighting the submission missed.
+- **A batched write reports edits an abort never made** (`pr-harden` *Editing by script*, `harden` a
+  pointer). Two records at a round for one (#336/PR368 round 1's blocking finding; #280/PR383 states no
+  cost, so the submitted "two rounds paid for it" was cut). The section's own "Three failure modes … all
+  measured on this loop's second run" had to change with it. **This pass then hit the rule while applying
+  it**: the batch adding it died on a bad anchor two edits from the end, the five prints that had already
+  succeeded read as the whole batch, and the two missing edits were caught only because a `head -80` on
+  the diff review hid them and a later grep did not. That instance is in the shipped bullet.
+- **A "no production change" claim is proved from the compiled artifact** (`pr-harden` FINISH). Submitted
+  at four sightings, shipped at **two** — the gate found 369 supplies one sighting twice (its other is
+  about deriving a FIGURE) and 378's is deployment identity, which is the verifier's hash step working.
+  Home moved to FINISH, where #337/PR384's incident actually landed, and the bullet states the scope
+  explicitly, because the same tool has opposite verdicts on the two questions: a hash answers "is the
+  loaded class the one I built", and cannot answer "did this push change behaviour".
+
+**KILLED · the PRUNE of `resolve-ticket` Step 1's "or no LLM endpoint for a module that needs one".**
+Three blocking objections, any sufficient. `2026-09-03-…-354.md:61-62` records the same clause WORKING on
+the same module ("the standalone, llama-server and models were all confirmed present at Step 1 and never
+became the blocker"), so #337/PR375's finding is one record against another. The skill never prescribes
+the check 337 blames — :137-151 says "confirm a standalone exists" and explicitly "**Do not check whether
+the port is free**"; the listening-port method was that run's own. And a clause whose antecedent ("a
+module that NEEDS one") is not satisfied has been mis-applied, not refuted, so Step 4's "never delete a
+measured rule without recording the measurement that retires it" refuses it. **Nothing was changed here**
+— the gate's offered scoping half-clause was not taken either, because taking it would add text to close
+a one-record mis-application.
+
+**Net +59 lines across three skills, of which ~24 are the other session's mirrored mark-ready rule, so
+this pass is about +35, and the pruning is thin — say so rather than dress it up.** Deleted: the WAIT
+paragraph's false generalisation ("a session limit states its reset time, so a bounded background wait
+until that time is a condition rather than a clock") with its over-read confound, and this pass's own
+headroom count. Everything else is addition. The justification per addition: two are limb-3
+contradictions between a script and its skill (both closed in CODE, not prose, which is the only kind of
+addition here that cannot go stale), one closes a parked reopen the window met six times, and the rest
+carry a measurement each. What subsumes nothing is stated as such.
+
+### Running parked counts (superseding the previous block where they differ)
+- **Prose-correction cycles: ~28 records** — previous ~24 (:1636), plus #338 (14 cycles; "applying it at
+  cycle 6 rather than cycle 11 would have saved roughly five cycles", and the shipped
+  deletion-over-rewording remedy is what ended it), #378 (5), #337/PR384 (9), #377. Remedy still killed.
+- **`git checkout -- <path>` losing uncommitted work: ~22 incidents / 18 records** — previous ~21/17
+  (:1628), plus #378, again the orchestrator's own probe, and again with the commit SKIPPED ("The skill
+  documents exactly this and I did it anyway"). :81's reopen — an incident where "commit before probing"
+  WAS followed — is still unmet.
+- **Rate-limit agent death: 17 records** — previous 11 (:1635), plus #336/PR368, #366, #348/PR369, #370,
+  #377/PR381, #379/PR382. The lever question is no longer parked: see the 429 entry above.
+- **`pr-harden`'s round cap raised past its default: 3 records** — previous 2 (:1640), plus #379/PR382
+  (4 → 5, converged at 5).
+- **An insertion orphaning a javadoc: 3 records this window** (#337/PR384 "found independently by two
+  lenses", #366, #338 "the known recurring defect, recurring"), against a rule already shipped at
+  `harden`:389. No proposal — the rule exists and is being skipped, and more text is not the remedy.
+  **REOPEN ON:** a mechanical check that could catch it, or a record where the rule was followed and
+  missed one anyway.
+- **Step 3's fourth outcome — the gate settles NEGATIVELY and no in-scope code change survives:**
+  **2 records** (#354 aborted under condition 3; #338 became a measurement deliverable and converged).
+  Both cost 0 rounds and both records say the rule HELD. :1725-1726's precedent treats a zero-cost catch
+  as the step working. **REOPEN ON:** a record where the missing outcome cost a round, or produced an
+  abort the skill should have handled.
+- **`--count-edits` answered by hand at every cycle: 3 records** (#347, #370, #337/PR384) — and the
+  window carries BOTH directions, which the previous entry flattened: #347/#370 are the no-upstream
+  fallback, #337/PR384 is the opposite ("the branch **had** an upstream, so every reading was
+  `@{u}..HEAD`", `edits=14/16/17` at convergence across nine cycles, i.e. the recorded-head path never
+  engaged for that run). All three are the fallback printing its own note and the run answering it.
+  **REOPEN ON:** a record where the note was absent, or the wrong number reached the gate — or a
+  measurement of why the recorded head did not resolve across nine cycles of one run.
+- **Recording an await is a separate call from spawning: 1 record** (#337/PR384; the gate caught the
+  yield, cost 0).
+- **A run record with a raw build log interpolated into a bullet: 1 record** (#377/PR381, 638 KB; read
+  here by section extraction, and mirrored to the repo at that size). **REOPEN ON:** a second, or a retro
+  that cannot read a record whole.
+- **The disk filling from concurrent isolated agent worktrees: 2 records, possibly ONE event**
+  (#377/PR381 and #379/PR382, consecutive runs of the same day; #377 names six worktrees each running a
+  full maven build). Both had to hand back, and #379 could not write its own gate state, because every
+  recovery path needs to create a file first. Carried inside the worktree entry rather than counted, per
+  the submission's own flag. **REOPEN ON:** a third record, or one where the two runs are provably
+  independent.
+- **The proposer not verifying its own citations: 20 cycles / 14 records** — previous 14/12 (:1642). This
+  pass added six of its own, every one cut at a gate: 369 credited with a budget event it does not
+  contain; "four convergences under the hook" contradicted by its own fourth citation; #354 cited as
+  post-hook when it predates the hook by two hours; #337/PR375's incident attributed to #337/PR384; "a
+  detour each" and "two rounds paid for it" invented; and, after the gate, a headroom count of three
+  where the records say four.
+- **A retro submitting wording that breaks the counts/universals rule it enforces: unbroken.** This pass
+  submitted "four runs, four convergences", "three of them on `main`'s last hundred bytes", "each paying
+  wasted calls", "a detour each" and "two rounds paid for it". Two were cut by the gate, three by this
+  pass's own diff review — the last of them in text the gate had written.
