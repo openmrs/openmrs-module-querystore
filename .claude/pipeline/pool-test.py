@@ -560,6 +560,7 @@ def test_gate_state_locking(tmp: Path) -> None:
     sh([sys.executable, str(helper), "pr-set", "--pr", "345", "--round", "2",
         "--phase", "reviewed", "--blocking", "1"], cwd=led, env=env)
     sh([sys.executable, str(helper), "reviewed-sha", "a" * 40], cwd=led, env=env)
+    sh([sys.executable, str(helper), "verified-sha", "a" * 40], cwd=led, env=env)
     sh([sys.executable, str(helper), "declined", "--round", "1", "--id", "r1-2",
         "--finding", "f", "--reason", "r"], cwd=led, env=env)
     got = sh([sys.executable, str(helper), "pr-set", "--pr", "384", "--round", "1",
@@ -567,6 +568,11 @@ def test_gate_state_locking(tmp: Path) -> None:
     entry = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(led.resolve())]
     check("a change of PR drops the previous PR's reviewed shas and declined ledger",
           entry["reviewed_shas"] == [] and entry["declined"] == [], json.dumps(entry))
+    # The verified list is the same hazard and the gate now reads it the same way: a sha verified on
+    # the PREVIOUS PR, surviving into this one, would satisfy the head comparison at handover with a
+    # runtime verdict about another PR's code.
+    check("and drops the previous PR's verified shas with them",
+          entry["verified_shas"] == [], json.dumps(entry))
     check("and says which PR's ledger it dropped", "345" in got and "384" in got, got.strip())
     sh([sys.executable, str(helper), "reviewed-sha", "b" * 40], cwd=led, env=env)
     sh([sys.executable, str(helper), "pr-set", "--pr", "384", "--round", "2",
@@ -574,6 +580,10 @@ def test_gate_state_locking(tmp: Path) -> None:
     entry = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(led.resolve())]
     check("a transition write on the SAME pr keeps the round's own ledger",
           entry["reviewed_shas"] == ["b" * 40], json.dumps(entry))
+    got = sh([sys.executable, str(helper), "verified-sha", "b" * 40], cwd=led, env=env).stdout
+    entry = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(led.resolve())]
+    check("verified-sha appends to the pr entry and says how many runs it holds",
+          entry["verified_shas"] == ["b" * 40] and "1 run(s)" in got, got.strip())
 
     # The `resolve-ticket` handoff is the case that must NOT be cleared: it writes `pr: null` at Step
     # 1 and the PR number only at Step 8, and Step 0 tells the loop to adopt that entry as its own.

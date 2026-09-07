@@ -35,6 +35,7 @@ hook must never block on someone else's lock — always see one whole version or
   gate-state clear-await [--only pr|harden|both]
   gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"   # writes the pr entry; no --only
   gate-state reviewed-sha <sha>                                        # writes the pr entry; no --only
+  gate-state verified-sha <sha>                                        # writes the pr entry; no --only
   gate-state show [--json]
   gate-state clear [--only pr|harden|both] [--json]        # --json prints what it REMOVED
 """
@@ -190,7 +191,8 @@ class _Parser(argparse.ArgumentParser):
     def error(self, message: str):
         if "--only" in message:
             message += ("\n--only is accepted by await, clear-await and clear. The subcommands that "
-                        "write an entry -- pr-set, harden-set, declined, reviewed-sha -- each write "
+                        "write an entry -- pr-set, harden-set, declined, reviewed-sha, "
+                        "verified-sha -- each write "
                         "the one entry they are named for, and show reads both. Re-run without it.")
         super().error(message)
 
@@ -242,6 +244,14 @@ def main() -> int:
     r = sub.add_parser("reviewed-sha", help="record the sha a round reviewed")
     r.add_argument("sha")
 
+    # The verifier's counterpart, and it exists for the same reason: the gate compares the head being
+    # handed over against the last entry of each list, because a blocking count and a runtime verdict
+    # are both statements about a SHA and neither survives the next commit. FINISH pushes after the
+    # last verifier run in every case, so without this the "verified the merging head" rule was prose
+    # with nothing able to check it.
+    v = sub.add_parser("verified-sha", help="record the sha a verifier run covered")
+    v.add_argument("sha")
+
     sh = sub.add_parser("show", help="print both entries for this working tree")
     sh.add_argument("--json", action="store_true", help="one JSON object keyed pr/harden, for callers")
 
@@ -273,12 +283,14 @@ def main() -> int:
                 prior = e.get("pr")
                 if prior is not None and prior != args.pr:
                     shas, dec = e.get("reviewed_shas") or [], e.get("declined") or []
-                    e["reviewed_shas"], e["declined"] = [], []
+                    ver = e.get("verified_shas") or []
+                    e["reviewed_shas"], e["declined"], e["verified_shas"] = [], [], []
                     # Unconditional on the drop, not on the fields being non-empty: after the reset
                     # the prior number is the only surviving evidence that this entry was another
                     # PR's, which is what Step 0's take-over report rests on.
                     print(f"pr {prior} -> {args.pr}: dropped the previous PR's ledger "
-                          f"({len(shas)} reviewed sha(s), {len(dec)} declined finding(s))")
+                          f"({len(shas)} reviewed sha(s), {len(ver)} verified sha(s), "
+                          f"{len(dec)} declined finding(s))")
                 e["pr"] = args.pr
             if args.ticket:
                 e["ticket"] = args.ticket
@@ -288,6 +300,7 @@ def main() -> int:
             e.setdefault("awaiting", [])
             e.setdefault("declined", [])
             e.setdefault("reviewed_shas", [])
+            e.setdefault("verified_shas", [])
             stamp(e, args.owner)
             print(f"round {args.round}: phase={args.phase} blocking={args.blocking}"
                   + (" OVERRIDE" if args.override else ""))
@@ -347,6 +360,14 @@ def main() -> int:
                 shas.append(args.sha)
             stamp(e, args.owner)
             print(f"reviewed {args.sha[:12]} ({len(shas)} round(s))")
+
+        elif args.cmd == "verified-sha":
+            e = held.entry("pr")
+            shas = e.setdefault("verified_shas", [])
+            if args.sha not in shas:
+                shas.append(args.sha)
+            stamp(e, args.owner)
+            print(f"verified {args.sha[:12]} ({len(shas)} run(s))")
 
         elif args.cmd == "show":
             if args.json:

@@ -1,8 +1,8 @@
 ---
 name: resolve-ticket
-description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until one reports zero blocking findings and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
+description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.15.0
+version: 0.15.1
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -75,8 +75,9 @@ nobody will notice.
 
 **The Stop gate covers the whole run, not just the loop.** Write the state entry at Step 1, before any
 work — see **State** in `pr-harden`, which owns the format. From that moment `pr-harden-gate.sh`
-refuses to let the turn end until a review round has reported zero blocking findings, or an override
-is recorded. That is what makes the run unattended rather than merely intended to be.
+refuses to let the turn end until the head being handed over has been reviewed with zero blocking
+findings — and verified, where any verifier ran — or an override is recorded. That is what makes the
+run unattended rather than merely intended to be.
 
 Two obligations come with it. On any abort above, **write the override into the state entry with its
 reason** — an abort that leaves `blocking > 0` behind wedges the next turn in this repo until the
@@ -536,7 +537,7 @@ blocking comment; a draft PR nobody has reviewed is not that, and handing back h
 early stop the autonomy contract forbids.
 
 `pr-harden` owns everything from round 1: fresh reviewer, fresh fixer, the declined ledger, the
-verifier, the round cap, and marking the PR ready when a round reports zero blocking findings. Do not
+verifier, the round cap, and marking the PR ready once the sha it hands over is reviewed clean. Do not
 review the PR yourself while it runs, and do not pre-empt round 1 by fixing what you suspect it will
 find — you hold the writing context, which is exactly the disqualification the loop is built around.
 Anything you can already see belongs in Step 7, before the PR existed.
@@ -545,6 +546,12 @@ When it converges, `pr-harden` verifies the merging head if no round already did
 change is not ready until something has run it, and the loop's per-round verifier sits on the fix
 path, which the exit path skips. Then the PR is marked ready (`gh pr ready`) and the run is done. A
 head that cannot be verified ends the run as converged-but-unverified, not as ready.
+
+**What it hands over is the sha a reviewer cleared, not merely a branch that once had a clean
+round.** `pr-harden`'s FINISH does not edit that sha, and an edit that is genuinely owed there costs
+one blocking-only round; the Stop gate compares the head against the last reviewed and verified sha
+and refuses the handover otherwise. That skill's **Termination** section owns the rule — do not
+restate it in the report, cite it.
 
 ## Reporting — once, at the end
 

@@ -1,8 +1,8 @@
 ---
 name: pr-harden
-description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until a review round reports zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
+description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.19.0
+version: 0.20.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -86,8 +86,8 @@ Refuse the run, with the reason, if any of these fails:
   and say in the report which PR's it was and what it said.
 
 Then write the opening state entry (`phase: "init"`, `round: 1`) — see **State**. From this point the
-Stop gate will not let the turn end until a review round reports zero blocking findings, or the
-override is taken.
+Stop gate will not let the turn end until the head being handed over has been reviewed with zero
+blocking findings — and verified, where any verifier ran — or the override is taken.
 
 ## The round
 
@@ -100,8 +100,8 @@ override is taken.
 5  GREEN     mvn -o clean install, from the ROOT
 6  VERIFY?   runtime-visible change → fresh verifier on the standalone
    COMMIT    one commit, push · round++ → step 1
-7  FINISH    apply the final round's non-blocking findings, green, commit, push,
-             VERIFY the merging head if nothing has, then mark ready
+7  FINISH    do NOT edit the cleared sha · re-derive the body · VERIFY the merging
+             head if nothing has · mark ready. An edit here owes a BLOCKING-ONLY round
 ```
 
 ### 1 — REVIEW
@@ -524,6 +524,11 @@ prescription" is really one per `orderCarrying` pick, because two orders sharing
 collapse onto one partner — visible in a live chip and in no test. Read the `observed` field for what it
 contradicts as well as for what it confirms.
 
+**Record the sha it covered** — `gate-state verified-sha 3085ff02` — for the same reason a round records
+the sha it reviewed: a runtime verdict is a statement about one commit and does not survive the next
+one. FINISH's own check and the Stop gate both read the last entry of that list against the head being
+handed over, so a verifier run that goes unrecorded reads as no verifier run at all.
+
 `classification: "not-the-environment"` is a verification result and a candidate finding for the next
 reviewer. `"unrepairable"` aborts the run. Neither is ever recorded as a blocking finding by the
 orchestrator: **an environmental failure is not a review finding**, and if the loop is allowed to
@@ -560,9 +565,19 @@ rounds, which such a commit only ever appends to.
 
 ### 7 — FINISH
 
-The reviewer found nothing blocking. Apply that round's non-blocking findings under the same fixer
-rules, prove green, commit and push. The run ends here: those edits carry no blocking finding by
-construction, so no further round is owed.
+The reviewer found nothing blocking, so this is the sha you are handing over — and **FINISH does not
+edit it.** That round's non-blocking findings go to a follow-up issue, named in the report, rather
+than into this branch.
+
+That is the whole change from the version of this step that applied them, and the argument it
+replaces was *"those edits carry no blocking finding by construction, so no further round is owed"*.
+It graded the FINDINGS, which the reviewer saw, and not the FIXES, which did not exist when it
+looked — and this step's own rule *A runtime-visible change is not ready until a verifier has run
+against the head that will merge* concedes exactly that ("pushed *after* the last verifier run in
+every case"). The run records name what actually landed here: a whitespace normal form defined
+twice, a citation carve-out pinned at only two markers, an assertion that pinned nothing.
+Re-deriving the PR description is still owed and is not an exception, because the body is not in the
+tree and does not move the head.
 
 **Delete the run's own `pr-<n>-r<round>` refs.** They are local fetch copies of the PR head with no
 upstream, worth nothing once the round is over and re-fetchable from `pull/<n>/head` while GitHub
@@ -590,6 +605,16 @@ artifact — and `unrepairable` aborts the run here exactly as it does inside a 
 
 **A PR that could not be verified is not marked ready**; report it as
 converged-but-unverified and stop.
+
+**And a verifier that ran fine and found something substantive was, until this was written, the one
+outcome with no instruction at all.** `unrepairable` aborts and "could not determine" stops as
+converged-but-unverified, but a `not-the-environment` finding on the merging head had no round left
+to reach, because the loop had already exited — so what happened next was whatever the orchestrator
+improvised, including marking ready over it, with the gate satisfied and nothing objecting. It is a
+**blocking finding**: record it and continue from step 4, under *That confirming round is
+BLOCKING-ONLY* in this step. An
+ENVIRONMENTAL failure is still not one and must never re-enter the loop — that is what grinds rounds
+against a broken standalone until the cap.
 
 **Whether a verifier run still covers the head is a question about the compiled artifact, not about the
 source, the timestamp or a file hash.** On #337/PR384 a comment-only push after the verifier ran made
@@ -619,8 +644,16 @@ This does not license moving a PR back to draft to dodge the trigger — that ru
 ordering the run so the question never arises: check `git log origin/main..HEAD` and the PR's
 mergeable state BEFORE marking ready, not after.
 
-If applying them turns up something blocking — it happens; a nit's fix exposes a real defect — that
-is a new blocking finding: record it, and the loop continues from step 4.
+**Where an edit here really is owed, it costs one more round rather than none.** A blocking finding
+turns up while you are handing over — a nit's fix exposes a real defect, `main` moved, the
+description was false — or the verifier on the merging head reports one. Implement it, and run one
+more round.
+
+**That confirming round is BLOCKING-ONLY, and this is what makes the rule terminate.** A round that
+implements nits and then re-reviews can never converge, because a review is expected to produce nits;
+a round that may only *report* blockers converges as soon as there are none. So brief the confirming
+reviewer to return blocking findings alone, and send anything else it notices to the follow-up issue
+with the rest.
 
 ## Editing by script, which is how edits get silently lost
 
@@ -675,14 +708,35 @@ bullet's "see the bullet above" at the new text. **Name the target instead of lo
 
 ## Termination
 
-> **A `/pr-harden` run is complete when a REVIEW ROUND reports zero blocking findings.**
+> **A `/pr-harden` run is complete when the SHA IT IS HANDING OVER has been reviewed with zero
+> blocking findings — and, where any verifier ran, verified on that same sha.**
 
 Not when a round makes no edits. Unlike `/harden`, every round here is *expected* to edit — the fixer
 implements the non-blocking findings too — so an edit count can never be the condition, and this is
 the one place the two skills' contracts genuinely differ.
 
-Check it, do not estimate it. The count comes from the reviewer's JSON, and it goes in the state file
-where something other than you can read it.
+**The condition is a property of the ARTIFACT, and it used to be a past event.** *"A review round
+reported zero blocking findings"* was true of the sha that round read, and stayed true once FINISH
+applied its non-blocking findings and pushed a different one — so the run handed over a head no
+reviewer had ever seen, on any run whose terminating round raised a non-blocking finding at all. The
+verifier half is the same hole from the other side. `reviewed_shas` had been recorded here since this
+skill was written, and step 1 compares it against the INCOMING head at the start of a round; what
+nothing compared it against was the head being handed over.
+
+Check it, do not estimate it. The count comes from the reviewer's JSON and the shas from
+`gate-state`, and all of it goes in the state file where something other than you can read it:
+`pr-harden-gate.sh` refuses the stop when the head is not the last reviewed sha, or not the last
+verified one. Both comparisons fail OPEN — no git, no worktree, no recorded sha, or a recorded value
+that is not sha-shaped (hex, 7 characters or more) — so neither can wedge a run that owes nothing,
+and `verified_shas` being empty means no verifier ran for this PR at all, which is a legitimate state
+for a change no round could make runtime-visible.
+
+**What the check costs, said rather than left to be discovered:** a terminal entry is indistinguishable
+from a mid-flight one — both are `phase: reviewed, blocking: 0` — so a FINISHED run's leftover entry
+in a worktree that has since moved on now blocks, where before it allowed, until the six-hour expiry.
+`gate-state clear --only pr` is the remedy and the block message says so. Under these rules a run that
+handed over correctly leaves the head ON the reviewed sha, so this is the tail of an entry written
+under the older ones, or of later work in the same worktree — never of a run that finished cleanly.
 
 `pr-harden-gate.sh` ships next to this file and runs on Stop. It refuses to end the turn while the
 newest entry for this directory says `blocking > 0`, and also while it says a run is in flight that
@@ -753,19 +807,29 @@ two sessions sharing ONE directory still share one entry, and `owner` is what te
     "ts": 1755400000, "override": false, "owner": 51039,
     "awaiting": [ { "agent": "fix r2", "since": 1755400000 } ],
     "reviewed_shas": ["<r1 sha>", "<r2 sha>"],
+    "verified_shas": ["<sha a verifier run covered>"],
     "declined": [ { "round": 1, "id": "r1-2", "finding": "…", "reason": "…" } ] } }
 ```
 
 `phase` is `"init"` before the first review, `"reviewed"` once a reviewer's count is recorded,
 `"fixing"` from the moment the fixer is spawned until the next reviewer reports. On `init` and
 `fixing` the gate blocks regardless of `blocking`, so leave the last measured value there for the
-record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts`, `override`, `owner`, `awaiting`, `unattended`
-and `mode` — all ten; `declined` and `reviewed_shas` are the orchestrator's own ledger, carried in the
-same entry so one write keeps both in step. **`mode` has no writer today**, which is a defect and not a
-spare field: the gate has a distinct `--plan-only` message behind it, so a plan-only run instead gets
-the generic `building` one, telling it to "continue the phases" through implementation and a draft PR —
-exactly the work its own mode excludes. Either something writes `mode` or that branch goes. `reviewed_shas` is not only a record: step 1 compares the incoming head against its last
-entry, because two rounds reviewing one sha is a round spent on bytes already reviewed.
+record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts`, `override`, `owner`, `awaiting`,
+`unattended`, `mode`, `reviewed_shas` and `verified_shas`; `declined` is the orchestrator's own
+ledger, carried in the same entry so one write keeps it in step with the rest. The two sha lists were
+the orchestrator's ledger too until the gate began reading their last entries against the head — so a
+missing `reviewed-sha` or `verified-sha` call is no longer merely an incomplete record, it is the
+difference between a checked handover and an unchecked one.
+
+**`mode` has no writer today**, which is a defect and not a spare field: the gate has a distinct
+`--plan-only` message behind it, so a plan-only run instead gets the generic `building` one, telling
+it to "continue the phases" through implementation and a draft PR — exactly the work its own mode
+excludes. Either something writes `mode` or that branch goes.
+
+`reviewed_shas` is not only a record, and it is now read at both ends: step 1 compares the incoming
+head against its last entry, because two rounds reviewing one sha is a round spent on bytes already
+reviewed, and the Stop gate compares the head being handed over against it, because a clean count
+about an earlier sha says nothing about this one.
 
 **`owner` is what tells your entry from somebody else's, and it is not the unattended marker's job.**
 This file is keyed on the CHECKOUT, so a pool run and an interactive session in the same directory read
@@ -933,9 +997,11 @@ Write it at every transition:
 
 `--owner $PPID` is this session's own claude process, which is how both gates tell your entry from
 one a co-located session left in the same directory. Add `--override --reason "…"` only when taking
-the labelled override. `declined` and `reviewed_shas` have their own subcommands — `gate-state
-declined --round 1 --id r1-2 --finding "…" --reason "…"` and `gate-state reviewed-sha 3085ff02` — so a
-transition write never has to restate them and cannot drop them.
+the labelled override. `declined`, `reviewed_shas` and `verified_shas` have their own
+subcommands — `gate-state
+declined --round 1 --id r1-2 --finding "…" --reason "…"`, `gate-state reviewed-sha 3085ff02` and
+`gate-state verified-sha 3085ff02` — so a transition write never has to restate them and cannot drop
+them.
 
 **Why a helper rather than the inline `python3` this used to be.** The read, the change and the write
 are one critical section, and they were not: every writer read the whole file, changed its own entry
@@ -1057,8 +1123,11 @@ runs, and no run can settle it about itself.
   a broken standalone until the cap and call it review.
 - **Don't repair the artifact to get a green verifier run.** Reverting the round, redeploying the last
   working omod, or flipping a GP to route around the failure is a green report on a broken build.
-- **Don't mark a PR ready on an unverified head.** The exit path skips step 6 and the FINISH commit
-  lands after it, so "no blocking findings" is not "somebody ran it".
+- **Don't mark a PR ready on an unverified head.** The exit path skips step 6, so "no blocking
+  findings" is not "somebody ran it".
+- **Don't hand over a sha nobody reviewed.** A clean blocking count is about the sha the reviewer
+  read, not about the branch, and it stays true after you push over it. If FINISH edited, one
+  blocking-only round is owed — see Termination.
 - **Don't mark a PR ready before the last push.** Ready is a trigger, not a label — the GitHub App
   reviews every push to a non-draft PR — so a run that marks ready and then merges `main` or runs
   another round pays for a review per push. See FINISH.
