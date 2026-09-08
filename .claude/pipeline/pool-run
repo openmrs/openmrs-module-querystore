@@ -47,6 +47,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -101,6 +102,10 @@ DEFAULTS = {
     # other's deploy. One standalone per worker, each with its own tomcat and database port. Default
     # 1, which is exactly the behaviour that predates this.
     "parallel": {"max_workers": 1, "standalones": [], "shared_m2": None},
+    # Where an escalation goes when nobody is at the terminal — which is the normal state of a pool
+    # that runs for hours. `command` is an argv (or a shell string) the summary is appended to, with
+    # the whole event as JSON on its stdin; unset falls back to a macOS banner. See `notify_argv`.
+    "notify": {"enabled": True, "command": None, "timeout_seconds": 15},
 }
 
 # The sessions running right now, so a second interrupt can reach them. A first interrupt asks the
@@ -241,6 +246,103 @@ def merge(base: dict, over: dict) -> dict:
     for k, v in (over or {}).items():
         out[k] = merge(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
     return out
+
+
+# ─────────────────────────────────────────────────────────────── notifying ──
+
+# Said once per invocation. A channel that cannot be reached is worth ONE line and not one per event:
+# the events it is failing to deliver are exactly the ones nobody is reading the terminal for, so a
+# complaint per event would scroll past unread beside them.
+NOTIFY_FAILED: dict = {"why": None}
+# Held over the read-and-set of it, because with several tickets in flight the complaint has
+# concurrent callers and "once" is the whole claim: two workers hitting a dead channel together would
+# otherwise each find it unreported and each report it.
+NOTIFY_LOCK = threading.Lock()
+
+# The outcomes that are the pipeline getting on with it, and everything else needs a human. ONE
+# definition, because the summary's own line and what wakes somebody at 3am must not be able to
+# disagree about which those are. `paused` is deliberately here: it needs `--resume`, not judgement.
+SETTLED = ("ready", "paused")
+
+
+def needs_a_human(status: str) -> bool:
+    return status not in SETTLED
+
+
+def notify_argv(cfg: dict) -> list[str] | None:
+    """The command one event is handed to, or None when nothing here can deliver one.
+
+    `notify.command` is the whole channel policy and the driver has no opinion about it: an argv the
+    operator chooses, the one-line summary appended as its LAST argument, the whole event as JSON on
+    its stdin. `["ntfy", "publish", "<topic>"]`, a Slack wrapper, or a script that decides for itself
+    which events are worth a phone buzzing all work unchanged — and a secret can live in that
+    script of theirs rather than in this pipeline's config.
+
+    Unset, it falls back to a macOS banner. That fallback exists so the feature is not inert out of
+    the box, NOT because a banner answers an eight-hour unattended run: it reaches a laptop the
+    operator has walked away from, and nothing else. Configure the channel.
+    """
+    notify_cfg = cfg.get("notify") or {}
+    if not notify_cfg.get("enabled", True):
+        return None
+    command = notify_cfg.get("command")
+    if isinstance(command, str):
+        command = shlex.split(command)
+    if command:
+        return [str(part) for part in command]
+    if sys.platform != "darwin":
+        return None
+    # `on run argv` rather than an interpolated `-e`: the summary carries ticket titles, quotes and
+    # apostrophes, and an AppleScript string built by concatenation is a syntax error waiting for the
+    # first ticket titled "don't".
+    return ["osascript", "-e", "on run argv",
+            "-e", 'display notification (item 1 of argv) with title "pool-run" sound name "Ping"',
+            "-e", "end run"]
+
+
+def notify(cfg: dict, event: str, summary: str, say, needs_human: bool = False, **fields) -> None:
+    """Push one event to the operator's channel. Never raises, never retries, never waits long.
+
+    This is the least important thing the driver does and it behaves like it: a channel that is
+    missing, misconfigured or slow costs one line of output and nothing else. The pool is the work; a
+    notification is a convenience laid over it, and the day it can stop a wave is the day it has cost
+    more than every escalation it ever delivered.
+    """
+    argv = notify_argv(cfg)
+    if not argv:
+        return
+    payload = {"event": event, "summary": summary, "needs_human": needs_human,
+               "at": datetime.now(timezone.utc).isoformat(), **fields}
+    try:
+        done = subprocess.run(argv + [summary], input=json.dumps(payload), text=True,
+                              capture_output=True,
+                              timeout=int((cfg.get("notify") or {}).get("timeout_seconds") or 15))
+        why = (None if done.returncode == 0
+               else f"exit {done.returncode}: {(done.stderr or done.stdout).strip()[:160]}")
+    except Exception as exc:                      # including the timeout, which is not exceptional
+        why = f"{type(exc).__name__}: {exc}"[:200]
+    if not why:
+        return
+    with NOTIFY_LOCK:
+        first, NOTIFY_FAILED["why"] = not NOTIFY_FAILED["why"], NOTIFY_FAILED["why"] or why
+    if first:
+        say(f"! the notifier {argv[0]} failed — {why}. Nothing else is affected, but this run's "
+            "escalations are not reaching you.")
+
+
+def notify_outcome(cfg: dict, ledger: dict, key: str, status: str, say) -> None:
+    """One ticket landed.
+
+    Pushed as it lands rather than with its wave: five workers against an eight-hour bound means the
+    wave ends when its SLOWEST ticket does, and a run that aborted in the first ten minutes would sit
+    unreported for the rest of the day — which is the whole failure this is here to end.
+    """
+    entry = (ledger or {}).get(key) or {}
+    pr = entry.get("pr")
+    notify(cfg, "outcome", f"{key}: {status}" + (f" (PR #{pr})" if pr else ""), say,
+           needs_human=needs_a_human(status), key=key, status=status, pr=pr,
+           pr_url=entry.get("pr_url"), duration_s=entry.get("duration_s"),
+           cost_usd=entry.get("cost_usd"))
 
 
 # ─────────────────────────────────────────────────────────────────── pause ──
@@ -2488,6 +2590,9 @@ def record_work_outcome(cfg: dict, ledger: dict, key: str, slug: str, ticket: st
         "duration_s": now() - started_at, "exit": code,
         "last_run": datetime.now(timezone.utc).isoformat()})
     say(f"recorded in the ledger as {status}")
+    # A hand-launched run is still hours long and still ends when nobody is looking. It reaches the
+    # ledger by the same rules a driven one does; it reaches the operator by them too.
+    notify_outcome(cfg, ledger, key, status, say)
 
 
 def crash_entry(ledger: dict, key: str, exc: BaseException) -> str:
@@ -2520,9 +2625,15 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
     def others(job: dict) -> set[str]:
         return members - {job["ticket"].lstrip("#")}
 
+    def landed(key: str, status: str) -> tuple[str, str]:
+        """Every outcome this wave produces passes through here, so the operator is told as the
+        ticket lands rather than when the wave does — and a worker that died is told about too."""
+        notify_outcome(cfg, ledger, key, status, say)
+        return (key, status)
+
     if len(jobs) == 1:
-        return [(jobs[0]["key"],
-                 work_ticket(jobs[0], slots[0], cfg, ledger, say, bases, others(jobs[0])))]
+        return [landed(jobs[0]["key"],
+                       work_ticket(jobs[0], slots[0], cfg, ledger, say, bases, others(jobs[0])))]
     results: list[tuple[str, str]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool_exec:
         futures = {
@@ -2532,7 +2643,7 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
         for future in concurrent.futures.as_completed(futures):
             job = futures[future]
             try:
-                results.append((job["key"], future.result()))
+                results.append(landed(job["key"], future.result()))
             except Exception as exc:  # a worker that dies must not take the wave with it
                 say(f"[{job['key']}] ! the worker itself raised {type(exc).__name__}: {exc}")
                 # And neither must the recording of that death. `crash_entry` writes the ledger, which
@@ -2545,7 +2656,7 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
                     say(f"[{job['key']}] ! and the ledger write for it raised "
                         f"{type(inner).__name__}: {inner} — the outcome is unrecorded")
                     status = "error"
-                results.append((job["key"], status))
+                results.append(landed(job["key"], status))
     return results
 
 
@@ -2623,6 +2734,12 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
         say(f"    ! {p}")
     if not problems:
         say("    verified: committed, pushed, LAST advanced, live copies and the mirror identical.")
+    # Set by this retro and no earlier one — an invocation whose retros were already off returned
+    # above. The rest of the pool is now being worked without learning, which is the failure this
+    # whole pipeline is arranged to prevent, and it is not a line to find afterwards in a log.
+    if RETRO_STOPPED["why"]:
+        notify(cfg, "retro-off", f"retros are OFF for the rest of this pool — {RETRO_STOPPED['why']}",
+               say, needs_human=True, records=[q.name for q in pending], problems=problems)
     return {"status": "problems" if problems else "ok", "problems": problems,
             "records": [p.name for p in pending], "commit": after_head,
             "seconds": run["seconds"], "stream": run["jsonl"]}
@@ -2661,6 +2778,38 @@ def retro_forecast(count: int, pending: int, cfg: dict) -> dict[int, list[str]]:
             if i < len(waves):
                 marks.setdefault(i + 1, []).append("first wave reading changed skills")
     return marks
+
+
+def summarise(results: list[tuple[str, str]], cfg: dict, say: Say) -> None:
+    """The end of an invocation, printed and pushed by the same function.
+
+    One function because the terminal and the operator's phone must not be able to report different
+    runs, and because what somebody away from the machine wants at the end is not a status line: it
+    is that the machine is free, and that these are the tickets waiting for them.
+    """
+    say("")
+    say("## summary")
+    for key, status in results:
+        e = load_json(LEDGER, {}).get(key, {})
+        say(f"  {status:13s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
+    # A paused ticket is not a ticket that needs a human: it needs `--resume`, and listing it
+    # here would put every pause on the same line as an abort.
+    needs = [k for k, s in results if needs_a_human(s)]
+    if needs:
+        say("")
+        say("needs a human: " + ", ".join(needs))
+    counts: dict[str, int] = {}
+    for _, status in results:
+        counts[status] = counts.get(status, 0) + 1
+    if not results:
+        # The only ways here with nothing worked are a stop or a pause asked for before the first
+        # wave — both typed by somebody at this terminal, who does not need telling about it.
+        return
+    tally = ", ".join(f"{n} {s}" for s, n in sorted(counts.items()))
+    notify(cfg, "finished",
+           f"pool finished: {tally}" + (f" — {len(needs)} need a human" if needs else ""),
+           say, needs_human=bool(needs), counts=counts, needs=needs, tickets=len(results),
+           log=str(say.path))
 
 
 def refresh_outcomes(ledger: dict, say: Say, loud: bool = True) -> int:
@@ -3237,6 +3386,10 @@ def main() -> int:
                 for blocked in [j for j in queue if str(j["path"]) == repo]:
                     write_ledger(ledger, blocked["key"],
                                  nothing_ran(ledger.get(blocked["key"], {}), failure, where))
+                    # These never reach a wave, so they never reach `landed`. A pool that stalled
+                    # before it started is the escalation most worth having: nothing is running, and
+                    # nothing will, until somebody fixes the remote.
+                    notify_outcome(cfg, ledger, blocked["key"], failure, say)
                 continue
             bases[repo] = sha
             say(f"  {job['slug']}: {where}")
@@ -3302,17 +3455,7 @@ def main() -> int:
             say("")
             say("a pause was asked for, but the run finished first — nothing is left to resume.")
 
-        say("")
-        say("## summary")
-        for key, status in results:
-            e = load_json(LEDGER, {}).get(key, {})
-            say(f"  {status:13s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
-        # A paused ticket is not a ticket that needs a human: it needs `--resume`, and listing it
-        # here would put every pause on the same line as an abort.
-        needs = [k for k, s in results if s not in ("ready", "paused")]
-        if needs:
-            say("")
-            say("needs a human: " + ", ".join(needs))
+        summarise(results, cfg, say)
         say("")
         say(f"log: {say.path}")
         return 0

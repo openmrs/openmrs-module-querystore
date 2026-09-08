@@ -2237,6 +2237,206 @@ def test_a_draft_is_not_told_the_loop_ran_out_of_rounds(tmp: Path) -> None:
           pool.draft_cause(None) == "the loop did not converge", pool.draft_cause(None))
 
 
+# ───────────────────────────────────────────────────────────────── notifying ──
+
+
+def notify_sink(tmp: Path) -> tuple[Path, list[str]]:
+    """A notifier of the operator's own, recording exactly what the driver handed it.
+
+    Not a mock of anything under test: `notify.command` is a production knob whose whole contract is
+    "an argv the operator chooses", and this is one. It records both halves of that contract — the
+    argv tail and the JSON on stdin — because a channel that gets only one of them is a channel that
+    silently drops half of every escalation.
+    """
+    cmd = tmp / "notifier"
+    cmd.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        "event = json.loads(sys.stdin.read() or '{}')\n"
+        "event['argv_tail'] = sys.argv[1:]\n"
+        "with open(sys.argv[0] + '.jsonl', 'a') as fh:\n"
+        "    fh.write(json.dumps(event) + '\\n')\n")
+    cmd.chmod(0o755)
+    return Path(str(cmd) + ".jsonl"), [str(cmd)]
+
+
+def notified(sink: Path) -> list[dict]:
+    if not sink.exists():
+        return []
+    return [json.loads(line) for line in sink.read_text().splitlines() if line.strip()]
+
+
+def test_an_outcome_reaches_the_operator(tmp: Path) -> None:
+    """A ticket that lands while nobody is watching has to reach the operator, not just the log.
+
+    The pipeline's own measurement of its long stalls: they are not wedged sessions, they are the
+    hours between a run ending and somebody noticing it ended. The driver's terminal is not a
+    channel — an unattended pool is unattended precisely because nobody is reading it.
+
+    Driven through a REAL wave rather than by calling the notifier: what is under test is that every
+    outcome the wave produces passes the operator on its way out, and a case that called `notify`
+    itself would pass just as happily against a driver that never calls it.
+    """
+    print("\nan outcome pushed to the operator's channel")
+    origin, work = git_fixture(tmp)
+    one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
+    stub = stub_claude(tmp / "claude-stub", tmp / "sessions.txt")
+    sink, cmd = notify_sink(tmp)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "claude": {"binary": str(stub)},
+        "parallel": {"max_workers": 1, "standalones": [str(one)]},
+        "ticket": {"timeout_seconds": 120, "quiet_seconds": 120},
+        "notify": {"command": cmd}})
+    say = pool.Say(tmp / "run.md")
+    job = {"slug": "o/r", "path": work, "ticket": "266", "url": "https://example/266",
+           "title": "a ticket nobody is watching", "key": "o/r#266"}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        results = pool.run_wave([job], slots, cfg, {}, say, {str(work): pool.remote_head(work)})
+
+    got = notified(sink)
+    check("the outcome was pushed, and exactly once", len(got) == 1, str(got))
+    if not got:
+        return
+    event = got[0]
+    check("it says which ticket", event.get("key") == "o/r#266", str(event))
+    check("and carries the status the wave itself decided, not one re-derived downstream",
+          event.get("status") == dict(results).get("o/r#266"), f"{event.get('status')} vs {results}")
+    check("a run that opened no PR is marked as needing a human",
+          event.get("needs_human") is True, str(event))
+    check("the summary is the command's LAST argument, so `ntfy publish <topic>` needs no wrapper",
+          event.get("argv_tail") == [event.get("summary")], str(event.get("argv_tail")))
+    check("and the ticket is named in it, which is all a phone banner will show",
+          "266" in (event.get("summary") or ""), str(event.get("summary")))
+
+
+def test_a_notifier_that_fails_costs_the_pool_nothing(tmp: Path) -> None:
+    """The channel is the least important thing in this file and must behave like it.
+
+    A notifier that cannot run is a notification not delivered; a notifier that can take the driver
+    down is every remaining ticket in the pool not worked. And it is worth exactly ONE line, because
+    the events it is failing to deliver are the ones nobody is reading the terminal for.
+    """
+    print("\na notifier that cannot run")
+    say = pool.Say(tmp / "run.md")
+    missing = pool.merge(pool.DEFAULTS, {"notify": {"command": [str(tmp / "nothing-here")]}})
+    raised = None
+    with isolated(tmp):
+        pool.NOTIFY_FAILED["why"] = None
+        try:
+            pool.notify_outcome(missing, {}, "o/r#1", "timeout", say)
+            pool.notify_outcome(missing, {}, "o/r#2", "ready", say)
+        except BaseException as exc:            # catching everything IS the case being made
+            raised = exc
+        finally:
+            pool.NOTIFY_FAILED["why"] = None
+    check("it does not take the run with it", raised is None, f"{type(raised).__name__}: {raised}")
+    complaints = [line for line in say.lines if "notif" in line.lower()]
+    check("and says so once, not once per event", len(complaints) == 1, str(complaints))
+
+    # And once has to survive the concurrency this driver is for: the complaint is written from
+    # whichever worker thread hits the dead channel first, and with five in flight that is a race.
+    loud = pool.Say(tmp / "racing.md")
+    with isolated(tmp):
+        pool.NOTIFY_FAILED["why"] = None
+        try:
+            threads = [threading.Thread(target=pool.notify_outcome,
+                                        args=(missing, {}, f"o/r#{i}", "timeout", loud))
+                       for i in range(8)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        finally:
+            pool.NOTIFY_FAILED["why"] = None
+    racing = [line for line in loud.lines if "notif" in line.lower()]
+    check("still once when eight workers find the channel dead at the same moment",
+          len(racing) == 1, str(racing))
+
+    sink, cmd = notify_sink(tmp)
+    off = pool.merge(pool.DEFAULTS, {"notify": {"enabled": False, "command": cmd}})
+    with isolated(tmp):
+        pool.notify_outcome(off, {}, "o/r#1", "timeout", say)
+    check("and an operator who wants silence gets it", notified(sink) == [], str(notified(sink)))
+
+
+def test_retros_stopping_is_escalated(tmp: Path) -> None:
+    """A retro that did not advance LAST turns retros off for the rest of the invocation.
+
+    That is the failure `ticket-pool` exists to prevent — the pool goes on working tickets at full
+    cost with the skills exactly as the last run left them — and the line saying so scrolls past in a
+    log nobody is reading. It is the one non-ticket event that cannot wait for the summary.
+    """
+    print("\nretros stopping, pushed to the operator")
+    origin, src = git_fixture(tmp)
+    stub = stub_claude(tmp / "claude-stub", tmp / "sessions.txt")
+    sink, cmd = notify_sink(tmp)
+    cfg = pool.merge(pool.DEFAULTS, {"claude": {"binary": str(stub)}, "source_repo": str(src),
+                                     "notify": {"command": cmd}})
+    say = pool.Say(tmp / "retro.md")
+
+    with isolated(tmp):
+        pool.RETRO_STOPPED["why"] = None
+        try:
+            pool.run_retro(cfg, say, force=True)
+            stopped = bool(pool.RETRO_STOPPED["why"])
+        finally:
+            pool.RETRO_STOPPED["why"] = None
+
+    check("the fixture reproduces a retro that leaves LAST where it was", stopped,
+          "the retro advanced LAST, so this case is not testing what it says")
+    got = [e for e in notified(sink) if e.get("event") == "retro-off"]
+    check("the operator is told the pool has stopped learning", len(got) == 1, str(notified(sink)))
+    if got:
+        check("and it is not filed as a status line", got[0].get("needs_human") is True, str(got[0]))
+
+
+def test_the_end_of_an_invocation_is_pushed_too(tmp: Path) -> None:
+    """What the operator would otherwise discover hours later: the machine is free and PRs are waiting.
+
+    `summarise` is the whole end of the run — the printed summary AND the push — so that the two
+    cannot report different things, and so this case exercises the function `main` calls rather than
+    a re-typed copy of it.
+    """
+    print("\nthe end of an invocation")
+    sink, cmd = notify_sink(tmp)
+    cfg = pool.merge(pool.DEFAULTS, {"notify": {"command": cmd}})
+    say = pool.Say(tmp / "run.md")
+
+    with isolated(tmp):
+        pool.summarise([("o/r#1", "ready"), ("o/r#2", "timeout")], cfg, say)
+
+    got = [e for e in notified(sink) if e.get("event") == "finished"]
+    check("the end of the invocation is pushed", len(got) == 1, str(notified(sink)))
+    if got:
+        check("it carries what the pool did, by status",
+              got[0].get("counts") == {"ready": 1, "timeout": 1}, str(got[0].get("counts")))
+        check("and names what is left for a human, in the summary's own terms",
+              got[0].get("needs") == ["o/r#2"], str(got[0].get("needs")))
+        check("a pool that ended with a ticket needing a human says so",
+              got[0].get("needs_human") is True, str(got[0]))
+    check("the summary the operator reads on the terminal is unchanged",
+          "## summary" in say.lines and any("needs a human: o/r#2" in l for l in say.lines),
+          str(say.lines))
+
+    quiet = pool.Say(tmp / "quiet.md")
+    with isolated(tmp):
+        pool.summarise([], cfg, quiet)
+    check("an invocation that worked nothing pushes nothing — whoever stopped it is sitting here",
+          len([e for e in notified(sink) if e.get("event") == "finished"]) == 1,
+          str(notified(sink)))
+    check("and it still prints the summary it always printed", "## summary" in quiet.lines,
+          str(quiet.lines))
+
+    clean = pool.Say(tmp / "clean.md")
+    with isolated(tmp):
+        pool.summarise([("o/r#3", "ready")], cfg, clean)
+    done = [e for e in notified(sink) if e.get("event") == "finished"][1:]
+    check("and a pool that needs nothing is not dressed up as one that does",
+          done and done[0].get("needs_human") is False, str(done))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -2276,7 +2476,11 @@ def main() -> int:
                          ("held back", test_a_held_back_suspended_ticket_stays_suspended),
                          ("paused vs plain run", test_a_paused_ticket_is_not_restarted),
                          ("ended by", test_a_session_reports_what_ended_it),
-                         ("draft cause", test_a_draft_is_not_told_the_loop_ran_out_of_rounds)]:
+                         ("draft cause", test_a_draft_is_not_told_the_loop_ran_out_of_rounds),
+                         ("notify outcome", test_an_outcome_reaches_the_operator),
+                         ("notify failure", test_a_notifier_that_fails_costs_the_pool_nothing),
+                         ("notify retro-off", test_retros_stopping_is_escalated),
+                         ("notify finished", test_the_end_of_an_invocation_is_pushed_too)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

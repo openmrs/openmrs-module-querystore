@@ -19,5 +19,10 @@
     "effort": null,
     "max_budget_usd": null,
     "extra_args": []
+  },
+  "notify": {
+    "enabled": true,
+    "command": null,
+    "timeout_seconds": 15
   }
 }

@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.15.2
+version: 0.16.0
 ---
 
 # Ticket pool — the loop that learns
@@ -124,7 +124,8 @@ to, the retro's record threshold and timeout, the per-ticket timeout, quiet wind
 `parallel` block (`max_workers`, the `standalones` that bound it, and `shared_m2` if your local maven
 repository is not `~/.m2/repository`), and a `claude` block — `model`, `effort`, `max_budget_usd`,
 `binary`, and `extra_args` passed through to every
-session. Logs, the ledger and the per-session streams are under `~/.claude/pipeline/`.
+session, and a `notify` block (below). Logs, the ledger and the per-session streams are under
+`~/.claude/pipeline/`.
 
 ### Pausing, and picking it up later
 
@@ -198,6 +199,29 @@ for thinking blocks, `--tail N` to join near the end.
 **Read the stream; do not attach to the session.** `claude --resume <session-id>` puts a second writer
 on a conversation, so it is for a session that has FINISHED — `pool-watch`'s header prints the full id
 for exactly that. Reading the `.jsonl` is safe at any time and cannot perturb a run.
+
+### Being told
+
+The driver pushes three things to a channel of your choosing, because a pool that runs for hours runs
+while you are not reading its terminal: **each ticket as it lands** (every status, `needs_human` false
+only for `ready` and `paused`), **a retro that turned retros off**, and **the end of the invocation**
+with its tally. Per ticket rather than per wave — the wave ends when its slowest ticket does, and a run
+that aborted in its first ten minutes would otherwise wait most of a day to be mentioned.
+
+`notify.command` is the whole channel policy: an argv, the one-line summary appended as its LAST
+argument, the whole event as JSON on its stdin. So `["ntfy", "publish", "<topic>"]` works as written,
+and a script of your own can read the JSON and decide for itself which events are worth a phone
+buzzing — `needs_human` is there to be filtered on. No token of yours is written into this pipeline to
+do it. `notify.enabled: false` silences the lot.
+
+**Unset, it falls back to a macOS banner, and that is a fallback and not an answer.** It reaches a
+laptop you have walked away from and nothing else, and `osascript` exits 0 whether or not the banner
+was actually shown — the invoking app's notification permission decides that, and a driver started
+from a launch agent may have none. If the escalations matter, configure the channel and watch one
+arrive.
+
+A failed notifier costs one line and nothing else: it never raises, never retries, and is reported
+once per invocation rather than once per event.
 
 ### What became of the work
 
