@@ -2335,8 +2335,9 @@ def test_a_notifier_that_fails_costs_the_pool_nothing(tmp: Path) -> None:
     complaints = [line for line in say.lines if "notif" in line.lower()]
     check("and says so once, not once per event", len(complaints) == 1, str(complaints))
 
-    # And once has to survive the concurrency this driver is for: the complaint is written from
-    # whichever worker thread hits the dead channel first, and with five in flight that is a race.
+    # And once is a property of the HELPER, not of its current callers: every one of them is
+    # single-threaded today, and `notify` is reachable from anywhere. Eight at once is the shape
+    # that would break it if the lock went.
     loud = pool.Say(tmp / "racing.md")
     with isolated(tmp):
         pool.NOTIFY_FAILED["why"] = None
@@ -2351,7 +2352,7 @@ def test_a_notifier_that_fails_costs_the_pool_nothing(tmp: Path) -> None:
         finally:
             pool.NOTIFY_FAILED["why"] = None
     racing = [line for line in loud.lines if "notif" in line.lower()]
-    check("still once when eight workers find the channel dead at the same moment",
+    check("still once when eight callers find the channel dead at the same moment",
           len(racing) == 1, str(racing))
 
     # A config that cannot be read as a command must fail like any other unreachable channel.
@@ -2582,6 +2583,115 @@ def test_the_config_says_what_it_says(tmp: Path) -> None:
           given == ["ntfy", "publish", "my-topic"], str(given))
 
 
+def test_a_retro_that_never_ran_is_escalated_too(tmp: Path) -> None:
+    """A dirty source repo turns learning off just as effectively as a retro that failed.
+
+    `run_retro` refuses one whose source repo has uncommitted changes — its own last step is a commit
+    there — and returns before anything sets `RETRO_STOPPED`. So the pool went on working tickets at
+    full cost with the skills as they were, and the channel was told nothing, while the doc's own row
+    described the state it was in. An operator mid-edit of the skills is the everyday way in.
+
+    It is NOT made sticky: cleaning the repo mid-pool must still let the next boundary retro, which
+    is exactly the difference from a retro that ran and left `LAST` where it was.
+    """
+    print("\na retro skipped for a dirty source repo")
+    origin, src = git_fixture(tmp)
+    (src / "half-an-edit.md").write_text("uncommitted\n")
+    sink, cmd = notify_sink(tmp)
+    cfg = pool.merge(pool.DEFAULTS, {"source_repo": str(src), "notify": {"command": cmd}})
+    say = pool.Say(tmp / "retro.md")
+
+    with isolated(tmp):
+        pool.RETRO_STOPPED["why"] = None
+        try:
+            out = pool.run_retro(cfg, say, force=True)
+            sticky = pool.RETRO_STOPPED["why"]
+        finally:
+            pool.RETRO_STOPPED["why"] = None
+
+    check("the retro is still refused, as before", (out or {}).get("status") == "skipped-dirty",
+          str(out))
+    check("and it is still not made sticky — cleaning the repo lets the next boundary retro",
+          sticky is None, str(sticky))
+    got = [e for e in notified(sink) if e.get("event") == "retro-off"]
+    check("but the operator is told the pool is working without learning", len(got) == 1,
+          str(notified(sink)))
+    if got:
+        check("as something needing a human", got[0].get("needs_human") is True, str(got[0]))
+        check("and the two ways learning stops are told apart on the wire",
+              got[0].get("reason") == "source-repo-dirty", str(got[0].get("reason")))
+
+
+def test_a_preflight_that_refuses_does_not_do_it_in_silence(tmp: Path) -> None:
+    """The invocation that never started, from a launch agent at 02:00.
+
+    An expired `gh` token, a slot lease a killed session left, a gate hook a settings edit dropped —
+    every fatal preflight is an unattended failure, and the driver printed to a terminal nobody was
+    at and exited 1. It is the argument the all-repositories-blocked exit already carries, one screen
+    earlier.
+
+    This drives the REAL `main`, which nothing here did before: argv, config file, preflight and all.
+    """
+    print("\na preflight that refused, and said so to nobody")
+    sink, cmd = notify_sink(tmp)
+    config = tmp / "pool.json"
+    config.write_text(json.dumps({"label": "x", "repos": {"o/r": str(tmp / "not-a-checkout")},
+                                  "source_repo": str(tmp / "also-not"),
+                                  "notify": {"command": cmd}}))
+    argv = sys.argv
+    with isolated(tmp):
+        # CLAUDE_HOME is the suite's temp tree, so the skills and gate hooks preflight looks for are
+        # not there: the refusal is real and its cause is the ordinary one.
+        sys.argv = ["pool-run", "--config", str(config)]
+        try:
+            code = pool.main()
+        finally:
+            sys.argv = argv
+    check("it still refuses to start, and still exits 1", code == 1, str(code))
+    got = notified(sink)
+    check("and the refusal reaches the operator who is not at the terminal", len(got) == 1, str(got))
+    if got:
+        check("as something needing a human", got[0].get("needs_human") is True, str(got[0]))
+        check("naming what preflight refused on, not just that it did",
+              bool(got[0].get("problems")), str(got[0]))
+
+
+def test_the_end_of_a_pool_carries_what_the_status_could_not(tmp: Path) -> None:
+    """A `ready` the driver itself called self-contradictory, at the end of the pool.
+
+    `flags` was put on the per-ticket event for exactly this — "PR is ready but the gate entry says
+    blocking=N — one of the two is wrong" rides on a `ready`, so `needs_human` is false — and the
+    end-of-pool event, which is the one an operator reasonably filters down to, dropped it. One buzz
+    per pool then said nothing needs a human when something did.
+
+    The terminal says it too. The two must not be able to report different runs, which is the whole
+    reason the summary and the push are one function.
+    """
+    print("\na flagged ready at the end of a pool")
+    sink, cmd = notify_sink(tmp)
+    cfg = pool.merge(pool.DEFAULTS, {"notify": {"command": cmd}})
+    say = pool.Say(tmp / "run.md")
+    flag = "PR is ready but the gate entry says phase=building blocking=3 — one of the two is wrong"
+
+    with isolated(tmp):
+        pool.save_json(pool.LEDGER, {"o/r#1": {"status": "ready", "pr": 7, "flags": [flag]},
+                                     "o/r#2": {"status": "ready", "pr": 8, "flags": []}})
+        pool.summarise([("o/r#1", "ready"), ("o/r#2", "ready")], cfg, say)
+
+    got = [e for e in notified(sink) if e.get("event") == "finished"]
+    check("the end of the pool is still pushed", len(got) == 1, str(notified(sink)))
+    if got:
+        check("it names the run the driver called self-contradictory",
+              got[0].get("flagged") == ["o/r#1"], str(got[0].get("flagged")))
+        check("and a pool holding one is not reported as needing nobody",
+              got[0].get("needs_human") is True, str(got[0]))
+    check("the terminal says the same thing, so the two cannot disagree",
+          any("flagged: o/r#1" in line for line in say.lines), str(say.lines))
+    check("and the ticket with no flag is not swept in with it",
+          not any("o/r#2" in line for line in say.lines if line.startswith("flagged")),
+          str(say.lines))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -2628,7 +2738,10 @@ def main() -> int:
                          ("notify finished", test_the_end_of_an_invocation_is_pushed_too),
                          ("notify worker death", test_a_worker_that_dies_is_escalated_from_either_branch),
                          ("notify blocked repo", test_one_unreachable_remote_is_one_escalation),
-                         ("notify config", test_the_config_says_what_it_says)]:
+                         ("notify config", test_the_config_says_what_it_says),
+                         ("notify dirty retro", test_a_retro_that_never_ran_is_escalated_too),
+                         ("notify preflight", test_a_preflight_that_refuses_does_not_do_it_in_silence),
+                         ("notify flagged ready", test_the_end_of_a_pool_carries_what_the_status_could_not)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

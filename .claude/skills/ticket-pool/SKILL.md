@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.17.0
+version: 0.17.1
 ---
 
 # Ticket pool — the loop that learns
@@ -209,8 +209,8 @@ driver for a channel of your choosing:
 |---|---|
 | `outcome` | a ticket lands — every status, driven or `--work`, a crashed worker included |
 | `repo-blocked` | a repository could not be fetched, stalling every ticket queued against it |
-| `retro-off` | a retro left `LAST` where it was: the rest of the pool is worked without learning |
-| `finished` | the invocation drained, with its tally and its needs-a-human list |
+| `retro-off` | no retro ran, or one left `LAST` where it was: the pool works on without learning |
+| `finished` | the invocation drained — or refused to start — with its tally and what is left for you |
 | `driver-died` | the driver itself raised — pushed before the traceback, since nothing else reports it |
 
 Per TICKET rather than per wave: a wave ends when its slowest member does, and a run that aborted in
@@ -219,8 +219,18 @@ that failed: the cause is the remote, and twenty tickets queued on it are not tw
 
 `needs_human` is a statement about the STATUS — false only for `ready` and `paused` — so read `flags`
 beside it. The driver's own "PR is ready but the gate entry says blocking=N" rides on a `ready`, and a
-channel filtering on `needs_human` alone drops the one outcome the driver has called
-self-contradictory.
+channel filtering on `needs_human` alone would drop the one outcome the driver has called
+self-contradictory. `finished` is the exception and needs no second key: it names those runs in
+`flagged` and counts them in its own `needs_human`, because it is the event an operator filters a
+whole pool down to.
+
+**What leaves the machine.** The summary becomes the command's argv, so it is visible in `ps` to any
+local user and is what a banner shows; everything else — `pr_url`, the log path, `flags`, and
+`driver-died`'s `error`, which embeds failing argv and absolute paths — is on stdin only. Across the
+five events that is ticket keys, PR numbers and URLs, statuses, repo slugs, a path carrying your
+username, and raw error text. **An ntfy.sh topic is world-readable to anyone who guesses it**, so
+read the example above as a shape and not as a recommendation: a private channel, or a script of your
+own that sends only what you want sent, is the version to run.
 
 `notify.command` is the whole channel policy: an argv, the one-line summary appended as its LAST
 argument, the whole event as JSON on its stdin. `["ntfy", "publish", "<topic>"]` works as written. A

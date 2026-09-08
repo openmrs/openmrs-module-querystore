@@ -254,9 +254,10 @@ def merge(base: dict, over: dict) -> dict:
 # the events it is failing to deliver are exactly the ones nobody is reading the terminal for, so a
 # complaint per event would scroll past unread beside them.
 NOTIFY_FAILED: dict = {"why": None}
-# Held over the read-and-set of it, because with several tickets in flight the complaint has
-# concurrent callers and "once" is the whole claim: two workers hitting a dead channel together would
-# otherwise each find it unreported and each report it.
+# Held over the read-and-set of it. Every caller today is single-threaded — `landed` runs in the
+# wave's collecting thread and never in a worker — so this is what keeps that from being a
+# PRECONDITION of the helper rather than an observation about its current callers: `notify` is
+# reachable from anywhere, and "once" is the whole claim.
 NOTIFY_LOCK = threading.Lock()
 
 # The outcomes that are the pipeline getting on with it, and everything else needs a human. ONE
@@ -294,9 +295,11 @@ def notify_argv(cfg: dict) -> list[str] | None:
         return [str(part) for part in command] or None
     if sys.platform != "darwin":
         return None
-    # `on run argv` rather than an interpolated `-e`: the summary carries ticket titles, quotes and
-    # apostrophes, and an AppleScript string built by concatenation is a syntax error waiting for the
-    # first ticket titled "don't".
+    # `on run argv` rather than an interpolated `-e`. No summary carries a ticket TITLE — they are
+    # repo slugs, statuses and counts — but `driver-died` carries `str(exc)`, which embeds failing
+    # argv and absolute paths, and a retro's carries the reason it stopped. An AppleScript string
+    # built by concatenation is a syntax error waiting for the first quote or apostrophe in any of
+    # those, and this way there is nothing to escape.
     return ["osascript", "-e", "on run argv",
             "-e", 'display notification (item 1 of argv) with title "pool-run" sound name "Ping"',
             "-e", "end run"]
@@ -2730,6 +2733,13 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
     if dirty:
         say(f"    skipped: {src} has uncommitted changes, and the retro's last step is a commit "
             "there. Clean it and re-run.")
+        # Refused, not failed — and the pool works on either way with the skills exactly as they are.
+        # Deliberately NOT sticky, which is the difference from the case below: cleaning the repo
+        # mid-pool must let the next wave boundary retro.
+        notify(cfg, "retro-off",
+               f"no retro ran — {src} has uncommitted changes, so this pool is working without "
+               "learning until you commit them", say, needs_human=True, reason="source-repo-dirty",
+               records=[q.name for q in pending])
         return {"status": "skipped-dirty"}
     sh(["git", "-C", str(src), "fetch", "origin", "--prune"], timeout=600)
     branch = default_branch(src)
@@ -2771,7 +2781,8 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
     # whole pipeline is arranged to prevent, and it is not a line to find afterwards in a log.
     if RETRO_STOPPED["why"]:
         notify(cfg, "retro-off", f"retros are OFF for the rest of this pool — {RETRO_STOPPED['why']}",
-               say, needs_human=True, records=[q.name for q in pending], problems=problems)
+               say, needs_human=True, reason="last-not-advanced",
+               records=[q.name for q in pending], problems=problems)
     return {"status": "problems" if problems else "ok", "problems": problems,
             "records": [p.name for p in pending], "commit": after_head,
             "seconds": run["seconds"], "stream": run["jsonl"]}
@@ -2862,15 +2873,25 @@ def summarise(results: list[tuple[str, str]], cfg: dict, say: Say) -> None:
     """
     say("")
     say("## summary")
+    flagged = []
     for key, status in results:
         e = load_json(LEDGER, {}).get(key, {})
         say(f"  {status:13s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
+        if e.get("flags"):
+            flagged.append(key)
     # A paused ticket is not a ticket that needs a human: it needs `--resume`, and listing it
     # here would put every pause on the same line as an abort.
     needs = [k for k, s in results if needs_a_human(s)]
     if needs:
         say("")
         say("needs a human: " + ", ".join(needs))
+    # A flag rides on a STATUS that needs nobody — "PR is ready but the gate entry says blocking=N"
+    # is the one that matters — so `needs_a_human` cannot see it and neither could an operator
+    # filtering the end-of-pool push. Said in both places, because they are one function so that
+    # they cannot report different runs.
+    if flagged:
+        say("")
+        say("flagged: " + ", ".join(flagged) + " — read the run's flags in the ledger")
     counts: dict[str, int] = {}
     for _, status in results:
         counts[status] = counts.get(status, 0) + 1
@@ -2880,9 +2901,10 @@ def summarise(results: list[tuple[str, str]], cfg: dict, say: Say) -> None:
         return
     tally = ", ".join(f"{n} {s}" for s, n in sorted(counts.items()))
     notify(cfg, "finished",
-           f"pool finished: {tally}" + (f" — {len(needs)} need a human" if needs else ""),
-           say, needs_human=bool(needs), counts=counts, needs=needs, tickets=len(results),
-           log=str(say.path))
+           f"pool finished: {tally}" + (f" — {len(needs)} need a human" if needs else "")
+           + (f", {len(flagged)} flagged" if flagged else ""),
+           say, needs_human=bool(needs or flagged), counts=counts, needs=needs, flagged=flagged,
+           tickets=len(results), log=str(say.path))
 
 
 def refresh_outcomes(ledger: dict, say: Say, loud: bool = True) -> int:
@@ -3245,6 +3267,15 @@ def main() -> int:
     if fatal:
         say("")
         say("Fix the above and re-run. Nothing was started.")
+        # The same argument the all-repositories-blocked exit carries: an expired `gh` token, a lease
+        # a killed session left, a gate hook a settings edit dropped — every one of these is an
+        # unattended failure, and the invocation is over. Not on a dry run: that is somebody here.
+        if not args.dry_run:
+            notify(cfg, "finished",
+                   f"pool refused to start: {fatal[0]}" + (f" (+{len(fatal) - 1} more)"
+                                                           if len(fatal) > 1 else ""),
+                   say, needs_human=True, counts={}, needs=[], tickets=0, problems=fatal,
+                   log=str(say.path))
         return 1
     say("  ok")
 
