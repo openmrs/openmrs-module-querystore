@@ -100,7 +100,8 @@ def isolated(tmp: Path):
     # writes the operator's real state: measured — omitting `SLOTS` let a case read the real leases
     # and RELEASE two slots a hand-launched session was holding, removing their worktrees.
     names = ["LEDGER", "LEDGER_FLOCK", "LOGS", "LESSONS", "LAST", "PR_STATE", "HARDEN_STATE",
-             "UNATTENDED_DIR", "WORKTREES", "SLOT_M2", "SLOTS", "LOCK", "PAUSE", "PAUSED"]
+             "UNATTENDED_DIR", "WORKTREES", "SLOT_M2", "SLOTS", "LOCK", "PAUSE", "PAUSED",
+             "PROJECTS"]
     saved = {n: getattr(pool, n) for n in names}
     root = tmp / "state"
     for n in names:
@@ -2692,6 +2693,157 @@ def test_the_end_of_a_pool_carries_what_the_status_could_not(tmp: Path) -> None:
           str(say.lines))
 
 
+def test_a_hand_launched_run_is_watched_even_though_nobody_is(tmp: Path) -> None:
+    """`--work` is the path that does the work, and it was the path with no bounds on it.
+
+    Measured off this pipeline's own ledger on 2026-09-08: 32 of 34 rows are `launched_by: work`, and
+    the five longest runs are all `--work` — 47.7h, 40.4h, 35.6h, 23.8h, 19.7h — every one ending
+    `error`, against a declared `ticket.timeout_seconds` of 8h. `Session` carries the timeout and the
+    quiet watchdog; `work_in_session` calls `Popen` directly, so neither reached the runs that
+    mattered.
+
+    It does NOT kill. An interactive session has a human who may simply be slow, and killing one on a
+    clock would throw away work the driver's own bounds are allowed to throw away only because that
+    path is headless. What it does is tell somebody, which is the thing that was not happening.
+    """
+    print("\na hand-launched run nobody is watching")
+    origin, work = git_fixture(tmp)
+    one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
+    sink, cmd = notify_sink(tmp)
+    stub = tmp / "stub"
+    stub.write_text("#!/bin/bash\nsleep 4\n")
+    stub.chmod(0o755)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/r": str(work)}, "claude": {"binary": str(stub)},
+        "parallel": {"max_workers": 1, "standalones": [str(one)]},
+        "ticket": {"timeout_seconds": 1, "quiet_seconds": 1},
+        "notify": {"command": cmd}})
+
+    with isolated(tmp):
+        say = pool.Say(tmp / "l.md")
+        # The transcript the session will write, aged so the quiet window is already spent. Its
+        # location is derived from the worktree, so it can be laid down before the session starts.
+        wt = pool.worktree_path("o/r", "266")
+        project = pool.PROJECTS / str(wt).replace("/", "-").replace(".", "-")
+        project.mkdir(parents=True, exist_ok=True)
+        transcript = project / "0000.jsonl"
+        transcript.write_text("{}\n")
+        os.utime(transcript, (time.time() - 600, time.time() - 600))
+
+        code = pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+
+    check("the session still ran to its own end — nothing killed it", code == 0, str(code))
+    check("and it still recorded a terminal outcome", entry.get("status") not in (None, "running"),
+          str(entry.get("status")))
+    overdue = [e for e in notified(sink) if e.get("event") == "run-overdue"]
+    reasons = sorted({e.get("reason") for e in overdue})
+    check("the operator is told it passed its bound", "past-its-bound" in reasons, str(reasons))
+    check("and told when it went quiet", "quiet" in reasons, str(reasons))
+    check("each reason once, not once per poll", len(overdue) == 2, str([e.get("summary") for e in overdue]))
+    check("both need a human", all(e.get("needs_human") is True for e in overdue), str(overdue))
+
+    # Fail-open, in the direction that matters: the transcript layout is observed rather than
+    # promised, so a session whose transcript cannot be found must produce NO quiet claim. Claiming
+    # one anyway would fire on every hand-launched run that writes nowhere this can see — a false
+    # alarm every time, which is how a channel gets muted and then ignored.
+    with isolated(tmp):
+        say = pool.Say(tmp / "l2.md")
+        blind = pool.work_in_session(cfg, "o/r", "267", {"url": "https://example/267"}, work, say)
+    later = [e for e in notified(sink) if e.get("event") == "run-overdue"
+             and e.get("key") == "o/r#267"]
+    check("a run whose transcript cannot be found still reports its bound",
+          [e.get("reason") for e in later] == ["past-its-bound"],
+          str([e.get("reason") for e in later]))
+    check("and makes no claim at all about whether it went quiet",
+          not any(e.get("reason") == "quiet" for e in later), str(later))
+    check("and is not otherwise disturbed by being unwatchable", blind == 0, str(blind))
+
+
+def test_status_names_a_running_row_no_session_holds(tmp: Path) -> None:
+    """Seven rows on this machine say `running` and nothing is running: measured 2026-09-08, the
+    oldest since 2026-09-03, every one `launched_by: work`.
+
+    `reap_running` cannot fix that from here — its soundness argument is the machine lock, which
+    `--work` never takes, so reaping from a hand-launched session would publish `error` over a live
+    sibling's row. A LEASE can say it instead: a lease whose worktree is gone or whose pid is dead
+    belonged to a session that ended. `--status` only reports it, because `--status` writes nothing —
+    including, deliberately, not through `active_leases`, which prunes what it filters.
+    """
+    print("\na running row nothing is running")
+    with isolated(tmp):
+        say = pool.Say(tmp / "s.md")
+        cfg = pool.merge(pool.DEFAULTS, {})
+        pool.save_json(pool.LEDGER, {
+            "o/r#100": {"status": "running", "launched_by": "work", "attempts": 1,
+                        "last_run": "2026-09-03T10:10:18+00:00"},
+            "o/r#200": {"status": "ready", "launched_by": "work", "pr": 9}})
+        pool.SLOTS.mkdir(parents=True, exist_ok=True)
+        dead = pool.SLOTS / "slot-9.json"
+        pool.save_json(dead, {"slot": "slot-9", "ticket": "100", "slug": "o/r",
+                              "worktree": str(tmp / "gone")})
+        before = pool.LEDGER.read_bytes()
+        pool.cmd_status(cfg, say)
+        after = pool.LEDGER.read_bytes()
+        still_there = dead.exists()
+
+    line = [l for l in say.lines if l.startswith("o/r#100")]
+    check("the row is still reported", len(line) == 1, str(say.lines[:4]))
+    check("and it is named as one nothing is running", any("no live session" in l for l in say.lines),
+          str(line))
+    check("with how long it has said it", any("running for" in l and "h" in l for l in line),
+          str(line))
+    check("a row that is not running is not annotated",
+          not any(l.startswith("o/r#200") and "no live session" in l for l in say.lines), str(say.lines))
+    check("--status still writes nothing to the ledger", before == after, "cmd_status wrote the ledger")
+    check("and does not prune a lease on its way past", still_there,
+          "cmd_status deleted a lease file — it must not write anything")
+
+
+def test_the_next_hand_launch_closes_out_what_died(tmp: Path) -> None:
+    """Nothing reaps a `--work` row today, because reaping runs only when a DRIVER starts.
+
+    So the next hand-launched session does it, scoped to what a lease can prove dead: `launched_by:
+    work`, `running`, and no live lease holding it. A row a live sibling session owns is left exactly
+    alone — that is the whole reason this cannot be `reap_running`.
+    """
+    print("\nthe next hand-launch closes out what died")
+    origin, work = git_fixture(tmp)
+    one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
+    stub = tmp / "stub"
+    stub.write_text("#!/bin/bash\nexit 0\n")
+    stub.chmod(0o755)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/r": str(work)}, "claude": {"binary": str(stub)},
+        "parallel": {"max_workers": 1, "standalones": [str(one)]},
+        "notify": {"enabled": False}})
+
+    with isolated(tmp):
+        say = pool.Say(tmp / "l.md")
+        pool.SLOTS.mkdir(parents=True, exist_ok=True)
+        alive_wt = tmp / "live-worktree"
+        alive_wt.mkdir()
+        pool.save_json(pool.SLOTS / "slot-8.json",
+                       {"slot": "slot-8", "ticket": "300", "slug": "o/r",
+                        "worktree": str(alive_wt), "session_pid": os.getpid()})
+        pool.save_json(pool.LEDGER, {
+            "o/r#100": {"status": "running", "launched_by": "work", "attempts": 1},
+            "o/r#300": {"status": "running", "launched_by": "work", "attempts": 1},
+            "o/r#400": {"status": "running", "attempts": 1}})
+        pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
+        led = pool.load_json(pool.LEDGER, {})
+
+    check("the row no lease holds is closed out", led.get("o/r#100", {}).get("status") == "error",
+          str(led.get("o/r#100")))
+    check("and says why, rather than looking like a run that failed",
+          any("no live session" in f for f in led.get("o/r#100", {}).get("flags") or []),
+          str(led.get("o/r#100", {}).get("flags")))
+    check("a row a LIVE sibling session holds is left alone",
+          led.get("o/r#300", {}).get("status") == "running", str(led.get("o/r#300")))
+    check("and a DRIVER's row is left to the driver's own reap, which holds the lock",
+          led.get("o/r#400", {}).get("status") == "running", str(led.get("o/r#400")))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -2741,7 +2893,10 @@ def main() -> int:
                          ("notify config", test_the_config_says_what_it_says),
                          ("notify dirty retro", test_a_retro_that_never_ran_is_escalated_too),
                          ("notify preflight", test_a_preflight_that_refuses_does_not_do_it_in_silence),
-                         ("notify flagged ready", test_the_end_of_a_pool_carries_what_the_status_could_not)]:
+                         ("notify flagged ready", test_the_end_of_a_pool_carries_what_the_status_could_not),
+                         ("work watchdog", test_a_hand_launched_run_is_watched_even_though_nobody_is),
+                         ("status staleness", test_status_names_a_running_row_no_session_holds),
+                         ("work reaps the dead", test_the_next_hand_launch_closes_out_what_died)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

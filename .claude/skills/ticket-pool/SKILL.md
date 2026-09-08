@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.17.1
+version: 0.18.0
 ---
 
 # Ticket pool — the loop that learns
@@ -211,6 +211,7 @@ driver for a channel of your choosing:
 | `repo-blocked` | a repository could not be fetched, stalling every ticket queued against it |
 | `retro-off` | no retro ran, or one left `LAST` where it was: the pool works on without learning |
 | `finished` | the invocation drained — or refused to start — with its tally and what is left for you |
+| `run-overdue` | a `--work` run passed its bound or went quiet — reported, never killed |
 | `driver-died` | the driver itself raised — pushed before the traceback, since nothing else reports it |
 
 Per TICKET rather than per wave: a wave ends when its slowest member does, and a run that aborted in
@@ -276,6 +277,9 @@ Three caps, in different states: `claude.max_budget_usd` bounds one session's sp
 by default; `ticket.timeout_seconds` bounds its wall clock and ships set to eight hours; `--limit N`
 bounds how many tickets an invocation takes and applies only when you pass it. The unset one is the
 one to decide about before the first long run rather than after it.
+
+**Two of those three bind the DRIVEN path only.** A `--work` session is an ordinary interactive
+`claude`, so nothing kills it on a clock and it reports no cost — see "Two sessions by hand".
 
 ## What the driver decides, and what it must not
 
@@ -414,6 +418,29 @@ rather than killing by symptom. Without that scoping a verifier's ordinary "kill
 port" is a licence to stop a sibling's server mid-query.
 
 ## Two sessions by hand
+
+**What a hand-launched run does NOT get, and what it now does.** `ticket.timeout_seconds` and
+`ticket.quiet_seconds` are enforced by `Session`, which only the driven path and the retro use; a
+`--work` session is an ordinary interactive `claude` under `Popen`. So it is not killed on a clock,
+and — because it inherits your terminal rather than emitting `stream-json` — it records no
+`cost_usd` and no `turns` either. That mattered more than it sounds: measured on this machine on
+2026-09-08, 32 of 34 ledger rows were `launched_by: work`, the five longest runs were all `--work`
+at 47.7h down to 19.7h and every one of them ended `error`, and only the two driver-launched runs
+recorded a cost at all.
+
+Both bounds are now WATCHED rather than enforced: passing the timeout, and going quiet for
+`quiet_seconds`, each push a `run-overdue` event once and neither ends the session. Quiet is read
+from the session's own transcript under `~/.claude/projects/`, fail-open — no transcript, no claim.
+Killing is left to you on purpose: the driven path may kill on a clock because it is headless and
+the bound is the only thing that can end it, while this session has somebody who can answer it.
+
+**And a `--work` run closes out what an earlier one left behind.** A row still saying `running` is
+reaped only when a DRIVER starts, which on this machine happened twice against 32 hand-launched
+runs — seven rows were reporting a live session days later. The next `--work` session now closes
+out the `--work` rows no live lease holds, and `--status` marks them rather than repeating them as
+live. It cannot be `reap_running`: that one's soundness is the machine lock, which `--work` never
+takes, so it would publish `error` over a live sibling's row. A lease can prove death without the
+lock — its worktree is gone, or its pid is.
 
 Everything above is the driver working tickets unattended. If you would rather drive two `claude`
 sessions yourself — to watch them, or to interrupt one — the isolation still has to come from
