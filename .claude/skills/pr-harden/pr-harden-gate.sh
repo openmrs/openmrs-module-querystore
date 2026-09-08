@@ -1,12 +1,24 @@
 #!/bin/bash
 # Stop-hook gate for the `pr-harden` skill's termination contract.
 #
-# The contract: a /pr-harden run is complete only when a REVIEW ROUND reports ZERO blocking
-# findings. Non-blocking findings do not extend the loop (the fixer applies them anyway — that is
-# the point of separating the fixer's scope from the loop's exit condition), and edit counts are
-# irrelevant here: unlike /harden, every round is expected to make edits, so "the cycle changed
-# nothing" can never be the condition. Only the reviewer's blocking count can end the run, and the
-# reviewer that produced it must have been a fresh agent — see the skill.
+# The contract: a /pr-harden run is complete only when the SHA IT IS HANDING OVER has been reviewed
+# with ZERO blocking findings, and — where a verifier ran at all — verified on that same sha. Edit
+# counts are irrelevant here: unlike /harden, every round is expected to make edits, so "the cycle
+# changed nothing" can never be the condition. Only a reviewer's blocking count can end the run, and
+# the reviewer that produced it must have been a fresh agent — see the skill.
+#
+# THE CONDITION IS A PROPERTY OF THE ARTIFACT, NOT A PAST EVENT, and it used to be the latter. A
+# reviewer clears sha N; FINISH then applies that round's non-blocking findings, commits and pushes
+# sha N+1; "a review round reported zero blocking findings" stays true, because it was true of N and
+# nothing makes it false. So this gate released a handover whose head no reviewer had ever seen —
+# every run on which the terminating round raised any non-blocking finding at all, which is the
+# normal case. The run records say those edits are not cosmetic: a whitespace normal form defined
+# twice, a citation carve-out pinned at only two markers, an assertion that pinned nothing. The
+# verifier half is the same hole from the other side — FINISH runs one on the merging head and its
+# finding has no round left to reach. `reviewed_shas` has been recorded in this file since the skill
+# was written, and the skill's step 1 compares it against the INCOMING head at the start of a round
+# (two rounds reviewing one sha is a round wasted); what nothing compared it against was the head
+# being HANDED OVER, which is the comparison below.
 #
 # Contract with the skill: it writes an entry keyed by the repo it is working in:
 #
@@ -98,6 +110,35 @@ pid_or_empty() {
   case "$1" in ''|*[!0-9]*) return 0 ;; esac
   local n; n=$(printf '%s' "$1" | sed 's/^0*//')
   [ -n "$n" ] && printf '%s' "$n"
+}
+
+# Could this RECORDED value be a sha at all? Only then is it evidence about the head. Measured while
+# reviewing this check: without the guard, `reviewed_shas: ["HEAD"]` or a branch name BLOCKED, which
+# breaks the fail-open doctrine this whole file is built on -- a value that is not a sha says nothing
+# about the head, so it must degrade to the behaviour that predates this check rather than wedge the
+# session. The floor of 7 is the other half of the same measurement: a 3-character record matched any
+# head beginning with those characters, silently satisfying the check, and 7 is what git's own
+# `core.abbrev` treats as the shortest useful abbreviation. THE RESIDUE, stated rather than implied:
+# a recorded value below the floor or outside hex makes this check silently not bind. Its only writer
+# is `gate-state reviewed-sha`/`verified-sha`, so that is a bug in the caller, not a normal state.
+looks_like_sha() {
+  case "$1" in ''|*[!0-9a-fA-F]*) return 1 ;; esac
+  [ "${#1}" -ge 7 ]
+}
+
+# Do a RECORDED sha and the head name the same commit? One being a prefix of the other is a match,
+# because the recorded value may be abbreviated -- `gate-state`'s own documented invocation is
+# `reviewed-sha 3085ff02`, eight characters -- while `git rev-parse HEAD` is always full. Comparing
+# for equality would read every abbreviated record as a mismatch and block every converged run.
+# Folded to lower case because `git rev-parse` emits lower and a hand-written record may not.
+sha_matches() {
+  local a b
+  a=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  b=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+  [ -n "$a" ] && [ -n "$b" ] || return 1
+  case "$b" in "$a"*) return 0 ;; esac
+  case "$a" in "$b"*) return 0 ;; esac
+  return 1
 }
 
 # Is PID an ancestor of this hook process? 0 = yes, 1 = the walk reached the top without meeting it
@@ -299,7 +340,68 @@ esac
 
 BLOCKING=$(jq -r '.blocking // empty' <<<"$ENTRY" 2>/dev/null) || allow
 case "$BLOCKING" in ''|*[!0-9]*) allow ;; esac
-[ "$BLOCKING" -gt 0 ] || allow
+
+if [ "$BLOCKING" -eq 0 ]; then
+  # A clean review, so the only question left is WHICH SHA it was clean about. Fail open wherever
+  # that cannot be established -- no git, not a worktree, an unreadable head, or a run that recorded
+  # no shas at all (an older entry, or the resolve-ticket handoff before its first round). A gate
+  # that holds a session on a comparison it could not make is the wedge this file exists to avoid.
+  command -v git >/dev/null 2>&1 || allow
+  HEAD_SHA=$(git -C "$KEY" rev-parse HEAD 2>/dev/null) || allow
+  [ -n "$HEAD_SHA" ] || allow
+
+  LAST_REVIEWED=$(jq -r '(.reviewed_shas // []) | last // empty' <<<"$ENTRY" 2>/dev/null) || allow
+  if looks_like_sha "$LAST_REVIEWED" && ! sha_matches "$LAST_REVIEWED" "$HEAD_SHA"; then
+    jq -n --arg p "$PR" --arg r "$ROUND" --arg h "${HEAD_SHA:0:12}" --arg s "${LAST_REVIEWED:0:12}" '{
+      decision: "block",
+      reason: ("pr-harden termination contract: round " + $r + " on PR #" + $p + " reported zero "
+        + "blocking findings, but it reported that about " + $s + ", and this worktree'"'"'s head is "
+        + $h + ". The sha you hand over must be one a review round cleared -- the condition is a "
+        + "property of the artifact, not a past event. Something edited the branch after the last "
+        + "review, and FINISH applying that round'"'"'s non-blocking findings is the usual cause. So "
+        + "either hand over the reviewed sha, or run one more round on this head: a FRESH reviewer "
+        + "agent (a new subagent, never subagent_type \"fork\"), BLOCKING-ONLY so it terminates -- "
+        + "any non-blocking finding it raises goes to a follow-up issue rather than into this branch "
+        + "-- then record it with `gate-state reviewed-sha " + $h + "`. Do NOT hand back to the user "
+        + "and do NOT ask whether to continue; if you are deliberately stopping early, take the "
+        + "labelled override in the skill'"'"'s Termination section and set override:true in "
+        + "~/.claude/pr-harden-state.json with its reason. If instead this entry is the LEFTOVER of a "
+        + "run that already handed its PR over, and this worktree has simply moved on since, "
+        + "`~/.claude/pipeline/gate-state clear --only pr` removes it and reports what it removed -- "
+        + "never edit that file by hand, since every live session shares it and only the helper locks "
+        + "it."),
+      systemMessage: ("pr-harden: PR #" + $p + " head " + $h + " was never reviewed (last review was "
+        + $s + ") — one more round is owed")
+    }'
+    exit 0
+  fi
+
+  # The verifier half. Absent `verified_shas` means no verifier ran for this PR at all, which is a
+  # legitimate state -- the skill gates VERIFY on the round having touched runtime behaviour, so a
+  # docs-only PR has none -- and requiring one there would wedge exactly the runs that owe nothing.
+  LAST_VERIFIED=$(jq -r '(.verified_shas // []) | last // empty' <<<"$ENTRY" 2>/dev/null) || allow
+  if looks_like_sha "$LAST_VERIFIED" && ! sha_matches "$LAST_VERIFIED" "$HEAD_SHA"; then
+    jq -n --arg p "$PR" --arg h "${HEAD_SHA:0:12}" --arg s "${LAST_VERIFIED:0:12}" '{
+      decision: "block",
+      reason: ("pr-harden termination contract: the last verifier run on PR #" + $p + " covered " + $s
+        + ", and this worktree'"'"'s head is " + $h + ". A runtime-visible change is not ready until a "
+        + "verifier has run against the head that will merge. Run one on this head now -- a fresh "
+        + "subagent, under the same rules: it repairs the ENVIRONMENT and never the artifact under "
+        + "test -- and record it with `gate-state verified-sha " + $h + "`. A substantive finding from "
+        + "it (classification \"not-the-environment\") is a BLOCKING finding: record it and continue "
+        + "from step 4. An environmental failure is not one and must never re-enter the loop, or the "
+        + "run grinds rounds against a broken standalone until the cap; `unrepairable` aborts, and a "
+        + "head that cannot be verified is reported as converged-but-unverified rather than marked "
+        + "ready. Do NOT hand back to the user and do NOT ask whether to continue; if you are "
+        + "deliberately stopping early, take the labelled override and set override:true with its "
+        + "reason."),
+      systemMessage: ("pr-harden: PR #" + $p + " head " + $h + " is unverified (last verifier run "
+        + "covered " + $s + ")")
+    }'
+    exit 0
+  fi
+  allow
+fi
 
 # Present, fresh, and the last review found blocking findings: another round is owed.
 jq -n --arg p "$PR" --arg r "$ROUND" --arg b "$BLOCKING" '{

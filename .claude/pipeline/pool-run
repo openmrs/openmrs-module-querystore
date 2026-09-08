@@ -47,6 +47,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -71,6 +72,7 @@ PAUSED = PIPELINE / "paused.json"      # what a paused driver left behind; see `
 SHARED_M2 = HOME / ".m2/repository"
 LESSONS = CLAUDE / "skill-lessons"
 LAST = LESSONS / "LAST"
+PROJECTS = CLAUDE / "projects"         # where `claude` writes a session's transcript; see `session_transcript`
 PR_STATE = CLAUDE / "pr-harden-state.json"
 HARDEN_STATE = CLAUDE / "harden-state.json"
 SETTINGS = CLAUDE / "settings.json"
@@ -101,6 +103,10 @@ DEFAULTS = {
     # other's deploy. One standalone per worker, each with its own tomcat and database port. Default
     # 1, which is exactly the behaviour that predates this.
     "parallel": {"max_workers": 1, "standalones": [], "shared_m2": None},
+    # Where an escalation goes when nobody is at the terminal — which is the normal state of a pool
+    # that runs for hours. `command` is an argv (or a shell string) the summary is appended to, with
+    # the whole event as JSON on its stdin; unset falls back to a macOS banner. See `notify_argv`.
+    "notify": {"enabled": True, "command": None, "timeout_seconds": 15},
 }
 
 # The sessions running right now, so a second interrupt can reach them. A first interrupt asks the
@@ -191,6 +197,20 @@ class Say:
             except OSError:
                 pass
 
+    def quietly(self, line: str = "") -> None:
+        """Into the log, and NOT onto the terminal.
+
+        For a watcher writing while an interactive session owns the screen: a line printed there
+        lands in the middle of somebody's TUI. The log is where it belongs and where `--status`
+        readers look for it anyway.
+        """
+        with self.lock:
+            self.lines.append(line)
+            try:
+                self.path.write_text("\n".join(self.lines) + "\n")
+            except OSError:
+                pass
+
     def for_ticket(self, tag: str):
         """A `Say` for one worker: same sink, every line labelled with whose it is."""
         def tagged(line: str = "") -> None:
@@ -241,6 +261,124 @@ def merge(base: dict, over: dict) -> dict:
     for k, v in (over or {}).items():
         out[k] = merge(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
     return out
+
+
+# ─────────────────────────────────────────────────────────────── notifying ──
+
+# Said once per invocation. A channel that cannot be reached is worth ONE line and not one per event:
+# the events it is failing to deliver are exactly the ones nobody is reading the terminal for, so a
+# complaint per event would scroll past unread beside them.
+NOTIFY_FAILED: dict = {"why": None}
+# Held over the read-and-set of it. Every caller today is single-threaded — `landed` runs in the
+# wave's collecting thread and never in a worker — so this is what keeps that from being a
+# PRECONDITION of the helper rather than an observation about its current callers: `notify` is
+# reachable from anywhere, and "once" is the whole claim.
+NOTIFY_LOCK = threading.Lock()
+
+# The outcomes that are the pipeline getting on with it, and everything else needs a human. ONE
+# definition, because the summary's own line and what wakes somebody at 3am must not be able to
+# disagree about which those are. `paused` is deliberately here: it needs `--resume`, not judgement.
+SETTLED = ("ready", "paused")
+
+
+def needs_a_human(status: str) -> bool:
+    return status not in SETTLED
+
+
+def notify_argv(cfg: dict) -> list[str] | None:
+    """The command one event is handed to, or None when nothing here can deliver one.
+
+    `notify.command` is the whole channel policy and the driver has no opinion about it: an argv the
+    operator chooses, the one-line summary appended as its LAST argument, the whole event as JSON on
+    its stdin. `["ntfy", "publish", "<topic>"]`, a Slack wrapper, or a script that decides for itself
+    which events are worth a phone buzzing all work unchanged — and a secret can live in that
+    script of theirs rather than in this pipeline's config.
+
+    Unset, it falls back to a macOS banner. That fallback exists so the feature is not inert out of
+    the box, NOT because a banner answers an eight-hour unattended run: it reaches a laptop the
+    operator has walked away from, and nothing else. Configure the channel.
+    """
+    notify_cfg = cfg.get("notify") or {}
+    if not notify_cfg.get("enabled", True):
+        return None
+    command = notify_cfg.get("command")
+    if command is not None:
+        # Emptied is not unset. An operator who blanked this chose silence, and answering that with
+        # a banner is the driver overruling the only instruction the key can carry.
+        if isinstance(command, str):
+            command = shlex.split(command)
+        return [str(part) for part in command] or None
+    if sys.platform != "darwin":
+        return None
+    # `on run argv` rather than an interpolated `-e`. No summary carries a ticket TITLE — they are
+    # repo slugs, statuses and counts — but `driver-died` carries `str(exc)`, which embeds failing
+    # argv and absolute paths, and a retro's carries the reason it stopped. An AppleScript string
+    # built by concatenation is a syntax error waiting for the first quote or apostrophe in any of
+    # those, and this way there is nothing to escape.
+    return ["osascript", "-e", "on run argv",
+            "-e", 'display notification (item 1 of argv) with title "pool-run" sound name "Ping"',
+            "-e", "end run"]
+
+
+def notify_timeout(cfg: dict) -> int:
+    """Absent means 15. A number the operator wrote is theirs — `or 15` silently overruled a 0."""
+    given = (cfg.get("notify") or {}).get("timeout_seconds")
+    return 15 if given is None else int(given)
+
+
+def notify(cfg: dict, event: str, summary: str, say, needs_human: bool = False, **fields) -> None:
+    """Push one event to the operator's channel. Never raises, never retries, never waits long.
+
+    This is the least important thing the driver does and it behaves like it: a channel that is
+    missing, misconfigured or slow costs one line of output and nothing else. The pool is the work; a
+    notification is a convenience laid over it, and the day it can stop a wave is the day it has cost
+    more than every escalation it ever delivered.
+    """
+    # Resolving the channel is INSIDE the guard, not before it. `notify.command: true` — somebody
+    # answering the question the key asks — is not iterable, and `notify_argv` raised it straight
+    # through a promise this docstring makes: out of a single-job wave it took the pool, and out of a
+    # parallel one it was caught by the worker handler and a finished ticket was rewritten as a crash.
+    argv, why = None, None
+    try:
+        argv = notify_argv(cfg)
+        if not argv:
+            return
+        payload = {"event": event, "summary": summary, "needs_human": needs_human,
+                   "at": datetime.now(timezone.utc).isoformat(), **fields}
+        done = subprocess.run(argv + [summary], input=json.dumps(payload), text=True,
+                              capture_output=True,
+                              timeout=notify_timeout(cfg))
+        if done.returncode != 0:
+            why = f"exit {done.returncode}: {(done.stderr or done.stdout).strip()[:160]}"
+    except Exception as exc:                      # including the timeout, which is not exceptional
+        why = f"{type(exc).__name__}: {exc}"[:200]
+    if not why:
+        return
+    with NOTIFY_LOCK:
+        first, NOTIFY_FAILED["why"] = not NOTIFY_FAILED["why"], NOTIFY_FAILED["why"] or why
+    if first:
+        say(f"! the notifier ({argv[0] if argv else 'notify.command'}) failed — {why}. Nothing else "
+            "is affected, but this run's escalations are not reaching you.")
+
+
+def notify_outcome(cfg: dict, ledger: dict, key: str, status: str, say) -> None:
+    """One ticket landed.
+
+    Pushed as it lands rather than with its wave: five workers against an eight-hour bound means the
+    wave ends when its SLOWEST ticket does, and a run that aborted in the first ten minutes would sit
+    unreported for the rest of the day — which is the whole failure this is here to end.
+    """
+    entry = (ledger or {}).get(key) or {}
+    pr = entry.get("pr")
+    # `flags` and `killed_for` travel with it because `needs_human` is a statement about the STATUS
+    # and cannot be one about the run: the driver's own "PR is ready but the gate entry says
+    # blocking=N — one of the two is wrong" rides on a `ready`, and a channel filtering on
+    # `needs_human` alone would drop the one outcome the driver has called self-contradictory.
+    notify(cfg, "outcome", f"{key}: {status}" + (f" (PR #{pr})" if pr else ""), say,
+           needs_human=needs_a_human(status), key=key, status=status, pr=pr,
+           pr_url=entry.get("pr_url"), duration_s=entry.get("duration_s"),
+           cost_usd=entry.get("cost_usd"), flags=entry.get("flags") or [],
+           killed_for=entry.get("killed_for"))
 
 
 # ─────────────────────────────────────────────────────────────────── pause ──
@@ -661,6 +799,84 @@ def slot_problems(cfg: dict, workers: int) -> list[str]:
 # ────────────────────────────────────────────────────────────────── claims ──
 
 
+def pid_is_alive(pid) -> bool:
+    """Whether a recorded pid still names a process.
+
+    `ProcessLookupError` is the only answer that means dead. A `PermissionError` means the process is
+    THERE and belongs to somebody else, and reading it as death is how a liveness check licenses
+    overwriting a live session's row.
+    """
+    if not isinstance(pid, int) or pid <= 0:                # 0 and negatives address a group
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def lease_is_live(lease: dict) -> bool:
+    """Whether the session a lease names is still there — the predicate, with no pruning.
+
+    Separate from `active_leases` because two callers want the question and only one of them may
+    answer it destructively: `--status` reports on leases and writes nothing at all, and a reader
+    that deleted what it looked at would be the second thing in this file to do that by accident.
+
+    A `--work` lease also records the session it belongs to, and a session that is gone cannot give
+    its slot back: SIGINT, SIGHUP and SIGTERM are absorbed so the release still runs, but SIGKILL
+    cannot be, and one `kill -9` would otherwise cost that slot until somebody noticed. A `--claim`
+    lease records no session — the operator starts `claude` afterwards, so there is no pid to record
+    — and its liveness stays the worktree. Absence of a pid is not death.
+    """
+    # A lease file is JSON somebody or something else wrote, so its fields are not to be trusted to
+    # be the type they usually are: `Path(5)` raises, and raising here took out `claim_slot` and
+    # every hand-launched start with it, over one corrupt file. A lease that cannot be read is not a
+    # live one.
+    worktree = lease.get("worktree")
+    if not isinstance(worktree, str) or not Path(worktree).is_dir():
+        return False
+    pid = lease.get("session_pid")
+    return pid_is_alive(pid) if pid is not None else True
+
+
+def leased_tickets() -> set[str]:
+    """The `slug#ticket` keys a live hand-launched session is holding, pruning nothing."""
+    return {f"{lease['slug']}#{str(lease['ticket']).lstrip('#')}"
+            for lease in all_leases().values()
+            if lease.get("slug") and lease.get("ticket") and lease_is_live(lease)}
+
+
+def work_row_death(entry: dict) -> str | None:
+    """Why a `--work` row saying `running` can be PROVEN over, or None where it cannot be.
+
+    The proof is a recorded pid that no longer exists, and nothing weaker. "No lease holds it" was
+    very nearly shipped as if it were proof, and it is not: `release_claim` unlinks a lease with no
+    liveness check at all, and `active_leases` prunes one whose worktree was removed — so an operator
+    typing `--release` in a second terminal, or a pruned worktree, would have the next hand-launched
+    session publish `error` over a run that is still working. `write_ledger` then keeps the flag
+    saying so as a field it never saw, so the lie outlives the session that disproves it.
+
+    A row with no pid — every row written before this existed — is therefore left alone. It cannot be
+    shown dead, `--status` says as much, and `reap_running` under the machine lock still can.
+
+    Driver rows are deliberately out of scope: they record no session here, and the driver's own reap
+    holds the lock that makes the weaker argument sound.
+    """
+    if entry.get("status") != "running" or entry.get("launched_by") != "work":
+        return None
+    pid = entry.get("session_pid")
+    if not isinstance(pid, int) or pid <= 0 or pid_is_alive(pid):
+        return None
+    return f"the session that held it (pid {pid}) is gone"
+
+
+def stale_work_rows(ledger: dict) -> dict[str, str]:
+    """Every `--work` row that `work_row_death` can prove is over, and why."""
+    return {k: why for k, e in sorted(ledger.items()) if (why := work_row_death(e))}
+
+
 def active_leases() -> dict[str, dict]:
     """Slot leases held by hand-launched sessions, minus the ones whose session is gone.
 
@@ -672,22 +888,10 @@ def active_leases() -> dict[str, dict]:
     live = {}
     for path in sorted(SLOTS.glob("*.json")) if SLOTS.is_dir() else []:
         lease = load_json(path, {})
-        gone = not (lease.get("worktree") and Path(lease["worktree"]).is_dir())
-        # A `--work` lease also records the session it belongs to, and a session that is gone cannot
-        # give its slot back: SIGINT, SIGHUP and SIGTERM are absorbed so the release still runs, but
-        # SIGKILL cannot be, and one `kill -9` would otherwise cost that slot until somebody noticed.
-        # A `--claim` lease records no session — the operator starts `claude` afterwards, so there is
-        # no pid to record — and its liveness stays the worktree. Absence of a pid is not death.
-        pid = lease.get("session_pid")
-        if not gone and isinstance(pid, int) and pid > 0:   # 0 and negatives address a group
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                gone = True
-        if gone:
-            path.unlink(missing_ok=True)
-        else:
+        if lease_is_live(lease):
             live[path.stem] = lease
+        else:
+            path.unlink(missing_ok=True)
     return live
 
 
@@ -842,6 +1046,134 @@ def release_claim(cfg: dict, ticket: str, say) -> dict | None:
     return None
 
 
+def project_dir_name(worktree: Path) -> str:
+    """`claude`'s directory name for a session whose cwd is `worktree`.
+
+    OBSERVED and not a contract: every project directory on a machine running this matches
+    `[A-Za-z0-9-]+`, i.e. every other character of the path is flattened to `-`. An earlier version
+    mapped only `/` and `.`, which is right for most paths and silently wrong for any worktree leaf
+    carrying an underscore — `safe_component` allows them — and a name that is wrong finds no
+    directory and reports nothing, which looks exactly like a session that is fine.
+    """
+    return re.sub(r"[^A-Za-z0-9-]", "-", str(worktree))
+
+
+def silence_since(worktree: Path, started_at: int) -> int | None:
+    """How long THIS run has written nothing, or None when that cannot be said.
+
+    The signal is the session's own transcripts under `~/.claude/projects/<project_dir_name>/`. It is
+    the only one a hand-launched session gives a watcher at all: it inherits the terminal, so unlike
+    a driven one there is no stream to read.
+
+    Two things this gets right that the obvious version does not.
+
+    The FLOOR. That directory is keyed on the worktree path, which is deterministic per ticket, so it
+    outlives the worktree — #266's still held transcripts from 2026-08-27 with no worktree at all. A
+    version without the floor calls the next run of that ticket "quiet for twelve days" on its first
+    tick and, because the report latches, spends the only quiet report that run will ever make.
+
+    The SUBTREE. A session's subagent transcripts sit under `<session-id>/`, and only the parent sits
+    at the top level — 16 of #266's 17 files were below it. Measured over this pipeline's own
+    transcripts, the largest gap in a PARENT jsonl of a `--work` run is hours (701 minutes on ticket
+    356, 534 on 360), far past the 90-minute default: a top-level-only glob spends the quiet report
+    on a session that is busy in its subagents.
+
+    Fail-open, deliberately: nothing written yet is absence of evidence, not evidence of a stall, and
+    the bound still catches a session that wedges before its first write.
+    """
+    project = PROJECTS / project_dir_name(worktree)
+    if not project.is_dir():
+        return None
+    newest = None
+    for path in project.rglob("*.jsonl"):
+        try:
+            at = int(path.stat().st_mtime)
+        except OSError:
+            continue
+        if at >= started_at and (newest is None or at > newest):
+            newest = at
+    return None if newest is None else now() - newest
+
+
+def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
+                        stop: threading.Event, say) -> None:
+    """Tell somebody when a hand-launched run passes its bound or goes quiet. It NEVER kills.
+
+    `Session` carries the driver's timeout and quiet window; `work_in_session` starts an ordinary
+    interactive `claude` with `Popen`, so for as long as this path has existed neither bound applied
+    to it. Measured off this pipeline's ledger on 2026-09-08: 32 of 34 rows were `launched_by: work`,
+    and the five longest runs were all `--work` — 47.7h down to 19.7h, every one ending `error` —
+    against a `ticket.timeout_seconds` of 8h.
+
+    Killing is the wrong remedy here and the difference is not squeamishness: the driven path may
+    kill on a clock because it is headless and its bound is the only thing that can end it, while
+    this session has somebody who can answer it and may simply be slow. So the bound is reported and
+    not enforced. Each reason is reported once — a bound that has passed stays passed, and saying so
+    every tick is how a channel gets muted.
+    """
+    bound = int(cfg["ticket"]["timeout_seconds"])
+    quiet = int(cfg["ticket"]["quiet_seconds"])
+    tick = max(1, min(30, bound, quiet))
+    told: set[str] = set()
+
+    def report(reason: str, summary: str, **fields) -> None:
+        # Said in the LOG as well as pushed. `notify` reaches `say` only when the channel fails, and
+        # on the success path never — so an operator with no channel wired, or with notifications
+        # off, had a watchdog that observed everything and recorded nothing anywhere.
+        told.add(reason)
+        say(f"! run-overdue ({reason}): {summary}")
+        notify(cfg, "run-overdue", summary, say, needs_human=True, reason=reason, key=key,
+               worktree=str(worktree), **fields)
+
+    while not stop.wait(tick):
+        if "past-its-bound" not in told and now() - started_at > bound:
+            report("past-its-bound",
+                   f"{key} has been running {hms(now() - started_at)}, past its {hms(bound)} "
+                   "bound — it is NOT killed", running_for_s=now() - started_at)
+        if "quiet" not in told:
+            silent = silence_since(worktree, started_at)
+            if silent is not None and silent > quiet:
+                report("quiet", f"{key} has written nothing for {hms(silent)} — it may be waiting "
+                                "for you, or wedged", quiet_for_s=silent)
+
+
+def reap_stale_work(ledger: dict, say) -> list[str]:
+    """Close out what `stale_work_rows` names, as the next hand-launched session starts.
+
+    Nothing reaps a `--work` row today: `reap_running` fires only when a DRIVER starts, and on this
+    machine the driver has started twice against 32 hand-launched runs, leaving seven rows reporting
+    a live session days after the fact (measured 2026-09-08, the oldest since 2026-09-03).
+
+    Re-asserted under the ledger lock for the same reason `reap_running` is: a sibling session can
+    record a real outcome for one of these while this pass is deciding, and publishing `error` over
+    it would destroy a PR and then say no outcome was ever recorded.
+    """
+    if not stale_work_rows(ledger):
+        return []
+    reaped = []
+    with ledger_held() as data:
+        for key in list(stale_work_rows(ledger)):
+            current = data.get(key) or ledger.get(key) or {}
+            # Proven AGAIN, from the row on disk rather than from the snapshot the candidates were
+            # chosen with. A sibling can start that very ticket in the window between the two — its
+            # own `running` row and its own live pid — and a recheck that only asked "is it still
+            # running?" would answer yes and overwrite it.
+            why = work_row_death(current)
+            if not why:
+                ledger[key] = current
+                continue
+            entry = {**current, "status": "error", "attempts": current.get("attempts", 0) + 1}
+            entry["flags"] = list(entry.get("flags") or []) + [
+                f"left running by a hand-launched session that ended without recording an outcome; "
+                f"{why}"]
+            data[key] = entry
+            ledger[key] = entry
+            reaped.append(key)
+    for key in reaped:
+        say(f"  ! {key} was left running and no live session holds it — closed out as error")
+    return reaped
+
+
 def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, say) -> int:
     """Claim a slot, start an ordinary interactive `claude` in it, and release when it exits.
 
@@ -911,6 +1243,13 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
                 for sig in (signal.SIGINT, signal.SIGHUP, signal.SIGTERM)}
     key = f"{slug}#{ticket.lstrip('#')}"
     ledger = load_json(LEDGER, {})
+    # Guarded, and for the same reason `record_work_outcome` is: this runs after the claim, so
+    # anything raising here escapes with the slot, the worktree and the lease already taken and the
+    # signals already absorbed — the release never happens and the operator has to find it by hand.
+    try:
+        reap_stale_work(ledger, say)
+    except Exception as exc:
+        say(f"! could not close out earlier hand-launched rows: {type(exc).__name__}: {exc}")
     started_at = now()
     write_ledger(ledger, key, {**ledger.get(key, {}), "status": "running", "launched_by": "work",
                                "slot": claim["slot"].name, "worktree": str(claim["worktree"]),
@@ -919,7 +1258,20 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
     try:
         proc = subprocess.Popen(argv, cwd=str(claim["worktree"]), env=claim["env"])
         record_session(claim["slot"].name, proc.pid)
-        code = proc.wait()
+        # And the ROW carries it too, not only the lease. `--release` in a second terminal unlinks a
+        # lease with no liveness check, and `active_leases` prunes one whose worktree was removed —
+        # neither of which is death. The row is where the next session's reap looks for proof.
+        write_ledger(ledger, key, {**ledger.get(key, {}), "session_pid": proc.pid})
+        # The watcher writes to the LOG and not the screen: the session owns this terminal, and a
+        # line printed into the middle of its TUI is worse than the thing being reported.
+        stop = threading.Event()
+        threading.Thread(target=watch_hand_launched, daemon=True,
+                         args=(cfg, key, claim["worktree"], started_at, stop,
+                               getattr(say, "quietly", say))).start()
+        try:
+            code = proc.wait()
+        finally:
+            stop.set()
         return code
     finally:
         for sig, handler in previous.items():
@@ -2488,6 +2840,9 @@ def record_work_outcome(cfg: dict, ledger: dict, key: str, slug: str, ticket: st
         "duration_s": now() - started_at, "exit": code,
         "last_run": datetime.now(timezone.utc).isoformat()})
     say(f"recorded in the ledger as {status}")
+    # A hand-launched run is still hours long and still ends when nobody is looking. It reaches the
+    # ledger by the same rules a driven one does; it reaches the operator by them too.
+    notify_outcome(cfg, ledger, key, status, say)
 
 
 def crash_entry(ledger: dict, key: str, exc: BaseException) -> str:
@@ -2520,9 +2875,39 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
     def others(job: dict) -> set[str]:
         return members - {job["ticket"].lstrip("#")}
 
+    def landed(key: str, status: str) -> tuple[str, str]:
+        """Every outcome this wave produces passes through here, so the operator is told as the
+        ticket lands rather than when the wave does — a worker that died included."""
+        notify_outcome(cfg, ledger, key, status, say)
+        return (key, status)
+
+    def died(job: dict, exc: BaseException) -> str:
+        """A worker that raised, recorded rather than propagated — from EITHER branch.
+
+        One handler because for a while there were two and one of them was empty: the single-job
+        branch, which is the branch `max_workers: 1` makes every pool take. `work_ticket` indexes
+        `bases` directly and `open_prs` inherits `sh`'s 300s timeout, so the exception is reachable —
+        and it escaped the wave and `main` alike, leaving the ticket reading `running` and nobody
+        told, in the default configuration.
+        """
+        say(f"[{job['key']}] ! the worker itself raised {type(exc).__name__}: {exc}")
+        # And neither must the recording of that death. `crash_entry` writes the ledger, which can
+        # raise on its own (an unusable lock file, a failed rename), and an exception escaping here
+        # would take the wave AND the driver — under the comment above saying it must not.
+        # `work_in_session` wraps its equivalent for the same reason.
+        try:
+            return crash_entry(ledger, job["key"], exc)
+        except Exception as inner:
+            say(f"[{job['key']}] ! and the ledger write for it raised "
+                f"{type(inner).__name__}: {inner} — the outcome is unrecorded")
+            return "error"
+
     if len(jobs) == 1:
-        return [(jobs[0]["key"],
-                 work_ticket(jobs[0], slots[0], cfg, ledger, say, bases, others(jobs[0])))]
+        try:
+            only = work_ticket(jobs[0], slots[0], cfg, ledger, say, bases, others(jobs[0]))
+        except Exception as exc:  # a worker that dies must not take the driver with it
+            only = died(jobs[0], exc)
+        return [landed(jobs[0]["key"], only)]
     results: list[tuple[str, str]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool_exec:
         futures = {
@@ -2532,20 +2917,10 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
         for future in concurrent.futures.as_completed(futures):
             job = futures[future]
             try:
-                results.append((job["key"], future.result()))
+                status = future.result()
             except Exception as exc:  # a worker that dies must not take the wave with it
-                say(f"[{job['key']}] ! the worker itself raised {type(exc).__name__}: {exc}")
-                # And neither must the recording of that death. `crash_entry` writes the ledger, which
-                # can now raise on its own (an unusable lock file, a failed rename), and an exception
-                # escaping this handler would take the wave AND the driver — under the comment above
-                # saying it must not. `work_in_session` wraps its equivalent for the same reason.
-                try:
-                    status = crash_entry(ledger, job["key"], exc)
-                except Exception as inner:
-                    say(f"[{job['key']}] ! and the ledger write for it raised "
-                        f"{type(inner).__name__}: {inner} — the outcome is unrecorded")
-                    status = "error"
-                results.append((job["key"], status))
+                status = died(job, exc)
+            results.append(landed(job["key"], status))
     return results
 
 
@@ -2587,6 +2962,13 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
     if dirty:
         say(f"    skipped: {src} has uncommitted changes, and the retro's last step is a commit "
             "there. Clean it and re-run.")
+        # Refused, not failed — and the pool works on either way with the skills exactly as they are.
+        # Deliberately NOT sticky, which is the difference from the case below: cleaning the repo
+        # mid-pool must let the next wave boundary retro.
+        notify(cfg, "retro-off",
+               f"no retro ran — {src} has uncommitted changes, so this pool is working without "
+               "learning until you commit them", say, needs_human=True, reason="source-repo-dirty",
+               records=[q.name for q in pending])
         return {"status": "skipped-dirty"}
     sh(["git", "-C", str(src), "fetch", "origin", "--prune"], timeout=600)
     branch = default_branch(src)
@@ -2623,6 +3005,13 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
         say(f"    ! {p}")
     if not problems:
         say("    verified: committed, pushed, LAST advanced, live copies and the mirror identical.")
+    # Set by this retro and no earlier one — an invocation whose retros were already off returned
+    # above. The rest of the pool is now being worked without learning, which is the failure this
+    # whole pipeline is arranged to prevent, and it is not a line to find afterwards in a log.
+    if RETRO_STOPPED["why"]:
+        notify(cfg, "retro-off", f"retros are OFF for the rest of this pool — {RETRO_STOPPED['why']}",
+               say, needs_human=True, reason="last-not-advanced",
+               records=[q.name for q in pending], problems=problems)
     return {"status": "problems" if problems else "ok", "problems": problems,
             "records": [p.name for p in pending], "commit": after_head,
             "seconds": run["seconds"], "stream": run["jsonl"]}
@@ -2661,6 +3050,90 @@ def retro_forecast(count: int, pending: int, cfg: dict) -> dict[int, list[str]]:
             if i < len(waves):
                 marks.setdefault(i + 1, []).append("first wave reading changed skills")
     return marks
+
+
+def prepare_bases(queue: list[dict], cfg: dict, ledger: dict, say) -> dict[str, str]:
+    """One fetch per repository per invocation, and the sha every worktree in every wave is cut from.
+
+    Here rather than per ticket: the whole invocation works one base, and concurrent workers never
+    fetch into one object store at the same time.
+
+    A repository that cannot be prepared stalls every ticket queued against it, and that is ONE
+    escalation naming the count — not one per ticket. The cause is the remote rather than the
+    tickets, and twenty buzzes plus twenty notifier timeouts for one broken fetch is the rule this
+    file already states about a dead channel, one level up. Nor does it name a PR: nothing ran, and
+    the number a retried ticket still carries in the ledger belongs to the PREVIOUS attempt.
+    """
+    bases: dict[str, str] = {}
+    seen: set[str] = set()
+    for job in queue:
+        repo = str(job["path"])
+        if repo in seen:
+            continue
+        seen.add(repo)
+        failure, where, sha = prepare_repo(job["path"], say)
+        if not failure:
+            bases[repo] = sha
+            say(f"  {job['slug']}: {where}")
+            continue
+        say(f"  x {job['slug']}: {where.splitlines()[0]}")
+        say(f"    {PREPARE_REMEDY[failure]}")
+        blocked = [j for j in queue if str(j["path"]) == repo]
+        for stalled in blocked:
+            write_ledger(ledger, stalled["key"],
+                         nothing_ran(ledger.get(stalled["key"], {}), failure, where))
+        # These never reach a wave, so they never reach `landed`. A pool that stalled before it
+        # started is the escalation most worth having: nothing is running, and nothing will, until
+        # somebody fixes the remote.
+        notify(cfg, "repo-blocked",
+               f"{job['slug']}: {failure} — {len(blocked)} ticket(s) cannot start", say,
+               needs_human=True, slug=job["slug"], failure=failure, blocked=len(blocked),
+               tickets=[j["key"] for j in blocked],
+               where=(where.splitlines()[0] if where else ""))
+    return bases
+
+
+def summarise(results: list[tuple[str, str]], cfg: dict, say: Say) -> None:
+    """The end of an invocation, printed and pushed by the same function.
+
+    One function because the terminal and the operator's phone must not be able to report different
+    runs, and because what somebody away from the machine wants at the end is not a status line: it
+    is that the machine is free, and that these are the tickets waiting for them.
+    """
+    say("")
+    say("## summary")
+    flagged = []
+    for key, status in results:
+        e = load_json(LEDGER, {}).get(key, {})
+        say(f"  {status:13s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
+        if e.get("flags"):
+            flagged.append(key)
+    # A paused ticket is not a ticket that needs a human: it needs `--resume`, and listing it
+    # here would put every pause on the same line as an abort.
+    needs = [k for k, s in results if needs_a_human(s)]
+    if needs:
+        say("")
+        say("needs a human: " + ", ".join(needs))
+    # A flag rides on a STATUS that needs nobody — "PR is ready but the gate entry says blocking=N"
+    # is the one that matters — so `needs_a_human` cannot see it and neither could an operator
+    # filtering the end-of-pool push. Said in both places, because they are one function so that
+    # they cannot report different runs.
+    if flagged:
+        say("")
+        say("flagged: " + ", ".join(flagged) + " — read the run's flags in the ledger")
+    counts: dict[str, int] = {}
+    for _, status in results:
+        counts[status] = counts.get(status, 0) + 1
+    if not results:
+        # The only ways here with nothing worked are a stop or a pause asked for before the first
+        # wave — both typed by somebody at this terminal, who does not need telling about it.
+        return
+    tally = ", ".join(f"{n} {s}" for s, n in sorted(counts.items()))
+    notify(cfg, "finished",
+           f"pool finished: {tally}" + (f" — {len(needs)} need a human" if needs else "")
+           + (f", {len(flagged)} flagged" if flagged else ""),
+           say, needs_human=bool(needs or flagged), counts=counts, needs=needs, flagged=flagged,
+           tickets=len(results), log=str(say.path))
 
 
 def refresh_outcomes(ledger: dict, say: Say, loud: bool = True) -> int:
@@ -2730,9 +3203,27 @@ def cmd_status(cfg: dict, say: Say) -> int:
     ledger = load_json(LEDGER, {})
     if not ledger:
         say("the ledger is empty — nothing has been worked yet.")
+    # Read-only, deliberately, and that is why it is `stale_work_rows` and not `active_leases`: the
+    # latter deletes the leases it filters out, which is right for a caller about to take a slot and
+    # wrong for one that only looks. A row saying `running` days after its session ended is the
+    # commonest wrong thing this command has told an operator.
+    dead = stale_work_rows(ledger)
+    held = leased_tickets()
     for key, e in sorted(ledger.items()):
+        since = iso_to_epoch(e.get("last_run"))
+        running_for = f", running for {hms(now() - since)}" if since else ""
+        if key in dead:
+            note = f"  ← {dead[key]}{running_for}"
+        elif (e.get("status") == "running" and e.get("launched_by") == "work"
+                and key not in held):
+            # Weaker and said as such: no lease holds it, which is not the same as proving the
+            # session gone. Scoped to `--work` rows because a DRIVER takes no lease at all, and
+            # annotating its live tickets with "no live session holds it" would be simply false.
+            note = f"  ← no live session holds it{running_for}"
+        else:
+            note = ""
         say(f"{key:52s} {e.get('status','?'):13s} attempts={e.get('attempts',0)} "
-            f"pr={e.get('pr')} {hms(e.get('duration_s') or 0)} {e.get('last_run','')[:19]}")
+            f"pr={e.get('pr')} {hms(e.get('duration_s') or 0)} {e.get('last_run','')[:19]}{note}")
         o = e.get("outcome")
         if o:
             say(f"{'':52s} → PR {o.get('pr_state')}"
@@ -2798,6 +3289,13 @@ def cmd_claim(cfg: dict, say: Say, token: str) -> int:
         say(f"  x {problem}")
     if problems:
         return 1
+    # A `--claim` is a hand-launched start too, and what the skill promises is that a hand-launched
+    # START closes out what an earlier one left — not that `--work` specifically does. Before
+    # anything is claimed, so nothing here can leak a lease. Guarded for the same reason as there.
+    try:
+        reap_stale_work(load_json(LEDGER, {}), say)
+    except Exception as exc:
+        say(f"! could not close out earlier hand-launched rows: {type(exc).__name__}: {exc}")
     for slug, path in cfg["repos"].items():
         issue = resolve_named(token, slug)
         if issue is None:
@@ -2835,7 +3333,25 @@ def cmd_claim(cfg: dict, say: Say, token: str) -> int:
         say(f"export CLAUDE_PIPELINE_SLOT={env['CLAUDE_PIPELINE_SLOT']}")
         say("claude")
         say("")
-        say(f"then, in that session:   /resolve-ticket {issue.get('url') or claim['url']}")
+        if existing:
+            # The warning above says `pr-harden` owns an open PR, and then this printed
+            # `/resolve-ticket` anyway -- so the operator was told one skill and handed the command
+            # for the other, twice (#353 and #348, reported in two records). The worktree is detached
+            # at the base BY DESIGN (`make_worktree`: git refuses one branch in two worktrees), so
+            # something has to bring the head in for `pr-harden` Step 0, which wants the head branch
+            # TRACKING the remote. The branch form is printed first because it is the one that
+            # satisfies that; the ref form is the fallback for a branch another worktree holds, and
+            # it is detached, so it satisfies the checkout and not the tracking.
+            say("the PR is open, so bring its head into this worktree first:")
+            say(f"git fetch origin {existing['headRefName']} && "
+                f"git checkout -B {existing['headRefName']} --track origin/{existing['headRefName']}")
+            say(f"  (refused where another worktree holds that branch; then "
+                f"git fetch origin pull/{existing['number']}/head && git checkout FETCH_HEAD,")
+            say("   and `pr-harden` Step 0's tracking requirement is what you are trading away)")
+            say("")
+            say(f"then, in that session:   /pr-harden {existing['number']}")
+        else:
+            say(f"then, in that session:   /resolve-ticket {issue.get('url') or claim['url']}")
         say("")
         say(f"When it is done:         pool-run --release {token.lstrip('#')}")
         return 0
@@ -3005,6 +3521,15 @@ def main() -> int:
     if fatal:
         say("")
         say("Fix the above and re-run. Nothing was started.")
+        # The same argument the all-repositories-blocked exit carries: an expired `gh` token, a lease
+        # a killed session left, a gate hook a settings edit dropped — every one of these is an
+        # unattended failure, and the invocation is over. Not on a dry run: that is somebody here.
+        if not args.dry_run:
+            notify(cfg, "finished",
+                   f"pool refused to start: {fatal[0]}" + (f" (+{len(fatal) - 1} more)"
+                                                           if len(fatal) > 1 else ""),
+                   say, needs_human=True, counts={}, needs=[], tickets=0, problems=fatal,
+                   log=str(say.path))
         return 1
     say("  ok")
 
@@ -3202,31 +3727,17 @@ def main() -> int:
             say("--dry-run: preflight passed and the queue is above. Nothing was started.")
             return 0
 
-        # One fetch per repository per invocation, here rather than per ticket: every worktree in
-        # every wave is cut from the sha resolved now, so the whole invocation works one base and
-        # concurrent workers never fetch into one object store at the same time.
-        bases: dict[str, str] = {}
-        seen: set[str] = set()
-        for job in queue:
-            repo = str(job["path"])
-            if repo in seen:
-                continue
-            seen.add(repo)
-            failure, where, sha = prepare_repo(job["path"], say)
-            if failure:
-                say(f"  x {job['slug']}: {where.splitlines()[0]}")
-                say(f"    {PREPARE_REMEDY[failure]}")
-                for blocked in [j for j in queue if str(j["path"]) == repo]:
-                    write_ledger(ledger, blocked["key"],
-                                 nothing_ran(ledger.get(blocked["key"], {}), failure, where))
-                continue
-            bases[repo] = sha
-            say(f"  {job['slug']}: {where}")
+        bases = prepare_bases(queue, cfg, ledger, say)
         queue = [j for j in queue if str(j["path"]) in bases]
         waves = plan_waves(queue, workers)
         if not queue:
             say("")
             say("no repository in the queue could be prepared; nothing was started.")
+            # `summarise` is never reached on this path, so without this the invocation ends having
+            # told nobody it ended. Each repository is already escalated by name above; this one
+            # says the pool is over and the machine is free.
+            notify(cfg, "finished", "pool finished: nothing could be prepared, no ticket started",
+                   say, needs_human=True, counts={}, needs=[], tickets=0, log=str(say.path))
             return 1
 
         def pause_here(remaining: list[dict], suspended: list[dict]) -> None:
@@ -3284,20 +3795,17 @@ def main() -> int:
             say("")
             say("a pause was asked for, but the run finished first — nothing is left to resume.")
 
-        say("")
-        say("## summary")
-        for key, status in results:
-            e = load_json(LEDGER, {}).get(key, {})
-            say(f"  {status:13s} {key:48s} pr={e.get('pr')} {hms(e.get('duration_s') or 0)}")
-        # A paused ticket is not a ticket that needs a human: it needs `--resume`, and listing it
-        # here would put every pause on the same line as an abort.
-        needs = [k for k, s in results if s not in ("ready", "paused")]
-        if needs:
-            say("")
-            say("needs a human: " + ", ".join(needs))
+        summarise(results, cfg, say)
         say("")
         say(f"log: {say.path}")
         return 0
+    except Exception as exc:
+        # Nothing else can report this one: no summary is printed, the ledger keeps whatever each
+        # ticket was last called, and the operator is not at the terminal — which is the premise of
+        # pushing anything at all. Re-raised, so the traceback an operator reads is unchanged.
+        notify(cfg, "driver-died", f"pool-run died: {type(exc).__name__}: {exc}"[:200], say,
+               needs_human=True, error=f"{type(exc).__name__}: {exc}"[:500])
+        raise
     finally:
         drop_lock()
 

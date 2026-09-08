@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.15.2
+version: 0.18.1
 ---
 
 # Ticket pool — the loop that learns
@@ -124,7 +124,8 @@ to, the retro's record threshold and timeout, the per-ticket timeout, quiet wind
 `parallel` block (`max_workers`, the `standalones` that bound it, and `shared_m2` if your local maven
 repository is not `~/.m2/repository`), and a `claude` block — `model`, `effort`, `max_budget_usd`,
 `binary`, and `extra_args` passed through to every
-session. Logs, the ledger and the per-session streams are under `~/.claude/pipeline/`.
+session, and a `notify` block (below). Logs, the ledger and the per-session streams are under
+`~/.claude/pipeline/`.
 
 ### Pausing, and picking it up later
 
@@ -199,6 +200,56 @@ for thinking blocks, `--tail N` to join near the end.
 on a conversation, so it is for a session that has FINISHED — `pool-watch`'s header prints the full id
 for exactly that. Reading the `.jsonl` is safe at any time and cannot perturb a run.
 
+### Being told
+
+A pool that runs for hours runs while you are not reading its terminal, so five things leave the
+driver for a channel of your choosing:
+
+| event | when |
+|---|---|
+| `outcome` | a ticket lands — every status, driven or `--work`, a crashed worker included |
+| `repo-blocked` | a repository could not be fetched, stalling every ticket queued against it |
+| `retro-off` | no retro ran, or one left `LAST` where it was: the pool works on without learning |
+| `finished` | the invocation drained — or refused to start — with its tally and what is left for you |
+| `run-overdue` | a `--work` run passed its bound or went quiet — reported, never killed |
+| `driver-died` | the driver itself raised — pushed before the traceback, since nothing else reports it |
+
+Per TICKET rather than per wave: a wave ends when its slowest member does, and a run that aborted in
+its first ten minutes would otherwise wait most of a day to be mentioned. Per REPOSITORY for a fetch
+that failed: the cause is the remote, and twenty tickets queued on it are not twenty problems.
+
+`needs_human` is a statement about the STATUS — false only for `ready` and `paused` — so read `flags`
+beside it. The driver's own "PR is ready but the gate entry says blocking=N" rides on a `ready`, and a
+channel filtering on `needs_human` alone would drop the one outcome the driver has called
+self-contradictory. `finished` is the exception and needs no second key: it names those runs in
+`flagged` and counts them in its own `needs_human`, because it is the event an operator filters a
+whole pool down to.
+
+**What leaves the machine.** The summary becomes the command's argv, so it is visible in `ps` to any
+local user and is what a banner shows; everything else — `pr_url`, the log path, `flags`, and
+`driver-died`'s `error`, which embeds failing argv and absolute paths — is on stdin only. Across the
+five events that is ticket keys, PR numbers and URLs, statuses, repo slugs, a path carrying your
+username, and raw error text. **An ntfy.sh topic is world-readable to anyone who guesses it**, so
+read the example above as a shape and not as a recommendation: a private channel, or a script of your
+own that sends only what you want sent, is the version to run.
+
+`notify.command` is the whole channel policy: an argv, the one-line summary appended as its LAST
+argument, the whole event as JSON on its stdin. `["ntfy", "publish", "<topic>"]` works as written. A
+string is split the way a shell would split it and then run WITHOUT one, so `&&` in there is an
+argument and not an operator — anything needing a shell goes in a script of your own, which is also
+where a token belongs rather than in this config.
+
+**Emptied means silence and only UNSET falls back.** `""`, `[]` and `notify.enabled: false` all give
+you nothing; an absent `command` gives you a macOS banner, which is a fallback and not an answer. It
+reaches a laptop you have walked away from and nothing else, and `osascript` exits 0 whether or not
+the banner was shown — the invoking app's notification permission decides that, and a driver started
+from a launch agent may have none. If the escalations matter, configure the channel and watch one
+arrive.
+
+A failed notifier costs one line and nothing else: it never raises, never retries, and is reported
+once per invocation rather than once per event — including a `notify.command` that cannot be read as
+one at all.
+
 ### What became of the work
 
 Everything else the ledger holds measures the pipeline's own activity — rounds, turns, whether a PR was
@@ -226,6 +277,9 @@ Three caps, in different states: `claude.max_budget_usd` bounds one session's sp
 by default; `ticket.timeout_seconds` bounds its wall clock and ships set to eight hours; `--limit N`
 bounds how many tickets an invocation takes and applies only when you pass it. The unset one is the
 one to decide about before the first long run rather than after it.
+
+**Two of those three bind the DRIVEN path only.** A `--work` session is an ordinary interactive
+`claude`, so nothing kills it on a clock and it reports no cost — see "Two sessions by hand".
 
 ## What the driver decides, and what it must not
 
@@ -364,6 +418,44 @@ rather than killing by symptom. Without that scoping a verifier's ordinary "kill
 port" is a licence to stop a sibling's server mid-query.
 
 ## Two sessions by hand
+
+**What a hand-launched run does NOT get, and what it now does.** `ticket.timeout_seconds` and
+`ticket.quiet_seconds` are enforced by `Session`, which only the driven path and the retro use; a
+`--work` session is an ordinary interactive `claude` under `Popen`. So it is not killed on a clock,
+and — because it inherits your terminal rather than emitting `stream-json` — it records no
+`cost_usd` and no `turns` either. That mattered more than it sounds: measured on this machine on
+2026-09-08, 32 of 34 ledger rows were `launched_by: work`, the five longest runs were all `--work`
+at 47.7h down to 19.7h and every one of them ended `error`, and only the two driver-launched runs
+recorded a cost at all.
+
+Both bounds are now WATCHED rather than enforced: passing the timeout, and going quiet for
+`quiet_seconds`, each report once — to the log and to your channel — and neither ends the session.
+Killing is left to you on purpose: the driven path may kill on a clock because it is headless and
+the bound is the only thing that can end it, while this session has somebody who can answer it.
+
+Quiet is read from the session's own transcripts under `~/.claude/projects/`, and only writes made
+**since this run started** count. That directory is keyed on the worktree path, which is
+deterministic per ticket, so it outlives the worktree — #266's still held transcripts from
+2026-08-27 with no worktree at all, and without that floor the next run of that ticket is "quiet for
+twelve days" on its first tick. The whole subtree is read, not just the top level: a session's
+subagent transcripts sit under `<session-id>/`, 16 of #266's 17 files were below it, and the largest
+gap in a parent jsonl of a real `--work` run is hours. Fail-open throughout — nothing written yet is
+absence of evidence, not a stall, and the bound still catches a session that wedges before its first
+write.
+
+**And a hand-launched START closes out what an earlier one left behind** — `--work` and `--claim`
+both. A row still saying `running` is otherwise reaped only when a DRIVER starts, which on this
+machine happened twice against 32 hand-launched runs, leaving seven rows reporting a live session
+days later.
+
+**What it takes as proof is a recorded pid that no longer exists, and nothing weaker.** Not "no
+lease holds it": `release_claim` unlinks a lease with no liveness check at all, and `active_leases`
+prunes one whose worktree was removed, so an operator typing `--release` in a second terminal would
+have the next session publish `error` over a run that is still working — and `write_ledger` keeps
+the flag saying so as a field it never saw, so the lie outlives the session that disproves it. A row
+with no pid, which is every row written before this existed, is left alone and marked by `--status`
+rather than rewritten. It also cannot be `reap_running`: that one's soundness IS the machine lock,
+which a hand-launched session never takes.
 
 Everything above is the driver working tickets unattended. If you would rather drive two `claude`
 sessions yourself — to watch them, or to interrupt one — the isolation still has to come from
