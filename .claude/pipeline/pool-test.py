@@ -2267,6 +2267,11 @@ def notified(sink: Path) -> list[dict]:
     return [json.loads(line) for line in sink.read_text().splitlines() if line.strip()]
 
 
+# Above any pid this machine issues (macOS caps at 99998), so `os.kill` cannot find it and cannot
+# hit a recycled one either.
+DEAD_PID = 999999
+
+
 def test_an_outcome_reaches_the_operator(tmp: Path) -> None:
     """A ticket that lands while nobody is watching has to reach the operator, not just the log.
 
@@ -2710,25 +2715,33 @@ def test_a_hand_launched_run_is_watched_even_though_nobody_is(tmp: Path) -> None
     origin, work = git_fixture(tmp)
     one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
     sink, cmd = notify_sink(tmp)
-    stub = tmp / "stub"
-    stub.write_text("#!/bin/bash\nsleep 4\n")
-    stub.chmod(0o755)
     cfg = pool.merge(pool.DEFAULTS, {
-        "repos": {"o/r": str(work)}, "claude": {"binary": str(stub)},
+        "repos": {"o/r": str(work)}, "claude": {"binary": "PLACEHOLDER"},
         "parallel": {"max_workers": 1, "standalones": [str(one)]},
         "ticket": {"timeout_seconds": 1, "quiet_seconds": 1},
         "notify": {"command": cmd}})
 
     with isolated(tmp):
         say = pool.Say(tmp / "l.md")
-        # The transcript the session will write, aged so the quiet window is already spent. Its
-        # location is derived from the worktree, so it can be laid down before the session starts.
         wt = pool.worktree_path("o/r", "266")
-        project = pool.PROJECTS / str(wt).replace("/", "-").replace(".", "-")
+        project = pool.PROJECTS / pool.project_dir_name(wt)
+        # A transcript from a PREVIOUS run of this ticket. The project directory is keyed on the
+        # worktree path, which is deterministic per ticket, so it outlives the worktree — verified on
+        # this machine: #266's directory holds files from 2026-08-27 and its worktree is long gone.
+        # Twelve days of silence in it says nothing whatever about the run starting now.
         project.mkdir(parents=True, exist_ok=True)
-        transcript = project / "0000.jsonl"
-        transcript.write_text("{}\n")
-        os.utime(transcript, (time.time() - 600, time.time() - 600))
+        old_run = project / "previous-run.jsonl"
+        old_run.write_text("{}\n")
+        os.utime(old_run, (time.time() - 600, time.time() - 600))
+        # The stub stands in for `claude`, so it writes where `claude` writes — under the session's
+        # own subdirectory, which is where all but one of #266's 17 real transcripts live.
+        stub = tmp / "stub"
+        stub.write_text("#!/bin/bash\n"
+                        f"mkdir -p {project}/session-1\n"
+                        f"echo '{{}}' > {project}/session-1/live.jsonl\n"
+                        "sleep 4\n")
+        stub.chmod(0o755)
+        cfg["claude"]["binary"] = str(stub)
 
         code = pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
         entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
@@ -2742,6 +2755,12 @@ def test_a_hand_launched_run_is_watched_even_though_nobody_is(tmp: Path) -> None
     check("and told when it went quiet", "quiet" in reasons, str(reasons))
     check("each reason once, not once per poll", len(overdue) == 2, str([e.get("summary") for e in overdue]))
     check("both need a human", all(e.get("needs_human") is True for e in overdue), str(overdue))
+    check("the quiet it reports is this run's own silence, not the previous run's",
+          all((e.get("quiet_for_s") or 0) < 600 for e in overdue if e.get("reason") == "quiet"),
+          str([e.get("quiet_for_s") for e in overdue if e.get("reason") == "quiet"]))
+    check("and the watcher says it in the log too, for an operator with no channel wired",
+          sum(1 for l in say.lines if "run-overdue" in l) == 2,
+          str([l for l in say.lines if "overdue" in l]))
 
     # Fail-open, in the direction that matters: the transcript layout is observed rather than
     # promised, so a session whose transcript cannot be found must produce NO quiet claim. Claiming
@@ -2758,6 +2777,26 @@ def test_a_hand_launched_run_is_watched_even_though_nobody_is(tmp: Path) -> None
     check("and makes no claim at all about whether it went quiet",
           not any(e.get("reason") == "quiet" for e in later), str(later))
     check("and is not otherwise disturbed by being unwatchable", blind == 0, str(blind))
+
+    # The same shape as the real #266: a project directory full of an OLD run and nothing from this
+    # one. Latched, a false quiet here would also spend the one quiet event this run will ever get.
+    with isolated(tmp):
+        say = pool.Say(tmp / "l3.md")
+        stale_project = pool.PROJECTS / pool.project_dir_name(pool.worktree_path("o/r", "268"))
+        stale_project.mkdir(parents=True, exist_ok=True)
+        ancient = stale_project / "a-run-from-last-week.jsonl"
+        ancient.write_text("{}\n")
+        os.utime(ancient, (time.time() - 900_000, time.time() - 900_000))
+        idle = tmp / "idle-stub"
+        idle.write_text("#!/bin/bash\nsleep 3\n")
+        idle.chmod(0o755)
+        cfg["claude"]["binary"] = str(idle)
+        pool.work_in_session(cfg, "o/r", "268", {"url": "https://example/268"}, work, say)
+    old_only = [e for e in notified(sink) if e.get("event") == "run-overdue"
+                and e.get("key") == "o/r#268"]
+    check("a transcript that predates the run is not this run going quiet",
+          [e.get("reason") for e in old_only] == ["past-its-bound"],
+          str([(e.get("reason"), e.get("quiet_for_s")) for e in old_only]))
 
 
 def test_status_names_a_running_row_no_session_holds(tmp: Path) -> None:
@@ -2803,9 +2842,16 @@ def test_status_names_a_running_row_no_session_holds(tmp: Path) -> None:
 def test_the_next_hand_launch_closes_out_what_died(tmp: Path) -> None:
     """Nothing reaps a `--work` row today, because reaping runs only when a DRIVER starts.
 
-    So the next hand-launched session does it, scoped to what a lease can prove dead: `launched_by:
-    work`, `running`, and no live lease holding it. A row a live sibling session owns is left exactly
-    alone — that is the whole reason this cannot be `reap_running`.
+    So the next hand-launched start does it — but only where death can be PROVEN, which is a dead
+    recorded pid and nothing weaker. "No lease holds it" is not proof and was very nearly shipped as
+    if it were: `release_claim` unlinks a lease with no liveness check at all, so an operator typing
+    `--release` in a second terminal, or a pruned worktree, would have had the next session publish
+    `error` over a run that was still working — and `write_ledger` preserves the flag saying so as a
+    field it never saw, so the lie would outlive the session that disproved it.
+
+    A row with no pid recorded — every row written before this existed — is therefore left alone. It
+    cannot be shown dead, `--status` says so, and the driver's own reap under the machine lock can
+    still close it out.
     """
     print("\nthe next hand-launch closes out what died")
     origin, work = git_fixture(tmp)
@@ -2827,21 +2873,74 @@ def test_the_next_hand_launch_closes_out_what_died(tmp: Path) -> None:
                        {"slot": "slot-8", "ticket": "300", "slug": "o/r",
                         "worktree": str(alive_wt), "session_pid": os.getpid()})
         pool.save_json(pool.LEDGER, {
-            "o/r#100": {"status": "running", "launched_by": "work", "attempts": 1},
-            "o/r#300": {"status": "running", "launched_by": "work", "attempts": 1},
+            # provably dead: a pid nothing can be running under
+            "o/r#100": {"status": "running", "launched_by": "work", "attempts": 1,
+                        "session_pid": DEAD_PID},
+            # alive, and its lease deliberately deleted underneath it — what `--release` in a second
+            # terminal does, with no liveness check of any kind
+            "o/r#200": {"status": "running", "launched_by": "work", "attempts": 1,
+                        "session_pid": os.getpid()},
+            # a live sibling holding its lease
+            "o/r#300": {"status": "running", "launched_by": "work", "attempts": 1,
+                        "session_pid": os.getpid()},
+            # written before pids were recorded: unprovable either way
+            "o/r#350": {"status": "running", "launched_by": "work", "attempts": 1},
+            # a driver's row: no lease, no pid, and not this path's business
             "o/r#400": {"status": "running", "attempts": 1}})
         pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
         led = pool.load_json(pool.LEDGER, {})
 
-    check("the row no lease holds is closed out", led.get("o/r#100", {}).get("status") == "error",
-          str(led.get("o/r#100")))
-    check("and says why, rather than looking like a run that failed",
-          any("no live session" in f for f in led.get("o/r#100", {}).get("flags") or []),
+    check("the row whose recorded session is provably gone is closed out",
+          led.get("o/r#100", {}).get("status") == "error", str(led.get("o/r#100")))
+    check("and says what the proof was, not just that it decided",
+          any(str(DEAD_PID) in f and "gone" in f for f in led.get("o/r#100", {}).get("flags") or []),
           str(led.get("o/r#100", {}).get("flags")))
-    check("a row a LIVE sibling session holds is left alone",
+    check("a LIVE session whose lease somebody released is NOT rewritten under it",
+          led.get("o/r#200", {}).get("status") == "running", str(led.get("o/r#200")))
+    check("a row a live sibling session holds is left alone",
           led.get("o/r#300", {}).get("status") == "running", str(led.get("o/r#300")))
+    check("a row that cannot be shown dead either way is left alone",
+          led.get("o/r#350", {}).get("status") == "running", str(led.get("o/r#350")))
     check("and a DRIVER's row is left to the driver's own reap, which holds the lock",
           led.get("o/r#400", {}).get("status") == "running", str(led.get("o/r#400")))
+
+    # A process this user may not signal is THERE. `os.kill` answers EPERM for it, and reading that
+    # as death is what would license overwriting a live row — pid 1 is the stable case of it.
+    check("a process we are not allowed to signal is alive, not dead", pool.pid_is_alive(1) is True,
+          "EPERM is read as death, so any process of another user's counts as gone")
+    check("and a pid nothing is running under is dead", pool.pid_is_alive(DEAD_PID) is False, "")
+
+    # A lease file is JSON written by another process, so its fields are not guaranteed to be the
+    # type they usually are. One whose `worktree` is a number used to raise `TypeError` out of
+    # `Path()` inside `lease_is_live` — taking out `claim_slot`, and with it every hand-launched
+    # start on the machine, over one corrupt file. Found by aiming at something else.
+    with isolated(tmp):
+        say = pool.Say(tmp / "l4.md")
+        pool.SLOTS.mkdir(parents=True, exist_ok=True)
+        pool.save_json(pool.SLOTS / "slot-7.json",
+                       {"slot": "slot-7", "ticket": "600", "slug": "o/r", "worktree": 5})
+        code = pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
+        after = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+        leftover = [p.name for p in pool.SLOTS.glob("*.json")
+                    if (pool.load_json(p, {}) or {}).get("ticket") == "266"]
+    check("one corrupt lease file does not stop a hand-launched start", code == 0, str(code))
+    check("the outcome is still recorded", after.get("status") not in (None, "running"),
+          str(after.get("status")))
+    check("and the claim is still released, rather than stranded", leftover == [], str(leftover))
+    check("a lease that cannot be read is not counted as a live one",
+          pool.lease_is_live({"slot": "slot-7", "worktree": 5}) is False, "it raised or said live")
+
+    # `--claim` is the other hand-launched start, and the skill's promise is about the START rather
+    # than about `--work`. Read from the source: `cmd_claim` resolves its ticket through `gh`, so
+    # nothing here can drive it, and a promise wired into one of the two paths is a promise an
+    # operator following the documented `--claim` workflow never gets.
+    body = (HERE / "pool-run").read_text()
+    claim = body[body.index("def cmd_claim("):body.index("def cmd_work(")]
+    check("a --claim start closes out what an earlier hand-launch left, as --work does",
+          "reap_stale_work(" in claim, "only --work reaps; the --claim workflow never would")
+    check("and it does so before it claims anything, so a raise cannot leak a lease",
+          claim.index("reap_stale_work(") < claim.index("claim_slot("),
+          "the reap runs after the claim, where an exception strands the slot")
 
 
 def main() -> int:

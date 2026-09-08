@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.18.0
+version: 0.18.1
 ---
 
 # Ticket pool — the loop that learns
@@ -429,18 +429,33 @@ at 47.7h down to 19.7h and every one of them ended `error`, and only the two dri
 recorded a cost at all.
 
 Both bounds are now WATCHED rather than enforced: passing the timeout, and going quiet for
-`quiet_seconds`, each push a `run-overdue` event once and neither ends the session. Quiet is read
-from the session's own transcript under `~/.claude/projects/`, fail-open — no transcript, no claim.
+`quiet_seconds`, each report once — to the log and to your channel — and neither ends the session.
 Killing is left to you on purpose: the driven path may kill on a clock because it is headless and
 the bound is the only thing that can end it, while this session has somebody who can answer it.
 
-**And a `--work` run closes out what an earlier one left behind.** A row still saying `running` is
-reaped only when a DRIVER starts, which on this machine happened twice against 32 hand-launched
-runs — seven rows were reporting a live session days later. The next `--work` session now closes
-out the `--work` rows no live lease holds, and `--status` marks them rather than repeating them as
-live. It cannot be `reap_running`: that one's soundness is the machine lock, which `--work` never
-takes, so it would publish `error` over a live sibling's row. A lease can prove death without the
-lock — its worktree is gone, or its pid is.
+Quiet is read from the session's own transcripts under `~/.claude/projects/`, and only writes made
+**since this run started** count. That directory is keyed on the worktree path, which is
+deterministic per ticket, so it outlives the worktree — #266's still held transcripts from
+2026-08-27 with no worktree at all, and without that floor the next run of that ticket is "quiet for
+twelve days" on its first tick. The whole subtree is read, not just the top level: a session's
+subagent transcripts sit under `<session-id>/`, 16 of #266's 17 files were below it, and the largest
+gap in a parent jsonl of a real `--work` run is hours. Fail-open throughout — nothing written yet is
+absence of evidence, not a stall, and the bound still catches a session that wedges before its first
+write.
+
+**And a hand-launched START closes out what an earlier one left behind** — `--work` and `--claim`
+both. A row still saying `running` is otherwise reaped only when a DRIVER starts, which on this
+machine happened twice against 32 hand-launched runs, leaving seven rows reporting a live session
+days later.
+
+**What it takes as proof is a recorded pid that no longer exists, and nothing weaker.** Not "no
+lease holds it": `release_claim` unlinks a lease with no liveness check at all, and `active_leases`
+prunes one whose worktree was removed, so an operator typing `--release` in a second terminal would
+have the next session publish `error` over a run that is still working — and `write_ledger` keeps
+the flag saying so as a field it never saw, so the lie outlives the session that disproves it. A row
+with no pid, which is every row written before this existed, is left alone and marked by `--status`
+rather than rewritten. It also cannot be `reap_running`: that one's soundness IS the machine lock,
+which a hand-launched session never takes.
 
 Everything above is the driver working tickets unattended. If you would rather drive two `claude`
 sessions yourself — to watch them, or to interrupt one — the isolation still has to come from
