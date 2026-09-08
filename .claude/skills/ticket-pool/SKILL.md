@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.16.0
+version: 0.17.0
 ---
 
 # Ticket pool — the loop that learns
@@ -202,26 +202,42 @@ for exactly that. Reading the `.jsonl` is safe at any time and cannot perturb a 
 
 ### Being told
 
-The driver pushes three things to a channel of your choosing, because a pool that runs for hours runs
-while you are not reading its terminal: **each ticket as it lands** (every status, `needs_human` false
-only for `ready` and `paused`), **a retro that turned retros off**, and **the end of the invocation**
-with its tally. Per ticket rather than per wave — the wave ends when its slowest ticket does, and a run
-that aborted in its first ten minutes would otherwise wait most of a day to be mentioned.
+A pool that runs for hours runs while you are not reading its terminal, so five things leave the
+driver for a channel of your choosing:
+
+| event | when |
+|---|---|
+| `outcome` | a ticket lands — every status, driven or `--work`, a crashed worker included |
+| `repo-blocked` | a repository could not be fetched, stalling every ticket queued against it |
+| `retro-off` | a retro left `LAST` where it was: the rest of the pool is worked without learning |
+| `finished` | the invocation drained, with its tally and its needs-a-human list |
+| `driver-died` | the driver itself raised — pushed before the traceback, since nothing else reports it |
+
+Per TICKET rather than per wave: a wave ends when its slowest member does, and a run that aborted in
+its first ten minutes would otherwise wait most of a day to be mentioned. Per REPOSITORY for a fetch
+that failed: the cause is the remote, and twenty tickets queued on it are not twenty problems.
+
+`needs_human` is a statement about the STATUS — false only for `ready` and `paused` — so read `flags`
+beside it. The driver's own "PR is ready but the gate entry says blocking=N" rides on a `ready`, and a
+channel filtering on `needs_human` alone drops the one outcome the driver has called
+self-contradictory.
 
 `notify.command` is the whole channel policy: an argv, the one-line summary appended as its LAST
-argument, the whole event as JSON on its stdin. So `["ntfy", "publish", "<topic>"]` works as written,
-and a script of your own can read the JSON and decide for itself which events are worth a phone
-buzzing — `needs_human` is there to be filtered on. No token of yours is written into this pipeline to
-do it. `notify.enabled: false` silences the lot.
+argument, the whole event as JSON on its stdin. `["ntfy", "publish", "<topic>"]` works as written. A
+string is split the way a shell would split it and then run WITHOUT one, so `&&` in there is an
+argument and not an operator — anything needing a shell goes in a script of your own, which is also
+where a token belongs rather than in this config.
 
-**Unset, it falls back to a macOS banner, and that is a fallback and not an answer.** It reaches a
-laptop you have walked away from and nothing else, and `osascript` exits 0 whether or not the banner
-was actually shown — the invoking app's notification permission decides that, and a driver started
+**Emptied means silence and only UNSET falls back.** `""`, `[]` and `notify.enabled: false` all give
+you nothing; an absent `command` gives you a macOS banner, which is a fallback and not an answer. It
+reaches a laptop you have walked away from and nothing else, and `osascript` exits 0 whether or not
+the banner was shown — the invoking app's notification permission decides that, and a driver started
 from a launch agent may have none. If the escalations matter, configure the channel and watch one
 arrive.
 
 A failed notifier costs one line and nothing else: it never raises, never retries, and is reported
-once per invocation rather than once per event.
+once per invocation rather than once per event — including a `notify.command` that cannot be read as
+one at all.
 
 ### What became of the work
 

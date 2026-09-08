@@ -286,10 +286,12 @@ def notify_argv(cfg: dict) -> list[str] | None:
     if not notify_cfg.get("enabled", True):
         return None
     command = notify_cfg.get("command")
-    if isinstance(command, str):
-        command = shlex.split(command)
-    if command:
-        return [str(part) for part in command]
+    if command is not None:
+        # Emptied is not unset. An operator who blanked this chose silence, and answering that with
+        # a banner is the driver overruling the only instruction the key can carry.
+        if isinstance(command, str):
+            command = shlex.split(command)
+        return [str(part) for part in command] or None
     if sys.platform != "darwin":
         return None
     # `on run argv` rather than an interpolated `-e`: the summary carries ticket titles, quotes and
@@ -300,6 +302,12 @@ def notify_argv(cfg: dict) -> list[str] | None:
             "-e", "end run"]
 
 
+def notify_timeout(cfg: dict) -> int:
+    """Absent means 15. A number the operator wrote is theirs — `or 15` silently overruled a 0."""
+    given = (cfg.get("notify") or {}).get("timeout_seconds")
+    return 15 if given is None else int(given)
+
+
 def notify(cfg: dict, event: str, summary: str, say, needs_human: bool = False, **fields) -> None:
     """Push one event to the operator's channel. Never raises, never retries, never waits long.
 
@@ -308,17 +316,22 @@ def notify(cfg: dict, event: str, summary: str, say, needs_human: bool = False, 
     notification is a convenience laid over it, and the day it can stop a wave is the day it has cost
     more than every escalation it ever delivered.
     """
-    argv = notify_argv(cfg)
-    if not argv:
-        return
-    payload = {"event": event, "summary": summary, "needs_human": needs_human,
-               "at": datetime.now(timezone.utc).isoformat(), **fields}
+    # Resolving the channel is INSIDE the guard, not before it. `notify.command: true` — somebody
+    # answering the question the key asks — is not iterable, and `notify_argv` raised it straight
+    # through a promise this docstring makes: out of a single-job wave it took the pool, and out of a
+    # parallel one it was caught by the worker handler and a finished ticket was rewritten as a crash.
+    argv, why = None, None
     try:
+        argv = notify_argv(cfg)
+        if not argv:
+            return
+        payload = {"event": event, "summary": summary, "needs_human": needs_human,
+                   "at": datetime.now(timezone.utc).isoformat(), **fields}
         done = subprocess.run(argv + [summary], input=json.dumps(payload), text=True,
                               capture_output=True,
-                              timeout=int((cfg.get("notify") or {}).get("timeout_seconds") or 15))
-        why = (None if done.returncode == 0
-               else f"exit {done.returncode}: {(done.stderr or done.stdout).strip()[:160]}")
+                              timeout=notify_timeout(cfg))
+        if done.returncode != 0:
+            why = f"exit {done.returncode}: {(done.stderr or done.stdout).strip()[:160]}"
     except Exception as exc:                      # including the timeout, which is not exceptional
         why = f"{type(exc).__name__}: {exc}"[:200]
     if not why:
@@ -326,8 +339,8 @@ def notify(cfg: dict, event: str, summary: str, say, needs_human: bool = False, 
     with NOTIFY_LOCK:
         first, NOTIFY_FAILED["why"] = not NOTIFY_FAILED["why"], NOTIFY_FAILED["why"] or why
     if first:
-        say(f"! the notifier {argv[0]} failed — {why}. Nothing else is affected, but this run's "
-            "escalations are not reaching you.")
+        say(f"! the notifier ({argv[0] if argv else 'notify.command'}) failed — {why}. Nothing else "
+            "is affected, but this run's escalations are not reaching you.")
 
 
 def notify_outcome(cfg: dict, ledger: dict, key: str, status: str, say) -> None:
@@ -339,10 +352,15 @@ def notify_outcome(cfg: dict, ledger: dict, key: str, status: str, say) -> None:
     """
     entry = (ledger or {}).get(key) or {}
     pr = entry.get("pr")
+    # `flags` and `killed_for` travel with it because `needs_human` is a statement about the STATUS
+    # and cannot be one about the run: the driver's own "PR is ready but the gate entry says
+    # blocking=N — one of the two is wrong" rides on a `ready`, and a channel filtering on
+    # `needs_human` alone would drop the one outcome the driver has called self-contradictory.
     notify(cfg, "outcome", f"{key}: {status}" + (f" (PR #{pr})" if pr else ""), say,
            needs_human=needs_a_human(status), key=key, status=status, pr=pr,
            pr_url=entry.get("pr_url"), duration_s=entry.get("duration_s"),
-           cost_usd=entry.get("cost_usd"))
+           cost_usd=entry.get("cost_usd"), flags=entry.get("flags") or [],
+           killed_for=entry.get("killed_for"))
 
 
 # ─────────────────────────────────────────────────────────────────── pause ──
@@ -2627,13 +2645,37 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
 
     def landed(key: str, status: str) -> tuple[str, str]:
         """Every outcome this wave produces passes through here, so the operator is told as the
-        ticket lands rather than when the wave does — and a worker that died is told about too."""
+        ticket lands rather than when the wave does — a worker that died included."""
         notify_outcome(cfg, ledger, key, status, say)
         return (key, status)
 
+    def died(job: dict, exc: BaseException) -> str:
+        """A worker that raised, recorded rather than propagated — from EITHER branch.
+
+        One handler because for a while there were two and one of them was empty: the single-job
+        branch, which is the branch `max_workers: 1` makes every pool take. `work_ticket` indexes
+        `bases` directly and `open_prs` inherits `sh`'s 300s timeout, so the exception is reachable —
+        and it escaped the wave and `main` alike, leaving the ticket reading `running` and nobody
+        told, in the default configuration.
+        """
+        say(f"[{job['key']}] ! the worker itself raised {type(exc).__name__}: {exc}")
+        # And neither must the recording of that death. `crash_entry` writes the ledger, which can
+        # raise on its own (an unusable lock file, a failed rename), and an exception escaping here
+        # would take the wave AND the driver — under the comment above saying it must not.
+        # `work_in_session` wraps its equivalent for the same reason.
+        try:
+            return crash_entry(ledger, job["key"], exc)
+        except Exception as inner:
+            say(f"[{job['key']}] ! and the ledger write for it raised "
+                f"{type(inner).__name__}: {inner} — the outcome is unrecorded")
+            return "error"
+
     if len(jobs) == 1:
-        return [landed(jobs[0]["key"],
-                       work_ticket(jobs[0], slots[0], cfg, ledger, say, bases, others(jobs[0])))]
+        try:
+            only = work_ticket(jobs[0], slots[0], cfg, ledger, say, bases, others(jobs[0]))
+        except Exception as exc:  # a worker that dies must not take the driver with it
+            only = died(jobs[0], exc)
+        return [landed(jobs[0]["key"], only)]
     results: list[tuple[str, str]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool_exec:
         futures = {
@@ -2643,20 +2685,10 @@ def run_wave(jobs: list[dict], slots: list[Slot], cfg: dict, ledger: dict, say: 
         for future in concurrent.futures.as_completed(futures):
             job = futures[future]
             try:
-                results.append(landed(job["key"], future.result()))
+                status = future.result()
             except Exception as exc:  # a worker that dies must not take the wave with it
-                say(f"[{job['key']}] ! the worker itself raised {type(exc).__name__}: {exc}")
-                # And neither must the recording of that death. `crash_entry` writes the ledger, which
-                # can now raise on its own (an unusable lock file, a failed rename), and an exception
-                # escaping this handler would take the wave AND the driver — under the comment above
-                # saying it must not. `work_in_session` wraps its equivalent for the same reason.
-                try:
-                    status = crash_entry(ledger, job["key"], exc)
-                except Exception as inner:
-                    say(f"[{job['key']}] ! and the ledger write for it raised "
-                        f"{type(inner).__name__}: {inner} — the outcome is unrecorded")
-                    status = "error"
-                results.append(landed(job["key"], status))
+                status = died(job, exc)
+            results.append(landed(job["key"], status))
     return results
 
 
@@ -2778,6 +2810,47 @@ def retro_forecast(count: int, pending: int, cfg: dict) -> dict[int, list[str]]:
             if i < len(waves):
                 marks.setdefault(i + 1, []).append("first wave reading changed skills")
     return marks
+
+
+def prepare_bases(queue: list[dict], cfg: dict, ledger: dict, say) -> dict[str, str]:
+    """One fetch per repository per invocation, and the sha every worktree in every wave is cut from.
+
+    Here rather than per ticket: the whole invocation works one base, and concurrent workers never
+    fetch into one object store at the same time.
+
+    A repository that cannot be prepared stalls every ticket queued against it, and that is ONE
+    escalation naming the count — not one per ticket. The cause is the remote rather than the
+    tickets, and twenty buzzes plus twenty notifier timeouts for one broken fetch is the rule this
+    file already states about a dead channel, one level up. Nor does it name a PR: nothing ran, and
+    the number a retried ticket still carries in the ledger belongs to the PREVIOUS attempt.
+    """
+    bases: dict[str, str] = {}
+    seen: set[str] = set()
+    for job in queue:
+        repo = str(job["path"])
+        if repo in seen:
+            continue
+        seen.add(repo)
+        failure, where, sha = prepare_repo(job["path"], say)
+        if not failure:
+            bases[repo] = sha
+            say(f"  {job['slug']}: {where}")
+            continue
+        say(f"  x {job['slug']}: {where.splitlines()[0]}")
+        say(f"    {PREPARE_REMEDY[failure]}")
+        blocked = [j for j in queue if str(j["path"]) == repo]
+        for stalled in blocked:
+            write_ledger(ledger, stalled["key"],
+                         nothing_ran(ledger.get(stalled["key"], {}), failure, where))
+        # These never reach a wave, so they never reach `landed`. A pool that stalled before it
+        # started is the escalation most worth having: nothing is running, and nothing will, until
+        # somebody fixes the remote.
+        notify(cfg, "repo-blocked",
+               f"{job['slug']}: {failure} — {len(blocked)} ticket(s) cannot start", say,
+               needs_human=True, slug=job["slug"], failure=failure, blocked=len(blocked),
+               tickets=[j["key"] for j in blocked],
+               where=(where.splitlines()[0] if where else ""))
+    return bases
 
 
 def summarise(results: list[tuple[str, str]], cfg: dict, say: Say) -> None:
@@ -3369,35 +3442,17 @@ def main() -> int:
             say("--dry-run: preflight passed and the queue is above. Nothing was started.")
             return 0
 
-        # One fetch per repository per invocation, here rather than per ticket: every worktree in
-        # every wave is cut from the sha resolved now, so the whole invocation works one base and
-        # concurrent workers never fetch into one object store at the same time.
-        bases: dict[str, str] = {}
-        seen: set[str] = set()
-        for job in queue:
-            repo = str(job["path"])
-            if repo in seen:
-                continue
-            seen.add(repo)
-            failure, where, sha = prepare_repo(job["path"], say)
-            if failure:
-                say(f"  x {job['slug']}: {where.splitlines()[0]}")
-                say(f"    {PREPARE_REMEDY[failure]}")
-                for blocked in [j for j in queue if str(j["path"]) == repo]:
-                    write_ledger(ledger, blocked["key"],
-                                 nothing_ran(ledger.get(blocked["key"], {}), failure, where))
-                    # These never reach a wave, so they never reach `landed`. A pool that stalled
-                    # before it started is the escalation most worth having: nothing is running, and
-                    # nothing will, until somebody fixes the remote.
-                    notify_outcome(cfg, ledger, blocked["key"], failure, say)
-                continue
-            bases[repo] = sha
-            say(f"  {job['slug']}: {where}")
+        bases = prepare_bases(queue, cfg, ledger, say)
         queue = [j for j in queue if str(j["path"]) in bases]
         waves = plan_waves(queue, workers)
         if not queue:
             say("")
             say("no repository in the queue could be prepared; nothing was started.")
+            # `summarise` is never reached on this path, so without this the invocation ends having
+            # told nobody it ended. Each repository is already escalated by name above; this one
+            # says the pool is over and the machine is free.
+            notify(cfg, "finished", "pool finished: nothing could be prepared, no ticket started",
+                   say, needs_human=True, counts={}, needs=[], tickets=0, log=str(say.path))
             return 1
 
         def pause_here(remaining: list[dict], suspended: list[dict]) -> None:
@@ -3459,6 +3514,13 @@ def main() -> int:
         say("")
         say(f"log: {say.path}")
         return 0
+    except Exception as exc:
+        # Nothing else can report this one: no summary is printed, the ledger keeps whatever each
+        # ticket was last called, and the operator is not at the terminal — which is the premise of
+        # pushing anything at all. Re-raised, so the traceback an operator reads is unchanged.
+        notify(cfg, "driver-died", f"pool-run died: {type(exc).__name__}: {exc}"[:200], say,
+               needs_human=True, error=f"{type(exc).__name__}: {exc}"[:500])
+        raise
     finally:
         drop_lock()
 

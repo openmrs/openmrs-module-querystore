@@ -2354,6 +2354,28 @@ def test_a_notifier_that_fails_costs_the_pool_nothing(tmp: Path) -> None:
     check("still once when eight workers find the channel dead at the same moment",
           len(racing) == 1, str(racing))
 
+    # A config that cannot be read as a command must fail like any other unreachable channel.
+    # `true` is the plausible typo — somebody answering the question "do I want notifications?" —
+    # and it reached `notify_argv`, which is called OUTSIDE the guard everything else here sits in:
+    # escaping a single-job wave it takes the pool, and inside a parallel one it is caught by the
+    # worker handler and a finished ticket is rewritten as a crash.
+    for junk in (True, 42, {"cmd": "ntfy"}):
+        broken = pool.Say(tmp / f"broken-{junk}.md")
+        bad = pool.merge(pool.DEFAULTS, {"notify": {"command": junk}})
+        with isolated(tmp):
+            pool.NOTIFY_FAILED["why"] = None
+            try:
+                pool.notify_outcome(bad, {}, "o/r#1", "timeout", broken)
+                blew_up = None
+            except BaseException as exc:
+                blew_up = exc
+            finally:
+                pool.NOTIFY_FAILED["why"] = None
+        check(f"a notify.command of {junk!r} costs a line, not the pool", blew_up is None,
+              f"{type(blew_up).__name__}: {blew_up}")
+        check(f"and {junk!r} is reported rather than swallowed",
+              len([l for l in broken.lines if "notif" in l.lower()]) == 1, str(broken.lines))
+
     sink, cmd = notify_sink(tmp)
     off = pool.merge(pool.DEFAULTS, {"notify": {"enabled": False, "command": cmd}})
     with isolated(tmp):
@@ -2437,6 +2459,129 @@ def test_the_end_of_an_invocation_is_pushed_too(tmp: Path) -> None:
           done and done[0].get("needs_human") is False, str(done))
 
 
+def test_a_worker_that_dies_is_escalated_from_either_branch(tmp: Path) -> None:
+    """A ticket whose worker RAISED, on the single-job branch, which is the default one.
+
+    `parallel.max_workers` ships at 1, so the branch with no guard around `work_ticket` was the
+    branch nearly every pool takes. `work_ticket` indexes `bases` directly, and `open_prs` inherits
+    `sh`'s 300s timeout, so the exception is reachable rather than theoretical — and it escaped the
+    wave AND `main`, whose only clause is `finally: drop_lock()`. The ticket stayed `running` in the
+    ledger, no summary printed, and nothing reached the operator: the exact eight-hour silence this
+    whole feature exists to end, in the configuration most people run.
+
+    Driven with a `bases` map the job is missing from — a real KeyError out of the real function,
+    with no patching of anything.
+    """
+    print("\na worker that raised, on the single-job branch")
+    origin, work = git_fixture(tmp)
+    one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
+    stub = stub_claude(tmp / "claude-stub", tmp / "sessions.txt")
+    sink, cmd = notify_sink(tmp)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "claude": {"binary": str(stub)},
+        "parallel": {"max_workers": 1, "standalones": [str(one)]},
+        "notify": {"command": cmd}})
+    say = pool.Say(tmp / "run.md")
+    job = {"slug": "o/r", "path": work, "ticket": "266", "url": "https://example/266",
+           "title": "t", "key": "o/r#266"}
+    ledger: dict = {}
+    raised, results = None, None
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        try:
+            results = pool.run_wave([job], slots, cfg, ledger, say, {})     # no base for its repo
+        except BaseException as exc:
+            raised = exc
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+
+    check("the wave does not take the driver with it", raised is None,
+          f"{type(raised).__name__}: {raised}")
+    check("the death is recorded as an outcome, not left as the running sentinel",
+          results == [("o/r#266", "error")], f"{results} / ledger status {entry.get('status')}")
+    check("and the ledger says so too", entry.get("status") == "error", str(entry))
+    got = [e for e in notified(sink) if e.get("event") == "outcome"]
+    check("the operator is told a worker died", len(got) == 1, str(notified(sink)))
+    if got:
+        check("as something needing a human", got[0].get("needs_human") is True, str(got[0]))
+        check("carrying the flag that says what raised, which the status alone cannot",
+              any("KeyError" in str(f) for f in (got[0].get("flags") or [])), str(got[0].get("flags")))
+
+    # The driver dying is the same failure one level up, and `main` is the only place that can
+    # report it: no summary is printed on the way out of an exception. Nothing here can drive
+    # `main` — it parses argv, takes the machine lock and talks to GitHub — so this one is read
+    # from the source, and says so.
+    body = (HERE / "pool-run").read_text()
+    body = body[body.index("def main() -> int:"):]
+    check("and the driver's own death is pushed before the traceback it re-raises",
+          'notify(cfg, "driver-died"' in body and body.index('notify(cfg, "driver-died"') <
+          body.index("        raise\n    finally:"),
+          "main exits on an exception without telling anybody")
+
+
+def test_one_unreachable_remote_is_one_escalation(tmp: Path) -> None:
+    """A repository that cannot be fetched is ONE cause, and must be one push.
+
+    Per ticket it was N identical pushes for one broken remote — twenty queued tickets, twenty
+    buzzes, and up to twenty notifier timeouts serially on the way to saying nothing was started.
+    That is the file's own rule about a dead channel, one level up: the complaint belongs to the
+    cause. It also stopped naming a PR number: `nothing_ran` strips `RUN_FIELDS` and `pr` is
+    deliberately not among them, so a retried ticket's push said "PR #123" about a run that never
+    began — and a PR number is exactly what an operator acts on.
+    """
+    print("\none unreachable remote, one escalation")
+    sink, cmd = notify_sink(tmp)
+    cfg = pool.merge(pool.DEFAULTS, {"notify": {"command": cmd}})
+    say = pool.Say(tmp / "run.md")
+    missing = tmp / "not-a-repo"
+    missing.mkdir()
+    queue = [{"slug": "o/r", "path": missing, "ticket": str(t), "key": f"o/r#{t}",
+              "title": "t", "url": f"u{t}"} for t in (101, 102, 103)]
+    ledger = {"o/r#101": {"status": "draft", "pr": 123, "pr_url": "https://example/pr/123"}}
+
+    with isolated(tmp):
+        bases = pool.prepare_bases(queue, cfg, ledger, say)
+        entries = {k: pool.load_json(pool.LEDGER, {}).get(k, {}) for k in
+                   ("o/r#101", "o/r#102", "o/r#103")}
+
+    check("no base is handed back for a repository that could not be prepared", bases == {}, str(bases))
+    check("every ticket on it is recorded as blocked, as before",
+          [e.get("status") for e in entries.values()] == ["checkout-blocked"] * 3, str(entries))
+    got = notified(sink)
+    check("and the operator is told ONCE, not once per ticket on it", len(got) == 1, str(got))
+    if got:
+        check("the push is about the repository, and says how many tickets it stalls",
+              got[0].get("slug") == "o/r" and got[0].get("blocked") == 3, str(got[0]))
+        check("it needs a human — nothing is running and nothing will",
+              got[0].get("needs_human") is True, str(got[0]))
+        check("and it names no PR, because nothing ran",
+              "123" not in json.dumps(got[0]), str(got[0]))
+
+
+def test_the_config_says_what_it_says(tmp: Path) -> None:
+    """Unset falls back; emptied means off. Two different instructions, and they were the same one.
+
+    An operator blanking `notify.command` to silence the pool got macOS banners instead — and on
+    Linux got nothing at all with no line saying why. `None` is the only value that means "I have not
+    chosen", which is the only value a fallback may answer.
+    """
+    print("\nwhat the notify config actually says")
+    with isolated(tmp):
+        unset = pool.notify_argv(pool.merge(pool.DEFAULTS, {}))
+        blanked = pool.notify_argv(pool.merge(pool.DEFAULTS, {"notify": {"command": ""}}))
+        emptied = pool.notify_argv(pool.merge(pool.DEFAULTS, {"notify": {"command": []}}))
+        spaces = pool.notify_argv(pool.merge(pool.DEFAULTS, {"notify": {"command": "   "}}))
+        given = pool.notify_argv(pool.merge(pool.DEFAULTS,
+                                            {"notify": {"command": "ntfy publish my-topic"}}))
+    check("unset is the only value the fallback may answer", unset is not None, str(unset))
+    check("a blanked command is silence, not a banner", blanked is None, str(blanked))
+    check("and so is an emptied list", emptied is None, str(emptied))
+    check("and so is whitespace, which is the same instruction typed differently", spaces is None,
+          str(spaces))
+    check("a string command is split as a shell would split it, and run without one",
+          given == ["ntfy", "publish", "my-topic"], str(given))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -2480,7 +2625,10 @@ def main() -> int:
                          ("notify outcome", test_an_outcome_reaches_the_operator),
                          ("notify failure", test_a_notifier_that_fails_costs_the_pool_nothing),
                          ("notify retro-off", test_retros_stopping_is_escalated),
-                         ("notify finished", test_the_end_of_an_invocation_is_pushed_too)]:
+                         ("notify finished", test_the_end_of_an_invocation_is_pushed_too),
+                         ("notify worker death", test_a_worker_that_dies_is_escalated_from_either_branch),
+                         ("notify blocked repo", test_one_unreachable_remote_is_one_escalation),
+                         ("notify config", test_the_config_says_what_it_says)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
