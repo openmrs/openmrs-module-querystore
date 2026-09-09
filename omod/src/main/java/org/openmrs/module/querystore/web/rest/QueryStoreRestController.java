@@ -135,7 +135,8 @@ public class QueryStoreRestController {
 		if (requestedSize <= 0 || from < 0) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "limit must be > 0 and startIndex >= 0");
 		}
-		int size = Math.min(requestedSize, maximumPageSize());
+		int maximum = maximumPageSize();
+		int size = Math.min(requestedSize, maximum);
 		String requestedMode = StringUtils.trimToNull(mode);
 		boolean contextMode = "context".equals(requestedMode);
 		if (requestedMode != null && !contextMode) {
@@ -191,7 +192,7 @@ public class QueryStoreRestController {
 		}
 
 		boolean ranked = query != null;
-		if (ranked && from > maximumPageSize() - size) {
+		if (ranked && from > maximum - size) {
 			return errorResponse(HttpStatus.BAD_REQUEST,
 			        "ranked result window must not exceed the OpenMRS maximum result count");
 		}
@@ -229,7 +230,7 @@ public class QueryStoreRestController {
 		}
 
 		Map<String, Object> body = PatientRecordView.page(page, ranked, from, size, totalCount,
-		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete);
+		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete, maximum);
 		if (pageEtag != null) {
 			return ResponseEntity.ok()
 			        .eTag(pageEtag)

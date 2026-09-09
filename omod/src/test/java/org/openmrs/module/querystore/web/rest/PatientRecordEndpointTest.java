@@ -44,6 +44,8 @@ import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * POJO tests for the {@code /querystore/patientrecord} read endpoint (ADR Decision 16): dispatch across
@@ -616,6 +618,78 @@ public class PatientRecordEndpointTest {
 		d.setEmbedding(new float[] { 0.1f, 0.2f, 0.3f }); // present so the exclusion assertion is meaningful
 		d.putMetadata("obs_group_uuid", "grp-" + uuid);
 		return d;
+	}
+
+	/** Follows real controller links; the search stub does not test datastore ranking. */
+	@Test
+	public void rankedSearch_nextLinksStayUsableThroughAPartialFinalWindow() {
+		authenticate();
+		wire();
+		controller.setMaximumPageSize(5);
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		List<QueryDocument> ranked = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 5; i++) {
+			ranked.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "glucose " + i));
+		}
+		when(queryStore.searchByPatient(PATIENT, "glucose", 2)).thenReturn(ranked.subList(0, 2));
+		when(queryStore.searchByPatient(PATIENT, "glucose", 4)).thenReturn(ranked.subList(0, 4));
+		when(queryStore.searchByPatient(PATIENT, "glucose", 5)).thenReturn(ranked);
+		ResponseEntity<Object> first = controller.getPatientRecords(PATIENT, "glucose", 2, 0);
+		assertEquals(HttpStatus.OK, first.getStatusCode());
+		String firstNext = pagingLink(first, "next");
+		assertNotNull(firstNext);
+		assertTrue(firstNext.endsWith("startIndex=2&limit=2"));
+		ResponseEntity<Object> second = followPagingLink(firstNext);
+		assertEquals(HttpStatus.OK, second.getStatusCode());
+		assertEquals("r2", ((Map<?, ?>) ((List<?>) body(second).get("results")).get(0)).get("resourceUuid"));
+		String secondNext = pagingLink(second, "next");
+		assertNotNull("the last usable record must remain reachable", secondNext);
+		assertTrue(secondNext.endsWith("startIndex=4&limit=1"));
+		ResponseEntity<Object> last = followPagingLink(secondNext);
+		assertEquals(HttpStatus.OK, last.getStatusCode());
+		List<?> results = (List<?>) body(last).get("results");
+		assertEquals(1, results.size());
+		assertEquals("r4", ((Map<?, ?>) results.get(0)).get("resourceUuid"));
+		assertEquals(Integer.valueOf(5), ((Map<?, ?>) results.get(0)).get("rank"));
+		assertNull(body(last).get("totalCount"));
+		assertNull("no usable ranked window remains", pagingLink(last, "next"));
+	}
+
+	@Test
+	public void crossPatientRankedSearch_omitsNextAtAnExactFullWindowBoundary() {
+		authenticate();
+		wire();
+		controller.setMaximumPageSize(4);
+		List<QueryDocument> ranked = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 4; i++) {
+			ranked.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "glucose " + i));
+		}
+		when(queryStore.search("glucose", 4)).thenReturn(ranked);
+		ResponseEntity<Object> last = controller.getPatientRecords(null, "glucose", 2, 2);
+		assertEquals(HttpStatus.OK, last.getStatusCode());
+		assertEquals(2, ((List<?>) body(last).get("results")).size());
+		assertNull(body(last).get("totalCount"));
+		assertNotNull(pagingLink(last, "prev"));
+		assertNull("a full page at the result ceiling is still the final page", pagingLink(last, "next"));
+	}
+
+	private static String pagingLink(ResponseEntity<Object> response, String rel) {
+		List<?> links = (List<?>) body(response).get("links");
+		if (links != null) {
+			for (Object value : links) {
+				Map<?, ?> link = (Map<?, ?>) value;
+				if (rel.equals(link.get("rel"))) {
+					return (String) link.get("uri");
+				}
+			}
+		}
+		return null;
+	}
+
+	private ResponseEntity<Object> followPagingLink(String uri) {
+		MultiValueMap<String, String> params = UriComponentsBuilder.fromUriString(uri).build().getQueryParams();
+		return controller.getPatientRecords(params.getFirst("patient"), params.getFirst("q"),
+		        Integer.valueOf(params.getFirst("limit")), Integer.valueOf(params.getFirst("startIndex")));
 	}
 
 	private static Map<?, ?> body(ResponseEntity<Object> response) {

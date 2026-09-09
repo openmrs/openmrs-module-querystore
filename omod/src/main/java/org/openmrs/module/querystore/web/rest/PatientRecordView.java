@@ -67,14 +67,15 @@ final class PatientRecordView {
 	 * shape by hand. {@code totalCount} is the materialized count for a full-chart read; a backend-documented
 	 * cap may omit older records. It is {@code null} for ranked (q-present) results, which are a top-K window
 	 * with no browseable total. A {@code next} link is emitted when a known total has more records, or when an
-	 * unknown-total page is full; a {@code prev} link is emitted when {@code startIndex > 0}.
+	 * unknown-total page is full and the ranked window has remaining capacity. The final ranked page's
+	 * limit is reduced to that remaining capacity; a {@code prev} link is emitted when {@code startIndex > 0}.
 	 *
 	 * @param ranked whether these are q-ranked results (drives the per-row {@code rank} and the null totalCount)
 	 * @param baseParams the non-paging query params, already URL-encoded, ending in {@code &} (e.g. {@code "patient=x&q=y&"})
 	 */
 	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
 	        Integer totalCount, String baseParams, String snapshotId, Boolean chartTruncated,
-	        Boolean projectionComplete) {
+	        Boolean projectionComplete, int maximumResultWindow) {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>(docs.size());
 		for (int i = 0; i < docs.size(); i++) {
 			results.add(toMap(docs.get(i), ranked ? Integer.valueOf(startIndex + i + 1) : null));
@@ -101,7 +102,11 @@ final class PatientRecordView {
 		        ? startIndex + docs.size() < totalCount.intValue()
 		        : docs.size() == limit);
 		if (hasNext) {
-			links.add(link("next", baseParams, startIndex + limit, limit));
+			int nextStart = startIndex + limit;
+			int nextLimit = ranked ? Math.min(limit, maximumResultWindow - nextStart) : limit;
+			if (nextLimit > 0) {
+				links.add(link("next", baseParams, nextStart, nextLimit));
+			}
 		}
 		if (!links.isEmpty()) {
 			env.put("links", links);
