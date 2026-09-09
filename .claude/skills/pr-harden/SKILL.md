@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.20.0
+version: 0.21.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -284,9 +284,26 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   right-hand side *contained* the flag's name accepted `order != null || namesADrug ? order : null`,
   which restores the defect with the whole suite green. State in the guard's javadoc which shapes each
   channel really catches, and never write that a shape is "caught behaviourally" without running it.
+  **And a mutation result measures the arms it moved, not the mechanism** — one run published a
+  "byte-identical" result for removing a scan bound, which held for the one arm it ran and failed for
+  the other, at a cycle and a round.
 - **A guard that is supposed to stay GREEN is not covered by *If you ADD a guard*** — a negative
   assertion passes whether or not its subject could ever arise, so build the case it exists for and
   watch it fail. `harden`'s Termination carries the measurements (#360, #355).
+- **Ask which case hands the guard's SUBJECT its other value. That is the general form of the
+  *supposed to stay GREEN* rule, and the question is not about the guard.** For each guard you
+  add: what is the cheapest edit that satisfies its assertion and still breaks the property, and
+  is the OTHER value of this boolean observed anywhere? A negative assertion is the instance where
+  one of the two values goes unbuilt; a boolean, an arm of a split and the order of a published
+  pair are others, and `harden`'s Termination asks the same question of a TEXT guard's forbidden
+  string and of the value under an asserted key. Four rounds across three runs, each blocking and
+  each raised by a fresh reviewer rather than by the guard's author: a context test asserting
+  `Boolean.TRUE` at both legs, where `= true;` at both call sites stayed green; that same flag's
+  last hop, where substituting the retained flag-less overload stayed green while hardcoding
+  `true` reddened a case, so the hop was covered in one direction and not its mirror; a pair of
+  published numbers whose wire fixtures were `ActiveOrderClaims(n, n)`, leaving the two `map.put`
+  arms transposable and green; and an ordering contract published over two arms whose tests drove
+  one, so hoisting the untested arm restored the defect it was written for with the suite passing.
 - **Don't rewrite prose faster than you verify it.** When a finding is about text an earlier round
   wrote, delete the unsupported clause rather than replacing it with a better-sounding one. That is not
   a counsel of caution — measured on this loop's second run, a correction of a false claim introduced a
@@ -872,11 +889,11 @@ a stop after the decision to stop has been made, and that decision is what costs
 read a stream with no gate text in it as evidence the gate never ran: hooks DO reach `-p` sessions,
 probed the same day, feedback delivered and captured.
 
-**Collecting in the same turn means the `Agent` call RETURNS the report — never a poll
-afterwards.** Several `Agent` calls in ONE message run concurrently, so a wave keeps its
-parallelism while each result is that agent's own report; Step 3's refutation gate already
-collects this way and its agents run ten to twenty minutes, so length is not what forces a
-background spawn. Launching async and then blocking on `TaskOutput` collects nothing extra — the
+**Collecting in the same turn means never polling afterwards.** Several `Agent` calls in ONE
+message run concurrently, so a wave keeps its parallelism while each result is that agent's own
+report; Step 3's refutation gate already collects this way and its agents run ten to twenty
+minutes, so length is not what forces a background spawn. Launching async and then blocking on
+`TaskOutput` collects nothing extra — the
 report arrives by itself in the completion notification's `<result>` — while `TaskOutput` is
 DEPRECATED for an agent task precisely because its output file is a symlink to the agent's whole
 JSONL transcript: each poll injects a truncated window of raw agent chatter, the next poll injects

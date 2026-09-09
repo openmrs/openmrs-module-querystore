@@ -1,7 +1,7 @@
 ---
 name: verify-frontend-change
 description: Verify an OpenMRS module UI change end-to-end before declaring it done — build the .omod, deploy it into a local OpenMRS standalone, (re)start the server, then drive the actual page in a browser. Use for any backend module that renders a UI (legacy/refapp web pages, HTML Form Entry, etc.) — e.g. htmlformentry's date-widget clear button. Trigger phrases include "verify this UI change", "test the module in the browser", "does this render/work in OpenMRS", "verify frontend change".
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Verifying an OpenMRS module UI change
@@ -54,8 +54,8 @@ OpenMRS loads modules at startup, so a running instance must be restarted to pic
 ## 4. Confirm the module actually loaded (the "zero console errors on load" analog)
 
 Before touching the UI, prove the module started clean:
-- **Primary (reliable positive signal):** hit the module REST endpoint (`/ws/rest/v1/module/<id>`) or the manage-modules admin page and confirm the module's state is **started**.
-- **Also** scan the startup log for the module id: there must be **no** `ModuleException` / `Error while starting module` / mapping or bean failure. Absence of a clear "started" line is *not* proof of failure — a module can start while logging only benign warnings, so don't infer breakage from the log alone; rely on the state check above.
+- **`started` is necessary and not sufficient** — it is a signal about the module's lifecycle, not about the bytes that run or the paths they map. Hit the module REST endpoint (`/ws/rest/v1/module/<id>`) or the manage-modules admin page and confirm the module's state is **started**; then hit one path this module MAPS and read the status code. It read green over stale bytes on #340, and on #305 where the omod timestamp and the lib-cache marker read current alongside it and only hashing the loaded class against the built omod settled it. On #393 it read `started=true` with a null `startupErrorMessage` while every REST path that module serves returned 404, so it is not evidence the controllers are mapped.
+- **Also** scan the startup log for the module id: there must be **no** `ModuleException` / `Error while starting module` / mapping or bean failure. Absence of a clear "started" line is *not* proof of failure — a module can start while logging only benign warnings, so don't infer breakage from the log alone.
 
 A module that silently failed to load renders nothing — catching it here saves a confusing browser session.
 

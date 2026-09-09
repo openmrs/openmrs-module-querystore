@@ -1339,8 +1339,13 @@ and only the byte proof is in step 5. "Every freshness signal" became the three 
 timestamp check STAYS, framed as necessary-not-sufficient, because this ledger's PARKED-at-0 entry on
 `omod/target` carries #250's counterweight crediting the existing check with a catch. Residue recorded:
 verify-frontend-change step 4 still calls the `started` state check the "Primary (reliable positive
-signal)" — the signal both #340 and #336 show reading green over stale bytes; the new bullet says so at
-the deploy step rather than re-writing step 4.
+signal)" — the signal #340 shows reading green over stale bytes; the new bullet says so at
+the deploy step rather than re-writing step 4. **Corrected 2026-09-09, and the residue is CLOSED:**
+this entry read "both #340 and #336", and #336 carries no such sighting — neither of its records
+contains the token `started` at all, and FM2-700, P5a's other record, never mentions the status
+endpoint either. The second record is #305 (`2026-09-07-…-305.md`:83-85, the status endpoint reading
+current over a stale expanded-module cache), found by the round-1 gate of the 2026-09-09 pass, which
+rewrote step 4.
 
 **APPLIED · P6 — prune pr-harden's copy of harden's five-universal paragraph.** Two claims in the
 submitted justification were false and the gate measured them: the paragraphs are **not** byte-identical
@@ -1913,3 +1918,201 @@ carry a measurement each. What subsumes nothing is stated as such.
   submitted "four runs, four convergences", "three of them on `main`'s last hundred bytes", "each paying
   wasted calls", "a detour each" and "two rounds paid for it". Two were cut by the gate, three by this
   pass's own diff review — the last of them in text the gate had written.
+
+## 2026-09-09 (window: 4 records — #305/PR385, #379/PR386, PR393/#388, #397/PR398) — 4 applied edits from 3 surviving proposals, 4 proposals killed, 1 limb killed, and the parked list restated below; linter 10 files, 0 findings
+
+Submissions: `proposals/2026-09-09-retro-window-305-379-393-397.md`, then
+`proposals/2026-09-09-retro-window-round2.md`. **Two refutation rounds, two read-only agents, never a
+fork. Not one proposal shipped as submitted, and the strongest lesson in the window was raised by the
+round-1 gate rather than by the proposer.**
+
+**APPLIED · `pr-harden` 0.21.0 — ask which case hands the guard's SUBJECT its other value.** 3 records
+and 4 blocking rounds: `2026-09-09-…-397.md`:159-162 (a context test asserting `Boolean.TRUE` at both
+legs, `= true;` at both call sites green) and :205-214 (the flag's last hop, the flag-less overload
+green while hardcoding `true` reddens one case — covered in one direction only);
+`2026-09-08-…-379.md`:21 (every wire fixture `ActiveOrderClaims(n, n)`, the two `map.put` arms
+transposable and green); `2026-09-08-chartsearchai-PR393.md`:24-28 (a contract published over two arms,
+tests driving one). #397:330 and :334-335 name the shape: "the mirror of the mutation you just proved".
+- **Placement forced by the gate.** The submission put the rule and all three round measurements in
+  `harden`'s Termination; :1289-1290 forbids that (a document that counts cycles), and #397:335-337
+  prescribes the other home in terms — "worth carrying into the fixer brief as a standing question". It
+  ships in `pr-harden`'s fixer brief and `harden` is untouched, which also withdrew the submitted
+  merge-and-delete of `harden`:242-250 and so kept "no mutation of production reaches it", the phrase
+  "positive control", and `pr-harden`'s "not covered by *If you ADD a guard*".
+- **Four things the gates cut from the text.** "the suite is green either way", refuted by #397:212-213
+  ("hardcoding `true` there DOES redden one case"); "mutation-verified by its author", false of #379:21
+  ("rested on review alone") and unsourced for #393; four universals; and "the mutations above", a
+  positional cross-reference into the file that forbids them at `harden`:390. The round-2 gate also cut
+  "satisfied by a constant" — it mis-describes a transposition and a hoist — replaced by #397:336-337's
+  own wording, and split the bullet so the negative-assertion rule keeps its own headline.
+- Bar (b) as submitted said "four rounds in one run"; #397:232 records round 4 at "ZERO blocking", so it
+  is three. Bar (a) at three records is what this rests on.
+
+**APPLIED · `pr-harden` 0.21.0 — a mutation result measures the arms it moved, not the mechanism.**
+`2026-09-08-…-379.md`:12, at 1 harden cycle + 1 pr-harden round. Split out of the bullet above at the
+round-2 gate's objection that it is a different lesson.
+
+**APPLIED · `verify-frontend-change` 0.4.0 — `started` is necessary and not sufficient.** Bar (c), on
+the round-2 gate's own upgrade: :40-41 said step 4's check "cannot see this" while :57 called it the
+"Primary (reliable positive signal)" and :58 said to "rely on the state check above". Closes the
+residue recorded at :1338-1343. Records: #340; #305:83-85; PR393:74-76 (`started=true`, null
+`startupErrorMessage`, 404 on every REST path that module serves — the check is not evidence the
+controllers are mapped). **#336 and FM2-700 both cut as citations** — see the correction above.
+**#397:80-81 is the MIRROR** (`started: false` for a module that had not started) and stays out of the
+skill text; it is why the frame is necessary-not-sufficient rather than deletion. The gate also
+narrowed the added probe to "one path this module MAPS and read the status code", which is PR393's
+actual observable and does not restate step 5, and cut a third copy of the lib-cache pointer.
+
+**APPLIED · `pr-harden` 0.21.0 — deleted "the `Agent` call RETURNS the report".** Bar (c): :875 asserted
+it and :879-881 described the opposite path four lines later. `2026-09-08-chartsearchai-PR393.md`:52-55
+measured the background launch. The round-2 gate corrected the framing — :886-887 carries a measurement
+of the synchronous behaviour, so the record shows VARIANCE, not falsity, which is the argument for
+deleting the mechanism claim in either direction rather than asserting the other one.
+
+**KILLED · P2, pr-harden's identical-head guard omits a cause the skill itself licenses.** Bar (c)
+fails: the record's own words are "the enumerated causes **did not cover** this one" and the two
+sentences "**do not reference each other**" (PR393:41,:45-46) — both gaps, and :331-333 and :1103 have
+already ruled a gap is not a document contradiction. The submission's bridge (that #393's case "lands
+in the first enumerated cause") is false: that cause's parenthetical requires the fixer to have
+declined everything and PR393:58 records nothing declined in any round. The guard also fired and the
+run established why at zero cost, which is :849-852's *existing mechanism exercised and worked*.
+**PARKED at 1 record / 0 cost. REOPEN ON:** a run that mis-classified an identical head as a *did not
+converge* and spent or skipped a round on it.
+
+**KILLED · P3, FINISH tells you to rewrite a body a round just reviewed.** Bar (c) fails on a passage
+the submission never cited: `pr-harden`:579-580 already reconciles the exact pair the record names —
+"Re-deriving the PR description is still owed and is not an exception, because the body is not in the
+tree and does not move the head." The substitute contradiction (:1128-1130's sha anti-pattern carried
+across to the body) is the widening :1017-1021 refused — clause (c) is "reflexive, possessive,
+singular". And the carve-out was fail-open: nothing in Step 1's reviewer brief asks a reviewer to
+review the description, so its antecedent would normally be an orchestrator's belief, while the
+consequent skips a step whose measurement is at :592-594. **PARKED at 1 record / 0 cost. REOPEN ON:** a
+record where a FINISH rewrite put a false sentence into a body a round had cleared.
+
+**KILLED · P6, the every-home search runs in both directions (deleting prose needs the search
+correcting it needs).** Bar (a) fails on this ledger's own precedent that a record where the discipline
+WORKED is not a sighting — :1812-1814, :1226-1229, :1725-1726. `2026-09-07-…-305.md`:68-71 is a clean
+instance of the run doing it right ("the falsifiable half **WAS** done"), leaving one failure record.
+Bar (b) fails too: the claimed cost is #397's cycle 4, which `harden`:193 owed regardless after cycle
+3's Phase 2 made 197 insertions / 239 deletions. The operative clause is genuinely absent from
+`harden`:383-387, :390, `pr-harden`:186-189 and `skill-retro`:84, which is why this parks rather than
+dies. **PARKED at 1 failure record. REOPEN ON:** a second record where a deletion cut the only home of
+a fact, or one where finding it cost a round or a cycle that was not already owed.
+
+**KILLED · P7, a claim-correction sweep needs a terminator that is not another grep** — the round-1
+gate's own proposal, killed by the round-2 gate, which is the clearest argument in this ledger for
+gating a gate's findings. Five objections, three sufficient:
+1. **The nearest text is uncited and is the proposal's operative instruction.** `harden`:268 — "**What
+   ends the loop is a change in the KIND of question, not another entry on the list**" — sits in a
+   bullet with the same open-ended-widening shape (:265, "treat no list of relocations as closed") and
+   its worked terminators at :271-273 are structural checks. P7 nominated only the *delete* half
+   (`harden`:383-387) and missed this.
+2. **P7's imperative excludes its own second record's terminator.** #397:123-124's was "re-running the
+   mutation and reading which cases actually redden" — behavioural, not "an identifier, a number, a
+   shape" — and that form is already shipped at `pr-harden`:270-273. So #397 is not evidence for the
+   imperative as written, and it carried no round cost either (both its incidents were caught inside
+   rounds already running).
+3. **"Widening does not converge" is refuted by P7's own third record**: on #379:13 the survivor was
+   missed because the sweep was doc-scoped, so widening past the docs is exactly what would have found
+   it — which is also what `harden`:390 already requires, making the `harden` half
+   *instruction-not-followed* (:1196-1198). That half was separately false: #379:13 records three
+   survivors and attributes only `config.xml` to doc-scoping, where P7 wrote "the survivor".
+4. Its text also stated "four successively wider greps" over a list of three, tightened a trigger the
+   record measures at the third sweep to the second, and carried two universals.
+- **What survives, and why it parks rather than ships:** #305 alone, at three rounds (:42, :43-45,
+  :46-47), which is bar (b); the round-2 gate ruled those three rounds ONE sighting, correctly, per
+  :1277-1280. And :1264-1275 already parks a prior attempt to operationalise this family — "what makes
+  two refuted claims the same kind is their subject and property, not their wording", **REOPEN ON:** a
+  run where differently-worded claims about ONE subject each took their own pass, stated on the subject
+  alone. #305:74-75 ("three consecutive rounds were homes of one property. The sweep, not the edit, was
+  the failing artifact") is arguably that reopen in rounds rather than passes, and P7 neither cited nor
+  argued it. **PARKED at 1 sighting / 3 rounds, and the reopen it must answer is :1264-1275's, not a
+  second record.** Whoever takes it next: cite `harden`:268, state the rule on the subject, and give an
+  imperative that reaches a behavioural check as well as a structural one.
+
+**KILLED · P4's second limb, appending the unattended-collection uncertainty to `pr-harden`'s State.**
+Three objections, each sufficient. It is a diagnosis where `skill-retro`:73-77 asks for a guard, and
+its operative sentence ("treat the gate as the mechanism and same-turn collection as the intent") has a
+reader do nothing :869-871 does not already have them do. It DEMOTES the highest-cost rule in the
+document — :868's "an unattended run never ends a turn with an agent outstanding", behind :865-867's
+two dead runs (#297 at 51 turns with no PR, #310 at 1365 turns and $76.72) — in an append placed
+immediately after it, while PR393's own incident cost nothing (:54). And it is growth without action in
+a file whose compliance falls with length. **PARKED: an unattended run may be unable to comply with
+:868 if the harness backgrounds the call — 1 record, 0 cost (PR393:52-55), against :886-887's contrary
+measurement. REOPEN ON:** an unattended run that died with an agent outstanding *after* launching it in
+the same turn, i.e. where the gate was the only thing between the run and #297's signature.
+
+**Running parked counts (superseding earlier blocks where they differ)**
+- **A brief's own factual claims going unchecked: 3 records (#338, #355, #397), all three caught by the
+  agent unprompted at zero round cost.** #397's is two invalid instruments in one verifier brief —
+  byte-identity as the test, and reading finding subjects off `safetyWarnings[]` — both refused by the
+  verifier, which substituted better ones. :1721-1726's condition is explicit that a further zero-cost
+  catch is "evidence the verifier step works, not that it needs text", so **the reopen is NOT met** and
+  the condition stands unchanged. Narrower and NOT a skill matter: #397 frames the class as "a
+  plausible re-expression of a production predicate produced a confident wrong number … `CLAUDE.md`
+  already forbids it in scripts, and a subagent BRIEF turns out to be the same hazard with no rule
+  covering it" — that is an edit to the chartsearchai instruction file, whose root is at its size
+  budget, and it is reported to the owner rather than proposed here.
+- **`pr-harden` is silent on where the FIXER works: 2 records** (#250 at :317-323, and
+  `2026-09-08-…-379.md`:27). Still not shipped on :318-322's ground — #379's fixer was isolated "per the
+  brief", an orchestrator decision rather than a document conflict. **The round-2 gate established the
+  two are different halves**, so two reopens, not one: **REOPEN ON** a run where `pr-harden` ITSELF
+  tells the fixer to isolate (the *whether*); and separately **REOPEN ON** a run where collecting from
+  an isolated tree cost a round or a cycle (#379:27's *how*, at 1 step so far).
+- **The measurement's INPUT moving between arms with nothing reporting it: 1 record (#397), 2
+  incidents.** A restart emptied the retrieval index — "`chartMode` still read `fullChart` while the
+  chart dropped from ~348 records to ~9 … the first shipping-artifact arm was measured against a
+  different prompt and was not comparable" — and the index rebuild then "shifted the chart text by a
+  uniform 12 tokens, which re-worded 11 of 14 greedy answers". The record names the instrument it
+  should have used: "a cross-build differential on a quantity the change is known to move, with the
+  cells the change cannot reach as the drift control". `harden`:63-68 has the sibling rule for REPEATS
+  and nothing covers ARMS. Cost was one discarded arm, and the project's own eval README already
+  carried the rule its author then ignored (:1196-1198). **REOPEN ON:** a second record, or a round or
+  cycle spent.
+- **Editing the tree while a build you backgrounded is running: 1 record (#397), 2 invalidated builds.**
+  "Running `mvn` in the background and then editing files raced the build twice, producing two invalid
+  red results that cost a re-run each." `harden`:164-168 and `pr-harden`:924-934 forbid exactly this
+  for a delegated AGENT reading the tree; a backgrounded build is the same reader, so this is one
+  clause away. No ledger entry stands against it. **REOPEN ON:** a second record.
+- **A line-scoped grep cannot see a wrapped SENTENCE, and reports absence: 1 record (#397), twice in one
+  run** — "a line-scoped grep over wrapped prose is a fail-open check … which is the direction that
+  invites writing a 'correction' over something already correct." The hazard is already named
+  (`pr-harden`:696-700, `harden`:390) and the shipped method — the rarest single TOKEN — is immune by
+  construction. **This retro reproduced it live**: two of eleven proposal quotations read as MISSING
+  under a line-scoped grep and verified once whitespace was flattened. That is a third sighting of the
+  hazard and still not a sighting of the shipped method failing. **REOPEN ON:** a record where the
+  single-TOKEN method itself returned a false absence.
+- **`resolve-ticket` has no step for "the gate you are told to work against is not on main yet": 1
+  record** (#397 — "Merging main into that branch first, renumbering to 83 and fixing its five pointer
+  sites was prerequisite, not scope"). **REOPEN ON:** a second record.
+- **The verifier can green a change whose schema half never deployed: still 1 record (#229).** Checked
+  against PR393 this pass and NOT met — #393's mechanism is a stale omod serving 404, not a changeset
+  skipped on a same-version redeploy. The operative reopen is the sharpened form at :1281-1283, "a run
+  whose OWN schema-bearing changeset failed to deploy on a same-version redeploy", not :1229's.
+- **Counts published in prose going stale: 4 records this window, carried and NOT proposable.**
+  `2026-09-07-…-305.md`:9-15 (three counts still standing inside the commit titled "the withholding
+  kinds are counted nowhere", 1 round), `PR393`:18 ("api 1995 tests" → 1997), `2026-09-09-…-397.md`:
+  232-240 ("nineteen" against 20, "a dozen" against 16, and a third count of one population),
+  `2026-09-08-…-379.md`:23 (Decision 81's "one mutation, both cases" stale in the round that wrote it).
+  The rule exists at `harden`:388 and `pr-harden`:294-304, so this is :1196-1198's shape; the count is
+  carried because the previous submission dropped it and `skill-retro`:70-71 requires it.
+- **The proposer not verifying its own citations: 21 cycles** — previous 20 (:1907). This pass added
+  nine, every one cut at a gate: bar (b) stated as four rounds where #397:232 records the fourth at
+  zero blocking; "#336" inherited from this ledger's own mis-citation and never checked; "the guard was
+  mutation-verified by its author" false of #379:21; "satisfied by a constant" describing a
+  transposition and a hoist; P3 omitting `pr-harden`:579-580, the passage that settles it; P7's "the
+  survivor" over #379's three; P7's "four successively wider greps" over a list of three; "observed
+  both ways" with no record for the inline direction; and "`…-379.md` throughout" left uncited. **The
+  records half of this counter is NOT re-derived here** — this pass's errors touch #397, #379 and #336,
+  and whether those were already inside the previous 14 cannot be established from the entry, so the
+  figure is left at its last stated value rather than guessed forward.
+- **A retro submitting wording that breaks the counts/universals rule it enforces: unbroken.** This
+  pass submitted "observes only the values", "all of the guard", "every fixture agrees", "never of the
+  mechanism", "green either way", "exactly this", "the first one able to", "every line naming", "no
+  phrasing in it" and "widening does not converge". The gates cut all of them; none reached a skill.
+- **Two source checkouts, one authoritative: remedy re-applied in the other direction.**
+  :1727-1740 recorded `~/Projects/openmrs/querystore` (the `pool.json` `source_repo`) five behind and
+  fast-forwarded it. This pass found the reverse — that checkout at `origin/main` and
+  `~/Projects/openmrs/openmrs-module-querystore`, which the previous pass committed in, five behind —
+  and fast-forwarded the latter. **This pass commits in the `source_repo` one.** Both were at
+  `origin/main` before the commit. **REOPEN ON:** a third checkout, or a pass that commits in neither.
