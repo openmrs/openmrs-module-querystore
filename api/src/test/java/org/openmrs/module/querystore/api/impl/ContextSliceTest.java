@@ -361,6 +361,11 @@ public class ContextSliceTest {
 		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("panel-parent"),
 		        "the triggering record must not remain budget-droppable similarity evidence");
 		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("panel-member"));
+		ContextSliceRecord promoted = slice.getRecords().stream()
+		        .filter(record -> "panel-parent".equals(record.getDocument().getResourceUuid()))
+		        .findFirst().orElseThrow(AssertionError::new);
+		assertEquals(Integer.valueOf(1), promoted.getRank(),
+		        "a promoted panel record keeps its original similarity rank for traceability");
 	}
 
 	@Test

@@ -43,8 +43,9 @@ public final class ContextSliceRecord {
 	}
 
 	/**
-	 * The original 1-based retrieval position for a {@code similarity} record, or
-	 * {@code null} for policy-selected records.
+	 * The original 1-based similarity-retrieval position when this record participated in that
+	 * search. A record promoted to the protected {@code panel} tier retains this rank for
+	 * traceability; records selected only by policy have {@code null}.
 	 */
 	public Integer getRank() {
 		return rank;

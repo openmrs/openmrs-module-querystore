@@ -286,21 +286,21 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			        // ES-side sort by record_date desc so any truncation at FULL_CHART_MAX_HITS keeps
 			        // the most-recent slice — aligning with chartsearchai's recency-cap prompt
 			        // convention. Missing dates land last so legacy rows that pre-date the record_date
-			        // convention don't poison the head of the chart. A secondary {@code _doc asc}
-			        // sort pins the truncation boundary deterministically when many docs share a date
-			        // (or all docs lack one — migration scenario for legacy obs without obs_datetime);
-			        // ES's per-shard secondary order is otherwise unspecified and would make the
-			        // cap's cut-off vary across calls. {@code _doc} (not {@code _id}) because ES 7+
-			        // makes {@code _id} unsortable without enabling expensive fielddata; {@code _doc}
-			        // gives Lucene-internal order which is stable within a segment and cheap to read.
-			        // The Comparator pass below re-applies the full (date, type, uuid) ordering for
-			        // byte-identical output with the other backends.
+			        // convention don't poison the head of the chart. The secondary {@code _index asc,
+			        // resource_uuid asc} keys implement the public (resource_type, resource_uuid)
+			        // tie-breaker before the cap is applied: each index is named for its resource type.
+			        // Lucene's internal {@code _doc} order changes across refreshes and segment merges, so
+			        // using it here could select a different 10,000-record subset between calls. The
+			        // Comparator pass below re-applies the same full ordering in Java.
 			        .sort(SortOptions.of(so -> so.field(f -> f
 			                .field(ElasticsearchFieldNames.RECORD_DATE)
 			                .order(SortOrder.Desc)
 			                .missing(FieldValue.of("_last")))))
 			        .sort(SortOptions.of(so -> so.field(f -> f
-			                .field("_doc")
+			                .field("_index")
+			                .order(SortOrder.Asc))))
+			        .sort(SortOptions.of(so -> so.field(f -> f
+			                .field(ElasticsearchFieldNames.RESOURCE_UUID)
 			                .order(SortOrder.Asc)))),
 			        Map.class);
 			List<co.elastic.clients.elasticsearch.core.search.Hit<Map>> hits = resp.hits().hits();

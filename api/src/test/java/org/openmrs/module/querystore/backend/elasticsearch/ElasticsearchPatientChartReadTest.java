@@ -70,6 +70,10 @@ public class ElasticsearchPatientChartReadTest {
 		assertNotNull(request.trackTotalHits());
 		assertEquals(Boolean.TRUE, request.trackTotalHits().enabled());
 		assertEquals(Integer.valueOf(ElasticsearchBackendStore.FULL_CHART_MAX_HITS), request.size());
+		assertEquals("the capped candidate set needs a complete stable sort", 3, request.sort().size());
+		assertEquals(ElasticsearchFieldNames.RECORD_DATE, request.sort().get(0).field().field());
+		assertEquals("_index", request.sort().get(1).field().field());
+		assertEquals(ElasticsearchFieldNames.RESOURCE_UUID, request.sort().get(2).field().field());
 		assertTrue("a total larger than returned hits must be disclosed", read.isTruncated());
 	}
 

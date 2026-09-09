@@ -410,7 +410,7 @@ public class PatientRecordEndpointTest {
 		                new org.openmrs.module.querystore.model.ContextSliceRecord(
 		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
 		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
-		                2, false,
+		                2, false, true,
 		                new java.util.LinkedHashSet<String>(Arrays.asList("allergy", "drug_order")),
 		                true, "chart-snapshot-1");
 		org.mockito.ArgumentCaptor<org.openmrs.module.querystore.model.ContextSliceRequest> captor =
@@ -470,6 +470,42 @@ public class PatientRecordEndpointTest {
 		assertEquals(Boolean.TRUE, first.get("chartTruncated"));
 		assertEquals("chart-snapshot-2", first.get("chartSnapshotId"));
 		assertEquals(first.get("chartSnapshotId"), second.get("chartSnapshotId"));
+	}
+
+	@Test
+	public void contextModePagingLinksPreserveTheSelectionRequest() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		org.openmrs.module.querystore.model.ContextSlice slice =
+		        new org.openmrs.module.querystore.model.ContextSlice(Arrays.asList(
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("allergy", "a-1", LocalDate.of(2024, 4, 1), "Allergy: Penicillin"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_MANDATORY),
+		                new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
+		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
+		                2, false);
+		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT),
+		        org.mockito.ArgumentMatchers.eq("current meds?"),
+		        org.mockito.ArgumentMatchers.any(org.openmrs.module.querystore.model.ContextSliceRequest.class)))
+		        .thenReturn(slice);
+
+		ResponseEntity<Object> firstResponse = controller.getPatientRecords(PATIENT, "current meds?", 1, 0,
+		        "context", "drug_order,allergy", Boolean.TRUE, Boolean.TRUE, null);
+		Map<?, ?> firstBody = body(firstResponse);
+		List<?> firstLinks = (List<?>) firstBody.get("links");
+		assertNotNull("a partial context page must advertise its next page", firstLinks);
+		assertEquals("/ws/rest/v1/querystore/patientrecord?patient=" + PATIENT
+		        + "&q=current+meds%3F&mode=context&types=drug_order%2Callergy"
+		        + "&temporal=true&interpret=true&startIndex=1&limit=1",
+		        ((Map<?, ?>) firstLinks.get(0)).get("uri"));
+
+		ResponseEntity<Object> secondResponse = controller.getPatientRecords(PATIENT, "current meds?", 1, 1,
+		        "context", "drug_order,allergy", Boolean.TRUE, Boolean.TRUE, null);
+		List<?> secondLinks = (List<?>) body(secondResponse).get("links");
+		assertNotNull("a later context page must advertise its previous page", secondLinks);
+		assertEquals("prev", ((Map<?, ?>) secondLinks.get(0)).get("rel"));
 	}
 
 	@Test

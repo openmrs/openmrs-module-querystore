@@ -86,8 +86,9 @@ public class QueryStoreRestController {
 	public ResponseEntity<Object> getIndexingStatus() {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
+		BootstrapService bootstrap = Context.getService(BootstrapService.class);
 		BootstrapStatusReport report = BootstrapStatusReport.from(
-				Context.getService(BootstrapService.class).getStatus());
+				bootstrap.getStatus(), bootstrap.getResourceTypeNames());
 
 		// Response shape (keys + values) is produced and unit-tested in BootstrapStatusReport.toMap();
 		// the controller stays a thin adapter so the JSON contract isn't hand-typed untested here.
@@ -151,6 +152,13 @@ public class QueryStoreRestController {
 		if (patientUuid != null && patientService().getPatientByUuid(patientUuid) == null) {
 			return errorResponse(HttpStatus.NOT_FOUND, "No patient with uuid '" + patientUuid + "'");
 		}
+		StringBuilder baseParams = new StringBuilder();
+		if (patientUuid != null) {
+			baseParams.append("patient=").append(PatientRecordView.encode(patientUuid)).append('&');
+		}
+		if (query != null) {
+			baseParams.append("q=").append(PatientRecordView.encode(query)).append('&');
+		}
 		if (contextMode) {
 			// Tiered context slice (ADR Decision 17 §4): the caller's question interpretation
 			// rides as params; each record carries its selection tier. chartSnapshotId binds the
@@ -167,16 +175,19 @@ public class QueryStoreRestController {
 			ContextSliceRequest sliceRequest = new ContextSliceRequest(typeSet, Boolean.TRUE.equals(temporal));
 			sliceRequest.setInterpretQuestion(Boolean.TRUE.equals(interpret));
 			ContextSlice slice = queryStoreService().getContextSlice(patientUuid, query, sliceRequest);
-			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size);
+			baseParams.append("mode=context&");
+			if (StringUtils.isNotBlank(types)) {
+				baseParams.append("types=").append(PatientRecordView.encode(types.trim())).append('&');
+			}
+			if (temporal != null) {
+				baseParams.append("temporal=").append(temporal).append('&');
+			}
+			if (interpret != null) {
+				baseParams.append("interpret=").append(interpret).append('&');
+			}
+			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size,
+			        baseParams.toString());
 			return new ResponseEntity<Object>(sliceBody, HttpStatus.OK);
-		}
-
-		StringBuilder baseParams = new StringBuilder();
-		if (patientUuid != null) {
-			baseParams.append("patient=").append(PatientRecordView.encode(patientUuid)).append('&');
-		}
-		if (query != null) {
-			baseParams.append("q=").append(PatientRecordView.encode(query)).append('&');
 		}
 
 		boolean ranked = query != null;

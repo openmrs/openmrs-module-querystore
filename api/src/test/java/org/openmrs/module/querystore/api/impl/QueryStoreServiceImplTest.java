@@ -477,6 +477,7 @@ public class QueryStoreServiceImplTest {
 	public void getPatientChartRead_marksCompletedProjectionComplete() {
 		FakeBackendStore backend = new FakeBackendStore(true);
 		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.resourceTypes = Collections.singletonList("obs");
 		BootstrapProgress completed = new BootstrapProgress("obs");
 		completed.setStatus(BootstrapStatus.COMPLETED);
 		bootstrap.status = Collections.singletonList(completed);
@@ -484,6 +485,21 @@ public class QueryStoreServiceImplTest {
 		service.setBootstrapServiceOverride(bootstrap);
 
 		assertTrue(service.getPatientChartRead("patient-uuid").isProjectionComplete());
+	}
+
+	@Test
+	public void getPatientChartRead_doesNotReportCompleteWhenAnExpectedTypeHasNoStatusRow() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.resourceTypes = Arrays.asList("obs", "condition");
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		bootstrap.status = Collections.singletonList(completed);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		assertFalse("a bootstrap interrupted before condition starts is not complete",
+		        service.getPatientChartRead("patient-uuid").isProjectionComplete());
 	}
 
 	// ---------- query-embedding cache ----------
@@ -632,11 +648,12 @@ public class QueryStoreServiceImplTest {
 
 		java.util.function.Consumer<String> onEnsureIndexed;
 		List<BootstrapProgress> status = Collections.emptyList();
+		List<String> resourceTypes = Collections.emptyList();
 
 		@Override public void bootstrap() { }
 		@Override public void bootstrap(String resourceType) { }
 		@Override public void resyncType(String resourceType) { }
-		@Override public List<String> getResourceTypeNames() { return Collections.emptyList(); }
+		@Override public List<String> getResourceTypeNames() { return resourceTypes; }
 		@Override public void ensureIndexed(String patientUuid) {
 			ensureIndexedCalls.add(patientUuid);
 			if (onEnsureIndexed != null) {

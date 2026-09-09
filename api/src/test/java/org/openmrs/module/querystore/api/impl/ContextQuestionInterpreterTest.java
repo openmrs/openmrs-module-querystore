@@ -12,6 +12,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import org.junit.Test;
@@ -50,6 +51,19 @@ public class ContextQuestionInterpreterTest {
 	@Test
 	public void preprocess_keepsAllTermsWhenStopwordRemovalWouldLeaveOne() {
 		assertEquals("the and", ContextQuestionInterpreter.preprocess("the and"));
+	}
+
+	@Test
+	public void preprocess_isIndependentOfTheJvmDefaultLocale() {
+		Locale previous = Locale.getDefault();
+		try {
+			Locale.setDefault(new Locale("tr", "TR"));
+			assertEquals("insulin glucose",
+			        ContextQuestionInterpreter.preprocess("INSULIN and GLUCOSE"));
+		}
+		finally {
+			Locale.setDefault(previous);
+		}
 	}
 
 	private static void assertTypes(String question, String... expected) {

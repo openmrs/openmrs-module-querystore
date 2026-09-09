@@ -25,7 +25,7 @@ import org.openmrs.module.querystore.model.QueryDocument;
 public class QueryStoreServiceCompatibilityTest {
 
 	@Test
-	public void defaultPatientChartReadWrapsLegacyImplementationsAsComplete() {
+	public void defaultPatientChartReadDoesNotInventProjectionCompletenessForLegacyImplementations() {
 		QueryStoreService legacy = mock(QueryStoreService.class, Answers.CALLS_REAL_METHODS);
 		List<QueryDocument> records = Collections.singletonList(new QueryDocument());
 		when(legacy.getPatientChart("patient-1")).thenReturn(records);
@@ -34,6 +34,8 @@ public class QueryStoreServiceCompatibilityTest {
 
 		assertSame(records.get(0), read.getDocuments().get(0));
 		assertFalse(read.isTruncated());
+		assertFalse("a legacy implementation cannot prove all configured types were projected",
+		        read.isProjectionComplete());
 		verify(legacy).getPatientChart("patient-1");
 	}
 

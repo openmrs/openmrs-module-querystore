@@ -194,7 +194,8 @@ public class ElasticsearchBackendStoreIntegrationTest {
 	public void findAllByPatient_returnsAllDocsAcrossTypesOrderedByRecordDateDesc() {
 		// ADR Decision 15: getPatientChart returns every indexed doc for the patient, no filtering,
 		// ordered by record_date desc with (resource_type, resource_uuid) tie-breaker. The ES
-		// backend uses a single wildcard search sorted ES-side by record_date desc with _doc asc as
+		// backend uses a single wildcard search sorted ES-side by record_date desc with the stable
+		// (index/resource type, resource UUID) tie-breaker as
 		// the deterministic secondary key; this test pins both the cross-type completeness and the
 		// CHART_ORDER re-sort that aligns the ES tier byte-for-byte with MySQL and Lucene.
 		QueryDocument recentObs = doc("obs", "patient-A", "Glucose 8.1", null);

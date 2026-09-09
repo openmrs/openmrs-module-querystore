@@ -37,7 +37,9 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   `chartTruncated`, set only from the backend's explicit completeness signal. It is `true` when a
   documented cap or handled backend read failure may have omitted records. For full-chart reads,
   `totalCount` is the number of records materialized by the configured backend, so clients must not
-  infer completeness from the count.
+  infer completeness from the count. `projectionComplete` is true only when every currently
+  registered resource type has a completed bootstrap row; an older `QueryStoreService`
+  implementation that cannot prove this reports false.
   Full-chart reads also carry a stable
   `snapshotId` for the complete materialized chart. Ranked top-K reads use `null` because the
   service does not expose a browseable total.
@@ -48,8 +50,9 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   `clinical_event`. Ranked records also carry a 1-based `rank`.
 - **Excluded:** embeddings and backend scores are never returned.
 
-Context mode adds a `tier` to every record. Records selected by the `similarity` tier also retain
-their original 1-based search `rank`, even though the slice itself remains in chart order. The
+Context mode adds a `tier` to every record. Records that participated in similarity search retain
+their original 1-based search `rank`, even when panel completion promotes them to the protected
+`panel` tier and even though the slice itself remains in chart order. The
 response returns `chartSize`, `chartTruncated`,
 `effectiveTypes`, `temporalApplied`, `chartSnapshotId`, and `sliceId`. The `chartSnapshotId`
 fingerprints the complete chart materialization from which the selection was made. Consumers that
@@ -66,9 +69,9 @@ same page request: an unchanged page returns `304 Not Modified` with no clinical
 rejects pages whose snapshot does not match the first page. Ranked searches are intentionally
 uncached windows.
 
-The endpoint does not claim index completeness. Index readiness and repair remain the
-responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do not trigger a full
-patient rebuild.
+The endpoint surfaces, but does not repair, projection completeness. Operational diagnosis and
+repair remain the responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do
+not trigger a full patient rebuild.
 
 ```bash
 curl -s -u patient-reader:secret \
@@ -124,8 +127,8 @@ Returns the per-resource-type bootstrap (initial-backfill) status, plus a single
 
 | Field | Meaning |
 |---|---|
-| `complete` | `true` **only** when at least one type is tracked **and every** tracked type is `COMPLETED`. Any `RUNNING`/`FAILED`/`NOT_STARTED` type — or an empty progress table — yields `false`. This is the headline "fully indexed?" answer. |
-| `types[].status` | `NOT_STARTED` \| `RUNNING` \| `COMPLETED` \| `FAILED`. |
+| `complete` | `true` **only** when every currently registered type has a `COMPLETED` progress row. Any missing, `RUNNING`, `FAILED`, or `NOT_STARTED` type — or an empty registered-type set — yields `false`. This is the headline "fully indexed?" answer. |
+| `types[].status` | `NOT_STARTED` \| `RUNNING` \| `COMPLETED` \| `FAILED`. A registered type with no persisted progress row is included as `NOT_STARTED`, so an interrupted bootstrap identifies what never began. |
 | `types[].documentsIndexed` | Documents written for that type so far. |
 | `types[].cursorDateChanged` | The backfill resume cursor (ascending `dateChanged`); records changed after this are not yet indexed. ISO-8601, or `null`. |
 | `types[].startedAt` / `completedAt` | ISO-8601 timestamps, or `null`. |

@@ -263,7 +263,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 	private boolean isProjectionComplete() {
 		try {
-			return BootstrapStatusReport.from(bootstrapService().getStatus()).isComplete();
+			BootstrapService bootstrap = bootstrapService();
+			return BootstrapStatusReport.from(bootstrap.getStatus(),
+			        bootstrap.getResourceTypeNames()).isComplete();
 		}
 		catch (RuntimeException e) {
 			log.warn("Could not verify QueryStore projection completeness; reporting incomplete", e);

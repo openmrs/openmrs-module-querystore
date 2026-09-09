@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -143,7 +144,7 @@ final class ContextQuestionInterpreter {
 	}
 
 	private static String stripStopwords(String question) {
-		String[] words = question.toLowerCase().replaceAll("'s\\b", "").replaceAll("[?!.,;:']", "")
+		String[] words = question.toLowerCase(Locale.ROOT).replaceAll("'s\\b", "").replaceAll("[?!.,;:']", "")
 		        .trim().split("\\s+");
 		List<String> contentWords = new ArrayList<String>();
 		List<String> allClean = new ArrayList<String>();
@@ -158,7 +159,7 @@ final class ContextQuestionInterpreter {
 		// Too few content words → keep every cleaned word: the fuller sentence embeds more
 		// specifically than one bare term.
 		List<String> keep = contentWords.size() >= 2 ? contentWords : allClean;
-		return keep.isEmpty() ? question.toLowerCase().trim() : String.join(" ", keep);
+		return keep.isEmpty() ? question.toLowerCase(Locale.ROOT).trim() : String.join(" ", keep);
 	}
 
 	private static Set<String> loadStopwords(String resourceName) {
@@ -172,7 +173,7 @@ final class ContextQuestionInterpreter {
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
 			String line;
 			while ((line = reader.readLine()) != null) {
-				String word = line.trim().toLowerCase();
+				String word = line.trim().toLowerCase(Locale.ROOT);
 				if (!word.isEmpty() && !word.startsWith("#")) {
 					stopwords.add(word);
 				}

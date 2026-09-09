@@ -9,6 +9,7 @@
  */
 package org.openmrs.module.querystore.model;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -36,24 +37,24 @@ public final class ContextSlice {
 	private final String chartSnapshotId;
 
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated) {
-		this(records, chartSize, chartTruncated, true, Collections.<String> emptySet(), false, null);
+		this(records, chartSize, chartTruncated, false, Collections.<String> emptySet(), false, null);
 	}
 
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
 	        Set<String> effectiveTypes, boolean temporalApplied) {
-		this(records, chartSize, chartTruncated, true, effectiveTypes, temporalApplied, null);
+		this(records, chartSize, chartTruncated, false, effectiveTypes, temporalApplied, null);
 	}
 
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
 	        Set<String> effectiveTypes, boolean temporalApplied, String chartSnapshotId) {
-		this(records, chartSize, chartTruncated, true, effectiveTypes, temporalApplied, chartSnapshotId);
+		this(records, chartSize, chartTruncated, false, effectiveTypes, temporalApplied, chartSnapshotId);
 	}
 
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
 	        boolean projectionComplete, Set<String> effectiveTypes, boolean temporalApplied,
 	        String chartSnapshotId) {
 		this.records = records == null ? Collections.<ContextSliceRecord> emptyList()
-		        : Collections.unmodifiableList(records);
+		        : Collections.unmodifiableList(new ArrayList<ContextSliceRecord>(records));
 		this.chartSize = chartSize;
 		this.chartTruncated = chartTruncated;
 		this.projectionComplete = projectionComplete;

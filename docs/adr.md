@@ -1358,7 +1358,7 @@ Accepted
 - **The endpoint is NOT in the OpenMRS Swagger spec** (plain controllers aren't, unlike framework resources); it is documented in [`rest-api.md`](./rest-api.md) alongside the operational endpoints. Promoting it to a framework resource for Swagger discoverability is a deferred follow-up.
 - **The ES 10 000-hit cap (Decision 15) is surfaced explicitly via `chartTruncated`;** `totalCount` remains the number of records materialized by the backend and must not be used to infer completeness. The cap is not lifted; `search_after` remains the deferred v1.1 item.
 - **First REST touch on a never-indexed patient pays the Decision-15 cold-touch cost**; the 404 validation guards only bogus uuids.
-- **Ordinary reads do not prove index completeness or trigger reconciliation.** Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to observe and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
+- **Ordinary reads surface, but do not repair, index completeness.** Full-chart and context reads carry the same expected-resource-type-aware `projectionComplete` signal as `indexingstatus`. Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to diagnose and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
 - **External clients can cache only in private memory.** The response is revalidated on use rather than given a shared-cache lifetime; a client treats an ETag/snapshot mismatch as a fresh chart and never serves the stale clinical payload.
 - **The endpoint is read-only** — indexing stays unexposed (Decision 14).
 - **Budget-aware retrieval, FHIR shaping, and a general non-AI read breadth remain deferred** — explicitly the next iteration.
@@ -1392,11 +1392,14 @@ prompt composition, token budgeting, and question interpretation.
    performs **mechanical selection only**; it does not interpret the question.
 2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
    highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
-   `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `recency_anchor`
-   (the first `recencyAnchorSize` chart documents, only when `temporal`) → `typed` (resource
-   type ∈ `types`) → `similarity` (uuid ∈ the `searchByPatient(question, similarityLimit)`
+   `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `exact` (explicit
+   UUIDs, dates, namespaced codes, labeled identifiers, and quoted phrases) → `typed` (resource
+   type ∈ `types`) → `recency_anchor` (the first `recencyAnchorSize` chart documents, only when
+   `temporal`) → `similarity` (uuid ∈ the `searchByPatient(question, similarityLimit)`
    hits) → `panel` (obs-group family completion: when a group parent or any member is selected,
-   the whole family joins). Output preserves Decision 15's `record_date`-desc chart order.
+   the whole family joins and any budget-droppable triggering record is promoted to `panel`).
+   Output preserves Decision 15's `record_date`-desc chart order. A panel-promoted similarity
+   record retains its original retrieval rank for traceability.
 3. **Degradation and edges follow the sibling reads**: blank question or `similarityLimit <= 0`
    skips the search RPC; a search failure degrades to the policy tiers alone (never blocks);
    cold-patient lazy bootstrap is inherited from `getPatientChart`. `ContextSlice` surfaces

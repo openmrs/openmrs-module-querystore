@@ -119,6 +119,11 @@ final class PatientRecordView {
 	 */
 	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
 	        int startIndex, int limit) {
+		return contextPage(slice, startIndex, limit, null);
+	}
+
+	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
+	        int startIndex, int limit, String baseParams) {
 		List<org.openmrs.module.querystore.model.ContextSliceRecord> all = slice.getRecords();
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
 		int pageSize = startIndex >= all.size() ? 0 : Math.min(limit, all.size() - startIndex);
@@ -143,6 +148,18 @@ final class PatientRecordView {
 		env.put("temporalApplied", Boolean.valueOf(slice.isTemporalApplied()));
 		env.put("chartSnapshotId", slice.getChartSnapshotId());
 		env.put("sliceId", contextSliceId(slice));
+		if (baseParams != null) {
+			List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
+			if (startIndex > 0) {
+				links.add(link("prev", baseParams, Math.max(0, startIndex - limit), limit));
+			}
+			if (startIndex <= Integer.MAX_VALUE - limit && startIndex + pageSize < all.size()) {
+				links.add(link("next", baseParams, startIndex + limit, limit));
+			}
+			if (!links.isEmpty()) {
+				env.put("links", links);
+			}
+		}
 		return env;
 	}
 

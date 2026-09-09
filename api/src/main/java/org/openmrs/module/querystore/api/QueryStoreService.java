@@ -170,7 +170,9 @@ public interface QueryStoreService extends OpenmrsService {
 	 */
 	@Authorized(PrivilegeConstants.GET_PATIENTS)
 	default PatientChartRead getPatientChartRead(String patientUuid) {
-		return PatientChartRead.complete(getPatientChart(patientUuid));
+		// A legacy implementation can preserve its complete record list but cannot prove that every
+		// configured resource type finished projecting. Fail closed on that separate claim.
+		return new PatientChartRead(getPatientChart(patientUuid), false, false);
 	}
 
 	/**
@@ -179,8 +181,8 @@ public interface QueryStoreService extends OpenmrsService {
 	 * conformance family {@code context_policy} in dual-provider-conformance.v1). Selection
 	 * tiers, by priority: {@code mandatory} (patient record, allergies, active conditions),
 	 * {@code exact} (explicit UUIDs, dates, namespaced codes, labeled identifiers, and quoted phrases),
-	 * {@code recency_anchor} (newest chart records, only when {@code request.temporal}),
-	 * {@code typed} (caller-declared typed-complete resource types), {@code similarity}
+	 * {@code typed} (caller-declared typed-complete resource types), {@code recency_anchor}
+	 * (newest chart records, only when {@code request.temporal}), {@code similarity}
 	 * (ranked-search hits for {@code question}), {@code panel} (obs-group family completion).
 	 * Records keep {@link #getPatientChart}'s {@code record_date}-desc order, each appearing
 	 * once under its highest tier.
