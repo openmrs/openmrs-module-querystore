@@ -2943,6 +2943,446 @@ def test_the_next_hand_launch_closes_out_what_died(tmp: Path) -> None:
           "the reap runs after the claim, where an exception strands the slot")
 
 
+# ────────────────────────────────────────────────────────── usage limit ──
+
+
+def limit_stub(path: Path, argv_log: Path, resets_in: int, status: str = "rejected",
+               tail: str = "", overage: str = "false", exit_code: int = 1) -> Path:
+    """A `claude` that reports a claude.ai usage limit the way the real one does, then dies.
+
+    The `rate_limit_event` record is not invented for this suite: it is the shape the CLI already
+    streams on `--output-format stream-json`, and the operator's own kept streams carry 304 of them
+    (`status`, `resetsAt`, `rateLimitType`, `unifiedWindows`). Only the STATUS differs here —
+    theirs all say `allowed_warning`, because a rejection ends the run that would have logged it.
+    """
+    path.write_text(
+        "#!/bin/bash\n"
+        f'echo "$PWD :: $@" >> {argv_log}\n'
+        f'reset=$(python3 -c "import time;print(int(time.time())+({resets_in}))")\n'
+        "echo '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\","
+        "\"text\":\"working\"}]}}'\n"
+        f'echo "{{\\"type\\":\\"rate_limit_event\\",\\"rate_limit_info\\":{{\\"status\\":\\"{status}\\",'
+        f'\\"resetsAt\\":$reset,\\"rateLimitType\\":\\"five_hour\\",\\"utilization\\":1.0,'
+        f'\\"isUsingOverage\\":{overage}}}}}"\n'
+        f"{tail}"
+        f"exit {exit_code}\n")
+    path.chmod(0o755)
+    return path
+
+
+def limit_fixture(tmp: Path, quiet: int = 300):
+    """The pieces every usage-limit case needs: a repo, a slot, a config and one ticket."""
+    origin, work = git_fixture(tmp)
+    one = standalone_fixture(tmp / "sa", "sa1", 8081, 3316)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "parallel": {"max_workers": 1, "standalones": [str(one)]},
+        "ticket": {"timeout_seconds": 300, "quiet_seconds": quiet},
+    })
+    job = {"slug": "o/r", "path": work, "ticket": "266", "url": "https://example/266",
+           "title": "t", "key": "o/r#266"}
+    return work, cfg, job
+
+
+def test_a_usage_limit_suspends_the_ticket_rather_than_spending_it(tmp: Path) -> None:
+    """The whole feature: a run the usage limit ended is a PAUSE with a known reset, not an error.
+
+    Before this, the limit reached `work_ticket` as `is_error` and nothing else — indistinguishable
+    from a crash. That cost three things on every ticket in flight when the window closed: the
+    attempt (two of those and the ticket waits for a human), the worktree (dropped, so the session
+    could never be re-entered), and a driver-capture record counted towards the retro threshold —
+    for a run that had not failed at all. What it must produce instead is exactly what an operator
+    pause produces, plus the one thing an operator pause cannot carry: when to come back.
+    """
+    print("\na usage limit suspends the ticket instead of spending it")
+    work, cfg, job = limit_fixture(tmp)
+    argv_log = tmp / "argv.txt"
+    stub = limit_stub(tmp / "claude-stub", argv_log, resets_in=90)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp) as root:
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        started = pool.now()
+        results = pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+
+        check("the ticket reports itself paused, not errored",
+              results == [("o/r#266", "paused")], str(results))
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+        check("the attempt is NOT spent — the run did not fail, it ran out of quota",
+              entry.get("attempts", 0) == 0, f"attempts={entry.get('attempts')}")
+        check("the worktree is kept, because the session resumes into it",
+              Path(entry.get("worktree", "/nonexistent")).is_dir(), str(entry.get("worktree")))
+        check("the session id is kept", bool(entry.get("session_id")), str(entry))
+        check("no driver-capture record: the run is not over",
+              not list((root / "skill-lessons").glob("*.md")),
+              str([p.name for p in (root / "skill-lessons").glob("*.md")]))
+        check("the row says WHY it is paused, so a pause with a clock is told from the operator's",
+              "usage limit" in (entry.get("paused_for") or ""), str(entry.get("paused_for")))
+        # The reset the CLI reported, not a guess: the driver may not invent a time to come back at.
+        resume_at = entry.get("resume_at")
+        check("the row carries the reset the CLI reported, which is the whole point",
+              isinstance(resume_at, int) and started + 60 <= resume_at <= started + 120,
+              f"resume_at={resume_at} started={started}")
+
+
+def test_a_limit_the_session_got_past_is_not_a_pause(tmp: Path) -> None:
+    """A rejection is not a verdict on the run — only on one moment of it.
+
+    The status field moves: a session rejected while overage is being provisioned, or holding a
+    grace window, sees `rejected` and then `allowed`, and finishes. Latching the first rejection
+    would suspend a session that had already recovered, and the driver would then sit waiting for a
+    reset that had stopped nothing. So the LAST observation wins, and a run that ended normally is
+    never re-read as a pause however it began.
+    """
+    print("\na rejection the session got past is not a pause")
+    work, cfg, job = limit_fixture(tmp)
+    argv_log = tmp / "argv.txt"
+    stub = limit_stub(
+        tmp / "claude-stub", argv_log, resets_in=90,
+        tail=("echo '{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed\","
+              "\"utilization\":0.2}}'\n"
+              "echo '{\"type\":\"result\",\"result\":\"done\",\"total_cost_usd\":0.01}'\n"),
+        exit_code=0)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        results = pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+
+    check("the ticket is not paused — it finished", results != [("o/r#266", "paused")], str(results))
+    check("and the attempt IS spent, because the run really ran",
+          entry.get("attempts", 0) == 1, f"attempts={entry.get('attempts')}")
+    check("nothing to come back for", entry.get("resume_at") is None, str(entry.get("resume_at")))
+
+
+def test_a_reset_that_has_already_passed_did_not_stop_this_run(tmp: Path) -> None:
+    """A rejection whose window has since reset cannot be what ended the run — so it is an error.
+
+    Without this the driver has no way to tell "the limit stopped me" from "a limit stopped me
+    hours ago and something else has stopped me now", and would answer the second by sleeping until
+    a reset that is already behind it, waking immediately, and re-entering a session that is going
+    to fail again for the reason nobody looked at.
+    """
+    print("\na reset that has already passed is not what ended the run")
+    work, cfg, job = limit_fixture(tmp)
+    stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=-600)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        results = pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+
+    check("a stale rejection leaves the failure reading as the failure it is",
+          results == [("o/r#266", "error")], str(results))
+    check("and it is spent, like any other error", entry.get("attempts") == 1, str(entry))
+
+
+def test_a_rejection_covered_by_overage_is_not_a_pause(tmp: Path) -> None:
+    """Paid overflow is not a window that resets, so there is nothing to wait for.
+
+    This is the CLI's own carve-out, mirrored rather than invented: its arming predicate excludes a
+    rejection while overage is in use. A driver that slept on one would wait out a `resetsAt` that
+    says nothing about when the credits come back.
+    """
+    print("\na rejection covered by overage is not a pause")
+    work, cfg, job = limit_fixture(tmp)
+    stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=90, overage="true")
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        results = pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+
+    check("an overage rejection is not slept on", results == [("o/r#266", "error")], str(results))
+
+
+def test_a_session_silent_under_a_limit_is_suspended_not_killed(tmp: Path) -> None:
+    """The quiet watchdog must not spend a ticket that is only blocked on quota.
+
+    A session that cannot make a request produces nothing, and `quiet_seconds` is 90 minutes in the
+    shipped config — so the OTHER way a limit reaches the driver is as a watchdog kill, with every
+    cost of one: the attempt spent, the worktree dropped, `timeout` in the ledger. The two routes
+    have to end in the same place, and this is the one no exit code marks.
+    """
+    print("\na session silent under a live limit is suspended, not killed")
+    work, cfg, job = limit_fixture(tmp, quiet=3)
+    stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=120,
+                      tail="sleep 120\n")
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        results = pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+
+    check("silence under a live limit is a pause, not a timeout",
+          results == [("o/r#266", "paused")], str(results))
+    check("nothing was killed_for, so nothing reads as a death",
+          not entry.get("killed_for"), str(entry.get("killed_for")))
+    check("the attempt is not spent by the watchdog either",
+          entry.get("attempts", 0) == 0, f"attempts={entry.get('attempts')}")
+    check("and it still knows when to come back", isinstance(entry.get("resume_at"), int),
+          str(entry.get("resume_at")))
+
+
+def test_a_session_nothing_can_resume_is_ended_by_a_limit_not_suspended(tmp: Path) -> None:
+    """A limit may only suspend a session something can carry back — which means a ticket.
+
+    What re-enters a suspended session is its LEDGER ROW: the session id and the worktree. The retro
+    has neither, which is why `run_retro` builds its session `pausable=False`, and a limit that
+    ignored that flag would suspend a retro into nothing — the work lost, the source repo left
+    mid-checkout for the next retro to refuse as dirty, and the whole thing reported through the
+    problem list as "no commit landed", which is true and is not the reason. So the limit ends it,
+    the way it always did, and the driver says which limit rather than leaving that inference to an
+    operator reading a list of consequences.
+    """
+    print("\na session nothing can resume is ended by a limit, not suspended")
+    with isolated(tmp):
+        stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=120)
+        cfg = pool.merge(pool.DEFAULTS, {"claude": {"binary": str(stub)}})
+        say = pool.Say(tmp / "retro.md")
+        ticket = pool.Session("t", tmp, cfg, tmp / "ticket", 300, 300, say).run()
+        retro = pool.Session("/skill-retro", tmp, cfg, tmp / "retro", 300, 300, say,
+                             pausable=False).run()
+
+    check("a ticket's session IS suspended by the limit",
+          ticket.get("paused_for") == pool.LIMIT_WHY, str(ticket.get("paused_for")))
+    check("the retro's session is NOT — nothing could re-enter it",
+          not retro.get("paused_for") and not retro.get("killed_for"), str(retro))
+    check("it ends as the error it is",
+          retro.get("is_error") is True, str(retro.get("is_error")))
+    check("but it still carries the limit that ended it, so the reason is not left to be inferred",
+          (retro.get("rate_limit") or {}).get("resets_at") is not None,
+          str(retro.get("rate_limit")))
+
+    # Wired, not merely available: the run dict has carried the limit all along, and a `run_retro`
+    # that never read it would report the retro's death as "no commit landed" exactly as before.
+    body = (HERE / "pool-run").read_text()
+    body = body[body.index("def run_retro("):body.index("def retro_forecast(")]
+    check("run_retro names the limit in its problem list",
+          "rate_limit" in body, "run_retro never reads the limit that ended its session")
+
+
+def test_the_driver_waits_for_the_reset_and_re_enters_the_session(tmp: Path) -> None:
+    """The half that made the operator type `--resume`: waiting, then re-entering.
+
+    Everything else here existed already — `work_ticket` suspends, `resume_jobs` rebuilds, `--resume`
+    re-enters. What was missing was the wait, so the driver's answer to a limit was to write a plan
+    and exit, and the pool sat idle from the moment the window closed until somebody came back to
+    the terminal. The reset is a KNOWN instant; there is nothing for a human to decide.
+    """
+    print("\nthe driver waits for the reset and re-enters the session")
+    work, cfg, job = limit_fixture(tmp)
+    argv_log = tmp / "argv.txt"
+    stub = limit_stub(tmp / "claude-stub", argv_log, resets_in=3)
+    quiet_sink, notifier = notify_sink(tmp)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}, "notify": {"command": notifier},
+                           # No jitter, so the case measures the WAIT and not a random margin on it.
+                           "ticket": {"limit_wait_jitter_seconds": 0}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        results = pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+        check("suspended by the limit", results == [("o/r#266", "paused")], str(results))
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+        sid, wt = entry.get("session_id"), Path(entry.get("worktree", "/nonexistent"))
+        (wt / "sentinel.txt").write_text("survives\n")
+
+        began = time.time()
+        resumed = pool.wait_for_limit_reset([job], pool.load_json(pool.LEDGER, {}), cfg, say,
+                                            lambda: False)
+        waited = time.time() - began
+        check("it actually waited for the window rather than returning at once",
+              waited >= 2, f"returned after {waited:.1f}s")
+        check("and it did not wait appreciably past it",
+              waited < 30, f"returned after {waited:.1f}s")
+        check("a wait the driver ends itself pages nobody",
+              not [e for e in notified(quiet_sink) if e.get("event") == "limit-held"],
+              str(notified(quiet_sink))[:200])
+        check("it hands back a job carrying the suspended session",
+              resumed is not None and len(resumed) == 1
+              and resumed[0].get("resume", {}).get("session_id") == sid, str(resumed))
+
+        stub.write_text("#!/bin/bash\n"
+                        f'echo "$PWD :: $@" >> {argv_log}\n'
+                        "echo '{\"type\":\"result\",\"result\":\"done\",\"total_cost_usd\":0.01}'\n")
+        stub.chmod(0o755)
+        pool.run_wave(resumed, slots, cfg, ledger, say, {str(work): base})
+
+    lines = [l for l in argv_log.read_text().splitlines() if l.strip()]
+    check("the session was started twice in all", len(lines) == 2, str(lines))
+    check("the first start opened a NEW session", "--session-id" in lines[0], lines[0])
+    check("the second RESUMED it rather than starting another",
+          f"--resume {sid}" in lines[1] and "--session-id" not in lines[1], lines[1])
+    check("in the same worktree, re-entered rather than recreated",
+          lines[1].split(" :: ")[0] == str(wt.resolve()) and (wt / "sentinel.txt").exists(),
+          lines[1])
+
+
+def test_a_reset_too_far_out_is_handed_back_to_a_human(tmp: Path) -> None:
+    """A weekly limit is not something to sleep through.
+
+    The five-hour window is at most five hours out and waiting for it costs an idle box. A seven-day
+    one can be days out, and a driver holding worktrees, slots and the machine lock across it is not
+    unattended operation, it is a hang — so past the cap the pause is handed back the way an
+    operator's is, with the reset named so the person reading knows what they are waiting for.
+    """
+    print("\na reset too far out is handed back rather than slept through")
+    work, cfg, job = limit_fixture(tmp)
+    stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=3 * 24 * 3600)
+    sink, notifier = notify_sink(tmp)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)},
+                           "notify": {"command": notifier}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+        began = time.time()
+        resumed = pool.wait_for_limit_reset([job], pool.load_json(pool.LEDGER, {}), cfg, say,
+                                            lambda: False)
+        elapsed = time.time() - began
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+
+    check("it refuses to wait", resumed is None, str(resumed))
+    check("and refuses immediately, rather than by timing out", elapsed < 10, f"{elapsed:.1f}s")
+    check("the operator is told when it resets, since they are the ones waiting now",
+          "resets" in (tmp / "run.md").read_text(), (tmp / "run.md").read_text()[-400:])
+    check("the ticket is still resumable by hand", entry.get("status") == "paused", str(entry))
+    # The awareness half, and it is not decoration. `paused` is in SETTLED, so it pages nobody — the
+    # right answer for a pause the driver ends itself and the wrong one here, where only a person
+    # can. The same limit used to end these runs as `error`, which DID page: waiting must not buy
+    # its quiet by dropping the one signal that mattered.
+    held = [e for e in notified(sink) if e.get("event") == "limit-held"]
+    check("a refused wait pages the operator, because only they can end this one",
+          len(held) == 1 and held[0].get("needs_human") is True, str(notified(sink))[:300])
+    check("and names the ticket it is holding", held and held[0].get("tickets") == ["o/r#266"],
+          str(held[:1]))
+
+
+def test_a_reset_the_platform_cannot_represent_still_suspends(tmp: Path) -> None:
+    """The numbers come off the wire, and the first thing done with one is PRINT it.
+
+    `work_ticket` names the reset in the line it says as it suspends the session, before anything
+    has judged whether the reset is plausible — so a `resetsAt` no calendar can hold would raise out
+    of that line and take the pause with it: the attempt spent, the ticket recorded as a crash by
+    the wave's own handler, and a live session orphaned in a worktree nothing names. Suspending on a
+    number nobody can read is the smaller failure, and the wait then refuses it like any other reset
+    too far out.
+    """
+    print("\na reset the platform cannot represent still suspends the ticket")
+    work, cfg, job = limit_fixture(tmp)
+    stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=99999999999999)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        results = pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+        resumed = pool.wait_for_limit_reset([job], pool.load_json(pool.LEDGER, {}), cfg, say,
+                                            lambda: False)
+
+    check("the ticket is suspended rather than crashed", results == [("o/r#266", "paused")],
+          str(results))
+    check("the attempt is not spent by an unprintable number",
+          entry.get("attempts", 0) == 0, f"attempts={entry.get('attempts')}")
+    check("and the wait refuses it, the way it refuses any reset too far out",
+          resumed is None, str(resumed))
+
+
+def test_waiting_for_a_reset_stays_interruptible(tmp: Path) -> None:
+    """A wait that Ctrl-C and `--pause` cannot reach is a driver nobody can stop for hours.
+
+    The wait is the longest thing this driver ever does with nothing running, and the two ways an
+    operator stops a pool both work by being NOTICED — the signal handler sets a flag the loop
+    reads, and `--pause` writes a file every watchdog polls. Neither survives a `time.sleep` to the
+    reset, so the wait has to be a poll.
+    """
+    print("\nwaiting for a reset stays interruptible")
+    work, cfg, job = limit_fixture(tmp)
+    stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=3000)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    ledger: dict = {}
+    asked = {"at": None}
+
+    def interrupted() -> bool:
+        if asked["at"] is None:
+            asked["at"] = time.time()
+            return False
+        return time.time() - asked["at"] > 1
+
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        pool.run_wave([job], slots, cfg, ledger, say, {str(work): base})
+        began = time.time()
+        resumed = pool.wait_for_limit_reset([job], pool.load_json(pool.LEDGER, {}), cfg, say,
+                                            interrupted)
+        waited = time.time() - began
+
+    check("an interruption ends the wait", resumed is None, str(resumed))
+    check("promptly, not at the reset", waited < 60, f"waited {waited:.0f}s of a 50-minute reset")
+
+
+def test_the_wave_loop_is_the_thing_that_waits(tmp: Path) -> None:
+    """The wait is only worth anything where the loop reaches it.
+
+    `wait_for_limit_reset` is exercised directly above, the way `resume_jobs` is: the wave loop is
+    inside `main` and a case cannot enter it without a `gh`, a preflight and a real queue. So what
+    is pinned here is the wiring — that the loop calls it, that a wait it refuses still leaves the
+    plan an operator resumes from, and that the retro barrier is not crossed while a session is
+    suspended mid-attempt. The retro rewrites the skills a live run is reading; running it between
+    a pause and its resume would hand the resumed session different skills mid-ticket.
+    """
+    print("\nthe wave loop is the thing that waits")
+    body = (HERE / "pool-run").read_text()
+    loop = body[body.index("def main() -> int:"):]
+    check("the wave loop waits for the reset", "wait_for_limit_reset(" in loop,
+          "main never calls it, so the driver still exits at the limit")
+    check("a wait it refuses still ends in the plan `--resume` reads",
+          bool(re.search(r"hand_back\(\w+, suspended\)", loop))
+          and "pause_here(" in loop[loop.index("def hand_back("):],
+          "a refused wait has no way back to the operator")
+    # Waiting is what first put a job carrying a live session back on the queue, so every exit from
+    # the loop now has to split the remainder by KIND. One that flattened it would write a suspended
+    # ticket into the un-started half of the plan, and the next resume would work it from scratch —
+    # abandoning the very session the pause was taken to keep.
+    check("every stop path splits what is left by whether the job carries a session",
+          loop.count("hand_back(") >= 4, "a stop path hands the raw remainder to pause_here")
+    check("and none of them flattens the queue into the un-started list",
+          "pause_here([j for w in" not in loop,
+          "a stop path still passes every remaining job as never-started")
+    resumed_at = loop.index("wait_for_limit_reset(")
+    retro_at = loop.rindex("run_retro(cfg, say, force=False)")
+    check("and the retro barrier is not crossed while a ticket is suspended",
+          "continue" in loop[resumed_at:retro_at],
+          "the loop falls through to the retro with a session suspended mid-attempt")
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -2995,7 +3435,18 @@ def main() -> int:
                          ("notify flagged ready", test_the_end_of_a_pool_carries_what_the_status_could_not),
                          ("work watchdog", test_a_hand_launched_run_is_watched_even_though_nobody_is),
                          ("status staleness", test_status_names_a_running_row_no_session_holds),
-                         ("work reaps the dead", test_the_next_hand_launch_closes_out_what_died)]:
+                         ("work reaps the dead", test_the_next_hand_launch_closes_out_what_died),
+                         ("limit suspends", test_a_usage_limit_suspends_the_ticket_rather_than_spending_it),
+                         ("limit recovered", test_a_limit_the_session_got_past_is_not_a_pause),
+                         ("limit stale reset", test_a_reset_that_has_already_passed_did_not_stop_this_run),
+                         ("limit overage", test_a_rejection_covered_by_overage_is_not_a_pause),
+                         ("limit quiet watchdog", test_a_session_silent_under_a_limit_is_suspended_not_killed),
+                         ("limit vs the retro", test_a_session_nothing_can_resume_is_ended_by_a_limit_not_suspended),
+                         ("limit waits and resumes", test_the_driver_waits_for_the_reset_and_re_enters_the_session),
+                         ("limit too far out", test_a_reset_too_far_out_is_handed_back_to_a_human),
+                         ("limit bogus reset", test_a_reset_the_platform_cannot_represent_still_suspends),
+                         ("limit interruptible", test_waiting_for_a_reset_stays_interruptible),
+                         ("limit loop wiring", test_the_wave_loop_is_the_thing_that_waits)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:

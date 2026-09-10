@@ -12,7 +12,9 @@
   "ticket": {
     "timeout_seconds": 28800,
     "max_attempts": 2,
-    "quiet_seconds": 5400
+    "quiet_seconds": 5400,
+    "limit_wait_max_seconds": 21600,
+    "limit_wait_jitter_seconds": 90
   },
   "claude": {
     "model": null,

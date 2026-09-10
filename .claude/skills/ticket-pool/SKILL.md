@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.18.1
+version: 0.19.0
 ---
 
 # Ticket pool — the loop that learns
@@ -133,6 +133,21 @@ session, and a `notify` block (below). Logs, the ledger and the per-session stre
 flight and stops at the wave boundary; with it, every session in flight is suspended within about
 five seconds. Either way it writes `~/.claude/pipeline/paused.json` and `pool-run --resume` carries
 on from there.
+
+**A claude.ai usage limit pauses the pool by itself, and un-pauses it by itself.** The CLI's own
+wait-for-the-reset is gated on an INTERACTIVE session, so it can never arm under the `claude -p` the
+driver runs: a headless session simply ends when the window closes, and for as long as that was all
+the driver saw it read as a crash — the attempt spent, the worktree dropped, a driver-capture record
+written. So the driver now reads the `rate_limit_event` records the stream already carries and
+treats a rejection as `--pause --now`: the same suspension, keeping everything the paragraph below
+lists, and then it sleeps until the reset the CLI reported and re-enters the sessions. Nothing is
+typed and nothing is owed. `pool-run --status` shows such a row as paused with the reset time on it,
+and the wave that comes back is worked before the retro, which must not run while a ticket is
+mid-attempt. It hands back to you instead in three cases, each named in the log by
+`wait_for_limit_reset`: a suspended ticket with no reset time on it (an operator's own pause, in the
+same wave), a reset further out than `ticket.limit_wait_max_seconds` — 6h by default, so a five-hour
+window is waited out and a weekly one is not — and a ticket suspended this way before that did
+nothing with the last reset, which is a session spinning rather than a big ticket.
 
 **What a suspended ticket keeps.** SIGTERM to the session's process group, and then four things that
 together are the whole feature: its transcript (kept under its own session id, which `--resume`
