@@ -3426,6 +3426,31 @@ def peer_listener(path: Path, received: list) -> threading.Thread:
     return t
 
 
+def refusing_then_serving_stub(path: Path, counter: Path, refusals: int, rejection: str) -> Path:
+    """A `claude` that refuses the first `refusals` probes and then serves, as a closed window does.
+
+    `rejection` is what it says while refusing — a real-shaped `rate_limit_event`, or nothing at
+    all. Nothing at all is the case that matters: the rejected form of that record has never been
+    observed by this pipeline (every one it has captured says `allowed_warning`, because a
+    rejection ends the run that would have logged it), so the carry must not depend on seeing one.
+    """
+    path.write_text(
+        "#!/bin/bash\n"
+        f'n=$(cat {counter} 2>/dev/null || echo 0); echo $((n+1)) > {counter}\n'
+        f'if [ "$n" -lt "{refusals}" ]; then\n'
+        f"  {rejection}\n"
+        '  echo \'{"type":"result","is_error":true,"result":"usage limit"}\'\n'
+        "  exit 1\n"
+        "fi\n"
+        'echo \'{"type":"result","result":"ok"}\'\n')
+    path.chmod(0o755)
+    return path
+
+
+REJECTION_EVENT = ('echo \'{"type":"rate_limit_event","rate_limit_info":{"status":"rejected",'
+                   '"resetsAt":RESET,"rateLimitType":"five_hour","isUsingOverage":false}}\'')
+
+
 def live_session_fixture(tmp: Path, root: Path, name: str = "t") -> tuple[int, Path, list]:
     """A real process, a real socket and the registry entry `claude` would publish for them.
 
@@ -3481,7 +3506,11 @@ def test_a_stalled_work_session_is_told_when_its_window_reopens(tmp: Path) -> No
         stale.write_text("{}\n")
         os.utime(stale, (pool.now() - 400, pool.now() - 400))
 
-        stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=2)
+        # Refuses once naming a window two seconds out, then serves. Both halves are required:
+        # a clock alone would nudge a session the account is still refusing.
+        stub = refusing_then_serving_stub(
+            tmp / "claude-stub", tmp / "probes.txt", 1,
+            REJECTION_EVENT.replace("RESET", str(pool.now() + 2)))
         cfg = pool.merge(pool.DEFAULTS, {
             "claude": {"binary": str(stub)},
             "ticket": {"timeout_seconds": 5, "quiet_seconds": 5, "limit_wait_jitter_seconds": 0},
@@ -3505,6 +3534,54 @@ def test_a_stalled_work_session_is_told_when_its_window_reopens(tmp: Path) -> No
     check("and it says continue where you stopped, not start again",
           "continue the /resolve-ticket run" in body and "do not start the skill again" in body,
           str(msg.get("message", {}).get("content"))[:200])
+
+
+def test_a_refusal_that_names_no_window_is_still_carried(tmp: Path) -> None:
+    """The link nothing here has been able to measure, removed from the critical path.
+
+    A reset time reaches the driver through a `rate_limit_event` whose REJECTED form this pipeline
+    has never captured: all 304 records in its kept streams say `allowed_warning`, because a
+    rejection ends the run that would have logged one. Its shape is taken from the CLI's own
+    arming predicate, not from an observation — so a carry that needed it would rest on a guess,
+    and would fail silently by simply never firing.
+
+    It does not need it. Being usage-limited means the account will not serve a request, and the
+    limit lifting means it will; both are observable without any record naming a window. So a probe
+    refused WITHOUT explanation blocks the session just the same, the account is polled until it
+    serves one, and only then is anything sent. A named window is an optimisation over that — it
+    says when to stop asking early — and never a precondition.
+    """
+    print("\na refusal that names no window is still carried")
+    with isolated(tmp) as root:
+        pid, _sock, received = live_session_fixture(tmp, root)
+        wt = tmp / "wt"
+        wt.mkdir()
+        started = pool.now() - 1000
+        proj = pool.PROJECTS / pool.project_dir_name(wt)
+        proj.mkdir(parents=True, exist_ok=True)
+        stale = proj / "s.jsonl"
+        stale.write_text("{}\n")
+        os.utime(stale, (pool.now() - 400, pool.now() - 400))
+
+        # Refused twice, saying NOTHING about a window or a reset, then served.
+        stub = refusing_then_serving_stub(tmp / "claude-stub", tmp / "probes.txt", 2, "true")
+        cfg = pool.merge(pool.DEFAULTS, {
+            "claude": {"binary": str(stub)},
+            "ticket": {"timeout_seconds": 4, "quiet_seconds": 4, "limit_wait_jitter_seconds": 0},
+        })
+        stop = threading.Event()
+        threading.Thread(target=pool.watch_hand_launched, daemon=True,
+                         args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None, pid)).start()
+        deadline = time.time() + 90
+        while time.time() < deadline and not received:
+            time.sleep(0.5)
+        stop.set()
+        probes = int((tmp / "probes.txt").read_text().strip() or 0)
+
+    check("a session is carried past a refusal that named no window at all",
+          len(received) == 1, str(received)[:200])
+    check("and it was carried because the account SERVED one, not because a clock passed",
+          probes >= 3, f"{probes} probes — it did not poll until the account served")
 
 
 def test_a_quiet_work_session_with_no_limit_against_it_is_left_alone(tmp: Path) -> None:
@@ -3676,6 +3753,7 @@ def main() -> int:
                          ("limit interruptible", test_waiting_for_a_reset_stays_interruptible),
                          ("limit loop wiring", test_the_wave_loop_is_the_thing_that_waits),
                          ("work carried past a limit", test_a_stalled_work_session_is_told_when_its_window_reopens),
+                         ("work carried with no window named", test_a_refusal_that_names_no_window_is_still_carried),
                          ("work quiet but unlimited", test_a_quiet_work_session_with_no_limit_against_it_is_left_alone),
                          ("work recycled pid", test_a_recycled_pid_is_never_handed_a_resume),
                          ("work carry off switch", test_the_carry_can_be_turned_off)]:

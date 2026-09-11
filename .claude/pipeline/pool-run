@@ -30,8 +30,10 @@ instead.
 reaches it: the CLI's own wait belongs to the SESSION and can be gated off for an account, and the
 driver's belongs to sessions it can suspend and re-enter, which a hand-launched one is not. So
 `watch_hand_launched` notices the window reopening and tells the session to continue, over the local
-peer socket the session itself publishes. It acts only on a run that is quiet AND that the ACCOUNT
-refused a probe for; `ticket.limit_continue_work: false` turns it off.
+peer socket the session itself publishes. What it waits for is the ACCOUNT SERVING a request again,
+not a clock: a reset time is an optimisation over that and never a precondition, because the
+rejected form of the record carrying one has never been observed here. It acts only on a run that
+is quiet and that the account refused; `ticket.limit_continue_work: false` turns it off.
 
 Evidence the runs cannot produce about themselves is captured here: a run that dies leaves no record
 of its own death, so this driver writes (or appends to) the record in `~/.claude/skill-lessons/`,
@@ -1315,8 +1317,9 @@ def session_is_busy(pid: int) -> bool:
     return bool(entry) and entry.get("status") == "busy"
 
 
-def account_limit(cfg: dict, cwd: Path) -> dict | None:
-    """Ask the ACCOUNT whether a usage limit is in force, and when it lifts. None means it is not.
+def account_limit(cfg: dict) -> tuple[str, dict | None]:
+    """Ask the ACCOUNT whether it will serve a request: "open", "limited" (with the window), or
+    "refused" (it would not, and did not say why).
 
     An interactive transcript records nothing machine-readable about a limit — the only trace is an
     assistant line in the operator's own locale ("resets 7:10am"), and reading a wall clock out of
@@ -1329,11 +1332,26 @@ def account_limit(cfg: dict, cwd: Path) -> dict | None:
     spends nothing; only a probe that finds the window OPEN costs a few tokens, and that is the
     answer that stops anything waiting. `pausable=False` because there is nothing to resume: this
     session is one question.
+
+    THREE answers rather than two, and the third is what the caller is really built on. A window's
+    `resetsAt` reaches this through a `rate_limit_event` whose rejected form nothing here has ever
+    observed — every one of the records this pipeline has captured says `allowed_warning`, because
+    a rejection ends the run that would have logged it, and the shape is taken from the CLI's own
+    predicate rather than from a measurement. So a probe that is refused WITHOUT saying why is
+    reported as refused rather than as fine: the caller polls until the account serves it, which is
+    what "the limit lifted" means operationally, and needs no `resetsAt` to be right.
     """
+    # Deliberately NOT run in the worktree it is asked on behalf of. `claude` keys its transcript
+    # directory on the cwd, and `silence_since` reads that directory to decide a run has stopped
+    # writing — so a probe run there would refresh the very signal that summoned it, and the
+    # session would never look quiet again. Measured by the suite before this line existed.
     stem = LOGS / safe_component(f"{utc_stamp()}-limit-probe")
-    run = Session("Reply with one word: ok", cwd, cfg, stem, 300, 300,
+    run = Session("Reply with one word: ok", PIPELINE, cfg, stem, 300, 300,
                   lambda *a, **k: None, pausable=False).run()
-    return run.get("rate_limit")
+    limit = run.get("rate_limit")
+    if limit:
+        return "limited", limit
+    return ("refused", None) if run.get("is_error") else ("open", None)
 
 
 def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
@@ -1368,7 +1386,42 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
     carry = bool(cfg["ticket"].get("limit_continue_work", True))
     cap = int(cfg["ticket"].get("limit_wait_max_seconds") or 0)
     jitter = max(0, int(cfg["ticket"].get("limit_wait_jitter_seconds") or 0))
-    limit, fire_at, tries, next_probe = None, 0, 0, 0
+    # `blocked` is the whole state: the account has refused a request while this session sat quiet.
+    # What ends it is the account SERVING one again — not a clock — because that is what "the limit
+    # lifted" means and it is true whether or not a reset time was ever reported. `fire_at` is only
+    # an optimisation over that: when a window was named, there is no point asking again before it.
+    blocked, fire_at, until, tries, next_probe = False, 0, None, 0, 0
+    # How stopped a run must look before the account is asked, and how often it may be asked after
+    # that. Ten minutes and five, except where the pool calls silence a problem sooner than that —
+    # one that treats five minutes of quiet as trouble should not wait ten to ask why.
+    probe_after, probe_every = min(300, quiet), max(tick, min(600, quiet))
+    # The probe runs on its OWN thread and this loop only collects its answer. A probe is a whole
+    # `claude` startup, and this loop's first duty is the bounds above — a watcher that stops
+    # reporting while it investigates misses the thing it exists for. Measured by the suite: run
+    # inline, a session that went quiet during a probe was never reported quiet at all.
+    probe_lock = threading.Lock()
+    probe: dict = {"busy": False, "answer": None}
+
+    def ask_the_account() -> None:
+        try:
+            got = account_limit(cfg)
+        except Exception as exc:      # a watcher must never take the session it watches with it
+            say(f"! could not ask the account about usage limits: {type(exc).__name__}: {exc}")
+            got = ("error", None)
+        with probe_lock:
+            probe["answer"], probe["busy"] = got, False
+
+    def ask_if_idle() -> None:
+        with probe_lock:
+            if probe["busy"]:
+                return
+            probe["busy"], probe["answer"] = True, None
+        threading.Thread(target=ask_the_account, daemon=True).start()
+
+    def answer():
+        with probe_lock:
+            got, probe["answer"] = probe["answer"], None
+            return got
 
     def report(reason: str, summary: str, **fields) -> None:
         # Said in the LOG as well as pushed. `notify` reaches `say` only when the channel fails, and
@@ -1392,20 +1445,39 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
 
         if not carry or pid is None or cap <= 0:
             continue
-        if limit is not None:
-            # `fire_at` was drawn ONCE, when the limit was observed. Drawing the margin here instead
+        if blocked:
+            # `fire_at` was drawn ONCE, when the window was named. Drawing the margin here instead
             # would re-roll it every tick, so the moment being waited for would move each time it
             # was asked about — either firing early or never settling.
-            if now() < fire_at:
+            # A named window governs on its own; `next_probe` paces the case where the account
+            # refused without naming one, which is the case that has to be polled.
+            got = answer()
+            if got is None:
+                if now() >= fire_at and now() >= next_probe:
+                    next_probe = now() + probe_every
+                    ask_if_idle()
+                continue
+            state, found = got
+            if state == "error":
+                continue
+            if state != "open":
+                # Still refused. A named window that has passed and is still refusing is the case a
+                # clock alone would have got wrong — it nudges a session that cannot yet run.
+                fire_at = (found["resets_at"] + (random.randint(jitter // 2, jitter) if jitter
+                                                  else 0)) if found else 0
+                until = found["resets_at"] if found else until
+                if found:
+                    next_probe = 0
                 continue
             failed = continue_session(pid, WORK_CONTINUE_PROMPT)
             if not failed:
-                say(f"the usage limit reset at {at_clock(limit['resets_at'])} — told {key}'s "
-                    "session to continue where it stopped")
+                say("the account is serving requests again"
+                    + (f" (the window reopened at {at_clock(until)})" if until else "")
+                    + f" — told {key}'s session to continue where it stopped")
                 # Cleared so a run that meets the limit twice is carried twice. The bounds above
                 # latch deliberately; this must not, because each window is its own event.
                 told.discard("limit-continue-failed")
-                limit, tries, next_probe = None, 0, now() + max(tick, 600)
+                blocked, fire_at, until, tries = False, 0, None, 0
                 continue
             # Retried across ticks rather than abandoned on the first refusal. Giving up here would
             # be permanent in practice: the next probe happens with the window OPEN, finds no limit,
@@ -1419,29 +1491,38 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
                 # Latched like the bounds above, and discarded on the next success: once per run of
                 # failures, not once per window and not once per tick.
                 report("limit-continue-failed",
-                       f"{key}: the usage limit reset at {at_clock(limit['resets_at'])} but this "
-                       f"session could not be told to continue after {tries} tries ({failed}) — "
-                       "send it any message to pick it up", resets_at=limit["resets_at"])
-            limit, tries, next_probe = None, 0, now() + max(tick, 600)
+                       f"{key}: the account is serving requests again but this session could not "
+                       f"be told to continue after {tries} tries ({failed}) — send it any message "
+                       "to pick it up", resets_at=until)
+            blocked, fire_at, until, tries = False, 0, None, 0
             continue
         # Asking the account costs a session, so it is asked only of a run that looks stopped: quiet
         # AND not busy by its own account. A long build is silent and says it is busy, which is what
         # keeps this from spending a probe a tick through a compile.
-        silent = silence_since(worktree, started_at)
-        if silent is None or silent < 300 or now() < next_probe or session_is_busy(pid):
+        got = answer()
+        if got is None:
+            silent = silence_since(worktree, started_at)
+            if (silent is not None and silent >= probe_after and now() >= next_probe
+                    and not session_is_busy(pid)):
+                next_probe = now() + probe_every
+                ask_if_idle()
             continue
-        next_probe = now() + max(tick, 600)
-        try:
-            found = account_limit(cfg, worktree)
-        except Exception as exc:   # a watcher must never take the session it watches with it
-            say(f"! could not ask the account about usage limits: {type(exc).__name__}: {exc}")
+        state, found = got
+        if state in ("open", "error"):
             continue
-        if found and found["resets_at"] - now() <= cap:
-            limit = found
-            fire_at = found["resets_at"] + (random.randint(jitter // 2, jitter) if jitter else 0)
-            say(f"{key} is stopped by the claude.ai usage limit; its "
-                f"{found['type'] or 'usage'} window reopens at {at_clock(found['resets_at'])} and "
-                "this session will be told to continue then")
+        if found and found["resets_at"] - now() > cap:
+            # A window further out than the driver will wait for is one a person should see; the
+            # same bound, so "do not wait for usage limits" means one thing on both paths.
+            continue
+        blocked, until = True, found["resets_at"] if found else None
+        fire_at = (found["resets_at"] + (random.randint(jitter // 2, jitter) if jitter else 0)
+                   if found else 0)
+        if found:
+            next_probe = 0
+        say(f"{key} is stopped: the account is refusing requests"
+            + (f" — its {found['type'] or 'usage'} window reopens at {at_clock(found['resets_at'])}"
+               if found else " and did not say when it will stop")
+            + ". This session will be told to continue as soon as the account serves one again")
 
 
 def reap_stale_work(ledger: dict, say) -> list[str]:
