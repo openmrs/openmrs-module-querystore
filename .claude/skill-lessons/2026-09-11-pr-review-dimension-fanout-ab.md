@@ -1,5 +1,5 @@
 # measurement · pr-review per-dimension fan-out A/B · openmrs-core PR 6551 · 2026-09-11
-outcome: measurement only — one proposal derived from it, not yet through the Step 5 gate
+outcome: measurement only — three proposals derived from it went to the Step 5 gate 2026-09-11: one parked at zero criteria met with six limbs killed, two applied as ledger entries after revision. No skill changed. See REJECTED.md, 2026-09-11 block.
 protocol: pre-registered before either arm ran and before the orchestrator read the diff
 artifacts: `/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/`
   (PROTOCOL.md with amendment, arm-A-control.json, lens-*.json ×6, arm-B-merged.json,
@@ -110,3 +110,12 @@ and a review bot.
   fan-out would cost something, and this run is silent on it.
 - The handicap ran against arm B and arm B still won, so the direction is safe; but arm B's wall-clock
   advantage would shrink on an uncontended machine.
+- **The 20-of-20 precision result was measured on MERGED arm B only.** `adjudication-input.json` holds
+  arm A's 9 plus merged arm B's 11; the 14 raw lens findings the merger consumed or dropped were never
+  adjudicated. **Raw fan-out precision is unmeasured**, and the merge pass is what protected it — the
+  same merge pass this record parks as an open question. Established at the Step 5 gate, 2026-09-11.
+- **The window contains evidence cutting the other way that this run did not use.**
+  `2026-09-11-openmrs-module-chartsearchai-387.md`:39-40 — a field-naming defect "Raised independently
+  by two lenses, the second told nothing about the first · cost: 1 cycle + a rename". That is the
+  duplication cost this record says it cannot speak to, sitting in the same window. Found by the
+  refuter, not by the orchestrator who had read that record.

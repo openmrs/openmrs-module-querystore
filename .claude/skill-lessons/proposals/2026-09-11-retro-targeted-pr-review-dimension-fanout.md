@@ -1,3 +1,12 @@
+> **GATE OUTCOME, 2026-09-11 — this draft was not accepted. Rulings supersede it; do not read it as shipped text.**
+> P-A **PARKED** as observed-not-yet-actionable at zero Step 3 criteria met, with six limbs killed.
+> P-B **APPLIED after revision** (four corrections, including an invented per-lens token figure and a
+> nit claim that is false for the performance reviewer). P-C **APPLIED** with unit-precision wording.
+> **No skill file changed.** Full rulings, with citations, in `REJECTED.md` under the 2026-09-11 block.
+> Two factual errors in the text below are corrected there and left standing here as the historical draft:
+> "It did not buy discovery" is false on its own record (4 arm-B-only defects), and the performance
+> reviewer returned four suggestions and no nits — the fourth raw nit was test coverage's.
+
 # skill-retro draft — pr-review: per-dimension fan-out as a selectable mode
 
 Scope: a targeted proposal, not a window retro. Origin: a design question — would `/pr-review`

@@ -2116,3 +2116,152 @@ the same turn, i.e. where the gate was the only thing between the run and #297's
   `~/Projects/openmrs/openmrs-module-querystore`, which the previous pass committed in, five behind —
   and fast-forwarded the latter. **This pass commits in the `source_repo` one.** Both were at
   `origin/main` before the commit. **REOPEN ON:** a third checkout, or a pass that commits in neither.
+
+## 2026-09-11 (window: 4 records — #247/PR406, #310/PR405, #387/PR404, and a `pr-review` fan-out measurement) — 2 ledger entries applied from 3 proposals, 1 parked with 6 limbs killed, 3 derived candidates killed at this ledger before reaching the gate; linter 10 files, 0 findings; **no skill file changed**
+
+Origin was a design question rather than a window sweep: would `/pr-review` be better if each review
+dimension got its own agent? A pre-registered A/B answered it
+(`2026-09-11-pr-review-dimension-fanout-ab.md`), and the proposals drafted from it went to a fresh
+refuter alongside three candidates derived from the three pipeline records.
+
+**Derived from the records and killed HERE, before the gate — recorded so a fourth derivation costs nobody a walk:**
+
+1. **`harden` Phase 2 lens tapering is unsanctioned** (#310: "I ran 4, then 3, then 2, then 1 as
+   findings shrank. Nothing in the skill sanctions tapering"). Already ruled at **:1230** on #250:
+   *"not parked as a lesson. It is the labelled-deviation discipline working, and it saved a pass
+   rather than costing one."* #310 is the third instance of the discipline working. **REOPEN ON:**
+   unchanged — a record where tapering LOST a defect, not one where it saved waste.
+2. **`git checkout -- <path>` discarding the ORCHESTRATOR's own uncommitted work** (#247, the
+   warnUnreadable helper). Increment only; remedies stay killed, and **:81's reopen — an incident
+   where "commit before probing" WAS followed — is still unmet**, since #247 records the commit as
+   skipped ("Committing before probing is the fix and it worked thereafter").
+3. **Delete the claim SHAPE early and wholesale rather than one claim per cycle** (#310 "applying it
+   earlier and wholesale would have saved two cycles"; #387 "FOUR successive attempts … what ended it
+   was deleting the claim SHAPE", 5 cycles cumulative). #338 already recorded this exact sharpening;
+   the remedy stays killed and the count is carried below.
+
+**P-A · PARKED as observed-not-yet-actionable · "Give `pr-review` per-dimension fan-out as a selectable mode in Step 3."**
+
+**Zero Step 3 criteria met.** The dispositive citation is **:1502** — *"Step 1 admits run records and
+nothing else, so neither rule ever met the Step 3 bar"*: the A/B's own header says
+`outcome: measurement only`, it was written by neither a pipeline skill nor the `ticket-pool` driver
+(`skill-retro`:32-35), and it cost zero rounds or cycles. A measurement is admissible as argument
+(**:119-126** heard a four-run wall-clock measurement on the merits and reverted all seven of its
+edits) and has never counted as corroboration.
+
+The two records cited for the mechanism are two events, not one — different tickets, dates, lenses and
+defects, and both quoted accurately (`2026-09-09-…-397.md`:303 quality lens;
+`2026-09-03-…-336.md`:18 reuse lens, "blocking-equivalent" as claimed). **They are nonetheless
+counted for something they do not support:** `harden`:100 spawns four parallel agents, so Phase 2 *is*
+a fan-out by construction and neither record contains an unscoped single-context arm. They measure
+lens-versus-lens coverage INSIDE a fan-out, and are silent on fan-out versus one context, which is the
+whole claim. Sharper still — `harden`'s lenses are reuse/quality/efficiency/integration, not
+`pr-review`:97's six, and #397's quality lens maps to conventions/quality, **the dimension P-A's own
+recommended scope drops and P-B records as not worth its cost**. Read whole, the corroboration argues
+against the configuration it was cited to support.
+
+**Parked rather than killed** because the mode question is genuinely open: n=1, on a PR selected
+because it favoured the treatment, judged by an adjudicator the record itself flags as possibly
+non-adversarial, and whose 20-of-20 precision result never saw raw fan-out at all (only the merged
+arm). **REOPEN ON:** a second measurement on a PR chosen for a different dominant dimension, with the
+duplication/dedup cost measured — and note `2026-09-11-…-387.md`:39-40 already cuts the other way
+("Raised independently by two lenses, the second told nothing about the first · cost: 1 cycle + a
+rename"), which is the duplication side the A/B admits it cannot speak to.
+
+**Six limbs KILLED, so a later readmit cannot carry them back:**
+
+1. **The heading rename** (`### When an adversarial refutation pass is worth it` → `### When one
+   context is not enough`). A grep of `pr-review` for "adversarial" returns exactly one line, 116 —
+   the heading — while `pr-harden`:111 and :119 both name "`pr-review` Step 3's adversarial refutation
+   pass". The rename strands both, and P-A proposed no `pr-harden` edit.
+2. **"It did not buy discovery"** — false on its own record: `…-ab.md`:38-41 gives 4 arm-B-only
+   defects, arm A 8 of 12. What it did not buy was *blocker* discovery.
+3. **The 6.5× / 1.6× figures in skill text** — `skill-retro`:90 and **:257-259**. They belong in the
+   record.
+4. **The four-dimension scope in skill text** — contradicts `pr-review`:97 ("Cover **each** of these …
+   an unnamed dimension is one you'll silently skip"), is a one-PR world fact of the class **:257-259**
+   admits only as a mechanical check, and duplicates P-B, which is its correct home.
+5. **"because a narrow scope leaves budget to run the expensive one"** — the record says the generalist
+   "skipped [it] as integration-profile" (`…-ab.md`:51), a profile decision, not budget exhaustion.
+   `skill-retro`:73-77: write the guard, not the diagnosis.
+6. **The "merge pass may not add" rule** — the record parks whether the merge should be a separate
+   agent at all, and the no-add merger is exactly where merged arm B lost a real defect to raw arm B
+   (11 of 12 against 12 of 12).
+
+**P-B · APPLIED after revision · Below the bar (not a run record; zero rounds or cycles) — parked with a reopen condition.**
+
+> **Per-dimension `pr-review` fan-out at the full six-dimension list.** Measured once
+> (`2026-09-11-pr-review-dimension-fanout-ab.md`): of the six, **performance and conventions returned
+> no blocking finding** — the five raw blocking findings are security 1, correctness 1, test
+> coverage 2, solution fit 1, artifact-verified in `lens-*.json`. All four raw nits were discarded by
+> the merge pass, three from conventions and one from **test coverage**, which is a dimension worth
+> keeping, so nit production does not discriminate. The whole arm cost 1.26M tokens; no per-lens cost
+> was measured. That the four remaining dimensions would have covered every blocker and both severity
+> corrections is **inference from the per-reviewer yield, not a measured arm** — no four-dimension arm
+> was run. **REOPEN ON:** a PR where a performance or conventions reviewer returns a blocking finding
+> the other four missed.
+
+Revised at the gate on four counts: the proposal's "~210k tokens apiece" was an invented per-lens
+figure (the one measured total covers six lenses *and* a 10.4-minute merge, and the record contradicts
+uniformity); its nit claim was false for performance, which returned four suggestions and no nits; its
+two `harden` citations re-proposed what **:1230** declined, and that same passage warns that the phrase
+"labelled reduction" appears in no skill and must not re-enter as if it were skill text; and its bar
+line misread `skill-retro`:64-65.
+
+**P-C · APPLIED · Standing counterweight.**
+
+> **`pr-review` Step 1's "Verify claimed fixes against the head — 'fixed' is a claim, not evidence"
+> (`pr-review`:20), as POSITIVE evidence.** From a **measurement, not a run record**
+> (`2026-09-11-pr-review-dimension-fanout-ab.md`), so it is not criterion-1 corroboration for anything.
+> On one PR (`openmrs-core` 6551) two review threads had been closed as fixed. Both repairs were
+> defective, and both arms of that one experiment caught it independently: the regression test a
+> reviewer asked for and accepted stays green with the fix it guards reverted, and the comment that
+> closed the session-cache thread describes stale data where the behaviour is a
+> `TransientPropertyValueException` that aborts the transaction. The record attributes the acceptance
+> to two humans and a review bot; that attribution is the record's, not independently checkable here.
+> **Any future proposal to soften the re-verification of claimed fixes has to pass this.**
+
+Mirrors the shape of **:1162**, and written in units that cannot drift, because that entry itself had
+to be re-litigated at **:1477** for stating "passes" where the record meant cycles.
+
+**Parked below the bar, with counts:**
+
+- **Fail-open verification — a pipe swallows the exit status.** #310: `mvn … | grep …; echo "EXIT=$?"`
+  reports grep's status, so a compile failure read green, "caught only because a later mutation
+  reported zero failures suspiciously." **1 record**, ~0 rounds. No skill carries this shape; the
+  nearest is `pr-review`:90 (no `2>/dev/null` on an evidence command, positive control before trusting
+  a zero hit). **REOPEN ON:** a second record, or one where it cost a round.
+- **`pr-harden`:REVIEW's "check out detached" leaves the worktree detached AND holding the branch**, so
+  a later `git checkout <branch>` fails — twice on #247, compounded by a killed agent's orphan worktree
+  holding the same branch. The record's own fix is to brief "return the worktree to `<branch>`", which
+  later rounds did. **1 record**, a cleanup detour. **REOPEN ON:** a second record.
+- **`pr-harden`:Step 0's `maintainerCanModify: false` reads as a refusal condition but only gates
+  CROSS-repo PRs**; `isCrossRepository` is what settles it (#387). **1 record, cost nothing**, but the
+  guard list invites the misread. **REOPEN ON:** a record where it cost a run.
+- **`gate-state:harden-set` misreports `edits` for a cycle whose label was never recorded** (#387:
+  recording cycle 4 then cycle 6 left the commit-half window spanning cycle 5). The gate's own contract
+  already says it writes an entry "at the end of every cycle" (`harden-cycle-gate.sh`:9), so this is
+  :1196-1198's shape — the rule exists and was skipped. **1 record.** **REOPEN ON:** a mechanical check
+  that could catch a missing cycle label.
+
+### Running parked counts (superseding the previous block where they differ)
+
+- **Prose-correction cycles: ~30 records** — previous ~28 (:2094), plus #310 (cycles 4-6, one
+  over-reaching claim each, converged at 7 by deleting the shape) and #387 (four successive summaries
+  refuted, 5 cycles cumulative). Remedy still killed.
+- **`git checkout -- <path>` losing uncommitted work: ~23 incidents / 19 records** — previous ~22/18
+  (:2096), plus #247, again the orchestrator's own probe and again with the commit skipped. :81's
+  reopen still unmet.
+- **Rate-limit / session-limit agent death: 19 records** — previous 17 (:2098), plus #310 (cycle-4
+  confirming agent; account-wide, so the retry was pointless and the three obligations were done
+  in-context and labelled) and #387 (documentation-cycle confirming agent, same shape).
+- **The proposer not verifying its own citations: 22 cycles** — previous 21 (:2099). This pass added
+  two, both in the brief handed to the gate rather than in the proposals: the count above was quoted as
+  "11 cycles / 9 records" from the superseded 2026-08-30 block (:1242), which is :1488's exact failure;
+  and the brief credited P-A with an offsetting cut (compressing `pr-review`:120-123) that appears
+  nowhere in the proposal file, whose entire Step 4 answer deletes no text. The gate caught both.
+  Also carried: the brief mis-cited those conditions as :119-123 when 119 is blank.
+- **A retro applying no skill change at all: 1 record** (this pass). `skill-retro`:141-143 anticipates
+  it — "A retro that applies NOTHING still commits here, because the parked counts and the new records
+  are its whole output." **REOPEN ON:** a second, which would say something about the bar rather than
+  about one window.
