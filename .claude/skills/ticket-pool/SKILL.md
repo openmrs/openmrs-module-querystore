@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.19.0
+version: 0.20.0
 ---
 
 # Ticket pool — the loop that learns
@@ -148,6 +148,20 @@ mid-attempt. It hands back to you instead in three cases, each named in the log 
 same wave), a reset further out than `ticket.limit_wait_max_seconds` — 6h by default, so a five-hour
 window is waited out and a weekly one is not — and a ticket suspended this way before that did
 nothing with the last reset, which is a session spinning rather than a big ticket.
+
+**A `--work` session is carried past it too, by a third mechanism.** Neither of the other two
+reaches a hand-launched session: Claude Code's own wait belongs to the SESSION and can be gated off
+for an account (measured 2026-09-11 — three `--work` sessions sat idle 4h14m past a 07:10 reset and
+the continuation prompt is in none of their transcripts), and the driver's wait belongs to sessions
+it can suspend and re-enter, which a `--work` session is not: it has no ledger row carrying its id
+and worktree back. So `watch_hand_launched`, which otherwise only ever reports, does the one thing
+it acts on: when the window reopens it tells the session to continue, over the local peer socket the
+session publishes for itself. Three guards stand in front of that, because a wrong nudge is a turn
+injected into a session that was working — the run must be quiet, the ACCOUNT must have refused a
+probe rather than merely be suspected, and the reset must have arrived; `procStart` and the session
+id keep a recycled pid from being handed somebody else's resume. `ticket.limit_continue_work: false`
+turns it off, and so does `limit_wait_max_seconds: 0`, which is one instruction — "do not wait for
+usage limits" — answered the same way on both paths.
 
 **What a suspended ticket keeps.** SIGTERM to the session's process group, and then four things that
 together are the whole feature: its transcript (kept under its own session id, which `--resume`

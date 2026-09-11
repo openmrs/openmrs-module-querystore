@@ -26,6 +26,13 @@ their transcripts intact, no attempt spent, worktrees kept — sleeps until the 
 and re-enters them. See `wait_for_limit_reset` for the three cases where it hands back to a human
 instead.
 
+`--work` is carried past the same limit by a different mechanism, because neither of the other two
+reaches it: the CLI's own wait belongs to the SESSION and can be gated off for an account, and the
+driver's belongs to sessions it can suspend and re-enter, which a hand-launched one is not. So
+`watch_hand_launched` notices the window reopening and tells the session to continue, over the local
+peer socket the session itself publishes. It acts only on a run that is quiet AND that the ACCOUNT
+refused a probe for; `ticket.limit_continue_work: false` turns it off.
+
 Evidence the runs cannot produce about themselves is captured here: a run that dies leaves no record
 of its own death, so this driver writes (or appends to) the record in `~/.claude/skill-lessons/`,
 labelled as driver capture. It is capture, never a proposed rule — same contract the skills have.
@@ -59,6 +66,7 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -82,6 +90,7 @@ SHARED_M2 = HOME / ".m2/repository"
 LESSONS = CLAUDE / "skill-lessons"
 LAST = LESSONS / "LAST"
 PROJECTS = CLAUDE / "projects"         # where `claude` writes a session's transcript; see `session_transcript`
+SESSIONS = CLAUDE / "sessions"         # `claude`'s OWN registry of live sessions; see `live_session`
 PR_STATE = CLAUDE / "pr-harden-state.json"
 HARDEN_STATE = CLAUDE / "harden-state.json"
 SETTINGS = CLAUDE / "settings.json"
@@ -105,7 +114,8 @@ DEFAULTS = {
     # (0 never waits, which is what it did before), and the margin it adds past the reset it was
     # told. Both are read in `wait_for_limit_reset`, which is where the reasoning lives.
     "ticket": {"timeout_seconds": 28800, "max_attempts": 2, "quiet_seconds": 5400,
-               "limit_wait_max_seconds": 21600, "limit_wait_jitter_seconds": 90},
+               "limit_wait_max_seconds": 21600, "limit_wait_jitter_seconds": 90,
+               "limit_continue_work": True},
     # `remote_control` applies to `--work` only: it is a flag on an INTERACTIVE session, so it means
     # nothing to the headless driver. The name is per ticket rather than per host, because the point
     # of monitoring two sessions from a phone is being able to tell which is which.
@@ -1230,9 +1240,106 @@ def silence_since(worktree: Path, started_at: int) -> int | None:
     return None if newest is None else now() - newest
 
 
+def process_start(pid: int) -> str | None:
+    """When a pid's process started, in the same spelling `claude` records for itself."""
+    got = sh(["ps", "-o", "lstart=", "-p", str(pid)])
+    return got.stdout.strip() or None
+
+
+def live_session(pid: int) -> dict | None:
+    """`claude`'s OWN registry entry for a live session, or None if this pid is not one.
+
+    A session publishes `~/.claude/sessions/<pid>.json` for itself, and it carries the two things an
+    outside process needs in order to talk to it — the socket it is listening on and its session id
+    — plus the one that makes talking to it SAFE. `procStart` is checked against the live process
+    because pids are recycled, and the cost of getting that wrong is a resume prompt delivered into
+    somebody else's unrelated session. Registry entries also outlive the sessions that wrote them.
+    """
+    entry = load_json(SESSIONS / f"{pid}.json", {})
+    if not isinstance(entry, dict) or entry.get("pid") != pid:
+        return None
+    if not entry.get("messagingSocketPath") or not entry.get("sessionId"):
+        return None
+    started = entry.get("procStart")
+    if started and process_start(pid) not in (None, started):
+        return None
+    return entry
+
+
+def peer_send(entry: dict, payload: dict, timeout: float = 5.0) -> str | None:
+    """Hand one message to a live session over the socket IT published. Returns an error, or None.
+
+    Never raises. This is a convenience laid over a run in exactly the sense `notify` is: a session
+    that cannot be reached costs a line in the log and nothing else, because the alternative — a
+    launcher that dies trying to be helpful — is worse than the stall it was fixing.
+
+    The transport is `claude`'s own local peer-message socket, which is how one session messages
+    another on this machine, and it is not a published contract: the envelope carries a protocol
+    version and can change. That is survivable ONLY because of where this is called from — a failed
+    send leaves the session exactly as it was, stalled, which is what it did before any of this
+    existed. Never build anything on this that a failure would corrupt.
+    """
+    path = entry.get("messagingSocketPath")
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            sock.connect(path)
+            sock.sendall((json.dumps(payload) + "\n").encode())
+            sock.shutdown(socket.SHUT_WR)
+    except (OSError, ValueError) as exc:
+        return f"{type(exc).__name__}: {exc}"
+    return None
+
+
+def continue_session(pid: int, text: str) -> str | None:
+    """Put one user turn into a live session's queue, the way another session would.
+
+    `session_id` rides along deliberately: the receiver drops a message whose session id is not its
+    own, which is the second guard after `procStart` against a recycled pid being handed a resume
+    prompt meant for something else. Two guards because they fail differently — one is a stale
+    registry file, the other a pid reissued between reading it and writing to it.
+    """
+    entry = live_session(pid)
+    if not entry:
+        return f"no live session is registered under pid {pid}"
+    return peer_send(entry, {"type": "user", "from": "pool-run", "priority": "next",
+                             "session_id": entry["sessionId"],
+                             "message": {"content": text}})
+
+
+def session_is_busy(pid: int) -> bool:
+    """Whether the session says it is working. Absent or unreadable reads as NOT busy, deliberately:
+    this only ever gates whether to spend a probe, and the decision to act needs the probe's answer
+    as well as this one."""
+    entry = live_session(pid)
+    return bool(entry) and entry.get("status") == "busy"
+
+
+def account_limit(cfg: dict, cwd: Path) -> dict | None:
+    """Ask the ACCOUNT whether a usage limit is in force, and when it lifts. None means it is not.
+
+    An interactive transcript records nothing machine-readable about a limit — the only trace is an
+    assistant line in the operator's own locale ("resets 7:10am"), and reading a wall clock out of
+    a localised sentence is a bug waiting for somebody in another timezone. A rate limit is an
+    ACCOUNT fact, so this asks the account: the smallest possible headless session, read through the
+    same `Session` and the same `limit_rejection` the driver uses. One reader of rate limits here,
+    not two.
+
+    It is free in the case that matters. A probe made while the window is shut is REJECTED, so it
+    spends nothing; only a probe that finds the window OPEN costs a few tokens, and that is the
+    answer that stops anything waiting. `pausable=False` because there is nothing to resume: this
+    session is one question.
+    """
+    stem = LOGS / safe_component(f"{utc_stamp()}-limit-probe")
+    run = Session("Reply with one word: ok", cwd, cfg, stem, 300, 300,
+                  lambda *a, **k: None, pausable=False).run()
+    return run.get("rate_limit")
+
+
 def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
-                        stop: threading.Event, say) -> None:
-    """Tell somebody when a hand-launched run passes its bound or goes quiet. It NEVER kills.
+                        stop: threading.Event, say, pid: int | None = None) -> None:
+    """Tell somebody when a hand-launched run passes its bound or goes quiet, and carry it past a
+    usage limit. It NEVER kills.
 
     `Session` carries the driver's timeout and quiet window; `work_in_session` starts an ordinary
     interactive `claude` with `Popen`, so for as long as this path has existed neither bound applied
@@ -1250,6 +1357,18 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
     quiet = int(cfg["ticket"]["quiet_seconds"])
     tick = max(1, min(30, bound, quiet))
     told: set[str] = set()
+    # The usage limit this session is blocked by, once observed, and the earliest the account may be
+    # asked again. The CLI's own wait-for-the-reset is a feature of the SESSION and can be gated off
+    # for an account; the driver's is for sessions it can suspend and re-enter, which a `--work`
+    # session is not — it has no ledger row carrying it back. So what is left is to notice the
+    # window reopening and say so. Unlike every other branch in this watcher that is an ACTION, and
+    # it is guarded three times over: the session must be quiet, the account must have REFUSED a
+    # probe rather than merely be suspected, and the reset must have arrived. A wrong nudge is a
+    # turn injected into a session that was working.
+    carry = bool(cfg["ticket"].get("limit_continue_work", True))
+    cap = int(cfg["ticket"].get("limit_wait_max_seconds") or 0)
+    jitter = max(0, int(cfg["ticket"].get("limit_wait_jitter_seconds") or 0))
+    limit, fire_at, tries, next_probe = None, 0, 0, 0
 
     def report(reason: str, summary: str, **fields) -> None:
         # Said in the LOG as well as pushed. `notify` reaches `say` only when the channel fails, and
@@ -1270,6 +1389,59 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
             if silent is not None and silent > quiet:
                 report("quiet", f"{key} has written nothing for {hms(silent)} — it may be waiting "
                                 "for you, or wedged", quiet_for_s=silent)
+
+        if not carry or pid is None or cap <= 0:
+            continue
+        if limit is not None:
+            # `fire_at` was drawn ONCE, when the limit was observed. Drawing the margin here instead
+            # would re-roll it every tick, so the moment being waited for would move each time it
+            # was asked about — either firing early or never settling.
+            if now() < fire_at:
+                continue
+            failed = continue_session(pid, WORK_CONTINUE_PROMPT)
+            if not failed:
+                say(f"the usage limit reset at {at_clock(limit['resets_at'])} — told {key}'s "
+                    "session to continue where it stopped")
+                # Cleared so a run that meets the limit twice is carried twice. The bounds above
+                # latch deliberately; this must not, because each window is its own event.
+                told.discard("limit-continue-failed")
+                limit, tries, next_probe = None, 0, now() + max(tick, 600)
+                continue
+            # Retried across ticks rather than abandoned on the first refusal. Giving up here would
+            # be permanent in practice: the next probe happens with the window OPEN, finds no limit,
+            # and so never schedules another attempt — one dropped packet and the session sits
+            # there. Bounded, because a send that fails three times is failing for a reason a
+            # fourth will not fix, and that reason belongs in front of a person.
+            tries += 1
+            if tries < 3:
+                continue
+            if "limit-continue-failed" not in told:
+                # Latched like the bounds above, and discarded on the next success: once per run of
+                # failures, not once per window and not once per tick.
+                report("limit-continue-failed",
+                       f"{key}: the usage limit reset at {at_clock(limit['resets_at'])} but this "
+                       f"session could not be told to continue after {tries} tries ({failed}) — "
+                       "send it any message to pick it up", resets_at=limit["resets_at"])
+            limit, tries, next_probe = None, 0, now() + max(tick, 600)
+            continue
+        # Asking the account costs a session, so it is asked only of a run that looks stopped: quiet
+        # AND not busy by its own account. A long build is silent and says it is busy, which is what
+        # keeps this from spending a probe a tick through a compile.
+        silent = silence_since(worktree, started_at)
+        if silent is None or silent < 300 or now() < next_probe or session_is_busy(pid):
+            continue
+        next_probe = now() + max(tick, 600)
+        try:
+            found = account_limit(cfg, worktree)
+        except Exception as exc:   # a watcher must never take the session it watches with it
+            say(f"! could not ask the account about usage limits: {type(exc).__name__}: {exc}")
+            continue
+        if found and found["resets_at"] - now() <= cap:
+            limit = found
+            fire_at = found["resets_at"] + (random.randint(jitter // 2, jitter) if jitter else 0)
+            say(f"{key} is stopped by the claude.ai usage limit; its "
+                f"{found['type'] or 'usage'} window reopens at {at_clock(found['resets_at'])} and "
+                "this session will be told to continue then")
 
 
 def reap_stale_work(ledger: dict, say) -> list[str]:
@@ -1402,7 +1574,7 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         stop = threading.Event()
         threading.Thread(target=watch_hand_launched, daemon=True,
                          args=(cfg, key, claim["worktree"], started_at, stop,
-                               getattr(say, "quietly", say))).start()
+                               getattr(say, "quietly", say), proc.pid)).start()
         try:
             code = proc.wait()
         finally:
@@ -2384,6 +2556,20 @@ RESUME_PROMPT = (
     "run for {url} exactly where you stopped. Do not start the skill again and do not repeat work "
     "you have already done — pick up from your last step, re-reading state from disk if you need to "
     "confirm where that was."
+)
+
+
+# What a `--work` session is told when the window it was stopped by reopens. Addressed to a
+# conversation that was never killed — it has been sitting at the limit notice with everything
+# intact — so it says what changed (the limit lifted) and rules out the one wrong reading: that a
+# message arriving out of nowhere means start again.
+WORK_CONTINUE_PROMPT = (
+    "The claude.ai usage limit that stopped you has reset — continue the /resolve-ticket run "
+    "exactly where you stopped. Nothing was cancelled and nothing has changed underneath you: the "
+    "same session, the same working tree, the same branch and the same slot. Do not start the skill "
+    "again and do not repeat work you have already done; pick up from your last step, re-reading "
+    "state from disk if you need to confirm where that was. (Sent by pool-run, automatically, when "
+    "the window reopened.)"
 )
 
 

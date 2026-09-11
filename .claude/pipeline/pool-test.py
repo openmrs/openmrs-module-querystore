@@ -18,6 +18,7 @@ import os
 import re
 import contextlib
 import shutil
+import socket
 import time
 import signal
 import subprocess
@@ -101,7 +102,7 @@ def isolated(tmp: Path):
     # and RELEASE two slots a hand-launched session was holding, removing their worktrees.
     names = ["LEDGER", "LEDGER_FLOCK", "LOGS", "LESSONS", "LAST", "PR_STATE", "HARDEN_STATE",
              "UNATTENDED_DIR", "WORKTREES", "SLOT_M2", "SLOTS", "LOCK", "PAUSE", "PAUSED",
-             "PROJECTS"]
+             "PROJECTS", "SESSIONS"]
     saved = {n: getattr(pool, n) for n in names}
     root = tmp / "state"
     for n in names:
@@ -3383,6 +3384,233 @@ def test_the_wave_loop_is_the_thing_that_waits(tmp: Path) -> None:
           "continue" in loop[resumed_at:retro_at],
           "the loop falls through to the retro with a session suspended mid-attempt")
 
+def peer_listener(path: Path, received: list) -> threading.Thread:
+    """A real unix socket standing in for a live session's inbox.
+
+    Not a mock of anything under test: what is under test is the frame the driver writes and the
+    guards it applies before writing one, and a socket is the genuine article on both sides. The
+    real receiver is `claude`'s own peer inbox, which is why the assertions below are about the
+    ENVELOPE — `type`, `message.content`, `session_id` — and not about anything this listener does.
+    """
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(str(path))
+    srv.listen(4)
+    srv.settimeout(30)
+
+    def serve() -> None:
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except (OSError, socket.timeout):
+                return
+            with conn:
+                buf = b""
+                conn.settimeout(5)
+                try:
+                    while b"\n" not in buf:
+                        chunk = conn.recv(4096)
+                        if not chunk:
+                            break
+                        buf += chunk
+                except (OSError, socket.timeout):
+                    pass
+            for line in buf.decode(errors="replace").splitlines():
+                if line.strip():
+                    try:
+                        received.append(json.loads(line))
+                    except ValueError:
+                        received.append({"unparseable": line})
+
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    return t
+
+
+def live_session_fixture(tmp: Path, root: Path, name: str = "t") -> tuple[int, Path, list]:
+    """A real process, a real socket and the registry entry `claude` would publish for them.
+
+    The socket goes under /tmp rather than the case directory, and not for convenience: an AF_UNIX
+    path is capped near 104 bytes and a per-case temp directory is already longer than that. It is
+    the same constraint `claude` works under, which is why it publishes its own socket path in the
+    registry instead of letting a caller derive one — and why the driver reads it from there.
+    """
+    holder = subprocess.Popen(["/bin/sh", "-c", "sleep 300"])
+    sock = Path("/tmp") / f"cc-pool-test-{holder.pid}-{name}.sock"
+    sock.unlink(missing_ok=True)
+    received: list = []
+    peer_listener(sock, received)
+    (root / "sessions").mkdir(parents=True, exist_ok=True)
+    (root / "sessions" / f"{holder.pid}.json").write_text(json.dumps({
+        "pid": holder.pid,
+        "sessionId": f"session-of-{holder.pid}",
+        "cwd": str(tmp),
+        "procStart": pool.process_start(holder.pid),
+        "messagingSocketPath": str(sock),
+        "kind": "interactive",
+        "status": "idle",
+    }))
+    return holder.pid, sock, received
+
+
+def test_a_stalled_work_session_is_told_when_its_window_reopens(tmp: Path) -> None:
+    """The `--work` half, which neither the CLI's wait nor the driver's can reach.
+
+    The CLI's own wait-for-the-reset belongs to the SESSION and can be off for an account — measured
+    on this machine 2026-09-11, when three `--work` sessions sat idle for 4h14m past a 07:10 reset
+    and the continuation prompt appears in none of their transcripts. The driver's wait cannot help
+    either: it suspends and re-enters a session, and a `--work` session has no ledger row carrying
+    its id and worktree back. So the watcher notices the window reopening and says so, over the
+    local peer socket the session itself publishes.
+
+    Three guards stand before that, because unlike everything else this watcher does, it ACTS: the
+    session must be quiet, the ACCOUNT must have refused a probe rather than merely be suspected,
+    and the reset must have arrived. The negative case below is the one that matters most — a quiet
+    session with no limit against it is a session waiting for a person, and must be left alone.
+    """
+    print("\na stalled --work session is told when its window reopens")
+    with isolated(tmp) as root:
+        pid, _sock, received = live_session_fixture(tmp, root)
+        wt = tmp / "wt"
+        wt.mkdir()
+        started = pool.now() - 1000
+        # A transcript where `claude` writes one, aged past the probe threshold: the watcher asks
+        # the account only about a run that has actually stopped writing.
+        proj = pool.PROJECTS / pool.project_dir_name(wt)
+        proj.mkdir(parents=True, exist_ok=True)
+        stale = proj / "s.jsonl"
+        stale.write_text("{}\n")
+        os.utime(stale, (pool.now() - 400, pool.now() - 400))
+
+        stub = limit_stub(tmp / "claude-stub", tmp / "argv.txt", resets_in=2)
+        cfg = pool.merge(pool.DEFAULTS, {
+            "claude": {"binary": str(stub)},
+            "ticket": {"timeout_seconds": 5, "quiet_seconds": 5, "limit_wait_jitter_seconds": 0},
+        })
+        stop = threading.Event()
+        t = threading.Thread(target=pool.watch_hand_launched, daemon=True,
+                             args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None, pid))
+        t.start()
+        deadline = time.time() + 60
+        while time.time() < deadline and not received:
+            time.sleep(0.5)
+        stop.set()
+
+    check("the stalled session is sent exactly one turn", len(received) == 1, str(received)[:200])
+    msg = received[0] if received else {}
+    check("as a user message, which is what a session acts on",
+          msg.get("type") == "user", str(msg.get("type")))
+    check("carrying the session id, so a recycled pid cannot be handed somebody else's resume",
+          msg.get("session_id") == f"session-of-{pid}", str(msg.get("session_id")))
+    body = (msg.get("message", {}).get("content") or "").lower()
+    check("and it says continue where you stopped, not start again",
+          "continue the /resolve-ticket run" in body and "do not start the skill again" in body,
+          str(msg.get("message", {}).get("content"))[:200])
+
+
+def test_a_quiet_work_session_with_no_limit_against_it_is_left_alone(tmp: Path) -> None:
+    """Quiet is not the signal. The ACCOUNT refusing a probe is.
+
+    A `--work` session goes quiet for the ordinary reason too: it asked its operator something and
+    is waiting. Nudging that one injects a turn answering nothing, into a conversation whose next
+    move was the person's — and `quiet_seconds` is reached by every session that stops for lunch.
+    So the watcher spends a probe and believes the answer, and this case is the one that fails if
+    silence is ever promoted back into evidence.
+    """
+    print("\na quiet --work session with no limit against it is left alone")
+    with isolated(tmp) as root:
+        pid, _sock, received = live_session_fixture(tmp, root)
+        wt = tmp / "wt"
+        wt.mkdir()
+        started = pool.now() - 1000
+        proj = pool.PROJECTS / pool.project_dir_name(wt)
+        proj.mkdir(parents=True, exist_ok=True)
+        stale = proj / "s.jsonl"
+        stale.write_text("{}\n")
+        os.utime(stale, (pool.now() - 400, pool.now() - 400))
+
+        # The account answers "not limited" — the probe runs and returns no rejection.
+        stub = tmp / "claude-stub"
+        stub.write_text("#!/bin/bash\n"
+                        "echo '{\"type\":\"rate_limit_event\",\"rate_limit_info\":"
+                        "{\"status\":\"allowed\",\"utilization\":0.1}}'\n"
+                        "echo '{\"type\":\"result\",\"result\":\"ok\"}'\n")
+        stub.chmod(0o755)
+        cfg = pool.merge(pool.DEFAULTS, {
+            "claude": {"binary": str(stub)},
+            "ticket": {"timeout_seconds": 5, "quiet_seconds": 5, "limit_wait_jitter_seconds": 0},
+        })
+        stop = threading.Event()
+        threading.Thread(target=pool.watch_hand_launched, daemon=True,
+                         args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None, pid)).start()
+        time.sleep(25)
+        stop.set()
+
+    check("nothing is sent to a session the account is not refusing", not received, str(received))
+
+
+def test_a_recycled_pid_is_never_handed_a_resume(tmp: Path) -> None:
+    """Pids are reissued, and registry files outlive the sessions that wrote them.
+
+    The cost of getting this wrong is not a wasted message: it is a `/resolve-ticket` resume prompt
+    delivered into whatever unrelated session now holds that pid. `procStart` is what tells the two
+    apart, and it is checked against the LIVE process rather than trusted from the file.
+    """
+    print("\na recycled pid is never handed a resume")
+    with isolated(tmp) as root:
+        pid, sock, received = live_session_fixture(tmp, root)
+        entry = json.loads((root / "sessions" / f"{pid}.json").read_text())
+
+        check("a live session with a matching procStart is addressable",
+              pool.live_session(pid) is not None, "the fixture itself is not addressable")
+
+        entry["procStart"] = "Mon Jan  1 00:00:00 2001"
+        (root / "sessions" / f"{pid}.json").write_text(json.dumps(entry))
+        check("a registry entry whose procStart does not match the live process is refused",
+              pool.live_session(pid) is None, str(pool.live_session(pid)))
+        failed = pool.continue_session(pid, "hello")
+        check("and nothing is sent to it", bool(failed) and not received, f"{failed} {received}")
+
+        (root / "sessions" / f"{pid}.json").unlink()
+        check("neither is a pid with no registry entry at all",
+              bool(pool.continue_session(pid, "hello")) and not received, str(received))
+
+
+def test_the_carry_can_be_turned_off(tmp: Path) -> None:
+    """It acts on a session somebody may be sitting in front of, so it has an off switch.
+
+    `limit_continue_work: false` leaves the watcher exactly what it was before — a reporter. The
+    same is true of `limit_wait_max_seconds: 0`, which is already the switch for the driver's own
+    wait: one instruction, "do not wait for usage limits", answered the same way on both paths
+    rather than two knobs that can disagree.
+    """
+    print("\nthe carry can be turned off")
+    for n, off in enumerate(({"limit_continue_work": False}, {"limit_wait_max_seconds": 0})):
+        case = tmp / str(n)
+        case.mkdir()
+        with isolated(case) as root:
+            pid, _sock, received = live_session_fixture(case, root, name=str(n))
+            wt = case / "wt"
+            wt.mkdir()
+            started = pool.now() - 1000
+            proj = pool.PROJECTS / pool.project_dir_name(wt)
+            proj.mkdir(parents=True, exist_ok=True)
+            stale = proj / "s.jsonl"
+            stale.write_text("{}\n")
+            os.utime(stale, (pool.now() - 400, pool.now() - 400))
+            stub = limit_stub(case / "stub", case / "argv.txt", resets_in=2)
+            cfg = pool.merge(pool.DEFAULTS, {
+                "claude": {"binary": str(stub)},
+                "ticket": {**{"timeout_seconds": 5, "quiet_seconds": 5,
+                              "limit_wait_jitter_seconds": 0}, **off},
+            })
+            stop = threading.Event()
+            threading.Thread(target=pool.watch_hand_launched, daemon=True,
+                             args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None,
+                                   pid)).start()
+            time.sleep(20)
+            stop.set()
+        check(f"with {sorted(off)[0]} it sends nothing", not received, str(received))
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -3446,7 +3674,11 @@ def main() -> int:
                          ("limit too far out", test_a_reset_too_far_out_is_handed_back_to_a_human),
                          ("limit bogus reset", test_a_reset_the_platform_cannot_represent_still_suspends),
                          ("limit interruptible", test_waiting_for_a_reset_stays_interruptible),
-                         ("limit loop wiring", test_the_wave_loop_is_the_thing_that_waits)]:
+                         ("limit loop wiring", test_the_wave_loop_is_the_thing_that_waits),
+                         ("work carried past a limit", test_a_stalled_work_session_is_told_when_its_window_reopens),
+                         ("work quiet but unlimited", test_a_quiet_work_session_with_no_limit_against_it_is_left_alone),
+                         ("work recycled pid", test_a_recycled_pid_is_never_handed_a_resume),
+                         ("work carry off switch", test_the_carry_can_be_turned_off)]:
             sub = tmp / name.replace(" ", "-")
             sub.mkdir()
             try:
