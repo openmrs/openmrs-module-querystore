@@ -2265,3 +2265,122 @@ to be re-litigated at **:1477** for stating "passes" where the record meant cycl
   it — "A retro that applies NOTHING still commits here, because the parked counts and the new records
   are its whole output." **REOPEN ON:** a second, which would say something about the bar rather than
   about one window.
+
+## 2026-09-13 (targeted pass: the reopen condition the 2026-09-11 block attached to P-A, answered by a second measurement) — 0 applied of 5 proposals as drafted; 2 revised into entries, 2 killed, 1 reduced to an observation; linter 10 files, 0 findings; **no skill file changed**
+
+Window swept: `2026-09-12-openmrs-module-chartsearchai-294.md` (a run record, `outcome: in-progress
+at time of writing`) and `2026-09-12-pr-review-dimension-fanout-ab2.md` (a measurement). The second
+answers the condition at **:2166**.
+
+**The pass's own procedural claim was false and the gate caught it.** The proposals opened "the window
+since `LAST` contains exactly one file"; it contained two, and the run record had been on disk an hour
+before the proposals were written, unread. Sweeping it afterwards is what this entry records. A
+targeted pass is still the right shape — testing a reopen condition the ledger itself wrote is not a
+rule derived from one record — but the exemption was argued from a false premise.
+
+**From #294, swept late:** a third consecutive-Phase-2-prose instance ("three consecutive Phase-2
+passes each found false claims in prose the previous pass had just written … I reached for it late,
+after the fourth refutation, not the second"), and two shipped rules recorded working — `resolve-ticket`
+Step 3's three-outcome gate ("saved a third pass") and the `no-subagent-model-override` hook refusing a
+`model` on a rate-limit retry ("correct refusal; the retry's changed variable should have been the
+brief only"). **#294 is in-progress; its completion is NOT covered by this pass** — a future retro
+reading by date will skip it, so re-sweep it when it finishes.
+
+**Q-A · APPLIED after revision · P-B, strengthened but not as drafted.**
+The draft said P-B's reopen condition was "directly tested and NOT met". It was **tested with no
+discriminating power**: `adjudication.json` assigns no `blocking` disposition to any of the 17 findings
+from any arm (nit ×7, suggestion ×5, question ×4, drop ×1), so a condition phrased on a blocking
+finding could not have been met by any reviewer on that subject. The record concedes exactly this for
+P2 and P1 is owed the same sentence. Appended to P-B:
+
+> **Second measurement, 2026-09-12** (`2026-09-12-…-ab2.md`), on a performance-dominant PR chosen to
+> falsify this entry. Per-reviewer yield: **performance** 1 finding, a duplicate of the control's, 0
+> unique; **conventions** 2 findings, of which **1 survives as a lens-unique adjudicated-REAL
+> suggestion** (F14, in no duplicate group). So this entry is not strengthened cleanly — conventions
+> produced one of the three surviving lens-unique defects, and in run 1 it also returned one unique.
+> The reopen condition could not be met on this subject at all, since no arm filed a blocking finding.
+> **REOPEN ON:** unchanged.
+
+Citing only "the conventions reviewer returned 0 blocking" would have been the same selective-citation
+defect this ledger charged P-A with at **:2181**.
+
+**Q-B · APPLIED after revision · P-A stays parked; reason upgraded, condition rewritten.**
+Every figure verified against the artifacts. Applied to P-A:
+
+> **Reopen condition met and answered, 2026-09-12.** A second measurement on a performance-dominant PR
+> with the duplication cost measured. The answer does not reopen it: fan-out found **no blocker the
+> single context missed in either run** (run 1: 3 blocking defects, each in both arms; run 2: none
+> anywhere — so that claim rests on three defects); unique yield was 4 defects each time, none
+> blocking, and in run 2 one of the four was destroyed at adjudication as an impossible consequence.
+> Cost ~6.3× tokens, and that figure **excludes an entire lost six-lens wave**, so the true cost is
+> worse. Duplication, the clause run 1 could not measure: 3 redundant of 10 lens findings (30%) by
+> independent adjudication, one defect derived five times, and one trivial dedup decision derived
+> seven times — every agent re-fetching the same conversation and re-verifying the same claimed fix.
+> Against all that, the strongest single pro-fan-out datum in either run is also from run 2: the
+> adjudicator's own pick for most serious defect in that PR was found by a lens alone.
+> **Reason for parking upgraded** from *insufficient evidence* to *measured twice, no blocker yield
+> either time*. **REOPEN ON (replacing the met condition): a measurement where fan-out surfaces a
+> BLOCKING defect the single context missed — the yield neither run produced.**
+
+The draft's second limb ("or a run record from a pipeline skill that used it") is **struck as
+circular**: no pipeline skill offers the mode, P-A is the proposal to add it, and the one existing
+pipeline fan-out was ruled non-probative for this question at **:2181**.
+
+**Q-C · KILLED. The distinguishing claim is false four times over.**
+The draft asserted that every one of the 19 rate-limit records is a single-agent death and that a
+wave dying at once is a new shape. Refuted from inside that count:
+`2026-08-31-…-339.md`:28 ("all four Phase 2 agents simultaneously"), `2026-09-02-…-357.md`:27 ("4
+harden agents at once"), `2026-09-08-…-379.md`:28 ("Both pass-4 harden agents died simultaneously"),
+`2026-09-02-…-354.md`:53 ("Two agents died"). And **:1259-1262** already parks the shape at 2 records
+with a sharper open condition. The draft's own reopen ("a run record showing the same wave-level
+loss") was met four times before it was written. Appended to **:1259-1262** instead:
+
+> A seventh instance, from a measurement (`2026-09-12-…-ab2.md`): six lenses lost at once mid-work
+> with results unwritten, four worktrees left dirty by agents that died mid-probe, wave re-run from
+> zero. **Supplies no remedy** — the run waited for a fresh window rather than probing capacity, so
+> :1262's condition stays unmet.
+
+**Q-D · REDUCED to an observation; the causal claim is KILLED.** "A verification agent's briefed
+stance determines its result" is not supported by one paired comparison. The four `anchor_wrong` are a
+single duplicate group created by run 2's ticket-half sitting at an untouched line; run 1's PR held 3
+blocking defects where run 2's held none, which mechanically yields more overstatement; one of the
+four overstatements came from a second pass triggered by an **in-brief warning about the expected
+distribution**, an outcome prime rather than a stance; and run 2's adjudicator brief was not archived,
+so a claim wholly about brief wording rests on a brief nobody can read. It also proposes nothing new —
+`pr-review`:116-118 already prescribes a reader "told to *refute* it". Recorded as: *two adjudications,
+0/20 and 4/17 overstated, cause not established; 1 measurement.* Run 1's record has been corrected to
+match, having briefly carried the stronger claim.
+
+**Q-E · causal clause KILLED, arithmetic PARKED.** The over-merge is real and reproducible — merger 10
+findings → 5 distinct, independent adjudication → 7 over the same 10. But "folded a claim together
+with its own refutation" is **misattributed**: the finding asserting placement is not a problem is
+**AM2**, an arm-A-merged *control* finding the merger never saw, and the note it was drawn from was the
+adjudicator describing its own cross-arm decision. The sharper and unmentioned over-merge is the
+merger's B3, folding the defect the adjudicator named most serious in the PR together with a seed-value
+nit, a grouping the adjudicator explicitly rejected. Parked as: *the merge pass returned 5 distinct
+where independent adjudication found 7 over the same 10 findings; two groupings rejected, one absorbing
+the adjudicator's most-serious pick. 1 measurement.* **REOPEN ON:** a second instance.
+
+**P4, recorded correctly rather than as the pass first reported it.** The pre-registered wording was
+"inter-lens duplication on raw output **exceeds the merger's self-reported ~28%**", with ~28% fixed in
+the same document as run 1's figure. Measured 30% — **the pre-registered numeric test passed.** What is
+refuted is P4's *mechanism* (that a merger under-reports because it has a stake in its grouping); run 2's
+merger over-reported. The pass initially called P4 "refuted" by substituting run 2's comparator after
+the fact. The whole difference is one finding: 3 of 10 against 7 of 25.
+
+### Running parked counts (superseding the previous block where they differ)
+
+- **Prose-correction cycles: ~31 records** — previous ~30 (2026-09-11 block), plus #294. Remedy still
+  killed; #294 adds the same sharpening #338 recorded (applied late, not early).
+- **`git checkout -- <path>` losing uncommitted work: ~23 incidents / 19 records** — unchanged.
+- **Rate-limit / session-limit agent death: 20 records + 1 measurement**, the measurement carried
+  separately per **:2237**'s convention. The wave-level sub-shape is at :1259-1262, not a new entry.
+- **A retro applying no skill change at all: 2 records.** **:2264-2267 wrote "REOPEN ON: a second,
+  which would say something about the bar rather than about one window" — this is that second, and the
+  pass did not notice it; the gate did.** What two consecutive no-change passes say about the bar is
+  now the open question, and it is not answered here.
+- **The proposer not verifying its own citations: 25 cycles** — previous 22 (:2258). This pass added
+  three, each cut at the gate: the "exactly one file" window claim, with an unread run record on disk;
+  "every one is a single-agent death", false in four records inside the count it cited; and the Q-E
+  misattribution of a control finding to the merger. A fourth is defensible — substituting run 2's
+  merger for the pre-registered P4 comparator — and is recorded above rather than counted.

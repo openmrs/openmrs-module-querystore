@@ -119,3 +119,14 @@ and a review bot.
   by two lenses, the second told nothing about the first · cost: 1 cycle + a rename". That is the
   duplication cost this record says it cannot speak to, sitting in the same window. Found by the
   refuter, not by the orchestrator who had read that record.
+- **The 20-of-20 REAL result is UNEXPLAINED, and should not be cited as evidence that either arm was
+  disciplined.** This record flagged it as "clean enough to suspect the instrument" and said the
+  settling experiment had not been run. A second run (`2026-09-12-…-ab2.md`) used an adjudicator
+  briefed to *refute* and returned 4 of 17 REAL_OVERSTATED and 4 `anchor_wrong` against this run's 0
+  and 0 over 20 — but the 2026-09-12 gate established that **stance is not identified as the cause**:
+  those four `anchor_wrong` are one duplicate group created by that PR's ticket-half living at an
+  untouched line, run 1's subject held three genuine blocking defects where run 2's held none (which
+  mechanically produces more overstatement), one of the four overstatements came from a second pass
+  an in-brief distribution warning triggered rather than from the stance, and run 2's adjudicator
+  brief was not archived. So: this figure is not evidence about the arms, and the reason it is clean
+  is not established. What survives both stances is that neither run produced a single NOISE finding.
