@@ -428,6 +428,7 @@ public class TypeBootstrapperTest {
 		@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> search(String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> getPatientChart(String patientUuid) { return Collections.emptyList(); }
+		@Override public org.openmrs.module.querystore.model.ContextSlice getContextSlice(String patientUuid, String question, org.openmrs.module.querystore.model.ContextSliceRequest request) { return new org.openmrs.module.querystore.model.ContextSlice(java.util.Collections.emptyList(), 0, false); }
 		@Override public void onStartup() { /* unused */ }
 		@Override public void onShutdown() { /* unused */ }
 	}

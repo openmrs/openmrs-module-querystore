@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ALLERGEN_NAME;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ALLERGEN_NON_CODED;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ALLERGEN_TYPE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ALLERGEN_UUID;
@@ -70,6 +71,17 @@ public class AllergyRecordSerializer extends AbstractRecordSerializer<Allergy> {
 	@Override
 	protected LocalDate getDate(Allergy allergy) {
 		return DateFormatUtil.toLocalDate(allergy.getDateCreated());
+	}
+
+	@Override
+	protected LocalDate getClinicalDate(Allergy allergy) {
+		return allergy.getEncounter() == null ? null
+		        : DateFormatUtil.toLocalDate(allergy.getEncounter().getEncounterDatetime());
+	}
+
+	@Override
+	protected String getDateKind(Allergy allergy) {
+		return DATE_KIND_ADMINISTRATIVE;
 	}
 
 	@Override

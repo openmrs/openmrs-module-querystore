@@ -1,12 +1,13 @@
 # Query Store REST API
 
-The query store's primary consumer surface is the in-process Java service
-(`QueryStoreService`); see [ADR Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface).
-These REST endpoints are **operational tooling, not the query surface** — an *observability* read
-(is this deployment fully indexed?) and *administrative maintenance* triggers (re-index one patient,
-or kick off the full backfill, without a restart). They exist because a deployment seeded by a SQL
-dump bypasses the live indexing bridge and depends on the background bootstrap completing, and that
-completion was otherwise unobservable and unrepairable on a live instance.
+The query store's primary in-JVM consumer surface is the Java `QueryStoreService`; see
+[ADR Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface). The REST API adds:
+
+- a thin read adapter for authorized non-JVM clients and external services such as med-agent-hub; and
+- operational endpoints for observing and repairing index state.
+
+The read adapter delegates to the existing service methods. It does not add per-request
+reconciliation, completeness claims, or a second read policy.
 
 All endpoints are served under the OpenMRS REST namespace (the module requires the
 `webservices.rest` module):
@@ -16,6 +17,72 @@ All endpoints are served under the OpenMRS REST namespace (the module requires t
 ```
 
 Authenticate with any OpenMRS REST mechanism (HTTP Basic shown below).
+
+---
+
+## GET `/ws/rest/v1/querystore/patientrecord`
+
+Returns query-store records through the existing `QueryStoreService` behavior:
+
+| Parameters | Service method | Ordering |
+|---|---|---|
+| `patient=<uuid>` | `getPatientChart(patient)` | Full materialized patient chart, newest first |
+| `patient=<uuid>&q=<text>` | `searchByPatient(patient, q, k)` | Ranked patient results |
+| `q=<text>` | `search(q, k)` | Ranked cross-patient results |
+| `patient=<uuid>&mode=context&q=<text>&interpret=true` | `getContextSlice(patient, q, request)` | Tiered question context in chart order |
+
+- **Privilege:** `Get Patients`.
+- **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`.
+- **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also include
+  `chartTruncated`, set only from the backend's explicit completeness signal. It is `true` when a
+  documented cap or handled backend read failure may have omitted records. For full-chart reads,
+  `totalCount` is the number of records materialized by the configured backend, so clients must not
+  infer completeness from the count. `projectionComplete` is true only when every currently
+  registered resource type has a completed bootstrap row; an older `QueryStoreService`
+  implementation that cannot prove this reports false.
+  Full-chart reads also carry a stable
+  `snapshotId` for the complete materialized chart. Ranked top-K reads use `null` because the
+  service does not expose a browseable total.
+- **Records:** `resourceType`, `resourceUuid`, ISO `date` (the record's sort date),
+  `clinicalDate` (the event date safe for temporal use, or `null`), `dateKind`
+  (`clinical_event`, `administrative`, or `unknown`), `lastModified`, `text`, and `metadata`.
+  Consumers must not treat `date` as a clinical event date when `dateKind` is not
+  `clinical_event`. Ranked records also carry a 1-based `rank`.
+- **Excluded:** embeddings and backend scores are never returned.
+
+Context mode adds a `tier` to every record. Records that participated in similarity search retain
+their original 1-based search `rank`, even when panel completion promotes them to the protected
+`panel` tier and even though the slice itself remains in chart order. The
+response returns `chartSize`, `chartTruncated`,
+`effectiveTypes`, `temporalApplied`, `chartSnapshotId`, and `sliceId`. The `chartSnapshotId`
+fingerprints the complete chart materialization from which the selection was made. Consumers that
+combine a full-chart ledger with a later context slice must require matching snapshot IDs and retry
+or fail when they differ. The `sliceId` fingerprints the complete ordered
+selection and its effective interpretation, so an external client can reject pages from different
+context slices. It is not a full-chart snapshot, an HTTP cache validator, or a promise that the
+underlying chart is complete. Context pages are question-dependent and are not cached.
+
+For a full-chart page, the response has a strong page-specific `ETag` and
+`Cache-Control: private, no-cache, must-revalidate`. Send that token as `If-None-Match` on the
+same page request: an unchanged page returns `304 Not Modified` with no clinical payload. The
+`snapshotId` covers the materialized records and their completeness state, so a multi-page consumer
+rejects pages whose snapshot does not match the first page. Ranked searches are intentionally
+uncached windows.
+
+The endpoint surfaces, but does not repair, projection completeness. Operational diagnosis and
+repair remain the responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do
+not trigger a full patient rebuild.
+
+```bash
+curl -s -u patient-reader:secret \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&limit=500'
+
+curl -s -u patient-reader:secret \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&mode=context&q=current%20medications&interpret=true&limit=100'
+```
+
+**Errors:** missing `patient` and `q`, invalid paging, or malformed parameters return `400`; an
+unknown patient returns `404`; failed authentication/authorization returns `401`/`403`.
 
 ---
 
@@ -60,8 +127,8 @@ Returns the per-resource-type bootstrap (initial-backfill) status, plus a single
 
 | Field | Meaning |
 |---|---|
-| `complete` | `true` **only** when at least one type is tracked **and every** tracked type is `COMPLETED`. Any `RUNNING`/`FAILED`/`NOT_STARTED` type — or an empty progress table — yields `false`. This is the headline "fully indexed?" answer. |
-| `types[].status` | `NOT_STARTED` \| `RUNNING` \| `COMPLETED` \| `FAILED`. |
+| `complete` | `true` **only** when every currently registered type has a `COMPLETED` progress row. Any missing, `RUNNING`, `FAILED`, or `NOT_STARTED` type — or an empty registered-type set — yields `false`. This is the headline "fully indexed?" answer. |
+| `types[].status` | `NOT_STARTED` \| `RUNNING` \| `COMPLETED` \| `FAILED`. A registered type with no persisted progress row is included as `NOT_STARTED`, so an interrupted bootstrap identifies what never began. |
 | `types[].documentsIndexed` | Documents written for that type so far. |
 | `types[].cursorDateChanged` | The backfill resume cursor (ascending `dateChanged`); records changed after this are not yet indexed. ISO-8601, or `null`. |
 | `types[].startedAt` / `completedAt` | ISO-8601 timestamps, or `null`. |
@@ -116,6 +183,8 @@ instance; previously it could only start at module startup. Poll
   Accepted` and the work proceeds in the background. Overlapping `scope:"all"` requests collapse to
   a single in-flight run via an in-flight guard in the launcher; even if two runs did overlap, the
   per-resource-type locks keep the progress bookkeeping safe.
+- **Idempotent overlap:** if a Querystore reindex is already running, another `scope:"all"` request
+  is accepted without launching a second worker.
 - **Opt-in by design:** the global scope is requested *explicitly* with `scope:"all"` (matched
   case-insensitively), never by omitting `patient` — an absent field overlaps with a malformed
   request, and the global scan is the most expensive operation in the module.
@@ -185,6 +254,6 @@ curl -s -X POST -u admin:Admin123 -H 'Content-Type: application/json' \
   triggering a reindex during active charting on that patient.
 - **Concurrent bridge writes converge.** A live `saveObs` (etc.) during either scope's reindex is
   reconciled by the version-protection invariant (newer write wins, older dropped) — no corruption.
-- **Single-type backfill.** To advance just one resource type in-process (e.g. retry a `FAILED`
-  type after fixing its data), `BootstrapService.bootstrap(resourceType)` is available on the Java
-  service; only the per-patient and `scope:"all"` triggers are exposed over REST.
+- **Single-type backfill.** To advance just one resource type in-process, call
+  `BootstrapService.bootstrap(resourceType)`; external operators use the REST `scope:"type"` trigger
+  documented above.

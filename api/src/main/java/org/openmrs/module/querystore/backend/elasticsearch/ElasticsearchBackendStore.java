@@ -33,6 +33,7 @@ import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.HealthStatus;
 import org.openmrs.module.querystore.backend.Hit;
 import org.openmrs.module.querystore.backend.MetadataCodec;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -258,8 +259,13 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public List<QueryDocument> findAllByPatient(String patientUuid) {
+		return findPatientChart(patientUuid).getDocuments();
+	}
+
+	@Override
+	public PatientChartRead findPatientChart(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		Query filter = Query.of(q -> q
 		        .term(t -> t.field(ElasticsearchFieldNames.PATIENT_UUID).value(patientUuid)));
@@ -267,7 +273,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			SearchResponse<Map> resp = client().search(s -> s
 			        .index(ALL_INDICES_PATTERN)
 			        .size(FULL_CHART_MAX_HITS)
-			        .trackTotalHits(t -> t.enabled(false))
+			        .trackTotalHits(t -> t.enabled(true))
 			        .allowNoIndices(true)
 			        .ignoreUnavailable(true)
 			        .query(filter)
@@ -280,25 +286,29 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			        // ES-side sort by record_date desc so any truncation at FULL_CHART_MAX_HITS keeps
 			        // the most-recent slice — aligning with chartsearchai's recency-cap prompt
 			        // convention. Missing dates land last so legacy rows that pre-date the record_date
-			        // convention don't poison the head of the chart. A secondary {@code _doc asc}
-			        // sort pins the truncation boundary deterministically when many docs share a date
-			        // (or all docs lack one — migration scenario for legacy obs without obs_datetime);
-			        // ES's per-shard secondary order is otherwise unspecified and would make the
-			        // cap's cut-off vary across calls. {@code _doc} (not {@code _id}) because ES 7+
-			        // makes {@code _id} unsortable without enabling expensive fielddata; {@code _doc}
-			        // gives Lucene-internal order which is stable within a segment and cheap to read.
-			        // The Comparator pass below re-applies the full (date, type, uuid) ordering for
-			        // byte-identical output with the other backends.
+			        // convention don't poison the head of the chart. The secondary {@code _index asc,
+			        // resource_uuid asc} keys implement the public (resource_type, resource_uuid)
+			        // tie-breaker before the cap is applied: each index is named for its resource type.
+			        // Lucene's internal {@code _doc} order changes across refreshes and segment merges, so
+			        // using it here could select a different 10,000-record subset between calls. The
+			        // Comparator pass below re-applies the same full ordering in Java.
 			        .sort(SortOptions.of(so -> so.field(f -> f
 			                .field(ElasticsearchFieldNames.RECORD_DATE)
 			                .order(SortOrder.Desc)
 			                .missing(FieldValue.of("_last")))))
 			        .sort(SortOptions.of(so -> so.field(f -> f
-			                .field("_doc")
+			                .field("_index")
+			                .order(SortOrder.Asc))))
+			        .sort(SortOptions.of(so -> so.field(f -> f
+			                .field(ElasticsearchFieldNames.RESOURCE_UUID)
 			                .order(SortOrder.Asc)))),
 			        Map.class);
 			List<co.elastic.clients.elasticsearch.core.search.Hit<Map>> hits = resp.hits().hits();
-			if (hits.size() >= FULL_CHART_MAX_HITS) {
+			long total = resp.hits().total() == null ? hits.size() : resp.hits().total().value();
+			boolean shardFailure = resp.shards() != null && resp.shards().failed().intValue() > 0;
+			boolean truncated = total > hits.size() || shardFailure || resp.timedOut()
+					|| Boolean.TRUE.equals(resp.terminatedEarly());
+			if (truncated) {
 				// Hitting the cap is a v1 quirk of the ES tier: single-search size is bounded by
 				// max_result_window (default 10k). MySQL and Lucene have no equivalent cap because
 				// they stream from JDBC/Lucene directly. PIT+search_after pagination is the v1.1
@@ -313,16 +323,13 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				all.add(readDocument(h.index(), h.source()));
 			}
 			all.sort(BackendDocs.CHART_ORDER);
-			return all;
+			return new PatientChartRead(all, truncated);
 		}
 		catch (ElasticsearchException | IOException e) {
-			// Mirror existsByPatient's stance: log + return empty rather than throwing. The service
-			// layer's caller is the LLM full-chart path; a thrown call strands a prompt mid-assembly,
-			// while an empty list lets the prompt fall back to its own absent-data handling. Tier-
-			// specific divergence from the MySQL/Lucene "partial-per-store" tolerance — see the SPI
-			// Javadoc on {@link BackendStore#findAllByPatient} for the contract that pins both shapes.
+			// Preserve the legacy non-throwing read contract, but never describe a backend failure as a
+			// complete empty chart. External consumers fail closed on the explicit incompleteness bit.
 			log.warn("findAllByPatient failed for " + patientUuid, e);
-			return Collections.emptyList();
+			return new PatientChartRead(Collections.<QueryDocument> emptyList(), true);
 		}
 	}
 
