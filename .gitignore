@@ -28,3 +28,7 @@ Thumbs.db
 # never part of the source, and `git add -A` from the main checkout sweeps them in as
 # embedded repositories if they are not ignored.
 .claude/worktrees/
+
+# Evidence logs under the skill-lessons artifact store are records, not build noise:
+# mutation runs here ground published figures and must stay verifiable.
+!.claude/skill-lessons/artifacts/**/*.log

@@ -1,0 +1,241 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< org.openmrs.api:openmrs-api >---------------------
+[INFO] Building openmrs-api 3.0.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- buildnumber:3.3.0:create (default) @ openmrs-api ---
+[INFO] maven is executed in offline mode, Updating project files from SCM: skipped.
+[INFO] ShortRevision tag detected. The value is '6'.
+[INFO] Storing buildNumber: b7cd90 at timestamp: 1789129594382
+[WARNING] Cannot get the branch information from the git repository: 
+Detecting the current branch failed: fatal: ref HEAD is not a symbolic ref
+
+[INFO] ShortRevision tag detected. The value is '6'.
+[INFO] Storing scmBranch: UNKNOWN
+[INFO] 
+[INFO] --- enforcer:3.6.2:enforce (enforce) @ openmrs-api ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed
+[INFO] Rule 1: org.apache.maven.enforcer.rules.dependency.BannedDependencies passed
+[INFO] 
+[INFO] --- build-helper:3.6.1:parse-version (parse-version) @ openmrs-api ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ openmrs-api ---
+[INFO] argLine set to -javaagent:/Users/danielkayiwa/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/target/jacoco.exec,includes=org/openmrs/** -Duser.language=en -Duser.region=US -Xmx1g --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED -Djava.locale.providers=COMPAT
+[INFO] 
+[INFO] --- spotless:3.10.1:apply (spotless-apply) @ openmrs-api ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 1268 files clean - 0 were changed to be clean, 1268 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ openmrs-api ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 109 resources from src/main/resources to target/classes
+[INFO] The encoding used to copy filtered properties files has not been set. This means that the same encoding will be used to copy filtered properties files as when copying other filtered resources. This might not be what you want! Run your build with --debug to see which files might be affected. Read more at https://maven.apache.org/plugins/maven-resources-plugin/examples/filtering-properties-files.html
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ openmrs-api ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 840 source files with javac [debug release 21] to target/classes
+2026-09-11T12:26:40.626023Z main ERROR Error processing element Memory ([Appenders: null]): CLASS_NOT_FOUND
+2026-09-11T12:26:40.667492Z main ERROR Unable to locate appender "MEMORY_APPENDER" for logger config "root"
+[INFO] Annotation processing is enabled because one or more processors were found
+  on the class path. A future release of javac may disable annotation processing
+  unless at least one processor is specified by name (-processor), or a search
+  path is specified (--processor-path, --processor-module-path), or annotation
+  processing is enabled explicitly (-proc:only, -proc:full).
+  Use -Xlint:-options to suppress this message.
+  Use -proc:none to disable annotation processing.
+[WARNING] unknown enum constant org.infinispan.factories.scopes.Scopes.GLOBAL
+  reason: class file for org.infinispan.factories.scopes.Scopes not found
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+  reason: class file for org.infinispan.jmx.annotations.DataType not found
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.factories.scopes.Scopes.GLOBAL
+[WARNING] unknown enum constant org.infinispan.factories.scopes.Scopes.GLOBAL
+  reason: class file for org.infinispan.factories.scopes.Scopes not found
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+  reason: class file for org.infinispan.jmx.annotations.DataType not found
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.factories.scopes.Scopes.GLOBAL
+[WARNING] The `GraalVmProcessor` annotation processor is missing the recommended `log4j.graalvm.groupId` and `log4j.graalvm.artifactId` options.
+  To follow the GraalVM recommendations, please add the following options to your build tool:
+    -Alog4j.graalvm.groupId=<groupId>
+    -Alog4j.graalvm.artifactId=<artifactId>
+[INFO] GraalVmProcessor: writing GraalVM metadata for 3 Java classes to `META-INF/native-image/log4j-generated/b6db8464/reflect-config.json`.
+[INFO] PluginProcessor: writing plugin descriptor for 3 Log4j Plugins to `META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat`.
+[WARNING] unknown enum constant org.infinispan.factories.scopes.Scopes.GLOBAL
+  reason: class file for org.infinispan.factories.scopes.Scopes not found
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+  reason: class file for org.infinispan.jmx.annotations.DataType not found
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.jmx.annotations.DataType.TRAIT
+[WARNING] unknown enum constant org.infinispan.factories.scopes.Scopes.GLOBAL
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[83,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,60] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,60] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[98,60] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,60] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,60] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/User.java:[117,60] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/ConceptMap.java:[56,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/DrugReferenceMap.java:[58,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/DrugReferenceMap.java:[58,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/DrugReferenceMap.java:[58,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/DrugReferenceMap.java:[58,10] org.hibernate.annotations.Cascade in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/DrugReferenceMap.java:[58,20] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/DrugReferenceMap.java:[58,39] org.hibernate.annotations.CascadeType in org.hibernate.annotations has been deprecated and marked for removal
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/liquibase/ext/logging/slf4j/Slf4JLogService.java: Some input files use or override a deprecated API.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/liquibase/ext/logging/slf4j/Slf4JLogService.java: Recompile with -Xlint:deprecation for details.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/DrugReferenceMap.java: Some input files additionally use or override a deprecated API that is marked for removal.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/BaseCustomizableMetadata.java: Some input files use unchecked or unsafe operations.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/main/java/org/openmrs/BaseCustomizableMetadata.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ openmrs-api ---
+[INFO] Copying 160 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ openmrs-api ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 428 source files with javac [debug release 21] to target/test-classes
+[INFO] Annotation processing is enabled because one or more processors were found
+  on the class path. A future release of javac may disable annotation processing
+  unless at least one processor is specified by name (-processor), or a search
+  path is specified (--processor-path, --processor-module-path), or annotation
+  processing is enabled explicitly (-proc:only, -proc:full).
+  Use -Xlint:-options to suppress this message.
+  Use -proc:none to disable annotation processing.
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/BaseOpenmrsObjectTest.java:[305,52] <T>get(java.lang.Class<T>,java.lang.Object) in org.hibernate.Session has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/BaseOpenmrsObjectTest.java:[446,52] <T>get(java.lang.Class<T>,java.lang.Object) in org.hibernate.Session has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/ObsTest.java:[1085,37] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/PersonTest.java:[713,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/ConceptServiceTest.java:[2147,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/OrderServiceTest.java:[2388,56] Boolean(boolean) in java.lang.Boolean has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/OrderServiceTest.java:[2402,56] Boolean(boolean) in java.lang.Boolean has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/OrderServiceTest.java:[2416,56] Boolean(boolean) in java.lang.Boolean has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/OrderSetServiceTest.java:[135,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/impl/ConceptServiceImplTest.java:[741,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/impl/ConceptServiceImplTest.java:[879,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/impl/DiagnosisServiceImplTest.java:[118,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/impl/DiagnosisServiceImplTest.java:[154,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/impl/DiagnosisServiceImplTest.java:[205,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/api/impl/DiagnosisServiceImplTest.java:[206,30] Integer(int) in java.lang.Integer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/event/outbox/OutboxEventServiceConcurrencyIT.java:[57,72] <T>get(java.lang.Class<T>,java.lang.Object) in org.hibernate.Session has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/event/outbox/OutboxEventServiceConcurrencyIT.java:[63,88] <T>get(java.lang.Class<T>,java.lang.Object) in org.hibernate.Session has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/hl7/HL7UtilTest.java:[53,30] Long(java.lang.String) in java.lang.Long has been deprecated and marked for removal
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/liquibase/ext/datatype/core/MySQLBooleanTypeTest.java: Some input files use or override a deprecated API.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/liquibase/ext/datatype/core/MySQLBooleanTypeTest.java: Recompile with -Xlint:deprecation for details.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/EncounterTest.java: Some input files use unchecked or unsafe operations.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/src/test/java/org/openmrs/EncounterTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.6.0:test (default-test) @ openmrs-api ---
+[WARNING]  Parameter 'systemProperties' is deprecated: use systemPropertyVariables instead
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.openmrs.api.LocationServiceTest
+Sep 11, 2026 3:26:46 PM sun.util.locale.provider.LocaleProviderAdapter <clinit>
+WARNING: COMPAT locale provider will be removed in a future release
+Sep 11, 2026 3:26:51 PM org.apache.lucene.internal.vectorization.VectorizationProvider lookup
+WARNING: Java vector incubator module is not readable. For optimal vector performance, pass '--add-modules jdk.incubator.vector' to enable Vector API.
+WARNING: A restricted method in java.lang.foreign.Linker has been called
+WARNING: java.lang.foreign.Linker::downcallHandle has been called by the unnamed module
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for this module
+
+Sep 11, 2026 3:26:51 PM org.apache.lucene.store.MemorySegmentIndexInputProvider <init>
+INFO: Using MemorySegmentIndexInput and native madvise support with Java 21 or later; to disable start with -Dorg.apache.lucene.store.MMapDirectory.enableMemorySegments=false
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/Users/danielkayiwa/.m2/repository/net/bytebuddy/byte-buddy-agent/1.17.7/byte-buddy-agent-1.17.7.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 7.785 s -- in org.openmrs.api.LocationServiceTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ openmrs-api ---
+[INFO] Loading execution data file /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/wt-adjudicator/api/target/jacoco.exec
+[INFO] Analyzed bundle 'openmrs-api' with 790 classes
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  21.642 s
+[INFO] Finished at: 2026-09-11T15:26:55+03:00
+[INFO] ------------------------------------------------------------------------
+EXIT=0

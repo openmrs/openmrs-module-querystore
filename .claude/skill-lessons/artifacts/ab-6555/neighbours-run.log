@@ -1,0 +1,122 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< org.openmrs.web:openmrs-web >---------------------
+[INFO] Building openmrs-web 3.0.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- buildnumber:3.3.0:create (default) @ openmrs-web ---
+[INFO] maven is executed in offline mode, Updating project files from SCM: skipped.
+[INFO] ShortRevision tag detected. The value is '6'.
+[INFO] Storing buildNumber: d38195 at timestamp: 1789243105425
+[WARNING] Cannot get the branch information from the git repository: 
+Detecting the current branch failed: fatal: ref HEAD is not a symbolic ref
+
+[INFO] ShortRevision tag detected. The value is '6'.
+[INFO] Storing scmBranch: UNKNOWN
+[INFO] 
+[INFO] --- enforcer:3.6.2:enforce (enforce) @ openmrs-web ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed
+[INFO] Rule 1: org.apache.maven.enforcer.rules.dependency.BannedDependencies passed
+[INFO] 
+[INFO] --- build-helper:3.6.1:parse-version (parse-version) @ openmrs-web ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ openmrs-web ---
+[INFO] argLine set to -javaagent:/Users/danielkayiwa/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/target/jacoco.exec,includes=org/openmrs/** -Duser.language=en -Duser.region=US -Xmx1g --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED -Djava.locale.providers=COMPAT
+[INFO] 
+[INFO] --- spotless:3.10.1:apply (spotless-apply) @ openmrs-web ---
+[INFO] Spotless.Java is keeping 72 files clean - 0 were changed to be clean, 1 were already clean, 71 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ openmrs-web ---
+[INFO] Copying 20 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.16.0:compile (default-compile) @ openmrs-web ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 45 source files with javac [debug release 21] to target/classes
+[INFO] Annotation processing is enabled because one or more processors were found
+  on the class path. A future release of javac may disable annotation processing
+  unless at least one processor is specified by name (-processor), or a search
+  path is specified (--processor-path, --processor-module-path), or annotation
+  processing is enabled explicitly (-proc:only, -proc:full).
+  Use -Xlint:-options to suppress this message.
+  Use -proc:none to disable annotation processing.
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[157,21] configureMessageConverters(java.util.List<org.springframework.http.converter.HttpMessageConverter<?>>) in org.springframework.web.servlet.config.annotation.WebMvcConfigurer has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[118,16] org.springframework.web.servlet.view.json.MappingJackson2JsonView in org.springframework.web.servlet.view.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[118,16] org.springframework.web.servlet.view.json.MappingJackson2JsonView in org.springframework.web.servlet.view.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[118,16] org.springframework.web.servlet.view.json.MappingJackson2JsonView in org.springframework.web.servlet.view.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[119,17] org.springframework.web.servlet.view.json.MappingJackson2JsonView in org.springframework.web.servlet.view.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[119,52] org.springframework.web.servlet.view.json.MappingJackson2JsonView in org.springframework.web.servlet.view.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[167,16] org.springframework.http.converter.json.Jackson2ObjectMapperFactoryBean in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[167,16] org.springframework.http.converter.json.Jackson2ObjectMapperFactoryBean in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[167,16] org.springframework.http.converter.json.Jackson2ObjectMapperFactoryBean in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[168,17] org.springframework.http.converter.json.Jackson2ObjectMapperFactoryBean in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[168,63] org.springframework.http.converter.json.Jackson2ObjectMapperFactoryBean in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[174,16] org.springframework.http.converter.json.MappingJackson2HttpMessageConverter in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[174,16] org.springframework.http.converter.json.MappingJackson2HttpMessageConverter in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[174,16] org.springframework.http.converter.json.MappingJackson2HttpMessageConverter in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[175,17] org.springframework.http.converter.json.MappingJackson2HttpMessageConverter in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[175,69] org.springframework.http.converter.json.MappingJackson2HttpMessageConverter in org.springframework.http.converter.json has been deprecated and marked for removal
+[WARNING] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/web/WebConfig.java:[182,24] org.springframework.http.converter.json.Jackson2ObjectMapperBuilder in org.springframework.http.converter.json has been deprecated and marked for removal
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/module/web/WebModuleUtil.java: Some input files use or override a deprecated API.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/main/java/org/openmrs/module/web/WebModuleUtil.java: Recompile with -Xlint:deprecation for details.
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ openmrs-web ---
+[INFO] Copying 4 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.16.0:testCompile (default-testCompile) @ openmrs-web ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 27 source files with javac [debug release 21] to target/test-classes
+[INFO] Annotation processing is enabled because one or more processors were found
+  on the class path. A future release of javac may disable annotation processing
+  unless at least one processor is specified by name (-processor), or a search
+  path is specified (--processor-path, --processor-module-path), or annotation
+  processing is enabled explicitly (-proc:only, -proc:full).
+  Use -Xlint:-options to suppress this message.
+  Use -proc:none to disable annotation processing.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/test/java/org/openmrs/module/web/WebModuleUtilTest.java: Some input files use or override a deprecated API.
+[INFO] /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/src/test/java/org/openmrs/module/web/WebModuleUtilTest.java: Recompile with -Xlint:deprecation for details.
+[INFO] 
+[INFO] --- surefire:3.6.0:test (default-test) @ openmrs-web ---
+[WARNING]  Parameter 'systemProperties' is deprecated: use systemPropertyVariables instead
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.openmrs.web.filter.update.util.FilterUtilTest
+Sep 12, 2026 10:58:39 PM sun.util.locale.provider.LocaleProviderAdapter <clinit>
+WARNING: COMPAT locale provider will be removed in a future release
+Sep 12, 2026 10:58:45 PM org.apache.lucene.internal.vectorization.VectorizationProvider lookup
+WARNING: Java vector incubator module is not readable. For optimal vector performance, pass '--add-modules jdk.incubator.vector' to enable Vector API.
+WARNING: A restricted method in java.lang.foreign.Linker has been called
+WARNING: java.lang.foreign.Linker::downcallHandle has been called by the unnamed module
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for this module
+
+Sep 12, 2026 10:58:45 PM org.apache.lucene.store.MemorySegmentIndexInputProvider <init>
+INFO: Using MemorySegmentIndexInput and native madvise support with Java 21 or later; to disable start with -Dorg.apache.lucene.store.MMapDirectory.enableMemorySegments=false
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/Users/danielkayiwa/.m2/repository/net/bytebuddy/byte-buddy-agent/1.17.7/byte-buddy-agent-1.17.7.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 15.18 s -- in org.openmrs.web.filter.update.util.FilterUtilTest
+[INFO] Running org.openmrs.web.filter.OpenmrsFilterTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.265 s -- in org.openmrs.web.filter.OpenmrsFilterTest
+[INFO] Running org.openmrs.web.context.AltAuthSchemeContextTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in org.openmrs.web.context.AltAuthSchemeContextTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ openmrs-web ---
+[INFO] Loading execution data file /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/wt-test-coverage/web/target/jacoco.exec
+[INFO] Analyzed bundle 'openmrs-web' with 53 classes
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  30.400 s
+[INFO] Finished at: 2026-09-12T22:58:54+03:00
+[INFO] ------------------------------------------------------------------------
