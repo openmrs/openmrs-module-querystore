@@ -1,7 +1,10 @@
 # measurement · pr-review per-dimension fan-out A/B · openmrs-core PR 6551 · 2026-09-11
 outcome: measurement only — three proposals derived from it went to the Step 5 gate 2026-09-11: one parked at zero criteria met with six limbs killed, two applied as ledger entries after revision. No skill changed. See REJECTED.md, 2026-09-11 block.
 protocol: pre-registered before either arm ran and before the orchestrator read the diff
-artifacts: `/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6551/`
+artifacts: `.claude/skill-lessons/artifacts/ab-6551/` in this repo — committed, so the figures below can be
+  re-derived rather than taken on trust. Transient agent probe output (probe*.txt, sqllog,
+  purge, perf-evidence) was excluded as scratch; everything an audit needs is there,
+  including the blinding key.
   (PROTOCOL.md with amendment, arm-A-control.json, lens-*.json ×6, arm-B-merged.json,
   adjudication-input.json + adjudication.json + the private key, oracle-analysis.md)
 transcript: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2.jsonl

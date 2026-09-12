@@ -1,0 +1,70 @@
+{
+ "F01": {
+  "src": "AM",
+  "orig": "AM2"
+ },
+ "F02": {
+  "src": "B",
+  "orig": "test-coverage-2"
+ },
+ "F03": {
+  "src": "A",
+  "orig": "A1"
+ },
+ "F04": {
+  "src": "AM",
+  "orig": "AM3"
+ },
+ "F05": {
+  "src": "B",
+  "orig": "performance-1"
+ },
+ "F06": {
+  "src": "AM",
+  "orig": "AM1"
+ },
+ "F07": {
+  "src": "B",
+  "orig": "correctness-2"
+ },
+ "F08": {
+  "src": "A",
+  "orig": "A2"
+ },
+ "F09": {
+  "src": "B",
+  "orig": "solution-fit-1"
+ },
+ "F10": {
+  "src": "B",
+  "orig": "correctness-1"
+ },
+ "F11": {
+  "src": "A",
+  "orig": "A3"
+ },
+ "F12": {
+  "src": "AM",
+  "orig": "AM4"
+ },
+ "F13": {
+  "src": "B",
+  "orig": "conventions-2"
+ },
+ "F14": {
+  "src": "B",
+  "orig": "conventions-1"
+ },
+ "F15": {
+  "src": "B",
+  "orig": "security-1"
+ },
+ "F16": {
+  "src": "B",
+  "orig": "test-coverage-1"
+ },
+ "F17": {
+  "src": "B",
+  "orig": "test-coverage-3"
+ }
+}

@@ -1,0 +1,200 @@
+{
+  "verdicts": [
+    {
+      "key": "F01",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Probe in a throwaway ZzAdjUserProbeTest (BaseContextSensitiveTest) with Hibernate Statistics: getAllUsers() (3 users) after flush+clear, then touching getLocations() on each = 3 extra prepared statements; re-ran with @BatchSize(size = 100) added to User.locations (plus the import) = 1 extra statement. Read Location.java:141/:147 for the sibling @BatchSize(size = 100). gh api repos/openmrs/openmrs-module-webservices.rest/pulls/762/files to confirm UserResource3_0 adds `locations` (Representation.REF) to FullRepresentation. Reverted with git checkout --.",
+      "why": "Reproduced the n+1 exactly (3 statements -> 1 with @BatchSize), the sibling precedent is in the very file this mapping was modelled on, and the named downstream consumer really does put the collection in a full representation.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F02",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Read LocationServiceImpl.getLocationsByTag (lines 213-223: loops dao.getAllLocations(false) and filters on l.getTags().contains(tag) in Java), HibernateLocationDAO.getAllLocations (selects all retired=false, ordered by name), HibernateLocationDAO.addTagPredicates (root.join(\"tags\") + IN + groupBy/having) and LocationService.getLocations(LocationSearchCriteria) @since 2.8.7. Measured with Hibernate Statistics on the standard dataset: getLocationsByTag = 2 stmts / 3 entity loads; getLocationsHavingAllTags = 1 stmt / 2 entity loads.",
+      "why": "The fetch-all-and-filter-in-Java shape of getLocationsByTag is exactly as described and the SQL-side sibling with tag matching, retired filtering and paging does exist at @since 2.8.7; git grep also shows this PR is getLocationsByTag's first in-core caller.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F03",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Deleted the two added lines from HibernateLocationDAO.deleteLocation, then `mvnw -o -pl api test -Dtest='LocationServiceTest#purgeLocation*'` -> Tests run: 4, Failures: 0, Errors: 0, BUILD SUCCESS. Confirmed the mechanism by reading HibernateLocationDAO.getLocation (a bare session.get). Built the discriminating shape as a probe: assign, Context.flushSession(), Context.clearSession(), reload location 4, purge, flush -> at head it succeeds and `select count(*) from user_location` goes 1 -> 0; with the two lines removed it throws 'PUBLIC.USER_LOCATION FOREIGN KEY(LOCATION_ID) ... (4)'. Also confirmed their caveat: the PR test body plus a bare Context.flushSession() throws TransientPropertyValueException even WITH the fix present.",
+      "why": "The one new regression test passes with the code it guards deleted, for precisely the stated reason (no flush; the assertion is a session lookup that returns null for a session-removed entity; rollback), and a shape that does discriminate exists and was run.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F04",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Replaced `dao.getUser(user.getUserId())` with `user` -> `UserServiceTest#getAllowedLocations*` 5/5 green. Probes at head vs mutated: new User(1) with a committed assignment to location 2 returns [2] with the re-read and [1, 2] without it; a detached User with an uninitialised collection returns [2] with the re-read and throws LazyInitializationException without it; an attached User whose set is changed to {3} in memory without saving returns [] (the caller's unsaved set is what gets intersected) while the same change on a detached User returns [2].",
+      "why": "Both halves reproduce: nothing in the suite pins the re-read (the mutation is green), and the result genuinely depends on whether the caller's User is session-attached, which is not what 'whatever the caller passed in' says.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F05",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "At the pristine head sha, ran the PR's own test body plus Context.flushSession() -> java.lang.IllegalStateException / org.hibernate.TransientPropertyValueException 'Persistent instance of org.openmrs.User references an unsaved transient instance of org.openmrs.Location [org.openmrs.User.locations -> org.openmrs.Location]'. Also reproduced with a User reloaded after flush+clear whose collection is merely initialised (clean), and with an ordinary getAllLocations() triggering auto-flush instead of an explicit flush.",
+      "why": "The shipped comment says the session will hold stale data; what actually happens is that the session becomes unflushable, which is a materially different caveat for the next maintainer. Their inability to build a committing web request matches mine, so 'question' is honest, but the comment is wrong as written and worth fixing regardless.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F06",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Probe: tagged locations 1 and 2 'Login Location', created and tagged a third, assigned user 1 to that third location only, flush+clear. getAllowedLocations -> [Adj Probe Ward]. Then purgeLocation on that ward, flush+clear -> getAllowedLocations returns [Test Level A Child Location 1, Test Parent Location], i.e. every tagged location, and `select count(*) from user_location` goes 1 -> 0. Read HibernateLocationDAO.java:133-134 (executeUpdate() count discarded), the new changeset (no audit columns), LocationServiceImpl.retireLocation (does not touch user_location) and git grep user_location over api/src/main + omod (nothing logs it).",
+      "why": "Reproduced the fail-open flip from one allowed location to all tagged locations with no record anywhere; the finding also correctly declines to call it blocking, since fail-open on an empty set is the ticket's stated design.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F07",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Probe at the pristine head sha: saved a child Location under location 4, assigned it to user 1, flush+clear, reloaded location 4 and purged it -> org.hibernate.exception.ConstraintViolationException / 'PUBLIC.USER_LOCATION FOREIGN KEY(LOCATION_ID) REFERENCES PUBLIC.LOCATION(LOCATION_ID) (8)' where 8 is the child, not the purged parent. Positive control with the same topology and no user assignment: purge succeeds and the child row is gone, so the cascade itself is clean. Read Location.java:140-144 for @OneToMany(cascade = ALL, orphanRemoval = true), and the TRUNK-6669 description for 'Leaf locations only - ... user_location stores the resolved leaf rows'.",
+      "why": "The fix deletes join rows for one location id while session.remove cascades the delete to every descendant, so the exact failure this hunk exists to prevent still fires on the topology the ticket calls normal.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F08",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Read all four mechanism points (UserServiceImpl:856 @Authorized(GET_LOCATIONS); :860 dao.getUser; UserService:86 @Authorized({GET_USERS}); HibernateUserDAO @Repository and AOPConfig.createAdvisor matching only targetClass.isAnnotationPresent(Service.class)); parsed liquibase-core-data-2.9.x.xml role_privilege rows (Get Locations -> Authenticated; Get Users -> no role). Probe: authenticated as the role-less user 6001, hasGetUsers=false, proxy-granted GET_LOCATIONS to stand in for the shipped Authenticated grant; userService.getUser(1) threw APIAuthenticationException 'Privileges required: Get Users' (positive control) while userService.getAllowedLocations(new User(1), tag) returned [2:Xanadu].",
+      "why": "Reproduced the disclosure: the method's only gate is a privilege core grants to every authenticated user, and the target User is read through an un-advised @Repository so the GET_USERS gate never runs.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F09",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Read all six LOCATION_ID usages at head: 133-134 (new; concatenated into native SQL as a parameter name), 419 (JPA attribute in a criteria subquery), 477/482 (recursive CTE parameter) and 494 (JPA attribute in buildPredicates). Confirmed from the diff that the extraction is substitution-only, no reformatting.",
+      "why": "The constant really does serve a JPA attribute name and a native-query parameter name, and really does reach into three methods the ticket does not otherwise touch; accurate, but low value - the finding rates itself a nit and that is right.",
+      "correct_disposition": "nit"
+    },
+    {
+      "key": "F10",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "(a) as for F07: the parent-purge probe throws the USER_LOCATION FK violation at the pristine head sha, with a no-assignment positive control that passes. (b) reproduced four ways at head - explicit Context.flushSession() after purge, an ordinary getAllLocations() triggering auto-flush, a reloaded User whose collection is merely initialised (clean), and a re-assigned (dirty) collection - all TransientPropertyValueException; with the native delete commented out the same exception still fires, isolating it to session.remove; and the childLocations analogue (load parent 3's children, purge child 4, flush) completes cleanly, so the hazard is new to this mapping.",
+      "why": "Both halves are real and the blocking disposition is carried by (a) alone. One nuance on (b): when the User is loaded inside getAllowedLocations' own read-only transaction a following purge+flush does NOT throw, so (b) needs a User loaded by ordinary means - no in-core caller does that today, which is what the shipped comment's 'safe today' is groping at.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F11",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Probe at head: loaded user 1 (no committed assignments), called setLocations({location 3}) without saving, then getAllowedLocations -> [] rather than the two tagged locations the documented 'unrestricted' contract would give, i.e. the caller's unsaved in-session set drove the answer. Control: the same change on a detached User returns [2], and a detached User with an uninitialised collection works only because of the re-read.",
+      "why": "dao.getUser is session.get, so it hands back the identity-map instance and the comment's 'whatever the caller passed in' is false; the re-read still earns its keep for genuinely detached callers, exactly as the finding says.",
+      "correct_disposition": "nit"
+    },
+    {
+      "key": "F12",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Probe at head: loaded user 1 with a committed assignment, read getRoles().size() (works, EAGER), Context.evictFromSession(user), then getLocations() -> org.hibernate.LazyInitializationException 'Cannot lazily initialize collection of role org.openmrs.User.locations with key 1 (no session)'; getRoles() still works after the evict. Repeated with Context.clearSession() (session open, entity detached) - same split. Read UserContext.getAuthenticatedUser (returns the stored field) and refreshAuthenticatedUser (explicit only). git grep confirms the only tests touching the collection are the five getAllowedLocations tests and the purge test.",
+      "why": "Verified end to end, including the asymmetry with the EAGER roles sibling the field was modelled on, and the recommendation (javadoc, not EAGER) is the right-sized ask.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F13",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "git grep getAllowedLocations over the tree (declaration, impl, User javadoc, new tests only) with the positive control the finding names (git grep 'getLocations()' over api/src/main returns 8 real hits, and UserServiceImpl:867 is the only reader of User.locations). Read UserContext.setLocation/setLocationId (public, consult nothing), LocationService.getLocationsByTag (unchanged), UserService.saveUser (@Authorized(EDIT_USERS)) and UserServiceImpl.checkPrivileges (constrains role assignment only). Read the TRUNK-6669 acceptance criteria - all about what the GET returns.",
+      "why": "The mechanism is right: nothing consults User.locations on any write path, so this is a picker filter and not an access check, while the javadoc's 'allowed to use' reads like enforcement. A one-sentence contract clarification is a fair question to put to the author.",
+      "correct_disposition": "question"
+    },
+    {
+      "key": "F14",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "At head: assigned locations 1 and 2 to user 1, retireUser -> loc1Retired=false loc2Retired=false. Removed only the @Independent line from User.locations and re-ran the same probe -> true/true. With the annotation removed, `mvnw -o -pl api test -Dtest='UserServiceTest,LocationServiceTest,UserTest,RequiredDataAdviceTest'` = 244 tests, 0 failures. Read RequiredDataAdvice.recursivelyHandle's @Independent skip and the retire branch of before(); confirmed the two precedent tests at LocationServiceTest:1218 and OrderServiceTest:3316.",
+      "why": "The annotation is load-bearing for data safety and demonstrably unguarded - the mutation is invisible to the whole User/Location test area - and the repo already ships the four-line test twice for the other two @Independent fields.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F15",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Same probes as for F12 (evict and clearSession variants), plus reading User.java:95 (roles EAGER) and UserContext.getAuthenticatedUser/refreshAuthenticatedUser. Also fetched webservices.rest#762's UserResource3_0 patch to see how the companion resource reaches the collection.",
+      "why": "The core claim is exactly right and reproduced. One clause overreaches: UserResource3_0 renders `locations` off a User the resource itself loads in-request (attached), so the live landmine is Context.getAuthenticatedUser().getLocations() in module code rather than the companion resource.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F16",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Hibernate Statistics on the standard dataset at head: getAllowedLocations for a restricted user = 7 statements / 7 entity loads for a result of size 1; getLocationsByTag = 2 / 3; getLocationsHavingAllTags = 1 / 2. Read LocationServiceImpl.getLocationsByTag, HibernateLocationDAO.getAllLocations, addTagPredicates, LocationService.getLocations(criteria) @since 2.8.7, and User.person's FetchType.EAGER (why the re-read pulls the Person graph). git grep shows getLocationsByTag had no in-core caller before this PR. Fetched webservices.rest#762: LocationForCurrentUserSearchHandler3_0 does call getAllowedLocations(Context.getAuthenticatedUser(), tag) and wrap the result in NeedsPaging.",
+      "why": "Every measured and cited fact holds, including the in-memory paging consumer and the ordering caveat (getAllLocations orders by name, getLocationsHavingAllTags does not); the finding correctly declines to call it blocking.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F17",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Same mutation and probe as F14 (remove only @Independent -> retireUser retires locations 1 and 2; restore -> it does not), plus the 244-test green run with the annotation removed and reading RequiredDataAdvice.recursivelyHandle line ~306.",
+      "why": "Identical, correctly-reasoned finding to F14: the annotation's real job is data safety, not lazy-loading hygiene, and nothing asserts it.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F18",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Enumerated every @ManyToMany in api/src/main/java/org/openmrs/*.java at head: exactly five (ConceptName:100, Location:145, OrderType:64, User:95 roles, User:108 locations). Confirmed the mutators on all four pre-existing ones (User.addRole:343 / removeRole:360, Location.addTag:582 / removeTag:597, ConceptName.addTag:406 / removeTag:424, OrderType.addConceptClass:196) and OrderType.getConceptClasses's lazy-initialising getter. Read the new accessors (direct return/assign) and the `assigned == null` defence at UserServiceImpl:868.",
+      "why": "The enumeration is right and the contract gap is real: setLocations(null) restores null, which is why the service still has to null-check a field the javadoc promises is a set; the PR's own test writing setLocations(new HashSet<>(singletonList(...))) is the visible cost.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F19",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Replaced deleteLocation's body with just `session.remove(location)` and ran `mvnw -o -pl api test -Dtest='LocationServiceTest#purgeLocation*'` -> 4/4 green (and the single named test alone is green too). Positive control that the FK exists in the H2 test schema: the cascade probe in the same environment produced the USER_LOCATION FK violation, and the flush+clear+reload shape throws it with the fix removed while passing at head (join rows 1 -> 0). Read HibernateLocationDAO.getLocation to confirm it is a bare session.get. Reverted with git checkout --; worktree clean.",
+      "why": "Verified: the added regression test cannot fail, for the stated reason. I did not run the entire api suite with the fix removed, but no other test both writes user_location and purges a location, so the 'full suite green' half is a safe inference rather than a measured one.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F20",
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Same as F08, plus the sibling check: HibernateUserDAO.getLastLoginTime reads user.getUserProperty(...) off the passed object with no datastore read, so it genuinely is not precedent for a bare @Authorized. Parsed core-data 2.9.x role_privilege rows (27 Authenticated grants, Get Locations among them; Get Users granted to no role). Read Authorized.requireAll() default false.",
+      "why": "Every mechanism fact and the blast-radius claim check out, the probe reproduces the disclosure with a working positive control, and the annotation caveat (adding GET_USERS to the array without requireAll would loosen the gate) is correct.",
+      "correct_disposition": "blocking"
+    }
+  ],
+  "duplicate_groups": [
+    [
+      "F03",
+      "F19"
+    ],
+    [
+      "F07",
+      "F10"
+    ],
+    [
+      "F05",
+      "F10"
+    ],
+    [
+      "F08",
+      "F20"
+    ],
+    [
+      "F12",
+      "F15"
+    ],
+    [
+      "F14",
+      "F17"
+    ],
+    [
+      "F02",
+      "F16"
+    ],
+    [
+      "F04",
+      "F11"
+    ]
+  ],
+  "most_serious_defect_in_this_pr": "The user_location cleanup is scoped to a single location id while session.remove(location) cascades the DELETE to every descendant location (Location.childLocations is @OneToMany(cascade = ALL, orphanRemoval = true)), so the operation this PR exists to fix still aborts: purging a parent department whose leaf child is assigned to a user throws a referential-integrity violation on user_location(location_id), reproduced at the head sha with a clean positive control. That is the ticket's own expected topology - 'Leaf locations only ... user_location stores the resolved leaf rows' are what get assigned, and a parent department is what an admin deletes. What makes it the most serious rather than merely the most concrete is the second half: the single new regression test provably cannot fail (deleting the cleanup leaves LocationServiceTest#purgeLocation* 4/4 green, because the test never flushes and its assertion is a session lookup that returns null for a session-removed entity), so neither this gap nor the related in-session TransientPropertyValueException is visible to CI, and any future edit that drops or reorders the cleanup ships green as well. The narrow fix is to run the delete over the location's descendants - the same class already has a recursive-CTE getDescendantIds - or to remove the location from the loaded User collections in HQL; either way the test needs a flush+clear+reload (or a direct assertion on the join rows) before it guards anything.",
+  "notes": "Every one of the 20 came out REAL, which I am flagging rather than hiding: I did not take that on trust. Each mutation claim was re-run independently and reproduced the stated result (drop the native delete -> LocationServiceTest#purgeLocation* still 4/4 green; drop the re-read -> the five new tests still green; drop @Independent -> retireUser retires the assigned locations while 244 tests in the closest suites stay green; add @BatchSize -> 3 collection statements collapse to 1), and every 'this breaks' claim was reproduced at the pristine head sha with a positive control that passes. All 20 anchors are accurate as well: every file:line lands on a line this diff adds and says what the finding says it says, so anchor_wrong is false throughout. The two weakest items, kept REAL but worth knowing: F09 (the LOCATION_ID constant serving both a JPA attribute name and a native-query parameter) is accurate but is nearly NOISE - acting on it changes two lines of naming; and F15 carries one clause I could not support, that the detached-getter hazard is a landmine 'for the companion REST resource' - webservices.rest#762's UserResource3_0 renders the collection off a User it loads in-request (attached) and its search handler routes through getAllowedLocations, which re-reads, so the live landmine is Context.getAuthenticatedUser().getLocations() in module code, exactly as its twin F12 states it. Duplicate grouping is heavier than it looks: 16 of 20 keys collapse into 8 defects, and F10 deliberately appears in two groups because it merges the cascade gap (= F07) and the session-cache caveat (= F05) into one blocking finding. The five singletons are F01 (no @BatchSize), F06 (purge silently un-restricts a user and logs nothing), F09, F13 (advisory-only vs 'allowed to use') and F18 (no add/remove mutators, setLocations(null) breaks the empty-set contract); F01 and F16 are both performance but on different code paths with different fixes, and F06 and F13 are both javadoc asks but about different contracts, so I kept those apart rather than merging them. One disposition is too mild for what the finding itself proves: F08 files the privilege hole as a suggestion where its twin F20 correctly calls it blocking. Things I checked that neither reviewer raised: envers - User is @Audited and the new collection carries no @NotAudited, but no *_audit table exists anywhere in liquibase and Location.tags is the identical audited @ManyToMany, so this matches precedent and is not a defect; purgeUser on a user with assigned locations succeeds, because Hibernate deletes the rows of the collection it owns, so the symmetric FK case is fine; and the changeset's composite primary key diverges from the ticket's proposed surrogate user_location_id, which is harmless but unremarked. Not measured: F19's parenthetical that the entire api suite stays green with the fix removed (I ran only the purge tests; no other test both writes user_location and purges a location, so it is a safe inference rather than a measurement). Worktree left clean at b7cd909d24 - probe classes deleted, all mutations reverted, git status --porcelain empty, and the PR's own new tests re-confirmed green (4/4 purge, 5/5 getAllowedLocations)."
+}

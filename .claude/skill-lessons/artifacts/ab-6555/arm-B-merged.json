@@ -1,0 +1,113 @@
+{
+  "findings": [
+    {
+      "id": "B1",
+      "dimension": "solution fit",
+      "merged_from": [
+        "solution-fit-1",
+        "performance-1"
+      ],
+      "file": "web/src/main/java/org/openmrs/web/filter/OpenmrsFilter.java",
+      "line": 64,
+      "disposition": "suggestion",
+      "claim": "TRUNK-6701 asks for two changes and this PR ships one. The per-request INIT_REQ_UNIQUE_ID write at line 64 (the ticket's \"unused unique-id attribute\") is byte-identical to the base, is not mentioned in the PR body, and the ticket is now Closed/Done. Declining that half is the right engineering call, but the reason is recorded nowhere, so the next person who reads TRUNK-6701 as a still-open request can delete a live cross-module contract. Was it left out deliberately for that reason, and can that be said on the ticket (and ideally in the comment on line 63)?",
+      "failure_mode": "Nothing breaks at merge; the failure is deferred to whoever finishes the ticket. If the write is removed, openmrs-module-legacyui PortletController.java:111-113 does `String uniqueRequestId = (String) request.getAttribute(WebConstants.INIT_REQ_UNIQUE_ID); ... if (uniqueRequestId.equals(lastRequestId))` with no null check, so every portlet render NPEs, and legacyui's HtmlIncludeTag plus four other modules silently lose their include-caching key.",
+      "evidence": "Ticket (unauthenticated JIRA REST, TRUNK-6701) Requested change: \"Only write session attributes when their values actually change, and remove (or make lazy) the unused unique-id attribute.\" `git diff eda229b1 d381957e -- web/.../OpenmrsFilter.java` has no hunk covering line 64 (hunk 2 covers RIGHT lines 72-97, so this cannot even be anchored as an inline diff comment where the problem is). The ticket's premise holds inside core: `git grep -n INIT_REQ_UNIQUE_ID` returns exactly 2 hits, WebConstants.java:20 and this write, no reader, with a positive control on the same pipeline. The readers are downstream: `gh search code INIT_REQ_UNIQUE_ID --owner openmrs` finds legacyui (HtmlIncludeTag, PortletController), reporting (ReportingPortletController), htmlwidgets (HtmlUtil), htmlformflowsheet (HtmlIncludeTag), personalhr (PortletController), plus a redeclaration in uiframework; the legacyui blobs were read at ref da89912c82ecc7f52e74c66fbfd779000c933414 via the contents API, showing HtmlIncludeTag.java:160 and the unguarded PortletController dereference quoted above. Two facts worth carrying into the note: this is a REQUEST attribute, not a session one, so it never replicated and is not part of the session-dirty problem the ticket groups it with; and it runs once per top-level request (spring-web 7.0.9 OncePerRequestFilter.doFilter disassembled with javap -c sets and finally-removes the alreadyFiltered attribute, so the INCLUDE/FORWARD dispatchers in web.xml:163-170 do not re-enter the body), so its cost is one long->String plus one map put. Merger note: the comment on line 63 already reads \"used by htmlInclude tag\", so it names one consumer but not the other five and does not say \"do not remove\" - which is why the ask here is a sentence on the ticket rather than a code change to the write itself.",
+      "confidence": "high"
+    },
+    {
+      "id": "B2",
+      "dimension": "correctness / test hygiene",
+      "merged_from": [
+        "correctness-1",
+        "test-coverage-2",
+        "conventions-2"
+      ],
+      "file": "web/src/test/java/org/openmrs/web/filter/OpenmrsFilterTest.java",
+      "line": 54,
+      "disposition": "suggestion",
+      "claim": "The new `@AfterEach public void logout()` can never log anything out: every test in the class runs doFilterInternal, whose `finally { Context.clearUserContext(); }` removes the thread-local, so Context.logout() returns at its own `if (!isSessionOpen()) return;` guard. It reads as an isolation step that does not happen, and the base class already does the same thing guarded. Drop it, or move the logout somewhere it can still run.",
+      "failure_mode": "Nothing fails today - verified, including across a shared JVM with sibling context-sensitive tests. The cost is the trap it leaves: the next test added to this class that calls any Context.* API after doFilterInternal gets APIException(\"A user context must first be passed to setUserContext()\") from Context.getUserContext() (Context.java:256-266), and the teardown that looks like it would have restored the context is the thing that does not run.",
+      "evidence": "Three reviewers reached this independently by three different routes, and all three agree. Mechanism: Context.clearUserContext() calls userContextHolder.remove() (Context.java:242-246), isSessionOpen() is `userContextHolder.get() != null` (Context.java:971), and Context.logout() early-returns on !isSessionOpen() (Context.java:713-716), never reaching the setUserContext(new UserContext(...)) at line 723. Probe A: printing Context.isSessionOpen() from the @AfterEach gives `isSessionOpen_at_AfterEach=false` (probe-run.log). Probe B: a throwaway test printed isSessionOpenBeforeFilter=true, isSessionOpenAfterFilter=false, isSessionOpenAfterContextLogout=false - had the logout executed, line 723 would have re-set a UserContext and the last value would be true. Deletion experiment: removing the hook and its @AfterEach import leaves `mvn -o -pl web test -Dtest=OpenmrsFilterTest` at 5/5 green. No leak today: running the class ahead of FilterUtilTest and AltAuthSchemeContextTest in one surefire JVM with -Dsurefire.runOrder=reversealphabetical is 11/11 green. Prior art: BaseContextSensitiveNonTransactionalTest.java:992-1001 already ends with `if (Context.isSessionOpen()) Context.logout();`, inherited here, and of the 16 files in the repo containing Context.logout() only that base class pairs it with an @AfterEach.",
+      "confidence": "high"
+    },
+    {
+      "id": "B3",
+      "dimension": "test coverage",
+      "merged_from": [
+        "test-coverage-1",
+        "correctness-2"
+      ],
+      "file": "web/src/test/java/org/openmrs/web/filter/OpenmrsFilterTest.java",
+      "line": 189,
+      "disposition": "suggestion",
+      "claim": "The locale half of the guard is the weakly pinned one. All five tests move `username` and `locale` together, so a locale-only change - the case the ticket's motivation is really about - is unasserted; and the one place locale is asserted as changed (the Locale.ENGLISH seed at line 193) only counts as changed because the test baseline's default locale happens to be en_GB. Worth a second request on the same session with the locale changed and the username unchanged, seeded with a locale that cannot equal the default.",
+      "failure_mode": "A later refactor collapsing the two calls into one guard keyed on the username passes the entire class (demonstrated), so a real locale-only change - an anonymous session after the default_locale GP changes, or Context.setLocale mid-session - would silently stop reaching the session and the container and downstream readers would keep serving the stale locale, with no test failing. The seed coupling is the loud half: if the test baseline's default_locale ever becomes `en`, line 193 stops differing and that test fails with expected 1 but was 0.",
+      "evidence": "Mutation run at this sha: replaced the two setSessionAttributeIfChanged calls at OpenmrsFilter.java:93-94 with a single guard keyed only on the username (writing both attributes inside it) and `mvn -o -pl web test -Dtest=OpenmrsFilterTest` reported Tests run: 5, Failures: 0, Errors: 0 (mutant-run.log) - the mutant survives, so the suite does not cover a locale-only change; production file restored with `git checkout --`. The scenario is real and stated in-tree: UserContext.getLocale() (UserContext.java:350-356) deliberately returns LocaleUtility.getDefaultLocale() uncached, commented \"don't cache default locale - allows recognition of changed default at login page\", so an anonymous session's locale can change between requests while its username stays \"-anonymous user-\"; Context.setLocale(Locale) (Context.java:880) is the authenticated mid-session switch. On the seed: a probe printed defaultLocale=[en_GB] and equalsLocaleENGLISH=[false], which is the only reason the write at line 193 happens and countWrites(LOCALE)==1 holds. Concrete test: second request on the same session after the locale changed, asserting countWrites(USERNAME)==0, countWrites(LOCALE)==1 and the new Locale value, with the stale value seeded as Locale.JAPANESE or derived from LocaleUtility.getDefaultLocale() rather than hard-coded Locale.ENGLISH.",
+      "confidence": "high"
+    },
+    {
+      "id": "B4",
+      "dimension": "test design / project conventions",
+      "merged_from": [
+        "test-coverage-3",
+        "conventions-1"
+      ],
+      "file": "web/src/test/java/org/openmrs/web/filter/OpenmrsFilterTest.java",
+      "line": 46,
+      "disposition": "suggestion",
+      "claim": "The new 17-line dataset, getTestUserCredentials() and the two executeDataSet/Context.authenticate pairs look unnecessary - the base class already authenticates every test as admin, and the authenticated tests pass unchanged against the existing fixtures with the assertion changed to \"admin\". If a non-admin user is deliberate, say why, and then the file needs moving: referenced by a bare filename it is the only dataset in the repository sitting at a src/test/resources root rather than under a package-mirroring path.",
+      "failure_mode": "No runtime failure either way. The cost is a duplicated fixture row now carried on master plus the 2.9.x/2.8.x/2.7.x backports, and a flat resource name that lands at the root of the published openmrs-web -tests.jar, which test-suite/module/omod consumes - a name-collision surface on that downstream classpath, and the reason the placement question is more than cosmetic.",
+      "evidence": "Necessity, probed at head: deleting `executeDataSet(FILTER_INITIAL_DATA_XML)` and `Context.authenticate(getTestUserCredentials())` from doFilterInternal_shouldSetAuthenticatedUsernameAndLocale and expecting \"admin\" leaves it green (probe-run.log, PROBE_B isAuthenticated_at_test_start=true user=admin); getCredentials() returns admin/test and baseSetupWithStandardDataAndAuthentication() authenticates before every test (BaseContextSensitiveNonTransactionalTest.java:386-388 and ~963-998), and the admin fixture row carries username=\"admin\" (initialInMemoryTestDataSet.xml:18), which is what the assertion would read. The added users row is byte-identical to AdministrationServiceTest-globalproperties.xml:27 and EncounterServiceTest-initialData.xml:95. Placement, re-verified in the worktree by the merger: exactly one dataset XML sits at a src/test/resources root (this one) against 122 under package paths; the only other root-level resources in web are classpath-root-by-necessity (log4j2, and AltAuthSchemeTestingApplicationContext.xml loaded as `classpath*:` by BaseWebContextSensitiveTest); executeDataSet resolves via getClass().getClassLoader().getResourceAsStream (BaseContextSensitiveNonTransactionalTest.java:703) so any package path works; every dataset constant in the tree is path-qualified, including the naming twin ObsServiceTest-initial.xml and the web module's only other executeDataSet (UpdateFilterTest.java:45, \"org/openmrs/api/include/UserServiceTest.xml\"); web binds maven-jar-plugin goals jar+test-jar over a single unfiltered testResource, and test-suite/module/omod/pom.xml:70-74 depends on openmrs-web with <type>test-jar</type> (re-verified). Recommended default: drop the dataset and the helper and assert admin; if the non-admin user is intentional, move the file to web/src/test/resources/org/openmrs/web/filter/include/OpenmrsFilterTest-initial.xml and make the constant the full path.",
+      "confidence": "high"
+    },
+    {
+      "id": "B5",
+      "dimension": "security / operations",
+      "merged_from": [
+        "security-1"
+      ],
+      "file": "web/src/main/java/org/openmrs/web/filter/OpenmrsFilter.java",
+      "line": 93,
+      "disposition": "question",
+      "claim": "These two writes were also the only thing marking the HttpSession dirty on every request. The UserContext is put on the session once at creation and mutated in place afterwards - refreshAuthenticatedUser reloading roles and privileges, removeProxyPrivilege, setLocationId - none of which changes `username` or `locale`. Under a store that persists or replicates the whole session whenever any attribute is written (Tomcat PersistentManager, BackupManager), that incidental dirty mark was what carried those mutations; in steady state this sha now writes nothing. Is any supported deployment on such a manager?",
+      "failure_mode": "Hypothetical and unverified, which is why this is a question. If such a deployment exists, a user whose roles or proxy privileges changed mid-session keeps the pre-change copy in the persisted or replicated session, so a failover node authorizes from stale state - wrong behaviour with nothing thrown, so no CI signal.",
+      "evidence": "UserContext.java:50 implements Serializable, i.e. it is meant to survive such a store; the authorization-relevant mutators at lines 152 (refreshAuthenticatedUser), 264/319 (removeProxyPrivilege) and 578 (setLocationId) change state without changing getUsername(); the attribute itself is set only at OpenmrsFilter.java:76-81 and never re-set. Zero-write steady state confirmed by probe and by the PR's own doFilterInternal_shouldNotRewriteUnchangedAuthenticatedSessionAttributes. Counter-evidence, kept inside the finding so it is cheap to close: the tree carries no clustering configuration at all (`git grep -n distributable`, and a combined grep for DeltaManager/BackupManager/PersistentManager/spring-session/SessionRepository, both zero against a positive control), web.xml:375-379's session-config holds only a cookie-config, and for per-attribute delta managers (Tomcat DeltaManager, Spring Session) the userContext key was never replicated before this change either - so for those the gap predates the PR. Two other lenses reached that conclusion and declined to raise it (the performance lens concluded the PR \"neither helps nor hurts\" in-place mutation replication; the correctness lens reasoned the same way for delta managers), and no clustered container was available to anyone to settle it. Note too that the ticket's own motivation is to stop dirtying the session, so the answer may simply be that full-session-on-dirty managers are not supported.",
+      "confidence": "low"
+    }
+  ],
+  "dropped": [],
+  "downgraded": [],
+  "merged_pairs": [
+    [
+      "solution-fit-1",
+      "performance-1"
+    ],
+    [
+      "correctness-1",
+      "test-coverage-2",
+      "conventions-2"
+    ],
+    [
+      "test-coverage-1",
+      "correctness-2"
+    ],
+    [
+      "test-coverage-3",
+      "conventions-1"
+    ]
+  ],
+  "merger_noticed_but_did_not_add": [
+    "FilterUtil.LOCALE_ATTRIBUTE (web/src/main/java/org/openmrs/web/filter/util/FilterUtil.java:36) is the same literal \"locale\" session key, and InitializationFilter/UpdateFilter store a String there (UpdateFilter.java:295 locale.toString()) while OpenmrsFilter stores a Locale object - so the new Objects.equals guard can never match in the window right after setup or upgrade, and the redundant write survives exactly there. Five of the six reports listed this out of scope; none developed it. Pre-existing, but this PR is what makes the type collision load-bearing.",
+    "No test covers the authenticated -> logged-out transition on a surviving session, which is the behaviourally interesting one (a stale username on a logged-out session would be user-visible). The correctness and security lenses each drove it manually with a throwaway probe and found it correct - username resets to \"-anonymous user-\" with exactly one write - so it is an unguarded-against-regression gap, not a defect. Both filed it out of scope.",
+    "The comment \"set username as attribute on session so parent servlet container can identify sessions easier\" moved inside the `if (user != null)` block (OpenmrsFilter.java:88-89), where it no longer sits next to any setAttribute call. Conventions lens, out of scope.",
+    "setSessionAttributeIfChanged (OpenmrsFilter.java:122) touches no instance state and could be private static. Three reports listed it out of scope.",
+    "The comment at OpenmrsFilter.java:71-72 points at \"webinf/view/uncaughtexception.jsp\", which does not exist in this repo (zero .jsp files remain); the copy lives in legacyui at a different path and casing. Pre-existing, four reports noted it out of scope.",
+    "SonarCloud's PR check reports \"0.0% Coverage on New Code\" while codecov and a local jacoco run both show the new lines fully covered (setSessionAttributeIfChanged 3/3 lines, 2/2 branches). The test-coverage lens could not reproduce it and treated it as CI coverage wiring rather than a PR defect; it is out of scope for all six.",
+    "RecordingHttpSession.countWrites (OpenmrsFilterTest.java:236) counts writes by attribute name only and ignores the value, so it would not catch the right number of writes carrying a wrong value - the value assertions are what cover that today. Solution-fit lens, out of scope.",
+    "doFilterInternal still calls httpRequest.getSession() unconditionally on a /* mapping, creating a session for every anonymous static-asset hit; the ticket explicitly scopes session-creation behaviour out, so the performance lens did not develop it.",
+    "Process: the PR is already merged (645814dc) with backports to 2.9.x (f0dc84a9), 2.8.x (7d3d2c78) and 2.7.x (b2542425). No reviewer reviewed the backport commits, and the 2.8.x/2.7.x copies differ at least in javax vs jakarta servlet imports, so the findings above are verified only against d381957e."
+  ],
+  "verdict": "Nothing blocks - the production change is behaviour-preserving and pinned by tests that provably fail on the merge base - and of the four follow-ups the one worth acting on is putting on the record why TRUNK-6701's unique-id half was deliberately not done, before someone finishes the ticket and breaks six downstream modules.",
+  "notes": "Ten reviewer findings collapsed to five, and four of the five are convergences rather than single-lens reports, so the duplication rate in this set was high. (1) The most-duplicated defect is the dead @AfterEach logout(): correctness, test-coverage and conventions found it independently, by three different methods - mechanism trace plus a probe on isSessionOpen, a printed probe from inside the teardown, and a deletion experiment - and framed it three ways (a trap for future tests, a teardown implying isolation that does not happen, a hook no other class in the repo declares). One defect, three reports, now B2. (2) The unfinished half of TRUNK-6701 was found by solution-fit and performance with genuinely complementary evidence: solution-fit found the unguarded dereference in legacyui's PortletController that a future removal would NPE, performance found six downstream readers org-wide and proved via javap on spring-web's OncePerRequestFilter that the write runs once per top-level request. Correctness, test-coverage and security all listed the same omission out of scope, so five of six reports saw it - that is why it leads as B1. (3) The new dataset was attacked from two directions that are not the same claim but nest: test-coverage says it is not needed at all (probed: the base class already authenticates as admin), conventions says that if it stays it is the only dataset in the tree at a resources root and ships at the root of the published test-jar. Merged as B4 with the ordering stated inside, because emitting both separately hands the author two instructions where the first moots the second. (4) The locale findings merged because the fix is one test: test-coverage's surviving mutant (a single guard keyed on username passes all five tests) and correctness's observation that the sole locale-changed assertion only works because the ambient default is en_GB are the same weakness - the locale guard is not independently pinned. One real contradiction needed adjudicating: security-1 argues the lost per-request dirty mark stops full-session-on-dirty stores from carrying in-place UserContext mutations, while performance's out-of-scope note asserts the PR \"neither helps nor hurts\" that, and correctness reasoned the same way for delta managers. Security itself concedes the effect is confined to full-session-on-dirty managers, rates itself low confidence, and nobody could stand up a clustered container to settle it; I kept it as B5, a question with its own counter-evidence inside, because it is the only production-behaviour consequence anyone traced past the ticket and it costs a maintainer one line to close - it was the closest call in this merge, and the one most defensible to drop. Quiet lenses: security produced a single low-confidence question and said outright that the PR barely touches its dimension; performance produced nothing in its own dimension at all - it verified the saving is real and quantified it, then spent its one finding on a solution-fit point. Conventions was thin by its own account and killed a long list of style candidates on prior-instance evidence. All six converged on the same verified-clean core - the base-vs-head mutation (3 of 5 tests fail on eda229b1 with identical counts) was run independently by four reviewers - which earns silence here but is why nothing blocks. No reviewer raised a blocking finding and none could write a failure-mode sentence for the merge, so I manufactured none. Nothing was dropped outright; all disposition movement was upward (conventions' nit on the @AfterEach became a suggestion on the strength of three independent confirmations, and performance's question about the ticket half became a suggestion because the omission is verified fact and only the recorded reason is missing), so the downgraded list is empty. All six also checked the one live inline thread (jwnasambu's trailing-`1` nit) against the head, found it genuinely fixed, and left it alone, so no finding here duplicates or re-opens live conversation."
+}

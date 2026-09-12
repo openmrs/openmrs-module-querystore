@@ -1,7 +1,10 @@
 # measurement · pr-review per-dimension fan-out A/B #2 · openmrs-core PR 6555 · 2026-09-12
 outcome: measurement only — built to answer the reopen condition the 2026-09-11 gate attached to P-A
 protocol: pre-registered before either arm ran and before the orchestrator read the diff; two amendments, both recorded before the results they bear on
-artifacts: `/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2/scratchpad/ab-6555/`
+artifacts: `.claude/skill-lessons/artifacts/ab-6555/` in this repo — committed, so the figures below can be
+  re-derived rather than taken on trust. Transient agent probe output (probe*.txt, sqllog,
+  purge, perf-evidence) was excluded as scratch; everything an audit needs is there,
+  including the blinding key.
 transcript: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-querystore/9f0167e9-18df-4e14-bedd-eab4aa62b9c2.jsonl
 
 Answers the condition `REJECTED.md` (2026-09-11) attached to the parked P-A: *"a second measurement on
@@ -35,19 +38,28 @@ dimension ranking is not a one-PR artifact.
 headline (the control filing a privilege escalation as a suggestion) cannot replicate on a clean PR.
 The subject choice biased against fan-out and against measuring run 1's main effect together.
 
-**P3 CONFIRMED, and it damages run 1.** The adversarial adjudicator returned **4 of 17
-REAL_OVERSTATED and 4 `anchor_wrong`** (four findings anchored at `OpenmrsFilter.java:64`, outside
-both diff hunks) where run 1's confirmation-stance adjudicator returned 20 of 20 REAL with zero of
-each. **Run 1's precision result was an artifact of how its instrument was briefed**, exactly as run
-1's own record suspected. Both runs still returned **0 NOISE**: these arms observe real things and
+**P3 — the numbers hold, the CAUSE DOES NOT (corrected at the 2026-09-13 gate).** The adversarial
+adjudicator returned **4 of 17 REAL_OVERSTATED and 4 `anchor_wrong`** where run 1's returned 20 of 20
+REAL with zero of each. This record first read that as stance causing the difference. It is not
+established: the four `anchor_wrong` are **one duplicate group**, created by this PR's ticket-half
+sitting at an untouched line; run 1's subject held 3 genuine blocking defects where this one held
+none, which mechanically yields more overstatement; **one of the four overstatements came from a
+second pass triggered by an in-brief warning about the expected distribution** — an outcome prime,
+not a stance; and this run's adjudicator brief was not archived, so a claim about brief wording rests
+on a brief nobody can read. What stands: run 1's precision figure is not evidence that either arm was
+disciplined, and why it is clean remains unexplained. Both runs still returned **0 NOISE**: these arms observe real things and
 misjudge severity and anchoring, rather than inventing.
 
-**P4 REFUTED, in the opposite direction.** The prediction was that a merger under-reports duplication
-because it has a stake in its own grouping. The independent adjudicator found **less** duplication
-than the merger claimed: 10 lens findings over **7** distinct defects (3 redundant, 30%) against the
-merger's 5 (5 redundant, 50%). The merger **over**-merged, and in one case folded a claim together
-with its own refutation — it grouped "the fixture is unnecessary" with "the fixture is in the wrong
-place" although one of those findings explicitly asserts the other is not a problem.
+**P4 — threshold MET, mechanism REFUTED (corrected at the 2026-09-13 gate).** The pre-registered
+wording was "inter-lens duplication on raw output **exceeds the merger's self-reported ~28%**", with
+~28% fixed earlier in the protocol as run 1's figure. Measured 30%, so **the numeric test passed**.
+What is refuted is the *mechanism* — that a merger under-reports because it has a stake in its own
+grouping. This run's merger **over**-reported: 10 lens findings over 5 distinct where independent
+adjudication found 7. The whole difference is one finding (3 of 10 against 7 of 25). This record
+first called P4 "refuted" by substituting this run's merger for the pre-registered comparator after
+the fact. The over-merge example first given here was also wrong: the finding asserting placement is
+not a problem is **AM2**, a control finding the merger never saw. The real instance is the merger's
+B3, which absorbed the defect the adjudicator named most serious into a seed-value nit.
 
 ## Outcome
 
@@ -62,7 +74,7 @@ place" although one of those findings explicitly asserts the other is not a prob
 One defect was found **five** times (the dead `@AfterEach logout()`: both controls plus three lenses,
 by three different methods), one four times, one three times.
 
-**The strongest result for fan-out in either run:** the adjudicator's own pick for most serious defect
+**The strongest result for fan-out in either run, a cross-run judgement a reader should re-make (run 1's competing candidate is a correctly-called blocking privilege escalation):** the adjudicator's own pick for most serious defect
 in the PR was found by a lens alone — *nothing pins the two guards as independent*. It reproduced the
 mutation itself: replacing both `setSessionAttributeIfChanged` calls with one keyed only on the
 username leaves all five tests green, so a later refactor could reintroduce the very redundant write
@@ -94,7 +106,7 @@ Observation true, consequence impossible, dropped.
 | 6 lenses | 851,000 | 240 | 15.4 min (wave = slowest) |
 | merger | 126,796 | 18 | 7.6 min |
 | **arm B total** | **977,796** | **258** | **23.0 min** |
-| ratio B:control | **6.32×** | 6.5× | 1.6× |
+| ratio B:control | **~6.3×** | ~6.5× | ~1.6× |
 
 Run 1's ratio was 6.45×, so the multiple is stable across two subjects. Adversarial adjudicator,
 charged to neither arm: 147,967 tokens, 51 calls, 23.4 min. **Not counted anywhere above: a first
@@ -108,9 +120,16 @@ falsification experiment"). Nothing was written; the wave was re-run from zero o
 window. Four of eight worktrees were left dirty by agents that died mid-probe — two with mutated
 tracked files, three with probe classes — and each was read before being restored.
 
-The ledger's 19 rate-limit records are all **single-agent** deaths, where a run loses one agent and
-retries it. This is a different shape: **a coordinated wave sharing one account limit loses everything
-at once, and a single-context review structurally cannot**. The retry cost a full second wave.
+This record first claimed the ledger's 19 rate-limit records are all single-agent deaths and that a
+wave dying at once is a new shape. **Both are false, and the 2026-09-13 gate killed the proposal built
+on them.** Simultaneous multi-agent deaths are recorded inside that count four times —
+`2026-08-31-…-339.md`:28 ("all four Phase 2 agents simultaneously"), `2026-09-02-…-357.md`:27,
+`2026-09-08-…-379.md`:28, `2026-09-02-…-354.md`:53 — and `REJECTED.md`:1259-1262 already parks the
+shape at 2 records with a sharper open condition, to which this incident was appended as a seventh
+instance supplying **no remedy**: the run waited for a fresh window rather than probing capacity. The
+"a single-context review structurally cannot" claim is also false in the weak sense, since the limit
+was session-wide and reaches one context too. What stands is the incident and its cost: a full second
+wave.
 
 ## Refuted — claims this run's own orchestrator made and the run broke
 
