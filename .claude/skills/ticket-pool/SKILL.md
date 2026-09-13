@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.21.0
+version: 0.22.0
 ---
 
 # Ticket pool — the loop that learns
@@ -162,7 +162,19 @@ probe rather than merely be suspected, and the account must then SERVE one again
 signal and a reset time is not: the rejected form of the `rate_limit_event` that would carry one
 has never been captured here (all 304 records in the kept streams say `allowed_warning`, because a
 rejection ends the run that would log one), so a named window only says when to stop asking early.
-`procStart` and the session id keep a recycled pid from being handed somebody else's resume. `ticket.limit_continue_work: false`
+`procStart` and the session id keep a recycled pid from being handed somebody else's resume, and
+both are compared as INSTANTS rather than as strings, because `claude` records its start in UTC and
+`ps` prints local — compared as text they disagree by the machine's offset on any box that is not
+on UTC, which silently refused every nudge the carry ever sent until 2026-09-13.
+
+**It only works on sessions this launcher started**, and that is not an accident of packaging. A
+session running `--dangerously-skip-permissions` HOLDS an inbound peer message unless it can
+identify the sender as another session in its own permission class, and `pool-run` is a python
+script — unidentifiable whatever it puts in the envelope. So `--work` passes
+`crossSessionInbound: accept` on the launch, scoped to that session: it lets any local process put
+a turn into a pool worktree that is already bypassing prompts, and deliberately does not enrol the
+operator's other sessions, which are not inside that boundary. A session started by hand will have
+its nudge held, and will say so in its own transcript. `ticket.limit_continue_work: false`
 turns it off, and so does `limit_wait_max_seconds: 0`, which is one instruction — "do not wait for
 usage limits" — answered the same way on both paths.
 

@@ -1198,8 +1198,12 @@ def test_work_one_command(tmp: Path) -> None:
         check("with a standalone of its own", line[1] == str(one), line[1])
         check("with co-tenancy declared", line[2] == "slot-1", line[2])
         check("with a private maven head", "m2/slot-1" in line[3], line[3])
+        # ENDS with it rather than IS it. The claim is "nothing left to type", which is about the
+        # prompt being present and LAST; the launch also carries flags now (`--settings`, and
+        # `--remote-control` where it is configured), and an equality here said something stricter
+        # than the sentence above it — that no flag may ever be added — which was never the rule.
         check("and the skill already invoked, so there is nothing left to type",
-              line[4].strip() == "/resolve-ticket https://example/266", repr(line[4]))
+              line[4].strip().endswith("/resolve-ticket https://example/266"), repr(line[4]))
 
         check("the slot is given back when the session exits", pool.active_leases() == {},
               "an unqualified release is ambiguous once two repos are configured, and refusing "
@@ -1223,6 +1227,24 @@ def test_work_one_command(tmp: Path) -> None:
                              {"url": "https://example/266"}, work, say)
         check("and it is off unless asked for",
               "--remote-control" not in seen.read_text(), seen.read_text())
+
+        # The carry cannot land without this. A session that bypasses prompts HOLDS an inbound peer
+        # message from a sender it cannot identify as another session of its own permission class,
+        # and `pool-run` is a python script — unidentifiable by construction, whatever it puts in
+        # the envelope. Measured 2026-09-13: everything else worked, the message was quarantined,
+        # and #379 sat at the limit notice for seven hours past its reset while the log said only
+        # that it had been told. Passed on the LAUNCH because it cannot be set afterwards, and
+        # scoped to this session because it lets any local process put a turn into it.
+        seen.unlink()
+        pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266"}, work, say)
+        args = seen.read_text().strip().split("|")[4]
+        check("a session the pool starts accepts the nudge the carry will send it",
+              "--settings" in args and "crossSessionInbound" in args and "accept" in args, args)
+        seen.unlink()
+        pool.work_in_session(pool.merge(cfg, {"ticket": {"limit_continue_work": False}}), "o/r",
+                             "266", {"url": "https://example/266"}, work, say)
+        check("and with the carry off it is not loosened at all",
+              "crossSessionInbound" not in seen.read_text(), seen.read_text())
 
         # `pool.json` documents its `claude` block as reaching EVERY session, and for a while
         # `--work` read none of it — an operator's configured model silently did not apply to the
@@ -3462,6 +3484,12 @@ def live_session_fixture(tmp: Path, root: Path, name: str = "t") -> tuple[int, P
     holder = subprocess.Popen(["/bin/sh", "-c", "sleep 300"])
     sock = Path("/tmp") / f"cc-pool-test-{holder.pid}-{name}.sock"
     sock.unlink(missing_ok=True)
+    # UTC, because that is what `claude` records — and NOT `process_start`, which reads local time
+    # out of `ps`. An earlier fixture built this field by calling the very function the entry is
+    # checked against, so the comparison was true by construction and a three-hour timezone
+    # disagreement lived underneath it, refusing every nudge on any machine not set to UTC.
+    utc_start = time.strftime("%a %b %d %H:%M:%S %Y",
+                              time.gmtime(pool.process_start(holder.pid) or time.time()))
     received: list = []
     peer_listener(sock, received)
     (root / "sessions").mkdir(parents=True, exist_ok=True)
@@ -3469,7 +3497,7 @@ def live_session_fixture(tmp: Path, root: Path, name: str = "t") -> tuple[int, P
         "pid": holder.pid,
         "sessionId": f"session-of-{holder.pid}",
         "cwd": str(tmp),
-        "procStart": pool.process_start(holder.pid),
+        "procStart": utc_start,
         "messagingSocketPath": str(sock),
         "kind": "interactive",
         "status": "idle",
@@ -3625,6 +3653,43 @@ def test_a_quiet_work_session_with_no_limit_against_it_is_left_alone(tmp: Path) 
     check("nothing is sent to a session the account is not refusing", not received, str(received))
 
 
+def test_a_session_is_addressable_from_a_machine_that_is_not_on_utc(tmp: Path) -> None:
+    """The two clocks compared here are in different zones, and neither says so.
+
+    `claude` records its own start in UTC; `ps -o lstart=` prints local. Compared as strings they
+    differ by the machine's offset and nothing else, so a string check refuses every live session
+    anywhere but UTC — measured 2026-09-13 on a +0300 box, where it had refused every nudge the
+    carry ever attempted while the log said only "no live session is registered under pid N".
+
+    Pinned in BOTH spellings, because which one `claude` writes is not this driver's to decide and
+    a future version may answer differently. What must not come back is a comparison that only
+    works where the machine agrees with the recorder.
+    """
+    print("\na session is addressable from a machine that is not on UTC")
+    with isolated(tmp) as root:
+        pid, _sock, _received = live_session_fixture(tmp, root)
+        path = root / "sessions" / f"{pid}.json"
+        entry = json.loads(path.read_text())
+        started = pool.process_start(pid)
+
+        check("the UTC spelling `claude` actually writes is accepted",
+              pool.live_session(pid) is not None,
+              f"procStart={entry.get('procStart')!r} refused; ps reads "
+              f"{time.strftime('%a %b %d %H:%M:%S %Y', time.localtime(started))!r}")
+
+        entry["procStart"] = time.strftime("%a %b %d %H:%M:%S %Y", time.localtime(started))
+        path.write_text(json.dumps(entry))
+        check("and so is the local spelling, in case that is ever what is recorded",
+              pool.live_session(pid) is not None, str(entry.get("procStart")))
+
+        # The guard still has to guard. An hour out in either direction is not this machine's
+        # offset arithmetic, it is a different process.
+        entry["procStart"] = time.strftime("%a %b %d %H:%M:%S %Y", time.gmtime(started + 3600))
+        path.write_text(json.dumps(entry))
+        check("a start time that is neither reading of this process is still refused",
+              pool.live_session(pid) is None, str(entry.get("procStart")))
+
+
 def test_a_recycled_pid_is_never_handed_a_resume(tmp: Path) -> None:
     """Pids are reissued, and registry files outlive the sessions that wrote them.
 
@@ -3755,6 +3820,7 @@ def main() -> int:
                          ("work carried past a limit", test_a_stalled_work_session_is_told_when_its_window_reopens),
                          ("work carried with no window named", test_a_refusal_that_names_no_window_is_still_carried),
                          ("work quiet but unlimited", test_a_quiet_work_session_with_no_limit_against_it_is_left_alone),
+                         ("work non-utc machine", test_a_session_is_addressable_from_a_machine_that_is_not_on_utc),
                          ("work recycled pid", test_a_recycled_pid_is_never_handed_a_resume),
                          ("work carry off switch", test_the_carry_can_be_turned_off)]:
             sub = tmp / name.replace(" ", "-")

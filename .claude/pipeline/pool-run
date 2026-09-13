@@ -33,7 +33,10 @@ driver's belongs to sessions it can suspend and re-enter, which a hand-launched 
 peer socket the session itself publishes. What it waits for is the ACCOUNT SERVING a request again,
 not a clock: a reset time is an optimisation over that and never a precondition, because the
 rejected form of the record carrying one has never been observed here. It acts only on a run that
-is quiet and that the account refused; `ticket.limit_continue_work: false` turns it off.
+is quiet and that the account refused, and the session must have been STARTED by this launcher —
+a session that bypasses prompts holds an inbound peer message from a sender it cannot identify, and
+`pool-run` is a python script, so the launcher passes `crossSessionInbound: accept` scoped to the
+session it starts. `ticket.limit_continue_work: false` turns all of that off.
 
 Evidence the runs cannot produce about themselves is captured here: a run that dies leaves no record
 of its own death, so this driver writes (or appends to) the record in `~/.claude/skill-lessons/`,
@@ -57,6 +60,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import calendar
 import concurrent.futures
 import contextlib
 import fcntl
@@ -1242,10 +1246,44 @@ def silence_since(worktree: Path, started_at: int) -> int | None:
     return None if newest is None else now() - newest
 
 
-def process_start(pid: int) -> str | None:
-    """When a pid's process started, in the same spelling `claude` records for itself."""
-    got = sh(["ps", "-o", "lstart=", "-p", str(pid)])
-    return got.stdout.strip() or None
+def process_start(pid: int) -> float | None:
+    """When the process holding `pid` started, as epoch seconds, or None if nothing holds it."""
+    stamp = sh(["ps", "-o", "lstart=", "-p", str(pid)]).stdout.strip()
+    try:
+        return time.mktime(time.strptime(stamp, "%a %b %d %H:%M:%S %Y")) if stamp else None
+    except ValueError:
+        return None
+
+
+def same_process(pid: int, recorded: str | None) -> bool:
+    """Whether `recorded` describes the process that holds `pid` NOW.
+
+    Both sides are bare wall clocks, and they do not agree about which zone they are in: `claude`
+    records its own start in UTC and `ps -o lstart=` prints local. Comparing the two as STRINGS
+    therefore refuses every live session on any machine that is not on UTC — measured 2026-09-13,
+    where it refused every nudge this feature had ever attempted, on a +0300 box, with the two
+    stamps three hours apart and otherwise identical.
+
+    The suite did not catch it, and the reason is worth keeping: the fixture wrote its registry
+    entry by calling `process_start`, so the comparison it was meant to exercise was true by
+    construction. A guard tested against its own output is not tested.
+
+    So: epochs, and a match under EITHER reading, because which zone gets recorded is not this
+    driver's to fix and a future version may answer differently. That is not a weak guard — a
+    recycled pid would have to have started at the same wall clock to the second, or exactly one
+    UTC offset away from it, and the session id travelling in the envelope is what the RECEIVER
+    checks regardless. Unparseable or unrecorded is not evidence of anything, and passes.
+    """
+    if not recorded:
+        return True
+    live = process_start(pid)
+    if live is None:
+        return False
+    try:
+        parsed = time.strptime(recorded, "%a %b %d %H:%M:%S %Y")
+    except (ValueError, TypeError):
+        return True
+    return min(abs(live - time.mktime(parsed)), abs(live - calendar.timegm(parsed))) <= 2
 
 
 def live_session(pid: int) -> dict | None:
@@ -1262,8 +1300,7 @@ def live_session(pid: int) -> dict | None:
         return None
     if not entry.get("messagingSocketPath") or not entry.get("sessionId"):
         return None
-    started = entry.get("procStart")
-    if started and process_start(pid) not in (None, started):
+    if not same_process(pid, entry.get("procStart")):
         return None
     return entry
 
@@ -1597,6 +1634,20 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         # does not start with `-` binds to it, leaving the prompt as the positional it was.
         argv += ["--remote-control", f"{slug.split('/')[-1].replace('openmrs-module-', '')}"
                                      f"-{ticket.lstrip('#')}"]
+    if cfg["ticket"].get("limit_continue_work", True):
+        # Without this the carry cannot land. A session that bypasses prompts HOLDS an inbound peer
+        # message unless the sender is identifiable as another session of the same permission class,
+        # and `pool-run` is a python script — "an unidentified session" by construction, whatever it
+        # puts in the envelope. Measured 2026-09-13: the carry detected the limit, waited out the
+        # window, saw the account serve again, delivered its message — and the session recorded
+        # "Held peer message ... not delivered to Claude" and went on sitting there for seven hours.
+        #
+        # Set HERE rather than in `~/.claude/settings.json`, because it is a real loosening: it lets
+        # any local process put a turn into this session. A pool worktree already running
+        # `--dangerously-skip-permissions` is inside that trust boundary; the operator's other
+        # sessions are not, and must not be enrolled by a knob they did not set for them.
+        # `ticket.limit_continue_work: false` turns the carry off and takes this with it.
+        argv += ["--settings", json.dumps({"crossSessionInbound": "accept"})]
     argv += common_claude_args(cfg)
     argv.append(prompt)
     say(f"{slug}#{ticket.lstrip('#')} on {claim['slot'].name} "
