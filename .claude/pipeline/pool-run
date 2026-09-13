@@ -2494,6 +2494,11 @@ class Session:
         # travels here rather than in the prompt: the skills read it, and a pipeline instruction
         # bolted onto the prompt would be governance no retro can see.
         self.env = env or dict(os.environ)
+        # Every session this driver starts is unattended, whatever its cwd: the ticket runs in a
+        # worktree, `/skill-retro` in the skills checkout, the health probe in this directory. The
+        # PreToolUse rm-shape guard scopes on this stamp as well as on the worktree path, because a
+        # permission prompt raised in ANY of them is a hang, not a pause -- see ~/.claude/hooks.
+        self.env["CLAUDE_PIPELINE_SESSION"] = "1"
         self.jsonl = log_stem.with_suffix(".jsonl")
         self.err = log_stem.with_suffix(".err")
         self.timeout, self.quiet, self.say = timeout, quiet, say
