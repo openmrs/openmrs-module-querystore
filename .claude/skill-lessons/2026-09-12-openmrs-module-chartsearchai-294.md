@@ -103,3 +103,78 @@ transcript: ~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-op
   the repo publishes one; what is scarce is the POPULATION. [gate pass 1]
 - "No production code changes at all" -> the canonical rationale home is a production javadoc, so
   the diff touches `api/src/main`. Comment-only, but the claim needed correcting. [Phase 1]
+
+---
+
+# pr-harden · openmrs-module-chartsearchai · #294 / PR410 · 2026-09-13 (CONTINUATION)
+outcome: converged
+rounds: 5 (cap raised 4 -> 5 on a shrinking-findings signal)   verifier: ran (works at runtime)
+context: no compaction · peak not surfaced
+
+## Raised by a fresh agent, missed by the author
+
+- [r1] Decision 41's overturn ("CONTRADICTED") rested ENTIRELY on the twinned arrangement this
+  same PR discards as confounded; the overturn site never said so · blocking · cost: 1 round
+- [r1] README stated the same over-claim as a general law of model behaviour, no provenance
+  pointer, stronger half from the discarded cells · blocking
+- [r1] `verdict_of` was a THIRD spelling of the wire-tagging rules where root CLAUDE.md mandates
+  one home · non-blocking
+- [r1] the population figure published a second time in the script docstring without its caveat
+- [r2] the #278/#279 attribution was PROVED impossible: the answer WAS colon-introduced, so
+  #278's split was in force; and on the un-split path a compound claim publishes null for every
+  citation, so false/false/true cannot arise there either. Both branches exclude it · blocking
+- [r2] "nine cells" was not reconstructible from the committed instrument, and dropped the
+  two-dud-cell weakness the instrument itself records · non-blocking
+- [r2] the entailment-gating claim generalized a table taken on the one sentence that quotes the
+  record's display verbatim — the most favourable case for cosine · non-blocking
+- [r2] the script still read raw wire keys in its dump, so the docstring's "a rename reaches this
+  file" was true of the tagging and false of the dump · non-blocking
+- [r2] `makeOrderNameless`'s routing claim holds only with an ATC code present · non-blocking
+- [r3] I replaced a banned 5-of-14 test tally with "four classes", thinking classes were safer.
+  Still the banned form AND incomplete: the mutation reddens six things, and the two omitted were
+  the omod withholding guard (#294's own named guard, unreachable under `-pl api`) and the new
+  refusal case's precondition · blocking · cost: 1 round
+- [r3] the unscoped regime-split claim had a FOURTH home round 2's three-site fix missed, in the
+  javadoc of the very case whose CLAIM is the shape the measurement disclaims · blocking
+- [r3] `UNNAMEABLE_ATC`'s javadoc gave a mechanism that does not exist — DISPROVED BY EXPERIMENT:
+  the reviewer swapped in a code the curated seed DOES carry and the test stayed green, because
+  the display is built from the order's own codes and never reads reference data · non-blocking
+- [r4] round 3's own fix created this one: making the bullet NAME the test pinning the second half
+  made the claim checkable, and it failed — that test's record is "Simvastatin 20mg", a NAMED
+  record, while the bullet's subject is codes-only · blocking · cost: 1 round
+
+## Refuted by measurement
+
+- "The instrument reuses grounding_scope_ab.search" -> it never called it; the only reference was
+  `gsab.search.__doc__ and None`, dead residue where a call had been, and the file hand-rolled the
+  reader its own docstring forbade · cost: 1 round
+- "four active drug orders" (2026-09-11) -> at verification on 2026-09-13 the module's context
+  reported ONE, with all four orders still active by SQL and identical in shape. UNEXPLAINED. Does
+  not falsify the dated ADR section, and the verifier reproduced the grid anyway under the changed
+  population — which attributes the verdict to the regime more strongly, not less.
+
+## Where a skill blocked or contradicted this run
+
+- pr-harden Termination / cap: the default 4 was reached with 1 blocking finding. Raised to 5 on
+  the skill's own stated signal (findings shrinking 4/5/4/1, zero re-raises, and round 4's finding
+  CAUSED by round 3's fix). Round 5 returned zero. The raise was correct and the signal test is
+  what made it decidable rather than a judgement call.
+- pr-harden FINISH: the verifier's one observation (the `finally` prints "# restored" without
+  reading the restore back, unlike its sibling `grounding_scope_ab.run`) is non-blocking, so per
+  FINISH it goes to a follow-up issue rather than into the cleared sha. Following that rule
+  required NOT fixing a 3-line robustness gap I could see — correct, but worth recording as the
+  one place the rule costs something real.
+- harden anti-pattern "don't rewrite prose faster than you verify it": this run is the strongest
+  evidence for it. FIVE successive drafts of one ADR section were refuted, each replacing a false
+  characterization with another. What ended it was deleting the CLAIM SHAPE — publishing the
+  observations and the arrangement, and stating that the section records what happened and stops.
+  I reached for that after the fourth refutation, not the second.
+
+## Declined
+- none, across five rounds and fifteen findings.
+
+## Assumptions review overturned
+- "every blocking finding will be about the code" -> all 15 findings, and every one of the 6
+  blocking ones, were about CLAIMS. The production diff is comment-only and the test held up under
+  four adversarial mutation attempts; the risk in a measurement PR lives entirely in what the
+  documentation asserts.

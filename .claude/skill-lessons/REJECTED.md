@@ -2384,3 +2384,158 @@ the fact. The whole difference is one finding: 3 of 10 against 7 of 25.
   "every one is a single-agent death", false in four records inside the count it cited; and the Q-E
   misattribution of a control finding to the merger. A fourth is defensible — substituting run 2's
   merger for the pre-registered P4 comparator — and is recorded above rather than counted.
+
+## 2026-09-13 (second window of the day: 3 records — #374/PR411, #379/PR414, and #294/PR410's CONTINUATION) — 1 applied after revision, 1 applied as a correction, 1 killed, 1 parked with its clause-(c) limb killed; linter 10 files, 0 findings
+
+Submission: `proposals/2026-09-13-retro-window-374-379-294cont.md`. One refutation round, one
+read-only agent, never a fork. **Not one of the three proposals survived as drafted**, and each of
+the two that shipped is roughly a quarter of what was submitted. Keyed by PR throughout: a
+`#379/PR382` already sits in this ledger at **:1749** and **:1881**, and this window's is PR414.
+
+**Before anything else, a false alarm this pass raised against itself.** Step 6's battery was first
+run against `~/Projects/openmrs/openmrs-module-querystore` and reported four drifts — `ticket-pool`
+0.21.0 against a live 0.22.0, `pipeline/pool-run`, `pipeline/pool-test.py`, and an unmirrored
+`skill-lessons/artifacts/` tree that two run records assert is committed. **All four were false.**
+`~/.claude/pipeline/pool.json`'s `source_repo` names `~/Projects/openmrs/querystore`, which is
+current with origin/main; `pool-run`'s own `parity_problems(cfg)`, driven directly rather than
+re-expressed, returns 0. The other checkout was 3 commits behind (`e4df73f`, `bbd68fb`, `34845fd`).
+This is the **:1733-1746** hazard in its other direction — that entry is about what a retro on the
+stale checkout WRITES; this is about what its battery REPORTS — and a false drift report is the
+more expensive of the two, because a retro acts on it.
+
+**APPLIED after revision · P1 — one sentence in `harden`:390, not the block submitted.** What
+shipped is the third mechanism plus the terminator `harden`:268 already prescribes: a home that
+names the claim's key nowhere is reachable by no token search, so when a sweep keeps returning one
+more home, change the kind of question and enumerate the claim's SUBJECT. Six blocking objections
+cut everything else:
+
+1. **Two of the three claimed sightings are not sightings of this lesson.** `#379`:18-22 is four
+   different claims in four classes, not one claim in four homes — its own summary at `:28` says
+   "progressively narrower **classes** (stale claim -> stale count -> stale ordinal -> positional
+   pointer)" — and the submission reached that reading by omitting `:20` (c6). `#294`:137-138 is one
+   missed home found in one round with no sweep loop at all, so P1's own trigger never fires on it.
+   What is left is **#374 alone at 6 cycles**, which is bar (b) and enough.
+2. **The submission moved a cost onto its own evidence.** It quoted `#294`:137 as ending
+   "· blocking · **cost: 1 round**". The record ends "· blocking"; the cost annotation belongs to
+   `:136`, the finding above it.
+3. **"A token search enumerates HOMES and is unbounded" would have manufactured a
+   self-contradiction** four lines from `harden`:390's own "**Search for the claim's rarest single
+   TOKEN, over the whole tree**", the same defect **:1026-1028** killed a proposal for. It is also
+   false on its evidence: `#374`:18 and `:24` blame **sampling**, and a rarest-token grep returns a
+   finite hit list.
+4. **The prune's stated ground was false.** "Treat no list of those mechanisms as closed" was said
+   to be the shape `harden`:268 forbids. `harden`:265 ("treat no list of relocations as closed") and
+   `:268` ("not another entry on the list") sit **in one bullet, three lines apart**: one forbids
+   believing a list complete, the other forbids list-extension as a *terminator*. And `skill-retro`
+   :84-86 forbids deleting a measured rule without the measurement that retires it — #374's third
+   mechanism **confirms** the list is open, so it cannot be that measurement. Nothing was pruned.
+5. **Growth was misreported as "roughly flat"** for +185 words across two files against 8 removed.
+   The shipped sentence is **+110 words in `harden` alone**; the `pr-harden` half was dropped with
+   the #379 evidence that justified it.
+6. **It is partly instruction-not-followed**, the class at **:1196-1198**: `#374`:24 says outright
+   "What ended it was **the skill's own** 'change the KIND of question' rule". What shipped is
+   therefore a ROUTING fix — that rule lives in the guard-mutation bullet and is now named from the
+   claim-correction bullet — not a new rule.
+
+This answers **:1264-1275**'s reopen and **:2029-2032**'s three instructions on #374 alone: it cites
+`harden`:268 by naming its sentence rather than its position, states the rule on the subject, and
+reaches the behavioural half by routing — `harden`:199-201 already sends the documentation-pass
+agent through this bullet "in full" and requires it to RUN any claim about behaviour.
+
+**KILLED · P3 as a rule; APPLIED as a one-clause factual correction.** `skill-retro`:116-117 said
+"this pipeline's source is `openmrs-module-querystore`; `git remote -v` in that checkout is the
+authority", and `pool.json` names `querystore`. Clause (c) does not reach the rule half: "two
+checkouts exist on this machine" is a fact about a filesystem, refused at **:871-873**, **:884** and
+**:1020-1021**, and **:895** settles that `skill-retro` has no gate script for it to contradict. The
+banked **:1745-1746** reopen — "a pool-run retro that commits on the stale base, or a third
+checkout" — is unmet, and same-cause-different-consequence does not open an entry. The draft also
+wrote a transient state into a skill ("one of them named for the repo **and behind**"), which
+`skill-retro`:90-91 forbids. What shipped is the swap alone, net zero: the parenthetical now reads
+"(which checkout that is comes from `~/.claude/pipeline/pool.json`'s `source_repo`)". Deleting a
+false clause needs no bar — `skill-retro`:87-89 prefers it — so this is a patch, not a rule.
+
+**KILLED · P2's clause-(c) limb. PARKED at 1 record / 0 cost.** `#379`:29 records that GitHub's
+`pull/<n>/head` lagged the pushed branch by one commit while `gh pr view --json headRefOid` and
+`git ls-remote` had the new sha. Clause (c) is refused by **:1016-1021**, whose ruling transfers
+word for word with GitHub in place of maven: the exception is "reflexive, possessive, singular", and
+`pr-harden`:125-126 and `pr-harden-gate.sh`:344-377 contradict each other **only** once you import
+the world-fact that the ref can lag. A gate catching such a sha is the gate working, not disagreeing
+with the skill. The draft also carried an unchecked "so the round is lost either way" — #379 lost no
+round, converged in 2, and `:29` is counterfactual ("**would have** reviewed the wrong sha").
+**PARKED:** *`pull/<n>/head` can lag the pushed branch, and `pr-harden`:133-141's guard only fires
+when the lag lands exactly on the previous round's sha — 1 record (#379/PR414), cost 0.*
+**REOPEN ON:** a record where a lagging pull ref cost a round; or a lag of two or more commits,
+which `:133`'s equality check cannot see; or a first round, where `reviewed_shas` is empty and the
+guard has no antecedent.
+
+**PARKED (refuter-raised) · `#379`:28's own remedy, which is not P1's and would not have been
+covered by it.** "The cheaper move is to sweep a whole CLASS tree-wide the moment one instance is
+found, which is what cycles 7 and 8 finally did." That is *class*-wide — all counts, all ordinals,
+all positional pointers — the opposite direction of generality from P1's *subject*-wide rule, and
+P1 would have prevented none of #379's cycles: c4's subject (a LAST-wins index claim) has no overlap
+with c6's (a refusals enumeration), c7's ("is not a fourth case") or c8's (a readings count).
+**PARKED at 1 record / 5 cycles (c4-c8).** It belongs to **:1264-1275**'s family and "one class" is
+not "one subject". **REOPEN ON:** a second record where sweeping the CLASS on first sighting would
+have collapsed several cycles, stated on the class rather than on the claim.
+
+**PARKED (refuter-raised) · a reviewer's own evidence being false — 1 record, uncounted until now.**
+`#374`:10 ("one of its two witnesses (GI bleeding) IS a free-text condition", cost 1 round) and
+`#374`:11 ("Came from the REVIEWER's own evidence and would have been propagated", cost 0). The
+nearest entry, **:1725-1731**, is about a **brief's** claims and is not reopened by this: the
+subject there is a brief, here a reviewer's finding, and `:10`'s round was owed regardless until
+zero blocking — the same discount **:1996-1997** applied. **REOPEN ON:** a record where a false
+reviewer finding reached the branch, or cost a round that was not otherwise owed.
+
+**Corrections to this pass's own parked arithmetic, all caught at the gate.**
+- The submission proposed prose-correction "~33, plus #374 **and #294's continuation**". #294's
+  continuation at `:167-171` and its first half at **:2281-2283** are **one event** — same ADR
+  section, same terminating move, same "after the fourth refutation, not the second" — already
+  counted in the 2026-09-13 block. Only #374 is new.
+- Rate-limit: `#379`:4 says "one session rate-limit **interruption**", not an agent death, and the
+  count is keyed on death. Only #374's Phase-2 agent counts. The entry is at **:2376-2377**; the
+  submission cited **:2375**, which is the `git checkout` line.
+
+**Shipped rules recorded working, no text proposed:** `pr-harden`'s cap raise on a shrinking-findings
+signal (#294:111 — 4/5/4/1, zero re-raises, round 4's finding caused by round 3's fix, round 5
+returned zero, "the signal test is what made it decidable rather than a judgement call");
+`resolve-ticket`'s refutation gate withdrawing #379's plan v1 entirely before any code; `pr-harden`
+FINISH not editing the cleared sha, in all three records; and `harden`'s deletion-over-rewording
+rule, which ended both #374's and #294's loops — late in both.
+
+**Two consecutive no-change retros ended here.** **:2379-2381** left open what that streak says about
+the bar; this pass applied two changes, so the streak stands at 2 and the question is neither
+advanced nor answered.
+
+### Running parked counts (superseding the previous block where they differ)
+
+- **Prose-correction cycles: ~32 records** — previous ~31 (**:2373**), plus #374 only ("Ended by
+  deleting the CLAIM SHAPE, not by a fourth attempt", cost gate pass 2 + cycles 6 and 9). #294's
+  continuation is the same event as its first half and is **not** counted twice. Remedy still killed;
+  #374 is the shipped rule applied late, as #338, #310 and #294 were.
+- **`git checkout -- <path>` losing uncommitted work: ~23 incidents / 19 records** — unchanged; no
+  incident in this window. **:81**'s reopen still unmet.
+- **Rate-limit / session-limit agent death: 21 records + 1 measurement** — previous 20 + 1
+  (**:2376-2377**), plus #374's Phase-2 agent, which "retried with a leaner brief after the reset and
+  it converged, matching the recorded pattern" — the 2026-08-31 P2a remedy working. #379's
+  interruption is not an agent death and is not counted.
+- **`pr-harden`'s round cap raised past its default: 4 records** — previous 3 (**:1881**), plus
+  #294/PR410 (4 -> 5, converged at 5).
+- **A retro applying no skill change at all: 2 records** — unchanged; this pass applied two.
+- **`pull/<n>/head` lagging the pushed branch: 1 record / 0 cost** — new, above.
+- **Sweeping a CLASS tree-wide on first sighting: 1 record / 5 cycles** — new, above.
+- **A reviewer's own evidence being false: 1 record** — new, above.
+- **resolve-ticket Step 3's "revise and re-run ONCE" undefined for a plan WITHDRAWN and replaced:
+  1 record** (#379:27, cost 0, read as allowed). An ambiguity, not a contradiction. **REOPEN ON:** a
+  second record, or one where the reading cost a gate pass.
+- **A FINISH rule costing something real: 1 record** (#294:162-166 — a non-blocking 3-line
+  robustness gap the verifier found goes to a follow-up rather than into the cleared sha). Distinct
+  from the FINISH entry killed at **:1982-1990**. **REOPEN ON:** a second.
+- **In a measurement or documentation PR the blocking findings are about CLAIMS, not code: 1 record**
+  (#294:177 — all 15 findings and all 6 blocking ones, against a comment-only production diff).
+  **REOPEN ON:** a second, with a remedy that is not "review the claims too".
+- **The proposer not verifying its own citations: 28 cycles** — previous 25 (**:2384**). This pass
+  added three, each cut at the gate: the `#294`:137 `cost: 1 round` that belongs to `:136`; the
+  `#379`:18-22 "one claim" reading, reached by omitting `:20`; and the **:2375** line slip. A fourth
+  is defensible — the #294 double-count in the submitted parked list — and is recorded above rather
+  than counted, per **:2386**'s convention.
+- **And the GATE mis-cited twice, and this pass propagated both before checking them: **:1024-1025** for the manufactured-self-contradiction ruling (it is **:1026-1028**) and **:1789** for `#379/PR382` (it is **:1749** and **:1881**). Caught before the commit, by re-resolving every pointer written into this block. A refuter's citation is owed the same check as a proposer's — **:2382**'s counter is keyed on the proposer and does not see this, which is why it is recorded here in prose rather than added to it.

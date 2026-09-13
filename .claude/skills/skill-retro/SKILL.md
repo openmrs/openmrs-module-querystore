@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.2.3
+version: 0.2.4
 ---
 
 # Skill retro — evidence in, governance change out
@@ -113,8 +113,8 @@ Apply the surviving proposals. Then, per skill touched:
 
 - bump `version:` in the frontmatter — minor for a new rule, patch for a correction;
 - re-run the linter and leave it at zero for the files you touched;
-- copy the skill into the source repo's `.claude/skills/` (this pipeline's source is
-  `openmrs-module-querystore`; `git remote -v` in that checkout is the authority) and verify with
+- copy the skill into the source repo's `.claude/skills/` (which checkout that is comes from
+  `~/.claude/pipeline/pool.json`'s `source_repo`) and verify with
   `cmp` that the live copy and the repo copy are byte-identical, **including any `*gate*.sh`** — the
   registered hooks under `~/.claude/hooks/` are SEPARATE copies, so a skill push alone leaves the gate
   running old logic;
