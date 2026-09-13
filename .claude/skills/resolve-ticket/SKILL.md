@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.15.1
+version: 0.16.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -98,7 +98,10 @@ everything else is shared:
 | the maven repository | `$MAVEN_ARGS` — a per-run head over the shared repository behind it | that shared repository, which is read-only to you: your installs go to the head |
 
 `$MAVEN_ARGS` is read by `mvn` itself, so a plain `mvn -o clean install` already picks it up: do not
-strip it, do not add `-Dmaven.repo.local` of your own, and do not be surprised that
+strip it, do not spell it onto a command line — interpolated it arrives as ONE argument, not several,
+and the build installs into a directory named after the whole string (#409; the measurement is in
+`harden`'s *A mutation that reddened nothing has not shown the guard is dead until you know it RAN*,
+which lost three configurations to it) — do not add `-Dmaven.repo.local` of your own, and do not be surprised that
 `chartsearchai-api-1.0.0-SNAPSHOT.jar` installs somewhere under `~/.claude/pipeline/m2/`. That is the
 point — it is the jar `omod` unpacks over `omod/target/classes`, so two runs sharing it means one
 run's classes silently under the other's tests.

@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.21.0
+version: 0.22.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -322,6 +322,16 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
 - **Fix every home of a corrected claim, not the one the reviewer named** — see *Correcting a claim
   means finding every home of it*. And edit by script under the rules in *Editing by script*: assert
   before replacing, count neighbours after, verify by reading back.
+
+**And do not ask either agent to re-derive evidence its brief already carries** — hand it the
+measurement and point its budget at the claims it DOUBTS. Two runs paid an attempt for the
+opposite: on #238 round 5's fixer stalled at the 600s watchdog building a temp fixture to
+re-measure something the reviewer had already measured, and the retry saying *"do not re-measure,
+edit only"* finished in three minutes; on #294 the round-1 reviewer's first attempt "exhausted
+itself re-running" mutations its brief had already documented, and died. This binds Step 1's
+brief as much as this one. It is **not** a 429 remedy, whatever the shape of those two records:
+#294 applied the leaner brief and the reset window together, which is the confound the dead-phase
+contract in **State** already discloses for #366 and #354.
 
 **Declining is governed by harden's deferral rules, in full.** A declined finding needs the
 failure-mode sentence — *"if we ship without this, X breaks because Y"* — and without that sentence it
