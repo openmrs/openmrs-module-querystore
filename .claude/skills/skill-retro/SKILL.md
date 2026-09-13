@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.2.4
+version: 0.2.5
 ---
 
 # Skill retro — evidence in, governance change out
@@ -113,18 +113,20 @@ Apply the surviving proposals. Then, per skill touched:
 
 - bump `version:` in the frontmatter — minor for a new rule, patch for a correction;
 - re-run the linter and leave it at zero for the files you touched;
-- copy the skill into the source repo's `.claude/skills/` (which checkout that is comes from
-  `~/.claude/pipeline/pool.json`'s `source_repo`) and verify with
-  `cmp` that the live copy and the repo copy are byte-identical, **including any `*gate*.sh`** — the
-  registered hooks under `~/.claude/hooks/` are SEPARATE copies, so a skill push alone leaves the gate
-  running old logic;
+- copy the skill into any clean checkout of `openmrs/openmrs-module-querystore` — which checkout does
+  not matter, since every commit is pushed — and verify with `cmp`, AFTER the push below, that the
+  live copy and the PUSHED copy are byte-identical, **including any `*gate*.sh`**. Read the pushed
+  copy as `git show origin/main:<path>` after a `git fetch`, never off a working tree: a checkout
+  behind `origin/main` reports drift that does not exist, and which checkout is the stale one does
+  not hold still — 2026-09-07 it was the pool's, 2026-09-13 the other. The registered hooks under
+  `~/.claude/hooks/` are SEPARATE copies, so a skill push alone leaves the gate running old logic;
 - **and `cmp` the live SKILL copy of each gate against the live HOOK copy** — `~/.claude/skills/<skill>/
   <gate>.sh` against `~/.claude/hooks/<gate>.sh`. Four copies need THREE equalities to be transitively
   identical and the two below state only two disjoint pairs, so without this one the repo's skill copy
   may drift arbitrarily from the repo's hook copy with every check green. That is the edge that matters:
   each skill's own install line is `cp .claude/skills/<skill>/<gate>.sh ~/.claude/hooks/`, so the
   uncopied one is what becomes the registered gate on the next machine;
-- **and `cmp` `~/.claude/hooks/` against the repo's `.claude/hooks/`, every file, whether or not a skill
+- **and `cmp` `~/.claude/hooks/` against the pushed `.claude/hooks/`, every file, whether or not a skill
   changed.** That directory is what `settings.json` actually runs, so each gate now exists in THREE
   copies (live hook, live skill, repo skill) plus its repo hook copy, and `git-restore-backup.sh` exists
   only there — it is not a skill and matches no `*gate*.sh`, so the clause above never reached it. Added

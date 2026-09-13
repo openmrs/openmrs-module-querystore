@@ -2454,6 +2454,8 @@ wrote a transient state into a skill ("one of them named for the repo **and behi
 "(which checkout that is comes from `~/.claude/pipeline/pool.json`'s `source_repo`)". Deleting a
 false clause needs no bar — `skill-retro`:87-89 prefers it — so this is a patch, not a rule.
 
+**SUPERSEDED the same day, by the owner, and the ledger supplies the refutation this pass missed.** Asked why the REMOTE was not the authority, the answer is that it should have been: `pool.json`'s `source_repo` cannot answer currency either, and **:1740-1741** records that on 2026-09-07 the stale checkout was **the pool's own** — 5 commits behind — while on 2026-09-13 it was the other. Which checkout is stale does not hold still, so naming a checkout at all is the wrong axis; **:1742** already said the identity does not matter ("both are working copies of one remote and every commit was pushed"). `skill-retro` 0.2.5 therefore compares against `git show origin/main:<path>` after a fetch, AFTER the push, and lets any clean checkout be the place you write. This retires the whole class rather than renaming it: a stale working tree can no longer be mistaken for parity, because the side you compare against is the one you just pushed to. Recorded as a proposer miss, not a gate miss — the gate was asked whether the rule half met the bar, and correctly said no; nobody asked whether the identifier was the right kind of thing.
+
 **KILLED · P2's clause-(c) limb. PARKED at 1 record / 0 cost.** `#379`:29 records that GitHub's
 `pull/<n>/head` lagged the pushed branch by one commit while `gh pr view --json headRefOid` and
 `git ls-remote` had the new sha. Clause (c) is refused by **:1016-1021**, whose ruling transfers
