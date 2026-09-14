@@ -2721,3 +2721,145 @@ entry stays at 1.
   `#409`:56). None reached the commit. The cheap rule, for
   whoever writes the next block: resolve skill-file pointers LAST, after every edit in the commit has
   landed — a record's line numbers are stable, a skill's are not.
+
+## 2026-09-14 (second window of the day: 3 records — #421/PR423, #337/PR422, #276/PR424) — 2 applied after revision, 1 applied as a correction, 4 killed, 6 parked; two refutation rounds; linter 10 files, 0 findings
+
+Records postdate the **:2545** block's own commit by hours, so the windows do not overlap. Three
+records cannot corroborate much, and most of what they carry turned out to be existing rules
+recurring rather than gaps.
+
+**APPLIED as a correction · P0' — `pr-harden` 0.22.1, the marker-decides-ownership paragraph deleted.**
+The one class Step 3 admits from a single sighting: a document contradicting itself AND its own gate
+script. The deleted paragraph opened *"that marker now decides OWNERSHIP as well as attendedness"*,
+while `pr-harden`:861 says ownership *"is not the unattended marker's job"* and :872 pins the measured
+cost of the reading it re-proposed (*"a live foreign marker allowed EVERY block path"*). The gate
+settles it: ownership is read off the ENTRY's `.owner` at `pr-harden-gate.sh`:203-217, whereas the
+marker block writes only `UNATTENDED`, consumed at :268 **inside** `if [ "$AWAITING" -gt 0 ]` (:264) —
+so the paragraph's own cited incident, a `phase: building` block, is decided before the marker is
+consulted at all. Both suites pin the entry-based answer (`pr-harden/gate-test.sh`:80,
+`harden/gate-test.sh`:65). It carried a SECOND stale claim nobody had flagged: *"still keyed on `$PWD`
+alone"* against State's own opening, *"the WORKING TREE's physical path — `pwd -P`"*, and gate :90's
+`KEY="$(pwd -P)"`. Two clauses were folded into the marker paragraph at `pr-harden`:902 rather than
+lost — the ancestry walk (a live non-ancestor marker leaves this session ATTENDED, pinned at
+`pr-harden/gate-test.sh`:88 and `harden/gate-test.sh`:75) and the indeterminate walk keeping the block,
+whose ONLY home in either skill was the deleted text. Net −7 lines.
+
+**APPLIED after revision · P2' — `harden` 0.30.0, the KIND-of-question rule promoted out of the
+text-guard bullet** (now `harden`:275, pointer at :408 widened). Clause 2: `#421`:18/:20/:21 are three
+cycles of one production predicate over TYPES escaping in turn (exact type equality, a raw type,
+wildcard and type-variable bounds), each found by the next fresh agent. The rule's sentence sat inside
+a bullet headed *"where the guard is over TEXT"* and :408 cited it as something it *"requires of a
+guard"*, so on the shipped wording it reached neither a non-text predicate nor a production one.
+Promotion rather than a third entry beside the TEXT and DATA bullets, because a third entry is what the
+rule itself forbids. Two gate cuts: the standalone bullet lost its antecedent ("the loop",
+"successive relocations"), so it now names its own population; and it carries a clause keeping it
+distinct from *treat no list of relocations as closed*, per **:2426-2431**, by NAMING that rule rather
+than locating it.
+
+**APPLIED after revision · P4' — `harden` 0.30.0, name the direction a REPORTING check must never fail
+in** (`harden`:251). Clause 1 only, two records, and the proposal says so: `#337`:15 (a carve-out
+applied to both operands withdrew the record-side exit, so a FAITHFUL reproduction was reported —
+blocking, found before the PR) and `#276`:17/:9 (`statesWord`, asserted to *"fail toward silence"*,
+matched a fragment of a larger number and produced a false report on a published key). Not subsumed by
+`pr-harden`:293-306 or `harden`:242-250, both of which are about a TEST guard's boolean — their
+question ("is the OTHER value observed anywhere?") answers yes for both records and finds neither. Two
+clauses cut by the gates: *"on input the suite already had"*, which was in neither record and was
+carrying the non-subsumption, and the causal headline *"a fix that closes a miss moves the other one
+too"*, which describes `#337` only. What ships is `#276`:17's own wording.
+
+**KILLED · P1, a trigger for reaching the claim-shape deletion sooner.** **:2561-2563**, from the
+block 11 hours earlier: *"It re-proposes a killed remedy. **:2138-2141** … A trigger UNIT is that
+remedy in different grammar."* Third grammar, same remedy. **:2564-2566** shows the pass-level form
+already counted at **:2281-2283** in the record's own words (*"I reached for it late, after the fourth
+refutation, not the second"*), and `harden`:398-399 already ships the threshold. The proposal also took
+`#276`'s narrative over its own findings list — the **:2568-2571** defect — since `#276`:21 (c3, a test
+arrangement) and `#276`:22 (c6, counts outside the diff) are non-documentation findings inside the span
+it called five documentation cycles, and `harden`:209-210 refuses to classify those as documentation.
+
+**KILLED · P1-R, the surviving routing clause naming *Don't rewrite prose faster than you verify it* in
+`harden`'s documentation-pass conditions.** Derived from round 1's own suggestion, killed by round 2 on
+three grounds, any one sufficient. It stated no bar clause. The site (`harden`:199-201) governs only a
+cycle confirmed by a single agent, and the ONLY record naming such a cycle is `#337`:22, where that
+route is recorded ENDING the run — so the clause would not have been read by either run it was
+justified from; `#276` never used the classification. And the routing precedent at **:2435-2438** points
+the other way here: `#337`:24 says what finished its hardest sweep was *"enumerating the claim's
+SUBJECT"*, which `harden`:199-201 already reaches through the rule it names "in full". Its fold also
+broke its own sentence — four obligations under a label of "three things", invisible to
+`skill-lint.py`, whose docstring names that exact class but whose check only fires on a markdown list.
+**REOPEN ON:** a record of a documentation-classified single-agent cycle that shipped a false claim the
+deletion discipline would have caught.
+
+**KILLED · P3', the write-side anchor for an orphaned javadoc** ("anchor after the preceding member's
+closing brace, never on the following member's signature"). **:1883-1885** is a standing refusal aimed
+at this family and this bullet — *"the rule exists and is being skipped, and more text is not the
+remedy"* — and `#276`:29 is another instance of the rule being skipped (*"the failure my own memory
+entry records"*), not of it being followed and missing one. Its reopen was consumed by the mechanical
+check at **:2684-2687**. **:2579-2585** records that the same bullet was trimmed to "the command plus
+one clause" eleven hours earlier, paid for by compressing its three-run enumeration; P3' put +3 lines
+of prose back into it and named no compression. And the prescription over-generalises its one record:
+"the preceding member's closing brace" has no referent for a field, an enum constant, or the first
+member of a type, each of which orphans a javadoc the same way. **REOPEN ON:** a record of a run that
+ran the awk check, or followed *read the neighbours*, and still shipped an orphan — and if it ships it
+must state the invariant (never insert between a doc comment and the member it documents) rather than
+an anchor, and name the lines it pays for.
+
+**KILLED · P5, an INBOUND-premise bullet in `harden` Phase 1** ("is the standing claim you are BUILDING
+on true?"), the class round 1 certified as missed. Four grounds. Its premise — *"nothing asks the
+opposite question"* — is false in three places, and this is the **:1693-1709** defect recurring:
+`harden`:59-62 asks it and its worked case is *the TICKET's* own offered sizing ("0 of 36 reachable")
+caught at the gate before code, the same artifact class and outcome as `#421`:8; `resolve-ticket`:166-169
+(*"a measurement in a comment outranks a claim in the body"*, with a second home at :640); `resolve-ticket`:287-297 Q6 (*"Does the
+plan rest on a claim about the DATA that nobody has measured? … ask for the count"*), which is exactly
+`#276`:8. Two of its six cited lines are the OPPOSITE direction — `#421`:16 is the author's own claim
+refuted by a standing javadoc (`harden`:32's population), and `#337`:12's control band was published by
+this very run, its resolution being `harden`:395-399 working — and `#337`:12 was the sole citation
+carrying clause-2 cost, so clause 2 collapsed. By the records' own fields the genuine inbound instances
+cost nothing (`#421`:8 "gate pass 1 (no code)", `#337`:8 and :11 "cost: 0"), leaving `#276`:8 at one
+harden pass: one record, already reached by two existing instructions. Placement was wrong too —
+`harden` contains **zero** occurrences of "plan", having no planning phase, and a ticket premise is not
+in the population *Trace outward* enumerates. **REOPEN ON:** a record where a standing IN-TREE claim —
+not a ticket premise, not the run's own publication, and not a data claim `harden`:59-62 or Step 3 Q6
+already reach — cost a harden cycle or more.
+
+### Running parked counts (superseding the previous block where they differ)
+
+- **Prose-correction cycles: ~35 records** — previous ~33 (**:2680**), plus `#276` (five cycles of
+  documentation counts by its own narrative, four by its findings list) and `#337`:18 (six passes, cost
+  4). Remedy killed at **:2138-2141**; trigger units killed at **:2561-2563** and again above.
+- **Rate-limit / session-limit agent death: 24 records + 1 measurement** — previous 22 + 1
+  (**:2697**), plus `#421` (all four cycle-3 Phase 2 agents killed mid-flight) and `#337`. Both resumed
+  from disk with nothing lost under the dead-phase contract; no proposal, and they are evidence the
+  contract works rather than of a gap.
+- **A test pinned from one side only, defeated by a TIGHTENING: 1 record** — new. `harden`:235's
+  mutation list is exhaustive-shaped (*"deleted, its arms swapped, its comparison **loosened**, or
+  rewritten"*) and `#337`:16 is `>=`→`==`, blocking, 1 round, with 2140 tests green. Round 1 called
+  this the sharpest of the parked items. Below both clauses. **REOPEN ON:** a second record, or one
+  costing two rounds.
+- **A mutation loop that silently ran nothing: 3 records for the family, 1 for the mechanism** —
+  `#421`'s macOS `timeout(1)` absence, where the `||` fallback never fired because grep exits 0 on
+  empty input, joins #256 and #263 at `harden`:236-241. Deliberately NOT added: the neighbouring rule
+  says what ends such a loop is a change in the KIND of question, not another entry on the list.
+- **A positive control before reporting an ABSENT signal at runtime: 1 record, cost 0** — `#421`'s
+  verifier established a logger positive control before reporting absent WARNs, *"unprompted by the
+  brief's wording"*. The brief does not ask for it. `harden`:242-250 carries the test-side rule.
+- **A measurement taken from an agent's report and never re-run by the author: 1 record** — `#421`:11
+  (*"recorded from an agent report, never run by the author … unguarded it reddens 10 of 13"*), 1
+  cycle. In tension with `pr-harden`:326-334 (do not ask an agent to re-derive evidence its brief
+  carries), which is a rule-versus-record tension and not a document self-contradiction, so clause 3
+  does not reach it. Raised by round 1.
+- **The proposer not verifying its own citations: 45** — previous 31 (**:2716**); this pass added 14,
+  which is what two refutation rounds over six proposals cost. Three wrong figures (`#421`'s cascade
+  called four cycles when its own lines say three; "46 lines above" for 57; the enumeration and the
+  "two questions" inverted). A citation filed in the wrong family (`#421`:22 belongs to the
+  claim-shape record, not the widening one). An overstated corroboration claim ("both runs name
+  Termination as the section they were fighting", false of `#337`:22, which names it favourably). A
+  narrative taken over a findings list. An unsourced clause carrying a proposal's whole
+  non-subsumption. A causal headline stated over two records and supported by one. A proposal with no
+  bar clause at all. A negative-coverage premise asserted without grepping for it — the **:1693-1709**
+  defect. Two records mis-cast as the proposal's own class. A round-2 revision silently dropping a
+  clause round 1 had itself named as unhomed, which is the one a reader should find most alarming: the
+  gate had to catch the same proposal twice. And a budget figure left describing a superseded set.
+- **And a note for whoever writes the next block, since **:2716-2723** asked for one:** its rule
+  (resolve skill-file pointers LAST) worked. Every `harden` and `pr-harden` pointer above was resolved
+  against the POST-edit files, after the P0'/P2'/P4' edits had landed — which is why they read :251,
+  :275 and :408 rather than the :235, :268 and :396 the proposals were written against.

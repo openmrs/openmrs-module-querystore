@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.22.0
+version: 0.22.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -899,6 +899,12 @@ a stop after the decision to stop has been made, and that decision is what costs
 read a stream with no gate text in it as evidence the gate never ran: hooks DO reach `-p` sessions,
 probed the same day, feedback delivered and captured.
 
+**That marker answers attendedness and nothing else, and its own test is an ancestry walk.** A live
+marker whose pid is NOT an ancestor of this session belongs to a co-located run, and a co-located run
+does not make this session unattended — the yield then allows. An INDETERMINATE walk keeps the block
+instead, because losing the unattended guard back is the more expensive direction. Whose ENTRY it is
+is a different question about a different file, answered by `owner` above and never by this marker.
+
 **Collecting in the same turn means never polling afterwards.** Several `Agent` calls in ONE
 message run concurrently, so a wave keeps its parallelism while each result is that agent's own
 report; Step 3's refutation gate already collects this way and its agents run ten to twenty
@@ -914,18 +920,6 @@ those runs the two agents that WERE collected synchronously returned their whole
 9,956 bytes, so one report is a third of a single poll's window and a polled agent costs several
 windows. Where you need to block on something that is NOT an agent — a build, a server coming up —
 that is a background Bash task, whose output file is its stdout and is safe to read.
-
-**And that marker now decides OWNERSHIP as well as attendedness, because the gate state is keyed on the
-checkout and not on the session.** Measured live 2026-08-26: an interactive session in a checkout the
-pool was working was stopped by a `phase: building` entry belonging to a different live
-`claude -p /resolve-ticket` run, and both remedies the block offered damaged that run — `override: true`
-disarms its gate for the rest of its life, and "continue the phases" puts a second session in one
-worktree. The gate now allows the stop where the marker's pid is alive and is **not** an ancestor of the
-stopping session. Two consequences to keep. Ownership is only ever established POSITIVELY, so an
-indeterminate answer keeps the block — losing the unattended guard back is the more expensive
-direction. And the state file is still keyed on `$PWD` alone, so two runs in one checkout share one
-entry and the later writer wins: this narrows a false positive and does not make the state
-multi-tenant.
 
 **Snapshot the worktree before every delegation and compare it after — on ANY terminal outcome.**
 `git diff | shasum` before you spawn; the same after the agent returns, fails, stalls or is killed. On a
