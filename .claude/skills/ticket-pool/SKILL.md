@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.22.0
+version: 0.23.0
 ---
 
 # Ticket pool — the loop that learns
@@ -174,7 +174,16 @@ script — unidentifiable whatever it puts in the envelope. So `--work` passes
 `crossSessionInbound: accept` on the launch, scoped to that session: it lets any local process put
 a turn into a pool worktree that is already bypassing prompts, and deliberately does not enrol the
 operator's other sessions, which are not inside that boundary. A session started by hand will have
-its nudge held, and will say so in its own transcript. `ticket.limit_continue_work: false`
+its nudge held, and will say so in its own transcript.
+
+**The account is asked per quiet SPELL, not per watcher.** A session that has been writing and goes
+quiet again is looked at at once; only repeats within one spell back off, at
+`ticket.limit_probe_seconds` (120s). Pacing it per watcher is what let #315 sit idle for an hour on
+2026-09-14: a probe spent during an earlier silence pushed its next look ten minutes out, it stopped
+six minutes before its window reopened, and by the time it looked the account was serving — which
+says nothing without a refusal to pair it with. That interval is a SETTING and deliberately not
+derived from `quiet_seconds`: deriving it left a pool with a small quiet window unable to exercise a
+long interval, so the case written for that bug passed against the broken code. `ticket.limit_continue_work: false`
 turns it off, and so does `limit_wait_max_seconds: 0`, which is one instruction — "do not wait for
 usage limits" — answered the same way on both paths.
 
