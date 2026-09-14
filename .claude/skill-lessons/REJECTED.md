@@ -2863,3 +2863,175 @@ already reach — cost a harden cycle or more.
   (resolve skill-file pointers LAST) worked. Every `harden` and `pr-harden` pointer above was resolved
   against the POST-edit files, after the P0'/P2'/P4' edits had landed — which is why they read :251,
   :275 and :408 rather than the :235, :268 and :396 the proposals were written against.
+
+## 2026-09-14 (third window of the day: 5 records / **4 runs** — #409+#426 share one transcript, #412/PR427, #425/PR428, #315/PR431) — 3 applied after revision, 2 killed, 1 parked; two refutation rounds; linter 10 files, 0 findings
+
+**The window's counting trap, stated first:** `2026-09-14-…-409.md` and `2026-09-14-…-426.md` both
+name transcript `…-chartsearchai-409/0102617e-5075-4baa-9afe-3a29fc459eab.jsonl`. They are ONE run —
+the condition-3 abort and the PR the same session went on to open. Everything they share (the
+"ABSENCE of prose" refutation, "3 of 7", `ClassCodeFidelityCheck is already marker-anchored`, the
+empty `gh issue view --comments`, the abort-delivers-nothing complaint) is one sighting. Both gates
+confirmed it independently.
+
+### Applied
+
+**P1 · `harden`:236 — a mutation loop's clean result is believed only after the loop has produced a
+RED.** Bar (a): `#425`:34 and `#426`:36, two runs, one mechanism. The revisions are the interesting
+part:
+- The original warrant — "a positive control is blind to which mechanism broke the loop" — is FALSE
+  of one of its own two records. `#426`:36's selector "makes surefire run nothing and report BUILD
+  FAILURE", and a control confirmed by a red is satisfied by that very failure. The shipped text
+  names the false-RED direction as residue instead of claiming the control closes it.
+- It does NOT claim `#425`'s round. `#425`:29 assigns that round elsewhere in the run's own words.
+  Both selector incidents cost 0.
+- The comma was over-sourced to two runs; only `#426`:36 mentions it. **Re-measured by this retro**
+  — 2026-09-14, surefire 3.5.5, chartsearchai `api`: `-Dtest='A+B'` → BUILD FAILURE, *"No tests
+  matching pattern … were executed!"*, 0 tests; the same pair comma-separated → `Tests run: 20`,
+  BUILD SUCCESS. The shipped figure is that measurement, not a record's.
+- **:1604-1606** requires a positive-control rule to state its trigger; the shipped clause triggers
+  on a zero that would license deleting the clause, and keeps *"ask of it what its inputs could not
+  have produced"* beside it. (That entry's own `harden`:231 pointer no longer resolves — the line is
+  now the cycle-gate's "cheap to satisfy and expensive to fake" — which is **:2716-2723**'s hazard
+  seen from the other end: a skill's line numbers are invalidated by every later commit, not only by
+  the one that cites them. Name the sentence.)
+- **Deliberately NOT shipped:** `#425`:34's `-DfailIfNoTests=false` vs
+  `-Dsurefire.failIfNoSpecifiedTests=false`. Verified true — and surefire's own error text names the
+  right flag, so the tool tells the run and the skill need not.
+- **Prunes** *"read the build output rather than the test count"*, retired by the two records: both
+  read the output, in opposite directions, and neither read it as "the mutation never ran".
+- This closes **:2838-2841** on the terms that entry set. It asked for a change in the KIND of
+  question rather than a sixth mechanism; a control needs no correct reading of the output, and the
+  mechanism list (`#256`, `#263`, `#421`, and this window's selector) is not extended.
+- Checked for collateral staleness: `harden`:273's *"the four mutations above"* still counts :235's
+  list, which this edit does not touch. Found only by grepping a phrase that does NOT straddle the
+  line-wrap — the **:2080-2086** hazard, reproduced live again.
+
+**P4a · `pr-harden`'s *Correcting a claim* section gains a POINTER to `harden`'s subject-enumeration
+remedy.** The two copies had drifted: `harden`:408 carries *enumerate the claim's SUBJECT* (from
+#374), `pr-harden`'s section ended at "treat no list of those mechanisms as closed". Bar (b) inside
+one run — `#426`:20 ("a home in `LlmInferenceService` the author's six-file sweep missed · blocking ·
+cost: 1 round") and `#426`:23 ("A SEVENTH home … cost: 1 round") — and bar (a) with `#315`:27.
+Shipped as a pointer, not a paraphrase, per **:764-765**; a paraphrase would be the second home P4b
+prohibits. **Correction to the proposal's own bookkeeping:** it billed `#426`:24 in both directions,
+once as evidence the remedy was missing from `pr-harden` and once as a shipped rule working. One
+reading survives: the fixer reached a remedy `pr-harden` does not name, three rounds after the sweep
+first cost a round.
+
+**P4b · `harden`:408 — where a claim already has a home, correct that home and point the others at
+it.** Bar (a) for the DEFECT (`#315`:37, `#412`:20). Gate 1 established that the REMEDY has one
+record and that this same window measures its cost, so the shipped text carries both:
+- `#412`:19 — "a dangling cross-file pointer; then a SECOND one, self-referential … introduced by the
+  fix for the first · cost: 2 passes". The most expensive single item in that record is the remedy
+  being proposed, and the proposal had not cited it.
+- `#412`:12 and `#425`:39 — an instruction file at its byte budget cannot take a pointer at all.
+- The universal ("the fix is ONE home … not N corrected copies") was cut; `harden`:400's grammar rule.
+
+### Killed
+
+**P2 · `pr-harden`'s 429 paragraph: "when the attempt is the WAIT, re-dispatch the briefs unchanged."**
+Killed twice, both citations settling.
+1. **Wrong document — and this submission was refused here once already, for this reason.**
+   **:1586-1591**: *"Both cited deaths are **harden** agents, not pr-harden phases … so :1289-1290's
+   standing precedent … refuses them in the pr-harden paragraph. Its real home is the parked harden
+   Phase 2 entry at :1258-1260."* `#412`:25 opens "harden:Phase 2 —"; `#425`:33 says "cycle-2 Phase-2
+   lenses". Same shape, newer deaths.
+2. **:2606-2608** — *"the submission put it in the 429 paragraph, but `pr-harden`:994-996 already
+   says a 429 'is neither of those' … so a brief-leanness rule argued there is arguing the confound."*
+   A do-NOT-lean rule is a brief-leanness rule.
+Residue: `#425`:33 is not a second witness for the proposed rule. It records another confound
+("cannot be separated from it"), not a second observation of re-dispatch-unchanged succeeding. On the
+rule as worded `#412`:25 stands alone, at 0 rounds.
+
+**P3 · name the `gate-state … --override --reason` invocation in `resolve-ticket`'s abort paragraph.**
+`#409`:30 is real and the script check is exact (`gate-state`:217 `action="store_true"`, :218
+`--reason` separately). Killed on clause (c) and on the remedy:
+- `grep -- "--override" resolve-ticket/SKILL.md` returns nothing, so the skill states no shape and
+  cannot contradict the script — it UNDER-SPECIFIES. **:2615-2617** settles that limb twice over
+  (**:437-440** "unstated PRECEDENCE, not a document contradicting itself", and **:1018-1021**).
+- `resolve-ticket`:77 already says *"see **State** in `pr-harden`, which owns the format"*, five lines
+  above the abort obligation, and `pr-harden`:1020 carries the shape. The correct call was one named
+  pointer away: the rule exists and was skipped, and **:1885-1887** / **:1196-1198** both rule that
+  more text is not the remedy for that. Writing the shape in would also be the second home P4b
+  prohibits.
+- One record, cost ≈ 0 (an errored first invocation, corrected). **REOPEN ON:** a second record, or
+  one where a wrong shape reached the gate rather than erroring.
+
+### Parked
+
+**P5 · a numeric BOUND defeated by MOVING it — the owed-mutation list names one direction.** Proposed
+after gate 1 was dispatched, and gate 2 (fresh) parked it. `#425`:24 and `#337`:16 are distinct runs
+(different transcripts, tickets and PRs) and both are blocking at one round, so **:2833-2837**'s
+reopen looked met. It is not, and the reason is an ellipsis in the proposal itself:
+- `#425`:29 whole reads *"harden Termination lists 'its comparison loosened' among the owed mutations;
+  I ran only deletions/disablings. **That exact omission is what round 1 caught, one round later.**
+  The list was in front of me."* The proposal quoted it with that middle sentence elided. It says the
+  round-1 defeat (`#425`:24) and the skipped list entry are ONE sighting — of the rule being SKIPPED.
+  **:2792-2796** killed a proposal on exactly that distinction, and **:432-436** is the standing
+  ruling on an ellipsis that removes the deciding clause.
+- A second ellipsis, in the proposal's quotation of `#425`:26, removed *"(tightening to `< 5`)"* —
+  the words that contradict the proposal's own sentence calling `< 4` → `< 3` a tightening.
+- The nearest text is uncited and is in the very bullet the edit would extend: `pr-harden`:287-289,
+  *"a mutation result measures the arms it moved, not the mechanism — one run published a
+  'byte-identical' result for removing a scan bound, which held for the one arm it ran and failed for
+  the other, at a cycle and a round."* A bound, one arm exercised, at a cycle AND a round. Either
+  that is the family's home (so P5 opens a second one, against P4b shipped in the same commit) or it
+  is an uncounted record.
+- "Move it one step in EACH direction" also under-covers its senior record: one step on `>= 3` is
+  `>= 2` or `>= 4`, never `#337`'s `==`.
+**REOPEN ON (sharpened, replacing :2836's):** a second record where the owed mutations WERE run and a
+moved bound still went unnoticed, or one costing two rounds. Without that sharpening the next window
+re-submits this on the same evidence.
+
+### Running parked counts (superseding the previous block where they differ)
+
+- **Prose-correction cycles: ~39 records** — previous ~35 (**:2826**), plus all four runs of this
+  window (`#425` cycles 2-5, `#409`/`#426` rounds 3-5, `#412`'s dangling pointer whose fix introduced
+  a second, `#315`'s four cycles over two claim families). Remedy still killed at **:2138-2141**.
+- **Rate-limit / session-limit agent death: 26 records + 1 measurement** — previous 24 + 1
+  (**:2829**), plus `#412` and `#425`. Both resumed; still evidence the contract works.
+- **`harden` Phase 2 carries no retry contract of its own: 6 records** — **:1258-1262**'s 2, raised to
+  4 at **:1591**, plus `#412` and `#425`. Its **REOPEN ON** (a remedy answering a limit that refuses
+  every retry for hours) is still unmet by both: neither offers a remedy, only a witness. This is
+  where P2's evidence belongs, and it is banked here rather than argued in `pr-harden`.
+- **A mutation loop that silently ran nothing: CLOSED by P1** (**:2838-2841**), on the KIND-change
+  terms that entry set. The mechanism list was not extended.
+- **A test pinned from one side only, defeated by a moved bound: still 1 record** (`#337`:16).
+  `#425`:24 is NOT a second — see P5 above; it and `#425`:29 are one sighting of a skip.
+- **A ticket that GAINS a material comment mid-run: 1 record, cost 1 round.** `#426`:19 — the reporter
+  posted the raw SSE two hours before the PR opened and the author's Step 1 read predated it.
+  `resolve-ticket` Step 1 says to read the comments; nothing says the read expires. **REOPEN ON:** a
+  second record, or one costing two rounds.
+- **A sentence in the repo's own MERGED prose taken as true: 4 runs, not proposable as drafted.**
+  `#409`:10-11 is the sharp one (a false sentence in merged ADR Decision 94 "propagated straight into
+  a new plan", and its "two sibling keys" was three, "stale within one day of being written") — but
+  cost 0, caught at plan time. The other three (`#412`:9, `#425`:15, `#315`:13) are the parked
+  prose-correction family in a new coat. **REOPEN ON:** a record where a claim inherited from a merged
+  artifact reached code, or cost a round.
+- **Abort condition 3 delivers nothing, discarding what the stopped run established: 3rd record**
+  (`#409`:26-28), joining **:1888-1892**'s two. Reopen ("a record where the missing outcome cost a
+  round, or produced an abort the skill should have handled") **still unmet**: the same session
+  resumed, PR 426 merged, nothing was re-derived. Both records say the rule fired correctly.
+- **The instruction file at its size budget blocking a rule: 2 more records** (`#412`:12, cost 1
+  build; `#315`:28, "the fourth raise, and the third in eight days"). `pr-harden`'s third class owns
+  the merge-consumed form. The residue both name — the guard's javadoc advises a SPLIT and the advice
+  is recorded rather than taken — is a decision in the target repo, not in a skill.
+- **`gate-state declined` is append-only: 1 record** (`#425`:32), asking for `--clear-declined` after
+  writing a placeholder row the skill never asked for.
+- **`git checkout -- <path>` discarding the ORCHESTRATOR's own uncommitted work: increments only**
+  (`#425`:35). **:2134-2137** keeps the remedies killed; its reopen (an incident where "commit before
+  probing" WAS followed) is still unmet — `#425` did not commit first.
+- **The proposer not verifying its own citations: 56** — previous 45 (**:2850**); this pass added 11
+  across two gates. P1's central warrant false of one of its own two records; the comma over-sourced
+  to two runs when one names it; P2's two harden deaths cited into a pr-harden paragraph this ledger
+  had already refused for that exact reason; P4a's one citation billed in both directions; P4b's
+  remedy stated over a record that measures its cost, uncited; two off-by-one ledger spans
+  (:2137-2141 for :2138-2141, :2134-2136 for :2134-2137 — and note BOTH were "corrections" I made to
+  citations that had been right the first time); P5's `#425`:31 for :29; and P5's three: the ellipsis
+  that removed the deciding clause, the ellipsis that removed the contradicting parenthesis, and the
+  uncited nearest text. Not counted, because they never reached a gate: seven wrong record line
+  numbers in the first draft, swept before dispatch by grepping every quoted phrase — which is the
+  cheap check, and it found half the citations wrong.
+- **A note for the next block:** **:2716-2723**'s rule (resolve skill-file pointers LAST) was followed
+  again — every `harden` and `pr-harden` pointer above was resolved against the POST-edit files. And
+  add one: a phrase that straddles a line-wrap does not grep, which cost a false "that tally is gone"
+  here before the flattened search found `harden`:273. **:2080-2086** predicted exactly this.

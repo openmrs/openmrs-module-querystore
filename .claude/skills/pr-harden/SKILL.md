@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.22.1
+version: 0.23.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -732,6 +732,12 @@ which no repo-wide grep will ever reach.
 And a positional cross-reference — "the bullet above", "the section below" — is a claim about layout
 that any insertion falsifies. On that same run, inserting a bullet silently re-pointed a neighbouring
 bullet's "see the bullet above" at the new text. **Name the target instead of locating it.**
+
+`harden`'s *Don't stop correcting a claim at the site you noticed it* carries one remedy this section
+does not, and it is the one for a sweep that keeps returning one more home: enumerate the claim's
+SUBJECT rather than a phrasing. A round-4 fixer here found nine homes of one claim that way, five
+more than the findings had named — after the same claim had already cost a round in round 1 and
+another in round 4.
 
 ## Termination
 
