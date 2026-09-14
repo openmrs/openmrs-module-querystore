@@ -121,7 +121,7 @@ DEFAULTS = {
     # told. Both are read in `wait_for_limit_reset`, which is where the reasoning lives.
     "ticket": {"timeout_seconds": 28800, "max_attempts": 2, "quiet_seconds": 5400,
                "limit_wait_max_seconds": 21600, "limit_wait_jitter_seconds": 90,
-               "limit_continue_work": True},
+               "limit_continue_work": True, "limit_probe_seconds": 120},
     # `remote_control` applies to `--work` only: it is a flag on an INTERACTIVE session, so it means
     # nothing to the headless driver. The name is per ticket rather than per host, because the point
     # of monitoring two sessions from a phone is being able to tell which is which.
@@ -1427,11 +1427,23 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
     # What ends it is the account SERVING one again — not a clock — because that is what "the limit
     # lifted" means and it is true whether or not a reset time was ever reported. `fire_at` is only
     # an optimisation over that: when a window was named, there is no point asking again before it.
-    blocked, fire_at, until, tries, next_probe = False, 0, None, 0, 0
+    blocked, fire_at, until, tries, next_probe, spell = False, 0, None, 0, 0, 0
     # How stopped a run must look before the account is asked, and how often it may be asked after
     # that. Ten minutes and five, except where the pool calls silence a problem sooner than that —
     # one that treats five minutes of quiet as trouble should not wait ten to ask why.
-    probe_after, probe_every = min(300, quiet), max(tick, min(600, quiet))
+    # Pacing is per QUIET SPELL, not per watcher. A probe spent during an EARLIER silence used to
+    # push the next one ten minutes out, so the silence that actually mattered waited that long for
+    # its first look. Measured 2026-09-14 on #315: it stopped six minutes before its window
+    # reopened, its first look landed seven minutes later with the account already serving, and
+    # "open" says nothing without a refusal to pair it with — so it sat idle for an hour while
+    # three siblings that had caught the refusal all resumed. A new spell is looked at at once, and
+    # only repeats WITHIN one spell back off.
+    # The REPEAT interval is its own setting and is NOT derived from `quiet_seconds`. Deriving it
+    # left a pool with a small quiet window unable to exercise a long interval at all, so the case
+    # written for the #315 pacing bug passed against the broken code — worse than no case. A knob
+    # instead, which a case can set small on purpose and one that must not be small leaves alone.
+    probe_first = max(tick, int(cfg["ticket"].get("limit_probe_seconds") or 120))
+    probe_after, probe_cap = min(300, quiet), probe_first * 5
     # The probe runs on its OWN thread and this loop only collects its answer. A probe is a whole
     # `claude` startup, and this loop's first duty is the bounds above — a watcher that stops
     # reporting while it investigates misses the thing it exists for. Measured by the suite: run
@@ -1491,7 +1503,7 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
             got = answer()
             if got is None:
                 if now() >= fire_at and now() >= next_probe:
-                    next_probe = now() + probe_every
+                    next_probe = now() + probe_first
                     ask_if_idle()
                 continue
             state, found = got
@@ -1514,7 +1526,7 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
                 # Cleared so a run that meets the limit twice is carried twice. The bounds above
                 # latch deliberately; this must not, because each window is its own event.
                 told.discard("limit-continue-failed")
-                blocked, fire_at, until, tries = False, 0, None, 0
+                blocked, fire_at, until, tries, next_probe, spell = False, 0, None, 0, 0, 0
                 continue
             # Retried across ticks rather than abandoned on the first refusal. Giving up here would
             # be permanent in practice: the next probe happens with the window OPEN, finds no limit,
@@ -1531,7 +1543,7 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
                        f"{key}: the account is serving requests again but this session could not "
                        f"be told to continue after {tries} tries ({failed}) — send it any message "
                        "to pick it up", resets_at=until)
-            blocked, fire_at, until, tries = False, 0, None, 0
+            blocked, fire_at, until, tries, next_probe, spell = False, 0, None, 0, 0, 0
             continue
         # Asking the account costs a session, so it is asked only of a run that looks stopped: quiet
         # AND not busy by its own account. A long build is silent and says it is busy, which is what
@@ -1539,10 +1551,16 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
         got = answer()
         if got is None:
             silent = silence_since(worktree, started_at)
-            if (silent is not None and silent >= probe_after and now() >= next_probe
-                    and not session_is_busy(pid)):
-                next_probe = now() + probe_every
-                ask_if_idle()
+            if silent is None or silent < probe_after:
+                # This spell is over, or has not begun. The NEXT one gets a prompt first look, which
+                # is the whole of the fix above: what this spell spent is not charged to the next.
+                next_probe, spell = 0, 0
+                continue
+            if now() < next_probe or session_is_busy(pid):
+                continue
+            spell += 1
+            next_probe = now() + min(probe_cap, probe_first * 2 ** (spell - 1))
+            ask_if_idle()
             continue
         state, found = got
         if state in ("open", "error"):

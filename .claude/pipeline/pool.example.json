@@ -15,7 +15,8 @@
     "quiet_seconds": 5400,
     "limit_wait_max_seconds": 21600,
     "limit_wait_jitter_seconds": 90,
-    "limit_continue_work": true
+    "limit_continue_work": true,
+    "limit_probe_seconds": 120
   },
   "claude": {
     "model": null,

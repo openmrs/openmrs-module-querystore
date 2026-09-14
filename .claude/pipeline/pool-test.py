@@ -3541,7 +3541,10 @@ def test_a_stalled_work_session_is_told_when_its_window_reopens(tmp: Path) -> No
             REJECTION_EVENT.replace("RESET", str(pool.now() + 2)))
         cfg = pool.merge(pool.DEFAULTS, {
             "claude": {"binary": str(stub)},
-            "ticket": {"timeout_seconds": 5, "quiet_seconds": 5, "limit_wait_jitter_seconds": 0},
+            "ticket": {"timeout_seconds": 5, "quiet_seconds": 5, "limit_wait_jitter_seconds": 0,
+                       # Small on purpose: this case waits on the poll that asks whether
+                       # the account is serving yet. The pacing case leaves it alone.
+                       "limit_probe_seconds": 3},
         })
         stop = threading.Event()
         t = threading.Thread(target=pool.watch_hand_launched, daemon=True,
@@ -3562,6 +3565,77 @@ def test_a_stalled_work_session_is_told_when_its_window_reopens(tmp: Path) -> No
     check("and it says continue where you stopped, not start again",
           "continue the /resolve-ticket run" in body and "do not start the skill again" in body,
           str(msg.get("message", {}).get("content"))[:200])
+
+
+def test_a_probe_spent_on_an_earlier_silence_does_not_delay_the_one_that_matters(tmp: Path) -> None:
+    """The shape that let #315 sit idle for an hour with the account wide open.
+
+    Measured 2026-09-14. Pacing was per WATCHER, so a probe spent during an earlier quiet spell
+    pushed the next look ten minutes out. #315 then stopped six minutes before its window reopened;
+    its first look landed seven minutes later with the account already serving — and "open" says
+    nothing without a refusal to pair it with, so it never armed, while three siblings that had
+    caught the refusal in their own spells all resumed.
+
+    What is asserted is the pacing itself and not the nudge: that a session which has been writing
+    and goes quiet AGAIN is looked at promptly rather than after the previous spell's interval.
+    Delivery is covered by the cases above, and asserting it here would need a refusal and then a
+    service, which is two more intervals of waiting for a property neither of them is about.
+    """
+    print("\na probe spent on an earlier silence does not delay the one that matters")
+    with isolated(tmp) as root:
+        pid, _sock, _received = live_session_fixture(tmp, root)
+        wt = tmp / "wt"
+        wt.mkdir()
+        started = pool.now() - 5000
+        proj = pool.PROJECTS / pool.project_dir_name(wt)
+        proj.mkdir(parents=True, exist_ok=True)
+        live = proj / "s.jsonl"
+        live.write_text("{}\n")
+        probes = tmp / "probes.txt"
+
+        def quiet_for(seconds: int) -> None:
+            """Age the transcript. It is the only thing `silence_since` reads."""
+            os.utime(live, (pool.now() - seconds, pool.now() - seconds))
+
+        def probe_count() -> int:
+            return int(probes.read_text().strip() or 0) if probes.exists() else 0
+
+        # Always serves, so nothing ever arms and every probe is just a probe.
+        stub = refusing_then_serving_stub(tmp / "claude-stub", probes, 0, "true")
+        cfg = pool.merge(pool.DEFAULTS, {
+            "claude": {"binary": str(stub)},
+            # `quiet_seconds` sets the probe threshold and `timeout_seconds` the tick; both small so
+            # the case moves. The REPEAT interval is deliberately not derived from either — an
+            # earlier version of this case derived it, which made it pass against the broken code.
+            "ticket": {"timeout_seconds": 6, "quiet_seconds": 20, "limit_wait_jitter_seconds": 0},
+        })
+        stop = threading.Event()
+        quiet_for(400)
+        threading.Thread(target=pool.watch_hand_launched, daemon=True,
+                         args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None, pid)).start()
+
+        deadline = time.time() + 45
+        while time.time() < deadline and probe_count() < 1:
+            time.sleep(0.5)
+        first = probe_count()
+
+        # The session writes again, held fresh across several ticks so the watcher cannot miss that
+        # the spell ended, and then goes quiet a second time.
+        for _ in range(6):
+            quiet_for(0)
+            time.sleep(3)
+        quiet_for(400)
+        began = time.time()
+        deadline = began + 45
+        while time.time() < deadline and probe_count() <= first:
+            time.sleep(0.5)
+        waited = time.time() - began
+        second = probe_count()
+        stop.set()
+
+    check("the first quiet spell is probed", first >= 1, f"{first} probes")
+    check("and so is the second, promptly rather than after the first spell's interval",
+          second > first and waited < 40, f"{second} probes after {waited:.0f}s (first={first})")
 
 
 def test_a_refusal_that_names_no_window_is_still_carried(tmp: Path) -> None:
@@ -3595,7 +3669,8 @@ def test_a_refusal_that_names_no_window_is_still_carried(tmp: Path) -> None:
         stub = refusing_then_serving_stub(tmp / "claude-stub", tmp / "probes.txt", 2, "true")
         cfg = pool.merge(pool.DEFAULTS, {
             "claude": {"binary": str(stub)},
-            "ticket": {"timeout_seconds": 4, "quiet_seconds": 4, "limit_wait_jitter_seconds": 0},
+            "ticket": {"timeout_seconds": 4, "quiet_seconds": 4, "limit_wait_jitter_seconds": 0,
+                       "limit_probe_seconds": 3},
         })
         stop = threading.Event()
         threading.Thread(target=pool.watch_hand_launched, daemon=True,
@@ -3642,7 +3717,10 @@ def test_a_quiet_work_session_with_no_limit_against_it_is_left_alone(tmp: Path) 
         stub.chmod(0o755)
         cfg = pool.merge(pool.DEFAULTS, {
             "claude": {"binary": str(stub)},
-            "ticket": {"timeout_seconds": 5, "quiet_seconds": 5, "limit_wait_jitter_seconds": 0},
+            "ticket": {"timeout_seconds": 5, "quiet_seconds": 5, "limit_wait_jitter_seconds": 0,
+                       # Small on purpose: this case waits on the poll that asks whether
+                       # the account is serving yet. The pacing case leaves it alone.
+                       "limit_probe_seconds": 3},
         })
         stop = threading.Event()
         threading.Thread(target=pool.watch_hand_launched, daemon=True,
@@ -3818,6 +3896,7 @@ def main() -> int:
                          ("limit interruptible", test_waiting_for_a_reset_stays_interruptible),
                          ("limit loop wiring", test_the_wave_loop_is_the_thing_that_waits),
                          ("work carried past a limit", test_a_stalled_work_session_is_told_when_its_window_reopens),
+                         ("work second quiet spell", test_a_probe_spent_on_an_earlier_silence_does_not_delay_the_one_that_matters),
                          ("work carried with no window named", test_a_refusal_that_names_no_window_is_still_carried),
                          ("work quiet but unlimited", test_a_quiet_work_session_with_no_limit_against_it_is_left_alone),
                          ("work non-utc machine", test_a_session_is_addressable_from_a_machine_that_is_not_on_utc),
