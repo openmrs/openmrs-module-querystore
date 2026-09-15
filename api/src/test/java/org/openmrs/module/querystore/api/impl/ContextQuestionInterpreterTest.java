@@ -65,6 +65,20 @@ public class ContextQuestionInterpreterTest {
 	}
 
 	@Test
+	public void preprocess_keepsBodySitesAndDiseaseNameParts() {
+		// Each pair is a question and its control that differ only in the word at risk; the two
+		// must not preprocess to the same retrieval text.
+		assertEquals("chronic back pain management plan",
+		        ContextQuestionInterpreter.preprocess("chronic back pain management plan"));
+		assertEquals("history low back pain sciatica",
+		        ContextQuestionInterpreter.preprocess("history of low back pain and sciatica"));
+		assertEquals("history down syndrome hypothyroidism",
+		        ContextQuestionInterpreter.preprocess("history of Down syndrome and hypothyroidism"));
+		assertEquals("management type i diabetes insulin",
+		        ContextQuestionInterpreter.preprocess("management of type I diabetes with insulin"));
+	}
+
+	@Test
 	public void preprocess_isIndependentOfTheJvmDefaultLocale() {
 		Locale previous = Locale.getDefault();
 		try {

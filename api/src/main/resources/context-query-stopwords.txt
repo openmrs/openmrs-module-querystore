@@ -6,11 +6,13 @@
 #   - Negation: no, not, never, none, without, neither, nor
 #   - Temporal: recent, last, new, first, previous, earliest
 #   - Status: active, stopped, off, past, ongoing, chronic, acute, resolved
-#   - Laterality: right, left
+#   - Laterality and body site: right, left, back
+#   - Disease-name parts and numerals: down (Down syndrome), i (type I diabetes)
 #   - Quantity with clinical meaning: elevated, low, high, normal, abnormal
 #
 # Stripping is set membership with no part-of-speech test, so a word that is usually an
-# adverb or conjunction (right, off, nor) is also removed where it carries the meaning above.
+# adverb, conjunction or pronoun (right, off, nor, back, down, i) is also removed where it carries
+# the meaning above. Check a candidate against a control phrase that differs only in that word.
 #
 # One word per line. Lines starting with # are comments. Blank lines ignored.
 
@@ -31,7 +33,6 @@ herself
 him
 himself
 his
-i
 it
 its
 itself
@@ -136,7 +137,6 @@ beyond
 but
 by
 despite
-down
 during
 either
 except
@@ -183,7 +183,6 @@ already
 also
 always
 away
-back
 clearly
 else
 enough
