@@ -189,7 +189,8 @@ public class QueryStoreRestController {
 			}
 			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size,
 			        baseParams.toString());
-			return new ResponseEntity<Object>(sliceBody, HttpStatus.OK);
+			// Question-dependent page: same private, revalidate-only caching as the full chart.
+			return ResponseEntity.ok().header("Cache-Control", "private, no-cache, must-revalidate").body((Object) sliceBody);
 		}
 
 		boolean ranked = query != null;
@@ -238,7 +239,8 @@ public class QueryStoreRestController {
 			        .header("Cache-Control", "private, no-cache, must-revalidate")
 			        .body(body);
 		}
-		return new ResponseEntity<Object>(body, HttpStatus.OK);
+		// Ranked window: uncached, and says so, since it carries the same record text as the chart.
+		return ResponseEntity.ok().header("Cache-Control", "private, no-cache, must-revalidate").body((Object) body);
 	}
 
 	/** Convenience seam retained for existing direct controller tests. */

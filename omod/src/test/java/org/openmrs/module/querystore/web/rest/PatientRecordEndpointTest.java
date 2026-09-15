@@ -35,13 +35,16 @@ import org.junit.After;
 import org.junit.Test;
 import org.openmrs.Patient;
 import org.openmrs.User;
+import org.openmrs.api.AdministrationService;
 import org.openmrs.api.PatientService;
 import org.openmrs.api.context.Context;
+import org.openmrs.api.context.ServiceContext;
 import org.openmrs.api.context.ContextAuthenticationException;
 import org.openmrs.api.context.UserContext;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
@@ -72,9 +75,31 @@ public class PatientRecordEndpointTest {
 		controller.setMaximumPageSize(Integer.valueOf(TEST_MAXIMUM_PAGE_SIZE));
 	}
 
+	private AdministrationService previousAdministrationService;
+
+	private boolean administrationServiceReplaced;
+
 	@After
 	public void clearContext() {
 		Context.clearUserContext();
+		if (administrationServiceReplaced) {
+			ServiceContext.getInstance().setAdministrationService(previousAdministrationService);
+			administrationServiceReplaced = false;
+		}
+	}
+
+	/** Puts a stubbed AdministrationService where Context.getAdministrationService() finds it. */
+	private void installAdministrationService(AdministrationService admin) {
+		ServiceContext services = ServiceContext.getInstance();
+		try {
+			previousAdministrationService = services.getAdministrationService();
+		}
+		catch (RuntimeException noService) {
+			previousAdministrationService = null;
+		}
+		services.setAdministrationService(admin);
+		Context.setContext(services);
+		administrationServiceReplaced = true;
 	}
 
 	@Test
@@ -251,6 +276,55 @@ public class PatientRecordEndpointTest {
 
 		assertEquals(HttpStatus.OK, response.getStatusCode());
 		verify(queryStore).searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE);
+	}
+
+	@Test
+	public void rankedSearch_sizesTheWindowFromTheLiveMaxResultsAbsoluteProperty() {
+		authenticate();
+		controller.setQueryStoreService(queryStore);
+		controller.setPatientService(patients);
+		// No injected ceiling: the controller has to read webservices.rest.maxResultsAbsolute itself.
+		// The stub is installed before RestConstants is touched, because its static initializer
+		// already needs an AdministrationService.
+		AdministrationService admin = mock(AdministrationService.class);
+		installAdministrationService(admin);
+		when(admin.getGlobalProperty(RestConstants.MAX_RESULTS_ABSOLUTE_GLOBAL_PROPERTY_NAME)).thenReturn("250");
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.searchByPatient(PATIENT, "glucose", 170)).thenReturn(new ArrayList<QueryDocument>());
+
+		// startIndex 120 + limit 50 fits inside the configured 250 and not inside the framework default of 100.
+		ResponseEntity<Object> response = controller.getPatientRecords(PATIENT, "glucose", Integer.valueOf(50),
+		        Integer.valueOf(120));
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		verify(queryStore).searchByPatient(PATIENT, "glucose", 170);
+	}
+
+	@Test
+	public void rankedAndContextReads_declineSharedCaching() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(queryStore.searchByPatient(PATIENT, "glucose", 50)).thenReturn(new ArrayList<QueryDocument>());
+
+		ResponseEntity<Object> ranked = controller.getPatientRecords(PATIENT, "glucose", null, null);
+
+		assertEquals(HttpStatus.OK, ranked.getStatusCode());
+		assertEquals("a ranked window carries the same record text as the full chart and must not be reused by a shared cache",
+		        "private, no-cache, must-revalidate", ranked.getHeaders().getCacheControl());
+
+		org.openmrs.module.querystore.model.ContextSlice slice = new org.openmrs.module.querystore.model.ContextSlice(
+		        new ArrayList<org.openmrs.module.querystore.model.ContextSliceRecord>(), 0, false, true,
+		        new java.util.LinkedHashSet<String>(), false, "chart-snapshot-1");
+		when(queryStore.getContextSlice(org.mockito.ArgumentMatchers.eq(PATIENT), org.mockito.ArgumentMatchers.eq("glucose"),
+		        org.mockito.ArgumentMatchers.any(org.openmrs.module.querystore.model.ContextSliceRequest.class))).thenReturn(slice);
+
+		ResponseEntity<Object> context = controller.getPatientRecords(PATIENT, "glucose", null, null, "context", null,
+		        null, null, null);
+
+		assertEquals(HttpStatus.OK, context.getStatusCode());
+		assertEquals("a context page is question-dependent and must not be reused by a shared cache",
+		        "private, no-cache, must-revalidate", context.getHeaders().getCacheControl());
 	}
 
 	@Test
