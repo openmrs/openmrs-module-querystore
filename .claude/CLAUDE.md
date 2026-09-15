@@ -24,3 +24,22 @@
   command, and never let a non-zero exit pass unread.
 - Prefer driving the real code to re-expressing its predicate in a script at all. A reimplementation
   that is 98% right is wrong in exactly the tail being investigated, and says so in plausible numbers.
+
+# Editing what is already written
+
+- Prose you wrote earlier in the same session is frozen. Revise it only when a failing test, a CI gate
+  or a reviewer finding names it, and quote that trigger before editing. Rewriting your own paragraph
+  because the second phrasing reads better is not work.
+- Anchor an edit on content, never on a line number or a byte offset, so a stale anchor fails loudly
+  instead of silently editing the wrong line.
+- A destructive discard (`git checkout -- <path>`, `git restore <path>`) is legitimate for undoing a
+  mutation probe, and at that moment the file is ALWAYS modified — so "is it modified?" is not the
+  question and must not become the rule. The question is whether the path also carries work the probe
+  did not put there. `git-restore-backup.sh` copies each modified tracked file aside first and says
+  where; read that output, because the loss it exists for is silent and found later.
+
+# Environment
+
+- `gh` can exit 0 with empty stdout (seen on `gh issue view`, 2026-09). Treat empty output from a `gh`
+  subcommand as a failure and fall back to `gh api repos/{owner}/{repo}/issues/{n}` — never as "the
+  issue has no body".
