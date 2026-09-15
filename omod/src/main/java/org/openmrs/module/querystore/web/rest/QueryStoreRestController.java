@@ -32,6 +32,7 @@ import org.openmrs.module.querystore.model.ContextSlice;
 import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
+import org.openmrs.module.webservices.rest.web.RestUtil;
 import org.openmrs.util.PrivilegeConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -283,12 +284,16 @@ public class QueryStoreRestController {
 		if (injectedMaximumPageSize != null) {
 			return injectedMaximumPageSize.intValue();
 		}
-		Integer configuredMaximum = RestConstants.MAX_RESULTS_ABSOLUTE;
+		// RestUtil.getAbsoluteLimit() is the live read of webservices.rest.maxResultsAbsolute, the
+		// one the REST framework itself uses to size pages. RestConstants.MAX_RESULTS_ABSOLUTE is a
+		// plain static that nothing assigns after its initializer, so an administrator's change to
+		// the global property would never reach this endpoint through it.
+		Integer configuredMaximum = RestUtil.getAbsoluteLimit();
 		return configuredMaximum != null && configuredMaximum.intValue() > 0
 		        ? configuredMaximum.intValue() : DEFAULT_LIMIT;
 	}
 
-	/** Test seam: POJO tests intentionally run without the core AdministrationService RestConstants needs. */
+	/** Test seam: POJO tests intentionally run without the core AdministrationService RestUtil reads. */
 	void setMaximumPageSize(Integer maximumPageSize) {
 		this.injectedMaximumPageSize = maximumPageSize;
 	}

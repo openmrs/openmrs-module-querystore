@@ -32,7 +32,12 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 | `patient=<uuid>&mode=context&q=<text>&interpret=true` | `getContextSlice(patient, q, request)` | Tiered question context in chart order |
 
 - **Privilege:** `Get Patients`.
-- **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`.
+- **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`. A `limit` above the
+  configured absolute maximum (`webservices.rest.maxResultsAbsolute`, default `100`) is clamped
+  to that maximum silently, where framework-backed resources reject it; the response's `links`
+  carry the effective page size. A ranked read whose window (`startIndex + limit`) would extend
+  past that maximum returns `400`, because ranked windows are not paged past the maximum result
+  count.
 - **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also include
   `chartTruncated`, set only from the backend's explicit completeness signal. It is `true` when a
   documented cap or handled backend read failure may have omitted records. For full-chart reads,
