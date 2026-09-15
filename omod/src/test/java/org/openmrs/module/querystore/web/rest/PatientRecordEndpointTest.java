@@ -457,7 +457,7 @@ public class PatientRecordEndpointTest {
 		                new org.openmrs.module.querystore.model.ContextSliceRecord(
 		                        doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
 		                        org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)),
-		                365, true,
+		                365, true, false,
 		                new java.util.LinkedHashSet<String>(Arrays.asList("drug_order", "allergy")),
 		                true, "chart-snapshot-2");
 

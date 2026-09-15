@@ -41,16 +41,6 @@ public final class ContextSlice {
 	}
 
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
-	        Set<String> effectiveTypes, boolean temporalApplied) {
-		this(records, chartSize, chartTruncated, false, effectiveTypes, temporalApplied, null);
-	}
-
-	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
-	        Set<String> effectiveTypes, boolean temporalApplied, String chartSnapshotId) {
-		this(records, chartSize, chartTruncated, false, effectiveTypes, temporalApplied, chartSnapshotId);
-	}
-
-	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
 	        boolean projectionComplete, Set<String> effectiveTypes, boolean temporalApplied,
 	        String chartSnapshotId) {
 		this.records = records == null ? Collections.<ContextSliceRecord> emptyList()
