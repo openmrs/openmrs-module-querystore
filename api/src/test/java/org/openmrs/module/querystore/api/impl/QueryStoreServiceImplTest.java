@@ -416,6 +416,31 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void getPatientChartRead_marksAFailedColdTouchIncomplete() {
+		// The backfill missed this patient and the lazy projection fails mid-outage. The backend's
+		// read-side truncated bit and the deployment-wide projection state both stay clean, so
+		// without the cold-touch result folded in the caller gets an empty chart that claims to
+		// be complete and cannot tell it from a patient who has no records.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.onEnsureIndexed = uuid -> { throw new RuntimeException("embedder unavailable"); };
+		bootstrap.resourceTypes = Collections.singletonList("obs");
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		bootstrap.status = Collections.singletonList(completed);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		PatientChartRead chart = service.getPatientChartRead("patient-uuid");
+
+		assertTrue(chart.getDocuments().isEmpty());
+		assertTrue("a failed cold touch must be disclosed on the read", chart.isTruncated());
+		assertTrue("the deployment-wide projection state is a different fact and stays as reported",
+		        chart.isProjectionComplete());
+		assertEquals("the read must still run after the failed cold touch", 1, backend.findAllByPatientCount.get());
+	}
+
+	@Test
 	public void getPatientChart_bootstrapServiceUnavailable_skipsAutoIndexQuietly() {
 		// No override and no OpenMRS Context: Context.getService throws, the ensureIndexedSafely
 		// catch absorbs the failure, and the chart enumeration still runs against whatever is

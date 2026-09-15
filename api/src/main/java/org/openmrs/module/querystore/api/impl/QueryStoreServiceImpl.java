@@ -242,10 +242,14 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 *  the cycle in bean construction. Context lookup defers it to call time, when both beans are
 	 *  fully wired. An unavailable service (no Spring context in test envs; narrow activation
 	 *  window) throws from Context.getService and is absorbed by the catch — the search still runs
-	 *  and returns whatever the backend has. */
-	private void ensureIndexedSafely(String patientUuid) {
+	 *  and returns whatever the backend has.
+	 *
+	 *  @return {@code true} when the projection ran; {@code false} when it failed and was
+	 *          swallowed, so a caller that claims completeness can disclose the gap. */
+	private boolean ensureIndexedSafely(String patientUuid) {
 		try {
 			bootstrapService().ensureIndexed(patientUuid);
+			return true;
 		}
 		catch (RuntimeException e) {
 			// Index-failure must not block search; whatever did get indexed (or what was already
@@ -253,6 +257,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			// feature shipped.
 			log.warn("Auto-index for patient " + patientUuid
 			        + " failed; serving search with whatever is indexed", e);
+			return false;
 		}
 	}
 
@@ -303,11 +308,15 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		// first method to touch a never-indexed patient pays the projection cost once. The shared
 		// ensureIndexedSafely also keeps the swallow-on-failure semantics consistent — an
 		// index-failure must not block the LLM full-chart caller any more than it blocks search.
+		// It must be disclosed, though: records this patient has in OpenMRS that were never
+		// projected are missing from this read, which is exactly what truncated means. Neither the
+		// backend's read-side bit nor the deployment-wide projection state can see a failed touch.
+		boolean coldTouchFailed = false;
 		if (!backend.existsByPatient(patientUuid)) {
-			ensureIndexedSafely(patientUuid);
+			coldTouchFailed = !ensureIndexedSafely(patientUuid);
 		}
 		PatientChartRead chartRead = backend.findPatientChart(patientUuid);
-		return new PatientChartRead(chartRead.getDocuments(), chartRead.isTruncated(),
+		return new PatientChartRead(chartRead.getDocuments(), chartRead.isTruncated() || coldTouchFailed,
 		        isProjectionComplete());
 	}
 
