@@ -766,6 +766,8 @@ while `date_kind` qualifies `record_date` itself, so temporal consumers must nev
 administrative sort date as a clinical event. Onset, end, resolution, and other clinical-fact dates
 remain dedicated metadata fields per [Decision 7](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time).
 
+**Re-bootstrap advisory on upgrade.** `clinical_date` and `date_kind` are emitted only by documents produced AFTER the upgrade; pre-upgrade Lucene segments and Elasticsearch documents carry neither. `PatientRecordView` renders a missing `date_kind` as `unknown`, and `rest-api.md` tells consumers not to treat `date` as a clinical event date unless `dateKind` is `clinical_event`, so on an existing deployment the whole chart reads as temporally unusable until it is re-projected, and a consumer cannot tell "this record has no clinical date" from "this deployment has not re-projected yet". Operators on existing deployments should re-run `BootstrapService.bootstrap()` (or the per-type resync) so every record passes through the updated serializers; both fields live in record metadata, so re-projection alone populates them. During the re-bootstrap window querystore is briefly internally inconsistent: re-projected resource types carry both fields, types not yet re-indexed carry neither, and a patient whose chart spans both sees `unknown` on one side only. The window is operator-observable in `BootstrapProgress` and resolves at completion.
+
 **Free-text annotations are metadata-only.** Free-text clinician annotations — `comment` on obs, `additional_detail` on condition, and the equivalent on other types — are excluded from the stored `text` field but indexed as metadata for BM25 keyword matching. Citation-clean text is the contract; consumers that want the annotation render it from the metadata field at presentation time.
 
 **Coded-or-free-text fallback.** For types whose primary concept is wrapped in `CodedOrFreeText` (Condition, Diagnosis), the serializer resolves the display name as: coded concept's preferred name when present; otherwise the trimmed `non_coded` string. The non-coded string is also stored on the `non_coded` metadata field. The display name (coded or non-coded) is what appears in `text`; `concept_uuid`/`concept_name`/`synonyms` are populated only on the coded path.
@@ -1410,10 +1412,13 @@ prompt composition, token budgeting, and question interpretation.
    `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling
    reads. The REST surface (Decision 16) exposes the slice additively via
    `patientrecord?...&mode=context&types=...&temporal=...`, with each record carrying its
-   `tier`. Like ranked windows, slices claim no stable complete-chart snapshot. Every context page
-   carries a deterministic `sliceId` over the complete ordered selection and effective
-   interpretation so external clients can reject mixed pages without mistaking that identifier
-   for a chart snapshot or cache validator.
+   `tier`. Every context page carries `chartSnapshotId`, the same stable complete-chart snapshot
+   the full-chart read publishes (`PatientChartFingerprint.snapshotId(chart, truncated,
+   projectionComplete)` over the complete chart the slice was selected from), plus a
+   deterministic `sliceId` over the complete ordered selection and effective interpretation.
+   A consumer that combines a full-chart ledger with a later slice must require matching
+   `chartSnapshotId` values and retry or fail when they differ; `sliceId` lets it reject mixed
+   pages and is neither a chart snapshot nor a cache validator.
 
 ### Rationale
 1. **Selection is retrieval.** The tiers are query semantics over fields this store owns
