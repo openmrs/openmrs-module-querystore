@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.2.5
+version: 0.2.6
 ---
 
 # Skill retro — evidence in, governance change out
@@ -132,6 +132,11 @@ Apply the surviving proposals. Then, per skill touched:
   only there — it is not a skill and matches no `*gate*.sh`, so the clause above never reached it. Added
   2026-08-27, when it was vendored: the first draft of this step's wording created a fourth copy with no
   sync obligation, which is the drift class the whole bullet opens by naming;
+- **and `cmp` `~/.claude/CLAUDE.md` against the pushed `.claude/CLAUDE.md`, whether or not a skill
+  changed.** It is the user-level instruction file every session loads, vendored path-for-path like
+  the skills and hooks, and it matches no clause above — the same fourth-copy drift the bullet above
+  names. Measured 2026-09-15: that path is ALSO loaded as project memory when cwd is this repo,
+  which is why the root `CLAUDE.md` names it;
 - one commit in the repo's own voice — `<skill> <version>[, <skill> <version>]: <lowercase summary>` —
   whose body cites the run records, and which says for each change what corroborated it;
 - push, then write today's date into `~/.claude/skill-lessons/LAST`.

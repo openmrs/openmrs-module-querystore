@@ -43,6 +43,7 @@ Other open questions (migration-time re-projection hook, event-handler idempoten
 - `docs/chartsearchai-port-map.md` — implementation-phase pointer to which chartsearchai files are worth porting and which are not.
 - `docs/spi-providers.md` — step-by-step walkthrough for modules contributing custom resource types (verified by `ProviderEndToEndTest`).
 - `pom.xml` — Maven build. Depends on OpenMRS Platform 2.9.0+ (bumped from 2.8 for #6084's event classes; see Decision 12).
+- `.claude/` — the pipeline skills, hooks and run records, vendored path-for-path against `~/.claude/` (see [`.claude/hooks/README.md`](.claude/hooks/README.md)). `.claude/CLAUDE.md` is the user-level instruction file those sessions load; a session whose cwd is this repo loads it as project memory too, so its rules apply here alongside this file.
 
 ## Workflow notes
 
