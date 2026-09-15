@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ADDITIONAL_DETAIL;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_STATUS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_END_DATE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_NON_CODED;
@@ -58,6 +59,16 @@ public class ConditionRecordSerializer extends AbstractRecordSerializer<Conditio
 	@Override
 	protected LocalDate getDate(Condition condition) {
 		return DateFormatUtil.toLocalDate(condition.getDateCreated());
+	}
+
+	@Override
+	protected LocalDate getClinicalDate(Condition condition) {
+		return DateFormatUtil.toLocalDate(condition.getOnsetDate());
+	}
+
+	@Override
+	protected String getDateKind(Condition condition) {
+		return DATE_KIND_ADMINISTRATIVE;
 	}
 
 	@Override

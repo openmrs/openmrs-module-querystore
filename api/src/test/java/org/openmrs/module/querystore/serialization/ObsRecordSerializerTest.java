@@ -71,6 +71,8 @@ public class ObsRecordSerializerTest {
 
 		assertEquals("obs", doc.getResourceType());
 		assertEquals("Fasting blood glucose: 11.2 mmol/L", doc.getText());
+		assertEquals("clinical_event", doc.getMetadata().get("date_kind"));
+		assertNotNull(doc.getMetadata().get("clinical_date"));
 		assertEquals(11.2, (Double) doc.getMetadata().get("value_numeric"), 0.0001);
 		assertEquals("mmol/L", doc.getMetadata().get("units"));
 		assertEquals("Fasting blood glucose", doc.getMetadata().get("concept_name"));
