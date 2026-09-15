@@ -262,6 +262,30 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		return findPatientChart(patientUuid).getDocuments();
 	}
 
+	/**
+	 * The WARN text for a full-chart read disclosed as incomplete. Nothing throws on this path and
+	 * the WARN is the only trace, so it names the signal that fired: a failed shard, a timeout or an
+	 * early termination point an operator at cluster health; only the size limit points at paging.
+	 */
+	static String truncationDisclosure(String patientUuid, long total, int returned, boolean shardFailure,
+	        boolean timedOut, boolean terminatedEarly) {
+		List<String> causes = new ArrayList<String>(4);
+		if (shardFailure) {
+			causes.add("a failed shard left part of the chart out of the response");
+		}
+		if (timedOut) {
+			causes.add("the search timed out before every record was collected");
+		}
+		if (terminatedEarly) {
+			causes.add("the search terminated early before every record was collected");
+		}
+		if (total > returned) {
+			causes.add("only " + returned + " of " + total + " matching records were returned under the single-search size of "
+			        + FULL_CHART_MAX_HITS);
+		}
+		return "findAllByPatient(" + patientUuid + ") is disclosed incomplete: " + String.join("; ", causes) + ".";
+	}
+
 	@Override
 	public PatientChartRead findPatientChart(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
@@ -309,14 +333,12 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			boolean truncated = total > hits.size() || shardFailure || resp.timedOut()
 					|| Boolean.TRUE.equals(resp.terminatedEarly());
 			if (truncated) {
-				// Hitting the cap is a v1 quirk of the ES tier: single-search size is bounded by
-				// max_result_window (default 10k). MySQL and Lucene have no equivalent cap because
-				// they stream from JDBC/Lucene directly. PIT+search_after pagination is the v1.1
-				// follow-up if a real consumer ever surfaces here. See ADR Decision 15 for the v1
-				// contract; the log message itself stays terse for ops dashboards.
-				log.warn("findAllByPatient(" + patientUuid + ") returned the ES v1 cap of "
-				        + FULL_CHART_MAX_HITS + " hits; older records beyond this slice are not in"
-				        + " the result.");
+				// The size limit is a v1 quirk of the ES tier: single-search size is bounded by
+				// max_result_window (default 10k). MySQL and Lucene have no equivalent because they
+				// stream from JDBC/Lucene directly. PIT+search_after pagination is the v1.1 follow-up
+				// if a real consumer ever surfaces here. See ADR Decision 15 for the v1 contract.
+				log.warn(truncationDisclosure(patientUuid, total, hits.size(), shardFailure, resp.timedOut(),
+				        Boolean.TRUE.equals(resp.terminatedEarly())));
 			}
 			List<QueryDocument> all = new ArrayList<>(hits.size());
 			for (co.elastic.clients.elasticsearch.core.search.Hit<Map> h : hits) {
