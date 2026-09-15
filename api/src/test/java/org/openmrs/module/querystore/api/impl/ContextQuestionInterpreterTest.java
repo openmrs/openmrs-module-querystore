@@ -54,6 +54,17 @@ public class ContextQuestionInterpreterTest {
 	}
 
 	@Test
+	public void preprocess_keepsWordsThatCarryClinicalMeaningOnBothSides() {
+		// Stripping is set membership with no part-of-speech test, so a word listed for its adverb
+		// or conjunction sense is also removed where it carries laterality, negation or status.
+		assertEquals("pain right knee", ContextQuestionInterpreter.preprocess("pain in the right knee"));
+		assertEquals("pain left knee", ContextQuestionInterpreter.preprocess("pain in the left knee"));
+		assertEquals("neither aspirin nor warfarin",
+		        ContextQuestionInterpreter.preprocess("neither aspirin nor warfarin"));
+		assertEquals("off metformin", ContextQuestionInterpreter.preprocess("is the patient off metformin?"));
+	}
+
+	@Test
 	public void preprocess_isIndependentOfTheJvmDefaultLocale() {
 		Locale previous = Locale.getDefault();
 		try {

@@ -3,10 +3,14 @@
 # "does the patient have any medications?" both become "medications").
 #
 # IMPORTANT: Do NOT add words that carry clinical meaning:
-#   - Negation: no, not, never, none, without, neither
+#   - Negation: no, not, never, none, without, neither, nor
 #   - Temporal: recent, last, new, first, previous, earliest
-#   - Status: active, stopped, past, ongoing, chronic, acute, resolved
+#   - Status: active, stopped, off, past, ongoing, chronic, acute, resolved
+#   - Laterality: right, left
 #   - Quantity with clinical meaning: elevated, low, high, normal, abnormal
+#
+# Stripping is set membership with no part-of-speech test, so a word that is usually an
+# adverb or conjunction (right, off, nor) is also removed where it carries the meaning above.
 #
 # One word per line. Lines starting with # are comments. Blank lines ignored.
 
@@ -144,9 +148,7 @@ inside
 into
 like
 near
-nor
 of
-off
 on
 onto
 or
@@ -210,7 +212,6 @@ perhaps
 quite
 rather
 really
-right
 same
 simply
 sometimes
