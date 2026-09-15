@@ -196,10 +196,6 @@ final class PatientRecordView {
 	}
 
 	/** Stable identity for an entire ordered chart, including completeness and canonical metadata. */
-	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated) {
-		return PatientChartFingerprint.snapshotId(docs, chartTruncated);
-	}
-
 	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated, boolean projectionComplete) {
 		return PatientChartFingerprint.snapshotId(docs, chartTruncated, projectionComplete);
 	}

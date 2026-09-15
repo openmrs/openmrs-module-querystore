@@ -29,10 +29,6 @@ public final class PatientChartFingerprint {
 	private PatientChartFingerprint() {
 	}
 
-	public static String snapshotId(List<QueryDocument> documents, boolean chartTruncated) {
-		return snapshotId(documents, chartTruncated, true);
-	}
-
 	public static String snapshotId(List<QueryDocument> documents, boolean chartTruncated,
 	        boolean projectionComplete) {
 		StringBuilder canonical = new StringBuilder();

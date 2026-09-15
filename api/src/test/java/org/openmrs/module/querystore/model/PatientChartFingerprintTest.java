@@ -21,8 +21,8 @@ public class PatientChartFingerprintTest {
 		QueryDocument first = documentWithAliases(new LinkedHashSet<String>(Arrays.asList("beta", "alpha")));
 		QueryDocument second = documentWithAliases(new LinkedHashSet<String>(Arrays.asList("alpha", "beta")));
 
-		assertEquals(PatientChartFingerprint.snapshotId(Collections.singletonList(first), false),
-		        PatientChartFingerprint.snapshotId(Collections.singletonList(second), false));
+		assertEquals(PatientChartFingerprint.snapshotId(Collections.singletonList(first), false, true),
+		        PatientChartFingerprint.snapshotId(Collections.singletonList(second), false, true));
 	}
 
 	private static QueryDocument documentWithAliases(LinkedHashSet<String> aliases) {
