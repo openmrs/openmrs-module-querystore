@@ -33,10 +33,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.store.FSDirectory;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.openmrs.module.querystore.QueryStoreConstants;
 import org.openmrs.module.querystore.backend.BackendCapabilities;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.Filter;
@@ -261,6 +266,32 @@ public class LuceneBackendStoreTest {
 		assertTrue("a handled per-index failure must be disclosed", read.isTruncated());
 		assertEquals(1, read.getDocuments().size());
 		assertEquals(obs.getResourceUuid(), read.getDocuments().get(0).getResourceUuid());
+	}
+
+	@Test
+	public void findPatientChart_marksAnIndexTheEnumeratorCouldNotOpenIncomplete() throws Exception {
+		QueryDocument obs = doc("obs", "patient-A", "Retained observation", null);
+		QueryDocument condition = doc("condition", "patient-A", "Condition behind a stale lock", null);
+		backend.upsert(obs);
+		backend.upsert(condition);
+		backend.close();
+
+		// A writer from a previous JVM still holds write.lock on one index. The enumerator skips
+		// that directory, so the per-index read loop never sees it and cannot report the gap
+		// itself; the enumerator has to.
+		Path lockedIndex = indexRoot.resolve(QueryStoreConstants.INDEX_PREFIX + "condition");
+		try (IndexWriter lockHolder = new IndexWriter(FSDirectory.open(lockedIndex),
+		        new IndexWriterConfig(new StandardAnalyzer()).setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND))) {
+			assertNotNull(lockHolder);
+			backend = new LuceneBackendStore(indexRoot);
+
+			PatientChartRead read = backend.findPatientChart("patient-A");
+
+			assertTrue("an index the enumerator could not open must be disclosed as incomplete",
+			        read.isTruncated());
+			assertEquals(1, read.getDocuments().size());
+			assertEquals(obs.getResourceUuid(), read.getDocuments().get(0).getResourceUuid());
+		}
 	}
 
 	@Test
