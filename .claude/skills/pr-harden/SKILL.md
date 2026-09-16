@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.23.0
+version: 0.24.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -289,7 +289,10 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   the other, at a cycle and a round.
 - **A guard that is supposed to stay GREEN is not covered by *If you ADD a guard*** — a negative
   assertion passes whether or not its subject could ever arise, so build the case it exists for and
-  watch it fail. `harden`'s Termination carries the measurements (#360, #355).
+  watch it fail. **And a control measures the HARNESS it ran in, not the property** — ask which
+  logger and level it captures, how it RENDERS what it captured, and whether a sibling test's residue
+  changes either; a liveness precondition is not the answer. `harden`'s Termination carries the
+  measurements.
 - **Ask which case hands the guard's SUBJECT its other value. That is the general form of the
   *supposed to stay GREEN* rule, and the question is not about the guard.** For each guard you
   add: what is the cheapest edit that satisfies its assertion and still breaks the property, and

@@ -3116,8 +3116,12 @@ cycle that shipped a false claim *after* its behavioural claims were run.
   bound still went unnoticed"*) is met is **undecidable from this record**: it says a fresh agent found
   both, not whether the author had run the owed mutations. Recorded as undecidable rather than counted
   either way.
-- **Cross-session interference on a live run's shared state: 3 records** — previous 2 (**:811-824**,
-  which rules that a third sighting does not restart at 1). At retro time the shared chartsearchai
+- **Cross-session interference on a live run's shared state: 4 records** — *corrected by the second
+  window of 2026-09-16, which measured it: this entry was written as "3 records — previous 2
+  (**:811-824**)", re-deriving "previous" from the base entry and dropping **:958**'s increment to 3
+  (`#297`:43, "Third distinct harm and a third surface"). That is **:1488**'s named defect, the one
+  this same block caught itself committing for the prose-correction count at **:3090-3092**.* At
+  retro time the shared chartsearchai
   clone was on another pipeline run's branch with that run's commits on it, while this run's branch and
   remote were intact. **Harm realised: none** — worth recording beside the two destructive sightings,
   since it is the first of the class that cost nothing. After-the-fact capture: no part of the run
@@ -3132,3 +3136,117 @@ cycle that shipped a false claim *after* its behavioural claims were run.
 **A note for the next block:** every ledger line number quoted above was resolved against the file
 before writing, after the refuter found the draft's `:30` citation pointing at a neighbouring entry —
 the same cheap check **:3036** prescribes, and it found the one wrong citation in this draft.
+
+## 2026-09-16 (second window of the day: 1 record — #439/PR440, mirrored at 9a08df8 and explicitly not read by the 22:45 block) — 1 applied after revision, 2 killed, 2 corrections applied to the store, 5 parked; linter 10 files, 0 findings
+
+**APPLIED after revision · `harden` 0.32.0, `pr-harden` 0.24.0 — a control measures the HARNESS it
+ran in, not the property.** Bar **(b)**: rounds 2, 3 and 4 of `#439`, one round each, every one a
+positive control that EXISTED and was green while the thing it forbids reached the log. The parent
+rule — *"Build the case it exists for and watch it FAIL"* — was obeyed: `efccb372`'s own message says
+*"Its control is what makes that a defect rather than a doubt — restoring the pre-fix label does
+redden the case"*. Three axes the control did not move along: a capture raised one class's logger to
+WARN (`info` passed), the shared helper's `describeAll` rendered a throwable's TYPE alone (a
+diagnostic exception passed), and a sibling capture's leftover `LoggerConfig` held the guard under
+one surefire run order. All three fixes verified in the tree, not just in the record.
+- **Written against `harden`'s *Residue the control does not close*, which the draft claimed did not
+  exist** (*"Nothing states it for a control"*). It does, two lines above the bullet edited, for the
+  opposite direction — a harness's spurious RED. The shipped text names it as the mirror.
+- **The bar-(a) leg was DROPPED.** The draft cited `#435`:`[c1]`, a second LF-only frame decoder in
+  the test package, as corroboration. It is not a positive control and the record never calls it one;
+  it is *a second definition*, which `harden`'s *ask whether the thing you fixed has a SIBLING*
+  already reaches. Same ground as **:3077**. The RE-IMPLEMENTATION clause built on it went with it.
+- **Dropped: *"One probe is evidence for ONE site"*** — the draft's own universal, sourced to
+  nothing, over an incident the record costs at 0 rounds. The axis it names is already carried by
+  `#360` in the parent bullet.
+- **Added, from the refuter's sweep of the record the draft had already mined:** `[r4]`'s liveness
+  precondition, *"passes while the negative it protects is vacuous"* — a sixth instance of the
+  proposal's own class, in the proposal's own record, missing from its evidence list.
+- **Reachability, decided after the draft:** `pr-harden`:261 says the fixer's brief *"carries
+  harden's Phase 1 discipline:"* followed by the bullets, so a rule written only in `harden`'s
+  Termination is not in a `pr-harden` fixer's brief — and `#439` is a `pr-harden` run whose guards a
+  fixer wrote. The operative sentence went into `pr-harden`'s *supposed to stay GREEN* bullet too,
+  which is that skill's existing pattern for this rule.
+- **Prune: none of comparable size, stated plainly rather than manufactured.** The one real cut is
+  `pr-harden`'s *"carries the measurements (#360, #355)"* enumeration, ten characters, which this
+  edit makes wrong and which is the rotting kind. Net **+13 lines**, justified: the parent rule was
+  in force, was obeyed, and cost three rounds in one run anyway.
+
+**KILLED · P2, a monotonic parked-count check for `skill-lint.py`.** The proposal reported the check
+*"calibrated in both directions on the live ledger"* — 39 classes, 7 repeated, one flag, and that
+flag the genuine `:3119` defect. Every one of those figures reproduces. **The calibration was still
+false, because the sample was half the corpus.** This ledger writes a parked count in TWO formats:
+`- **Class: N records**` (60 entries) and `- Class: **N records**` (66 entries, the earlier blocks'
+form). Over both — 82 classes, 16 repeated — the same rule fires **13 times, 12 of them legitimate
+restatements** of standing counts in the early blocks. `skill-lint.py`'s own removed positional-
+cross-reference check is the precedent and the bar: *"A guard whose output is mostly noise gets
+learned-around rather than obeyed, which is worse than not having it"* — that one was 3 noise in 4,
+this is 12 in 13. And the defect it MISSES is the one it was written for: `:2255` cites *"previous 17
+(:2098)"* where the 17 is at `:1879`, and `:1872` cites *"previous ~24 (:1636)"* where the ~24 is at
+`:1641` — both **:1488**'s class, both invisible because N rose. The proposal recorded that coverage
+hole against the variant it REJECTED and never applied it to the one it recommended. Two figures in
+its own prose do not reproduce either: the sequence *"17→19→20→21→22"* spans a class RENAME (`Rate-
+limit agent death` → `Rate-limit / session-limit agent death`) and continues 24 and 26.
+**REOPEN ON:** a check calibrated over both formats, with the `unchanged` convention retro-fitted to
+the twelve first, that detects the wrong-`previous`-pointer defect rather than only the flat-N one.
+
+**KILLED · C2, renaming the record's `-DfailIfNoTests=false` to `-Dsurefire.failIfNoSpecifiedTests=
+false`.** The measurement behind it is sound and reproduced twice — six arms, maven 3.9.10 / surefire
+3.5.5, calibrated known-bad (plus selector → exit 1) and known-good (comma → `Tests run: 20`, exit 0);
+`-DfailIfNoTests=false` exits **1** on `surefire:test`, on the `test` lifecycle, in both modules and
+in the reactor, while `-Dsurefire.failIfNoSpecifiedTests=false` exits 0 with no `Tests run:` line.
+**But the correction it licensed was false.** The run's transcript carries `failIfNoTests` throughout
+and `failIfNoSpecifiedTests` only inside surefire's error text: the flag name in the record is RIGHT.
+What is wrong is *"exits 0"* — the command was `mvn … | grep -E … | head -20`, whose status is
+`head`'s, and BUILD FAILURE was in the captured output, unread. Renaming the flag would have put a
+command the run never issued into the record while preserving the half that is false. **:2897-2899**'s
+ground for not shipping a flag clause therefore stands re-measured, for the reason already recorded.
+Corrected per Step 4's *"Prefer deleting an unsupported clause to rewording it"*: the outcome, not the
+flag. Precedent for correcting a record from a later window: **:2350-2352**.
+
+**Corrections applied to the store.**
+- **`:3119`'s count, 3 → 4.** It read *"3 records — previous 2 (:811-824)"*, re-deriving from the base
+  entry and dropping **:958**'s increment (`#297`:43, *"Third distinct harm and a third surface"*).
+  **:1488**'s class, and the same block caught itself committing it for the prose-correction count at
+  **:3090-3092**. The fourth sighting is the one `:3119` records, captured in `#435`; `#439` is the
+  OTHER SIDE of that same event and is not a fifth — the draft said it was, contradicting its own O5.
+- **`#439`'s Environment bullet**, per the C2 entry above.
+
+**Parked.**
+- **The proposer not verifying its own citations: 34 cycles** — previous 31 (**:2706**). This pass
+  added three: `harden`:410 for *Don't stop correcting a claim*, which is **:414** (caught by the
+  proposer before submission); `harden`:248-255 for a bullet that ends at **:256**; and **:3084-3086**
+  for the self-catch sentence, which is **:3090-3092**. A fourth in prose rather than counted: the
+  draft cited `9a08df8` without saying it is a querystore mirror commit, which resolves in no
+  chartsearchai ref.
+- **A completeness sweep whose criterion is narrower than the defect class it claims: 1 record.**
+  `#439`:`[r1]`, blocking, 1 round, and the run's only genuinely missed disclosure — the sweep
+  filtered log-call ARGUMENTS by identifier name and the missed site passed `withheld`/`pairs`;
+  `[r3]` then found a fourth class the same criterion reaches. The transposed remedy already exists
+  for the neighbouring problem, `harden`'s *enumerate the claim's SUBJECT instead … a population you
+  can finish*. **REOPEN ON:** a second record of a defect-site sweep narrower than the class it reports.
+- **A measurement recorded in javadoc, falsified by a later commit on the SAME branch: 1 record.**
+  `#439`, *"Widening the capture to the module root was tried and reverted"*, whose cause round 3's
+  own `close()` fix removed. Cost: part of 1 round. **:2714-2723** and **:2895** are the same hazard
+  for POINTERS; this is the measured claim itself. **REOPEN ON:** a second.
+- **`pr-harden` has no contract for a background BUILD as an await: 1 record, 0 cost.** `#439` records
+  inventing one — *"recording a background BUILD as an await (not just an agent) is what lets an
+  orchestrator yield while a build runs"* — against a schema whose field is `{"agent": …}` and a rule
+  that reads *"Don't spawn a subagent without recording the await."* Raised by the refuter against the
+  draft, which had filed it as a skill holding rather than a gap. **REOPEN ON:** a second, or one
+  where the missing contract costs a yield.
+- **A run reusing a prior run's DECLINE as precedent, overturned: 1 record.** `#439` round 5 —
+  *"A security-scan fix needs no instruction-file rule, per #435's precedent"* — where `#435`'s rule
+  bound one directory and this one binds two packages, which the root instruction file's own criterion
+  routes differently. Absent from the draft entirely. **REOPEN ON:** a second.
+- **`-Dtest=A+B` selects nothing and reports BUILD FAILURE: 3 records** — previous 2
+  (**:2887-2890**, **:3133-3134**), plus `#439`. Re-measured today at both ends; see the C2 entry. No
+  clause proposed, three windows running. Label kept character-for-character from **:3133** so the
+  two group, which is one of the grounds P2 died on.
+- **A ledger citation invalidated by an edit the SAME commit made ABOVE it: 1 incident.** The draft
+  of this block cited the entry above as **:3129-3130**, correct when read and four lines stale by
+  the time it was written, because this block's own `:3119` correction inserted four lines above it.
+  **:2895** states this hazard for a SKILL's line numbers and **:2721-2723**'s remedy — *"resolve
+  skill-file pointers LAST … a record's line numbers are stable, a skill's are not"* — does not
+  reach it: the ledger's own numbers are not stable either, in exactly the commit that corrects an
+  entry. Caught by re-resolving every citation in this block after writing it. Not proposed as a
+  rule at 1 incident; the existing remedy needs one word, not a new entry.

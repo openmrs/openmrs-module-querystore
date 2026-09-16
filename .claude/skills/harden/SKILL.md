@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.31.0
+version: 0.32.0
 ---
 
 # Harden
@@ -254,6 +254,16 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
   mutation check — found it. On #355 a verifier briefed to look for a partner the shipped data does
   not carry re-drove the contract with one it does, plus a control, rather than reporting the absence
   as a result.
+- **And a control measures the HARNESS it ran in, not the property.** This is the mirror of *Residue
+  the control does not close*: there a harness's own spurious RED satisfies the control, here its
+  blindness satisfies the guard, and both leave a negative assertion standing over a channel nothing
+  ever drove. Ask which logger and level the harness captures, how it RENDERS what it captured, and
+  whether a sibling test's residue changes either. Rounds 2, 3 and 4 of #439, one round each: a
+  capture raised one class's logger to WARN, so the same details logged at `info` passed; the shared
+  capture helper rendered a throwable's TYPE alone, so the patient's medication names attached to a
+  diagnostic exception passed every guard; and a leftover `LoggerConfig` from a sibling capture held
+  the guard under one surefire run order and not another. A liveness precondition is not the answer —
+  #439's passed on unrelated events while the negative it protects was vacuous.
 - **And where the thing you changed REPORTS — a warning, a finding, a check — name the direction it
   must never fail in, and build the input for that direction.** Two runs, each found by a fresh agent
   rather than by the author: on #337 a carve-out applied to both operands withdrew the record-side
