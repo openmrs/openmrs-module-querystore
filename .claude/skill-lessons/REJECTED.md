@@ -3250,3 +3250,25 @@ flag. Precedent for correcting a record from a later window: **:2350-2352**.
   reach it: the ledger's own numbers are not stable either, in exactly the commit that corrects an
   entry. Caught by re-resolving every citation in this block after writing it. Not proposed as a
   rule at 1 incident; the existing remedy needs one word, not a new entry.
+
+## 2026-09-16 (addendum to the window above, operator-directed) — 1 applied as a correction; **Step 5 not run**
+
+**APPLIED as a correction · `skill-retro` 0.2.8, Step 6's push-verification clause.** The clause
+already said to read the pushed copy with `git show origin/main:<path>` "after a `git fetch`"; it did
+not say WHEN. Measured this window: a concurrent session pushed its own retro between this window's
+fetch and its all-clear, so a full four-family `cmp` reported everything identical against a
+superseded `origin/main`, and only a re-fetch showed the remote had moved. The added clause says to
+fetch immediately before the comparison you report. It is a sharpening of an existing instruction
+rather than a new obligation, hence the patch bump.
+
+**Deviation, recorded because it is one:** Step 5 was not run on this change. The operator directed
+the edit after the incident, and no fresh agent refuted it. The cheap checks were done instead — the
+clause was read in full to confirm it does not restate what is already there, and `REJECTED.md` was
+searched for a prior kill of the same idea (none). **REOPEN ON:** any evidence that "immediately
+before" is the wrong remedy — for instance a window where the re-fetch itself raced and a lock or a
+recorded sha would have been the answer.
+
+**And the incident itself is the fourth sighting of cross-session interference on a live run's shared
+state** (previous 3, this block above). The first three were about work; this one is about
+VERIFICATION, which is the more dangerous shape: a stale check reports a clean result it has not
+earned, and nothing about the output distinguishes it from one that has.
