@@ -3035,3 +3035,100 @@ re-submits this on the same evidence.
   again — every `harden` and `pr-harden` pointer above was resolved against the POST-edit files. And
   add one: a phrase that straddles a line-wrap does not grep, which cost a false "that tally is gone"
   here before the flattened search found `harden`:273. **:2080-2086** predicted exactly this.
+
+## 2026-09-16 (1 record — #435/PR436, the store's **first standalone-`harden` run**) — 0 applied as drafted, 1 applied as a correction, 1 killed, 6 parked; linter 10 files, 0 findings
+
+**KILLED · P1, stating the standalone-`harden` capture gap in `skill-retro` Step 1.** Bar (c) claimed
+and not met, on three grounds any one sufficient. `skill-retro`:10 already enumerates the capturing
+skills — *"`resolve-ticket` and `pr-harden` each append a run record when they finish"* — so Step 1's
+sentence is incomplete, not false, and its coverage claim is bounded two paragraphs earlier.
+**:825-828** has already ruled this shape: an absence in `harden` cited against another skill's
+sentence is *"a **GAP, not a contradiction**"*. And deciding whether the omission matters needs a fact
+about the world — whether `/harden` is ever invoked outside the two — which is what **:66-68** excludes
+from clause (c). At 1 record and 0 cycles lost, clauses (a) and (b) fail too.
+**Its second sentence was worse than unchecked and the refuter measured it.** P1 asserted the corpus
+under-samples standalone harden runs *"which is where the prose-correction class is heaviest"*. Every
+record behind the prose-correction count names `resolve-ticket` or `pr-harden` with harden nested, so
+the standalone sample size is **1** and the comparative is unavailable from the corpus — while the
+corpus's actual weight sits on the nested path. It also carried *"only"* and a superlative into a
+proposal, which is **:856-859**'s five-retro streak of submitting wording that breaks the
+counts/universals rule being enforced.
+**And it would not have prevented what it cites:** it tells a later retro how to read the corpus; it
+cannot make a standalone run write a record. **REOPEN ON:** a second standalone-`harden` record, or one
+where the missing capture costs a retro a re-derivation.
+
+**APPLIED as a correction · `skill-retro` 0.2.7, Step 1.** *"one per finished run"* has been loosely
+false since 2026-08-24: six files in the store are measurement or defect notes rather than run records
+(`2026-08-24-pipeline-timing-measurement`, `2026-08-26-pwd-keyed-gate-false-positive`,
+`2026-08-26-unattended-yield-kills-the-run`, `2026-08-27-retro-authored-hook-regression`, and two
+`pr-review-dimension-fanout` measurements), and this window adds a seventh kind, a hand-written
+capture. One clause: a file count is not a run count, read each file's header, and a standalone
+`/harden` writes none. Precedent for applying a correction against a killed proposal: **:2388**,
+**:2725**.
+
+**The reopen at :2789-2790 FIRED and is ANSWERED here, so the next window does not re-derive it.**
+Its condition — *"a documentation-classified single-agent cycle that shipped a false claim the deletion
+discipline would have caught"* — is met word for word by this run: cycle 7 rewrote the
+`assertCarriedWhole` paragraph and shipped *"This is the assertion that reddens on it"*, refuted by
+measurement at cycle 8 (`git show 7a080eed` carries both wordings). The routing clause stays killed
+anyway, on a ground at the site rather than the one first drafted: `harden`:199-201's third obligation
+already requires the confirming agent to RUN any claim about behaviour, and running the mutation is
+exactly what refuted this one — so it is non-compliance with a shipped condition, not a missing one,
+and **:2786** already ruled the site *"already reaches"* the rule P1-R named. The first draft of this
+entry suppressed the reopen on **:25-27**'s logic instead (the failure was the orchestrator's, not an
+agent's), which the refuter killed: the record files the failure at the route and says nothing about
+who typed the edit, so that premise was not in evidence. **REOPEN ON:** a documentation-classified
+cycle that shipped a false claim *after* its behavioural claims were run.
+
+**Parked.**
+- **Prose-correction cycles: ~40 records** — previous ~39 (**:2987**), plus this run. First
+  standalone-`harden` instance in the store, and the sharpest single case: **12 of 19 harden commits
+  changed zero non-comment `*.java` lines**, and the fix itself was written before cycle 1 and never
+  changed again. Both rules that would have ended it early were already shipped — `harden`:401
+  (delete, don't reword) and :406 (the universals list) — and both were violated until cycle 7, when
+  deletion plus enumerating the claim's SUBJECT stopped it. Remedy still killed; the shipped rules are
+  the remedy. The draft of this entry took its figure from **:1152**'s superseded 16, which is
+  **:1488**'s named defect (*"a parked count taken from a superseded block"*), and a "33 lines of code"
+  figure that did not reproduce under three countings was dropped rather than published.
+- **A mechanical detector for the self-rewrite signature: attempted, not calibrated.** Written and run
+  over this run's own history (`proposals/2026-09-16-selfrewrite.py`): comment-only diff, removing
+  comment lines an earlier commit of the same run added, adding comment lines in their place. Measured
+  **4 true positives, 2 false positives, 1 false negative** — it flags cycles 8 and 9, whose edits were
+  pure deletions, because cutting a clause out of a wrapped comment reflows its neighbours and that is
+  indistinguishable from a replacement at line granularity; and it exempts cycle 7, which carried one
+  code line and is the cycle that shipped a false claim. A third failure the first draft missed: its
+  `is_comment` treats every line of a `.md` file as code, so an ADR-only prose cycle is silently
+  exempt, and this run's prose had ADR homes. A word-granularity version might separate a reflow from a
+  replacement. Recorded so the next attempt starts here. The standing *"probably mechanical, not
+  textual"* note at **:30** is the `git checkout --` entry's, not this class's — the first draft
+  borrowed it, which is **:853-855**'s citation defect; this class's own note is **:2989**.
+- **N consecutive single-agent cycles each independently reporting code convergence while the cycle's
+  only edits are prose: 1 record** — cycles 6-9 here, four of them. Parked against **:1444**'s standing
+  reopen, *"a spin signal, not a cap"*, as the first candidate signal any record has supplied, and
+  distinct from another cap or trigger (killed at **:2770-2777** as *"third grammar, same remedy"*). No
+  remedy proposed. **REOPEN ON:** a second record of the shape, or one where the signal is available to
+  a gate rather than only to a reader.
+- **A test pinned from one side only, defeated by a moved bound: 3 records** — previous 1 (**:2998**,
+  `#337`:16), plus two from this run: widening the terminator set to `\R` passes the whole suite while
+  turning a form feed in a clinician's answer into a newline, and dropping the `-1` from the framing
+  split deletes a trailing line break with the whole suite green, because no payload in the class ended
+  with a terminator. Whether **:2981**'s sharpened reopen (*"the owed mutations WERE run and a moved
+  bound still went unnoticed"*) is met is **undecidable from this record**: it says a fresh agent found
+  both, not whether the author had run the owed mutations. Recorded as undecidable rather than counted
+  either way.
+- **Cross-session interference on a live run's shared state: 3 records** — previous 2 (**:811-824**,
+  which rules that a third sighting does not restart at 1). At retro time the shared chartsearchai
+  clone was on another pipeline run's branch with that run's commits on it, while this run's branch and
+  remote were intact. **Harm realised: none** — worth recording beside the two destructive sightings,
+  since it is the first of the class that cost nothing. After-the-fact capture: no part of the run
+  observed it, and the record labels it so, per **:387-395**.
+- **Concurrent maven in one checkout: 1 record.** A foreground `mvn -pl omod test` run while a
+  background `mvn clean install` was in flight in the SAME tree invalidated the background build, which
+  cleans the module the foreground run compiles into. Cost: one build re-run, and a moment of treating
+  its green as evidence. No prior sighting in this ledger.
+- **`-Dtest=A+B` selects nothing and reports BUILD FAILURE:** this run is another sighting, adding to
+  **:2887-2890**. It silently voided one mutation measurement until re-run with a comma.
+
+**A note for the next block:** every ledger line number quoted above was resolved against the file
+before writing, after the refuter found the draft's `:30` citation pointing at a neighbouring entry —
+the same cheap check **:3036** prescribes, and it found the one wrong citation in this draft.
