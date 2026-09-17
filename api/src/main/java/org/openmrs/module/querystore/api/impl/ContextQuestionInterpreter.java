@@ -151,7 +151,9 @@ final class ContextQuestionInterpreter {
 		for (String word : words) {
 			if (!word.isEmpty()) {
 				allClean.add(word);
-				if (!QUERY_STOPWORDS.contains(word)) {
+				// Single-character tokens (e.g. disease variants "A", vitamins, blood types, numerals)
+				// are never stripped as stopwords; they distinguish clinical entities.
+				if (word.length() == 1 || !QUERY_STOPWORDS.contains(word)) {
 					contentWords.add(word);
 				}
 			}

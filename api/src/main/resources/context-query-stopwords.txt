@@ -7,17 +7,17 @@
 #   - Temporal: recent, last, new, first, previous, earliest
 #   - Status: active, stopped, off, past, ongoing, chronic, acute, resolved
 #   - Laterality and body site: right, left, back
-#   - Disease-name parts and numerals: down (Down syndrome), i (type I diabetes)
-#   - Quantity with clinical meaning: elevated, low, high, normal, abnormal
+#   - Disease-name parts, letters and numerals: down (Down syndrome), single letters (hepatitis A, vitamin A, type I diabetes)
+#   - Quantity and clinical control: elevated, low, high, normal, abnormal, well
 #
 # Stripping is set membership with no part-of-speech test, so a word that is usually an
-# adverb, conjunction or pronoun (right, off, nor, back, down, i) is also removed where it carries
-# the meaning above. Check a candidate against a control phrase that differs only in that word.
+# adverb, conjunction or pronoun (right, off, nor, back, down, well) is also removed where it carries
+# the meaning above. Single-character tokens are skipped by the interpreter rule.
+# Check a candidate against a control phrase that differs only in that word.
 #
 # One word per line. Lines starting with # are comments. Blank lines ignored.
 
 # Determiners and pronouns
-a
 all
 an
 another
@@ -221,7 +221,6 @@ thus
 too
 usually
 very
-well
 
 # Question words
 how

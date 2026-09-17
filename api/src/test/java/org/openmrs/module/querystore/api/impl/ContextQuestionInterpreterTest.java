@@ -76,6 +76,26 @@ public class ContextQuestionInterpreterTest {
 		        ContextQuestionInterpreter.preprocess("history of Down syndrome and hypothyroidism"));
 		assertEquals("management type i diabetes insulin",
 		        ContextQuestionInterpreter.preprocess("management of type I diabetes with insulin"));
+		assertEquals("history hepatitis a cirrhosis",
+		        ContextQuestionInterpreter.preprocess("history of hepatitis A and cirrhosis"));
+		assertEquals("history hepatitis b cirrhosis",
+		        ContextQuestionInterpreter.preprocess("history of hepatitis B and cirrhosis"));
+		assertEquals("vitamin a deficiency management plan",
+		        ContextQuestionInterpreter.preprocess("vitamin A deficiency management plan"));
+		assertEquals("vitamin d deficiency management plan",
+		        ContextQuestionInterpreter.preprocess("vitamin D deficiency management plan"));
+		assertEquals("influenza a positive swab result",
+		        ContextQuestionInterpreter.preprocess("influenza A positive swab result"));
+		assertEquals("influenza b positive swab result",
+		        ContextQuestionInterpreter.preprocess("influenza B positive swab result"));
+		assertEquals("blood type a negative transfusion record",
+		        ContextQuestionInterpreter.preprocess("blood type A negative transfusion record"));
+		assertEquals("blood type o negative transfusion record",
+		        ContextQuestionInterpreter.preprocess("blood type O negative transfusion record"));
+		assertEquals("well controlled metformin",
+		        ContextQuestionInterpreter.preprocess("is the patient well controlled on metformin?"));
+		assertEquals("poorly controlled metformin",
+		        ContextQuestionInterpreter.preprocess("is the patient poorly controlled on metformin?"));
 	}
 
 	@Test
