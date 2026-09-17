@@ -86,6 +86,8 @@ public class ConditionRecordSerializerTest {
 
 		assertEquals("Condition: Hypertension. Status: ACTIVE. Onset: 2020-03-15", doc.getText());
 		assertEquals("2020-03-15", doc.getMetadata().get("onset_date"));
+		assertEquals("2020-03-15", doc.getMetadata().get("clinical_date"));
+		assertEquals("administrative", doc.getMetadata().get("date_kind"));
 	}
 
 	@Test

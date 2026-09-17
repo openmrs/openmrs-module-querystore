@@ -63,6 +63,8 @@ public class MedicationDispenseRecordSerializerTest {
 				"Dispensed: Metformin 500mg. Status: Completed. Quantity: 60.0 Tablet(s)."
 				        + " Dose: 1.0 Tablet(s) Oral twice daily. Handed over: 2025-01-10",
 				doc.getText());
+		assertEquals("2025-01-10", doc.getMetadata().get("clinical_date"));
+		assertEquals("clinical_event", doc.getMetadata().get("date_kind"));
 	}
 
 	@Test
