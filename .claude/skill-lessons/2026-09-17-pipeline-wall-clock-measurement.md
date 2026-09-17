@@ -36,8 +36,10 @@ Three buckets, measured independently, summing to ~100% with almost no overlap:
   waves that do not overlap each other**. The sum of wave spans equals the union, so the chain is
   strictly serial. Only the first one or two waves carry four lenses; the tail is n=1 or n=2, and the
   single-agent waves alone are 124-188 min of each run.
-- **20-22% is the orchestrator generating** — 71/72/73/78 min, at 658-801k output tokens and
-  152-185 tok/s.
+- **20-22% is the orchestrator generating** — 71/72/73/78 min, at 321/310/309/347k output tokens and
+  70-75 tok/s. Count output per MESSAGE, not per transcript event: an assistant message appears once
+  per content block with the same final `usage` repeated, so summing over events inflates this figure
+  by the average blocks-per-message (2.1 on #446) and was published that way in the first pass here.
 - **13-19% is maven** — 45/45/62/56 min. Full `clean install` accounts for 26/38/49/51 min of that,
   at ~105 s per build; maven's self-reported `Total time` equals the wall time, so there is no harness
   overhead inside a build and the *count* is the cost. Most of those builds are inside compound
