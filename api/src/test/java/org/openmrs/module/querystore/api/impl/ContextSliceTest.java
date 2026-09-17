@@ -494,17 +494,16 @@ public class ContextSliceTest {
 
 	@Test
 	public void similarityLeg_preprocessesTheQuestion_ownedByTheRetrievalStore() {
-		// Retrieval-quality preprocessing (lab-panel expansion + stopword stripping) runs HERE,
-		// at the owner of the index and embedder — callers send the raw question. Idempotent for
-		// a caller that still preprocesses client-side.
+		// Retrieval-quality preprocessing (lab-panel expansion only, natural language preserved)
+		// runs HERE, at the owner of the index and embedder — callers send the raw question.
 		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
 
 		service.getContextSlice(PATIENT, "results of the last BMP?", request);
 
 		assertTrue(backend.lastQueryText.contains("basic metabolic panel"),
 		        "the panel abbreviation must be expanded for retrieval; got " + backend.lastQueryText);
-		assertFalse(backend.lastQueryText.contains("the "),
-		        "stopwords must be stripped; got " + backend.lastQueryText);
+		assertTrue(backend.lastQueryText.contains("results of the last"),
+		        "natural language context must be preserved for dense embeddings; got " + backend.lastQueryText);
 	}
 
 	/** Scripted backend: canned chart + canned similarity hits, everything else inert. */

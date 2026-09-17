@@ -9,17 +9,9 @@
  */
 package org.openmrs.module.querystore.api.impl;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -120,18 +112,17 @@ final class ContextQuestionInterpreter {
 		        Pattern.CASE_INSENSITIVE);
 	}
 
-	private static final Set<String> QUERY_STOPWORDS = loadStopwords("context-query-stopwords.txt");
-
 	/**
-	 * Retrieval preprocessing for the slice's similarity leg: expand lab-panel abbreviations,
-	 * then strip stopwords so phrasing variants embed to the same query vector. Idempotent for
-	 * input a caller already preprocessed. Null/blank pass through unchanged.
+	 * Retrieval preprocessing for the slice's similarity leg: expand lab-panel abbreviations so
+	 * both the abbreviation and the full clinical surface form reach the embedding and BM25 index.
+	 * Preserves full natural-language sentence structure for the transformer embedder and
+	 * multilingual queries. Idempotent for callers that still preprocess. Null/blank pass through unchanged.
 	 */
 	static String preprocess(String question) {
 		if (question == null || question.trim().isEmpty()) {
 			return question;
 		}
-		return stripStopwords(expandLabPanels(question));
+		return expandLabPanels(question.trim());
 	}
 
 	private static String expandLabPanels(String question) {
@@ -141,49 +132,5 @@ final class ContextQuestionInterpreter {
 			        .replaceAll("$0 " + Matcher.quoteReplacement(entry.getValue()));
 		}
 		return expanded;
-	}
-
-	private static String stripStopwords(String question) {
-		String[] words = question.toLowerCase(Locale.ROOT).replaceAll("'s\\b", "").replaceAll("[?!.,;:']", "")
-		        .trim().split("\\s+");
-		List<String> contentWords = new ArrayList<String>();
-		List<String> allClean = new ArrayList<String>();
-		for (String word : words) {
-			if (!word.isEmpty()) {
-				allClean.add(word);
-				// Single-character tokens (e.g. disease variants "A", vitamins, blood types, numerals)
-				// are never stripped as stopwords; they distinguish clinical entities.
-				if (word.length() == 1 || !QUERY_STOPWORDS.contains(word)) {
-					contentWords.add(word);
-				}
-			}
-		}
-		// Too few content words → keep every cleaned word: the fuller sentence embeds more
-		// specifically than one bare term.
-		List<String> keep = contentWords.size() >= 2 ? contentWords : allClean;
-		return keep.isEmpty() ? question.toLowerCase(Locale.ROOT).trim() : String.join(" ", keep);
-	}
-
-	private static Set<String> loadStopwords(String resourceName) {
-		Set<String> stopwords = new HashSet<String>();
-		InputStream is = ContextQuestionInterpreter.class.getClassLoader().getResourceAsStream(resourceName);
-		if (is == null) {
-			log.warn("Stopword resource " + resourceName + " missing — similarity preprocessing degrades"
-			        + " to abbreviation expansion only.");
-			return stopwords;
-		}
-		try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = reader.readLine()) != null) {
-				String word = line.trim().toLowerCase(Locale.ROOT);
-				if (!word.isEmpty() && !word.startsWith("#")) {
-					stopwords.add(word);
-				}
-			}
-		}
-		catch (IOException e) {
-			log.warn("Failed reading stopword resource " + resourceName, e);
-		}
-		return stopwords;
 	}
 }
