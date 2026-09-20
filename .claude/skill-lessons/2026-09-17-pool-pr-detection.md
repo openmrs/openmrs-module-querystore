@@ -121,12 +121,25 @@ reads as the explanation. Two verified end to end: `#229` is `error` while its o
 "converged · #229 / PR 334" (merged 2026-08-30), and `#310` is `no-pr` while its record says
 "converged · #310 / PR 405" (merged 2026-09-11).
 
-**Not repaired, and deliberately.** Only the nine this record names were fixed (2026-09-20, through
-`write_ledger`, verified by `--outcomes`). The other 30 were left because two things make them a
-different job: `error` carries a fact — the session errored — that overwriting with `ready` would
-erase, where `no-pr` carries none; and four of them have more than one merged PR (#250 → 333/311,
-#336 → 368/341, #338 → 376/343, #379 → 414/386/382), so which PR the row should name is a judgement
-per ticket rather than a lookup.
+**Repaired 2026-09-20, all but one, through `write_ledger` and verified by `--outcomes`.** 9 + 26 +
+3 = 38 rows; the ledger now reads 46 `ready`, 4 `error`, 2 `draft`, 1 `no-pr`.
+
+**The reason given for holding the 26 back did not survive checking, and that is worth recording.**
+The claim was that `error` carries a fact `ready` would erase. It does not, for 19 of the 26: the row
+already carries the session's own `exit` code (129, 143 or 0) independently of `status`. It was true
+for the other 7 — #280, #305, #353, #360, #374, #377, #387 have no `exit` field at all, and for those
+`status` really was the only carrier. So the prior status is now written into `flags` on **every**
+repaired row, which covers both cases with one rule and makes the repair legible in `--status`.
+`exit` was asserted unchanged on every write.
+
+**The four multi-PR tickets: three resolved on evidence, one did not.** `last_run` decides three of
+them, each following its PR's merge closely while the sibling merged days earlier — #250 → 333 (3.5 h),
+#336 → 368 (103 s), #338 → 376 (10 s). **#379 is the one left for a human**: three merged PRs (382 on
+09-07, 386 on 09-08, 414 on 09-13) and three converged run records, against a row reading `attempts: 2`
+and `last_run` 2026-09-11T13:25 — a time that matches no merge and sits between two of them. Neither
+the record count nor the attempt count nor the timestamp agrees with the others.
+
+**Still correctly recorded, and untouched:** #262 (its PR 372 is still OPEN) and #393 (no PR).
 
 **A second defect, adjacent and separate: two ledger keys are malformed.** Both read
 `openmrs/openmrs-module-chartsearchai#https://github.com/.../issues/<n>` — the ticket was passed as a
