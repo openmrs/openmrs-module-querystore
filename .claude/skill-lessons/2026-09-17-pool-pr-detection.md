@@ -100,3 +100,37 @@ Both are corrected in place (original kept as `.bak-20260917`), and its figures 
 independently written scripts on #446. It was not vendored in this repo; two measurement passes had
 leaned on it and one published wrong numbers from it, which was the argument for vendoring it at
 `.claude/bin/`. **Vendored there 2026-09-20** (`bca30ab`), with its `.bak-20260917`.
+
+## The extent, measured 2026-09-20 after the repair — it is ~4x what this record said
+
+Repairing the nine rows this record names prompted the sibling question, and the answer changes the
+record's scope. Sweeping the WHOLE ledger for rows that report no delivered PR, then asking GitHub
+for every PR whose branch names that ticket:
+
+| | rows |
+|---|---|
+| recording no delivered PR | 34 |
+| of those, a **MERGED** PR names the ticket in its branch | **30** — 26 `error`, 4 `no-pr` |
+| correctly recorded (no merged PR) | 2 — #262 (PR 372 still OPEN), #393 (no PR) |
+| malformed key, the ticket passed as a URL | 2 |
+
+**So `error` is the larger half of this defect, not `no-pr`.** The ladder checks `run["is_error"]`
+before it reaches the `no-pr` branch, and both are downstream of the PR lookup — so a session that
+errored AND delivered a PR the open list could not see lands on `error`, and the `error` label then
+reads as the explanation. Two verified end to end: `#229` is `error` while its own record says
+"converged · #229 / PR 334" (merged 2026-08-30), and `#310` is `no-pr` while its record says
+"converged · #310 / PR 405" (merged 2026-09-11).
+
+**Not repaired, and deliberately.** Only the nine this record names were fixed (2026-09-20, through
+`write_ledger`, verified by `--outcomes`). The other 30 were left because two things make them a
+different job: `error` carries a fact — the session errored — that overwriting with `ready` would
+erase, where `no-pr` carries none; and four of them have more than one merged PR (#250 → 333/311,
+#336 → 368/341, #338 → 376/343, #379 → 414/386/382), so which PR the row should name is a judgement
+per ticket rather than a lookup.
+
+**A second defect, adjacent and separate: two ledger keys are malformed.** Both read
+`openmrs/openmrs-module-chartsearchai#https://github.com/.../issues/<n>` — the ticket was passed as a
+URL and used verbatim where a number belongs. Each carries `attempts: 1`, so each is a phantom row
+beside the properly-keyed one, and neither can ever match a PR. `pool-run` normalises a URL everywhere
+else (the skill's table says every command takes "a `#266`, a JIRA key … or the URL"), so this is a
+missed normalisation on the ledger-key path and not on the argument path. No record measures a cost.
