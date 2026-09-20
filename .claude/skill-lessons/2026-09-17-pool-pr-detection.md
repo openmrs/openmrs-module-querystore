@@ -1,6 +1,7 @@
 # defect · ticket-pool driver — a merged PR reads as "the run opened no PR" · 2026-09-17
-outcome: root cause verified; a patch and its tests are prepared and **not applied** — a pool run was
-         executing the file at the time (pid 79582, #444 and #445 still in flight).
+outcome: root cause verified; patch and tests **APPLIED 2026-09-20** in the retro of that window
+         (`bca30ab`, `ticket-pool` 0.24.0). Written here as prepared-and-not-applied, because a pool
+         run was executing the file at the time (pid 79582, #444 and #445 still in flight).
 found by: asking what makes a run need a second attempt, which the 2026-09-17 wall-clock measurement
           handed on as its open question. Attempts are the largest latency multiplier in the ledger
           (#337 `att=3` -> 11.0 h, #409 `att=2` -> 9.4 h against 7.4 h in-session).
@@ -73,17 +74,29 @@ mention of it.
 `gh` process boundary — substituted, and two mutants prove they discriminate: reverting the prose
 tier to the bare number reddens 2, deleting the gate fallback reddens 2.
 
-**To apply, once no pool run is executing the file** (`ps aux | grep pool-run`): copy the patched
-driver over `~/.claude/pipeline/pool-run` and the repo's `.claude/pipeline/pool-run` — they are the
-same file, vendored — land the test beside `pool-test.py`, run `python3 ~/.claude/pipeline/pool-test.py`
-whole, and ship it as a `ticket-pool` version bump. The prepared files are in
-`~/.claude/pipeline/.pending-2026-09-17/`.
+**Applied 2026-09-20**, once no pool run held the file. The driver went over
+`~/.claude/pipeline/pool-run` and the repo's `.claude/pipeline/pool-run` (the same file, vendored);
+the 16 cases were integrated INTO `pool-test.py` as `test_pr_detection` rather than landed beside it,
+since a test file nothing runs is not a test — `pool.sh` is restored in a `finally` and the stand-in
+returns a real `subprocess.CompletedProcess`. Suite: **523 passed / 0 failed** (507 before). The cases
+were re-calibrated after integration: against the pre-patch driver they fail 2 and then raise
+`TypeError: 'NoneType' object is not iterable`. Shipped as `ticket-pool` 0.24.0 with the `unknown` row
+and the correction to "everything else is retried", which the code made false. The prepared originals
+stay in `~/.claude/pipeline/.pending-2026-09-17/` as the record of what was applied; the live test is
+the one in `pool-test.py`.
+
+**Not repaired by the patch, and still true: the nine wrong rows are in the ledger.** Checked
+2026-09-20 — the eight `no-pr` rows still read `pr: None` with their attempts charged (#337 at 3, past
+`max_attempts`), and #294 still reads `ready pr=417`. None of the nine carries the `claude-pipeline`
+label today, so none is queueable and the duplicate-PR path is not live; five (#337, #276, #409, #425,
+#315) are still OPEN issues, so a re-label would make it live again. Repairing them is a hand edit of
+live pipeline state and belongs to an operator.
 
 ## Also fixed, and it is why this was findable
 
 `~/.claude/bin/run-timing.py` reported `IDLE waiting on a subagent 0 min` and `?` for every latency
 on the current harness, and inflated output tokens ~2.1x by summing `usage` per transcript event.
 Both are corrected in place (original kept as `.bak-20260917`), and its figures now reproduce two
-independently written scripts on #446. It is not vendored in this repo; two measurement passes have
-now leaned on it and one published wrong numbers from it, which is the argument for vendoring it at
-`.claude/bin/`.
+independently written scripts on #446. It was not vendored in this repo; two measurement passes had
+leaned on it and one published wrong numbers from it, which was the argument for vendoring it at
+`.claude/bin/`. **Vendored there 2026-09-20** (`bca30ab`), with its `.bak-20260917`.
