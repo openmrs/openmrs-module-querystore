@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Wall-clock decomposition of a resolve-ticket / pr-harden run, read from its own transcript.
+
+Usage:  run-timing.py ~/.claude/projects/<project-dir>/<session>.jsonl [...]
+
+The harness for the "is the pipeline getting faster?" gate. It reports, per run:
+  * the phase timeline (skill invocations, agent waves, PR created, PR ready)
+  * where the wall clock went: orchestrator generating, idle waiting on a subagent, tools
+  * per-wave agent latency and the spread inside a wave (the wave costs its SLOWEST agent)
+A run is cut at the first gap > 45 min, which is the session going idle after the run ended.
+"""
+import json, sys, os, re, datetime, collections
+
+CUT = 45 * 60
+
+def ts(s): return datetime.datetime.fromisoformat(s.replace('Z', '+00:00')).timestamp()
+
+def load(path):
+    ev = []
+    for line in open(path, errors='replace'):
+        line = line.strip()
+        if not line: continue
+        try: e = json.loads(line)
+        except Exception: continue
+        if e.get('timestamp'):
+            e['_t'] = ts(e['timestamp']); ev.append(e)
+    ev.sort(key=lambda e: e['_t'])
+    end = len(ev)
+    for i in range(1, len(ev)):
+        if ev[i]['_t'] - ev[i - 1]['_t'] > CUT:
+            end = i; break
+    return ev[:end]
+
+def blocks(e):
+    c = (e.get('message') or {}).get('content')
+    return c if isinstance(c, list) else []
+
+def report(path):
+    ev = load(path)
+    if not ev: return
+    t0, t1 = ev[0]['_t'], ev[-1]['_t']; total = t1 - t0
+    agents, notif, opened, marks = {}, {}, {}, []
+    tool = collections.Counter(); tooln = collections.Counter()
+    out_tokens = 0; turns = 0
+    for e in ev:
+        for b in blocks(e):
+            if b.get('type') == 'tool_use':
+                nm = b.get('name'); inp = b.get('input') or {}
+                opened[b['id']] = (nm, e['_t'])
+                if nm == 'Agent':
+                    agents[b['id']] = (e['_t'], (inp.get('description') or '')[:38])
+                    marks.append((e['_t'], 'spawn: ' + (inp.get('description') or '')[:38]))
+                elif nm == 'Skill':
+                    marks.append((e['_t'], 'SKILL /' + str(inp.get('skill'))))
+                elif nm == 'Bash':
+                    cmd = inp.get('command', '')
+                    if 'gh pr create' in cmd: marks.append((e['_t'], '>>> PR CREATED'))
+                    if 'gh pr ready' in cmd: marks.append((e['_t'], '>>> PR READY'))
+            elif b.get('type') == 'tool_result':
+                u = opened.pop(b.get('tool_use_id'), None)
+                if u: tool[u[0]] += e['_t'] - u[1]; tooln[u[0]] += 1
+        if e.get('type') == 'assistant':
+            turns += 1
+            out_tokens += ((e.get('message') or {}).get('usage') or {}).get('output_tokens', 0)
+        c = (e.get('message') or {}).get('content')
+        if e.get('type') == 'user' and isinstance(c, str):
+            m = re.search(r'<tool-use-id>(\w+)</tool-use-id>', c)
+            if m and m.group(1) in agents: notif[m.group(1)] = e['_t']
+    iv = sorted((agents[a][0], notif[a]) for a in notif)
+    def covered(a, b):
+        return min(sum(max(0, min(b, y) - max(a, x)) for x, y in iv), b - a)
+    busy = idle_agent = idle_other = 0.0
+    for i in range(1, len(ev)):
+        a, b = ev[i - 1]['_t'], ev[i]['_t']; d = b - a
+        if d <= 0: continue
+        prev_tool = ev[i - 1].get('type') == 'assistant' and any(
+            x.get('type') == 'tool_use' for x in blocks(ev[i - 1]))
+        working = ev[i].get('type') == 'assistant' or (prev_tool and ev[i].get('type') == 'user')
+        cov = covered(a, b)
+        if working: busy += d
+        elif cov > 0: idle_agent += cov; idle_other += d - cov
+        else: idle_other += d
+    print('=' * 88)
+    print(os.path.basename(path), ' run %.0f min (%.1f h)' % (total / 60, total / 3600))
+    print('  orchestrator working      %6.0f min  (%d turns, %d output tokens)' % (busy / 60, turns, out_tokens))
+    print('  IDLE waiting on a subagent%6.0f min' % (idle_agent / 60))
+    print('  other idle                %6.0f min' % (idle_other / 60))
+    print('  tools: ' + ', '.join('%s %.0fm/n=%d' % (k, v / 60, tooln[k]) for k, v in tool.most_common()))
+    print('  --- timeline (min from start)')
+    for t, lab in marks:
+        print('   %6.1f  %s' % ((t - t0) / 60, lab))
+    print('  --- agent latency')
+    waves, last = [], None
+    for aid, (st, lab) in sorted(agents.items(), key=lambda kv: kv[1][0]):
+        d = (notif[aid] - st) / 60 if aid in notif else None
+        if last is None or st - last > 120: waves.append([])
+        last = st
+        if d is not None: waves[-1].append(d)
+        print('   %6s  %s' % ('%.1fm' % d if d is not None else '   ?', lab))
+    tail = sum(max(v) - sorted(v)[len(v) // 2] for v in waves if len(v) > 1)
+    print('  waves: %d | slowest-agent tax inside multi-agent waves: %.0f min' % (len(waves), tail))
+
+for p in sys.argv[1:]:
+    report(p)

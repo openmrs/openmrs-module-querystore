@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.32.0
+version: 0.33.0
 ---
 
 # Harden
@@ -254,6 +254,13 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
   mutation check — found it. On #355 a verifier briefed to look for a partner the shipped data does
   not carry re-drove the contract with one it does, plus a control, rather than reporting the absence
   as a result.
+  **And an exemption you WRITE into a guard is the same hole from the inside** — an allow-listed
+  method, a by-name exempt file. It is not coverage you are tolerating; it is where the next defect
+  lands, because the carve-out was made for a reason the next change does not honour. On #448 a guard
+  allow-listed a whole method and the uncharged splitter was written inside it, and the round that
+  tightened that rule and its neighbour had both walked through again — a round each, both raised by a
+  fresh reviewer; on #445 the endpoint class was exempted from the new dialect rule it most needed, at
+  2 cycles. So build the case the exemption ADMITS, and watch it pass.
 - **And a control measures the HARNESS it ran in, not the property.** This is the mirror of *Residue
   the control does not close*: there a harness's own spurious RED satisfies the control, here its
   blindness satisfies the guard, and both leave a negative assertion standing over a channel nothing

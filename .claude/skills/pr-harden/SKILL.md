@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.24.0
+version: 0.25.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -125,10 +125,16 @@ argue both sides in its own reasoning, or mark the finding non-blocking.
 Fetch and review the **pushed** head, not the local worktree:
 `git fetch origin 'pull/<n>/head:pr-<n>-r<round>'`. Record the sha.
 
-**A brief names that SHA and has the agent check it out detached.** The round's ref name is a shared
-resource: on #370 two reviewers in isolated worktrees could not `git fetch origin
-pull/371/head:pr-371` because a sibling agent's worktree already held that name. Briefing the SHA fixed
-it; the record states no round or cycle cost.
+**A brief names that SHA, and only an agent with its OWN checkout is told to check it out.** The
+round's ref name is a shared resource: on #370 two reviewers in isolated worktrees could not `git
+fetch origin pull/371/head:pr-371` because a sibling agent's worktree already held that name, and
+briefing the SHA fixed it at no round or cycle cost. But a `git checkout` by an agent that has no
+checkout of its own lands on the tree this run commits from: on #446 the next phase's fixer then
+edited in detached HEAD, and reattaching had to get past a leftover agent worktree holding the branch
+(`--ignore-other-worktrees`); on #444 a reviewer that died on a 429 left it detached, and every later
+round passed `isolation: "worktree"`; #247 paid the same detour twice. So either isolate it, or brief
+that the worktree is already at the head and nothing is to be checked out — #446's rounds 2 and 3 took
+the second and the problem did not recur.
 
 **Compare that sha against the last entry of `reviewed_shas` before you spawn anything.** The state
 file has recorded these since the skill was written and nothing has ever compared them, so the
@@ -158,7 +164,8 @@ what this branch says about the code the move touched.** Three classes, and git 
 
 The first is **an identifier this branch allocated from a sequence `main` also appends to.** An ADR
 decision number is the observed instance: the branch takes the next free one when it writes the entry, and an upstream PR
-merged since can have taken the same one. Observed on three consecutive runs, twice within a single run.
+merged since can have taken the same one. Observed on three consecutive runs, twice within a single
+run, and on 2026-09-17 four concurrent branches each took Decision 103 for a different decision.
 When it has moved, correct every home of the old value and not just the one you noticed — they sit in
 javadoc and test names, not only in the ADR file — and search for the number itself rather than for a
 phrasing you wrote, which is how a renumbering sweep left three sites standing on #238.
@@ -167,7 +174,10 @@ phrasing you wrote, which is how a renumbering sweep left three sites standing o
 guard checks the heading and not the index; on #348/PR369 `main`'s own Decision 70 had been missing
 since #367 and surfaced only on a fourth merge, for the same reason. On #348 a merge also kept only one
 of two entries added at the same insertion point, with nothing in the build failing — so after a merge,
-check the index for BOTH numbers.
+check the index for BOTH numbers. **And the index line is owed by the commit that ADDS an entry, not
+only by the merge that meets one**: each of those four branches wrote its decision and none wrote its
+index line, every one found later by a fresh agent (#447 c3 and #448 r1 non-blocking; #450 c4 blocking,
+a cycle; #444's is in the git history and in no record).
 
 The second is **a count or a structural claim that git merges cleanly and silently falsifies.** On #340
 `main` refactored three emission sites onto a shared writer; the controller auto-merged correctly and
@@ -291,8 +301,10 @@ and declines the rest on the record. Its brief carries harden's Phase 1 discipli
   assertion passes whether or not its subject could ever arise, so build the case it exists for and
   watch it fail. **And a control measures the HARNESS it ran in, not the property** — ask which
   logger and level it captures, how it RENDERS what it captured, and whether a sibling test's residue
-  changes either; a liveness precondition is not the answer. `harden`'s Termination carries the
-  measurements.
+  changes either; a liveness precondition is not the answer. **And an exemption you write into a
+  guard is that same hole from the inside** — an allow-listed method, a by-name exempt file — so build
+  the case the exemption ADMITS and watch it pass; both of #448's rounds here were that. `harden`'s
+  Termination carries the measurements.
 - **Ask which case hands the guard's SUBJECT its other value. That is the general form of the
   *supposed to stay GREEN* rule, and the question is not about the guard.** For each guard you
   add: what is the cheapest edit that satisfies its assertion and still breaks the property, and
@@ -916,19 +928,18 @@ is a different question about a different file, answered by `owner` above and ne
 
 **Collecting in the same turn means never polling afterwards.** Several `Agent` calls in ONE
 message run concurrently, so a wave keeps its parallelism while each result is that agent's own
-report; Step 3's refutation gate already collects this way and its agents run ten to twenty
-minutes, so length is not what forces a background spawn. Launching async and then blocking on
-`TaskOutput` collects nothing extra — the
-report arrives by itself in the completion notification's `<result>` — while `TaskOutput` is
-DEPRECATED for an agent task precisely because its output file is a symlink to the agent's whole
-JSONL transcript: each poll injects a truncated window of raw agent chatter, the next poll injects
-a different window rather than the rest of the first, and the orchestrator re-sends all of it on
-every later turn. Measured 2026-09-01 over the three tickets of twenty that reached for it: 49
-polls carried 953,119 bytes no round ever used, 23 of them at the 32 KB truncation cap; on one of
-those runs the two agents that WERE collected synchronously returned their whole reports in 9,352 and
-9,956 bytes, so one report is a third of a single poll's window and a polled agent costs several
-windows. Where you need to block on something that is NOT an agent — a build, a server coming up —
-that is a background Bash task, whose output file is its stdout and is safe to read.
+report, and the report arrives by itself in the completion notification's `<result>`. **A delegated
+agent's output file is its whole JSONL transcript, never its report**: each read injects a window of
+raw agent chatter, the next a different window rather than the rest of the first, and the
+orchestrator re-sends all of it on every later turn — measured 2026-09-01 across three tickets of
+twenty, 49 reads carrying 953,119 bytes no round ever used, against whole reports of 9,352 and 9,956
+bytes from two agents collected in-turn. *This paragraph used to argue a CHOICE between a background
+spawn and a foreground one, naming `TaskOutput` and a `run_in_background` flag as the lever; neither
+exists in the harness as of 2026-09-20 — the `Agent` schema carries no such parameter and
+`TaskOutput` resolves to no tool — and the spawn result now carries the warning itself.* What
+outlived the tool is the transcript file, which is what this rule is about. Where you need to block
+on something that is NOT an agent — a build, a server coming up — that is a background Bash task,
+whose output file is its stdout and is safe to read.
 
 **Snapshot the worktree before every delegation and compare it after — on ANY terminal outcome.**
 `git diff | shasum` before you spawn; the same after the agent returns, fails, stalls or is killed. On a

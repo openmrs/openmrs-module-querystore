@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.23.0
+version: 0.24.0
 ---
 
 # Ticket pool — the loop that learns
@@ -385,7 +385,8 @@ a deliberate hand-back from a crash, since both leave no PR, and it can only mak
 | `draft` | a PR exists, still a draft: the review loop did not converge. `pr-harden` owns it now |
 | `aborted` | the run hit one of `resolve-ticket`'s six abort conditions and handed back. Not retried |
 | `timeout` | the driver killed the session. The record says which bound it hit |
-| `no-pr` / `error` | it died before opening a PR, and its record did not report an abort |
+| `no-pr` / `error` | it died before opening a PR, and its record did not report an abort. GitHub was asked and so was the PR number the run wrote into its own gate entry, so a PR MERGED before the check is no longer invisible here — on 2026-09-13/14 eight delivered tickets were recorded `no-pr` because it was |
+| `unknown` | GitHub could not be asked at all, so nothing here says whether the run delivered. Not retried, and for a different reason from `aborted`: it may have delivered, and a second attempt risks a SECOND PR for one issue. Read the stream and set the row by hand |
 | `died-yielding` | it ended with a background agent still outstanding. Not its judgement: it yielded, and an unattended run has no next turn to yield into. Both gates refuse this now, so a fresh sighting means EITHER the marker never reached the gate (check `pipeline/unattended/` for a file whose pid was live) or the run stopped despite being told not to — a block is persuasion, not a lock, and the two have different fixes |
 | `worktree-blocked` | a previous run left uncommitted work in this ticket's worktree; nothing was touched. Read it, then `git worktree remove --force` that path |
 | `checkout-blocked` | the repository could not be fetched, or its default branch does not resolve on origin, so nothing was touched. Fix the remote or the clone |
@@ -398,8 +399,10 @@ unrepairable, or the refutation gate found two defensible readings and no citati
 them. A second identical run meets the same wall, or is asked to pick a reading `resolve-ticket`
 forbids it to pick — so the ticket waits, and keeps its attempt budget. (The two remaining conditions,
 the round cap and a declined blocking finding, normally leave a draft PR and land as `draft`.)
-Everything else is retried on a later invocation until `ticket.max_attempts`, after which a second
-identical failure is evidence about the skills rather than about the ticket.
+`unknown` waits for a human on the other ground: not that a second run would meet the same wall, but
+that nobody can say whether the first one delivered, and re-running a ticket whose PR is invisible is
+how one issue gets two. Everything else is retried on a later invocation until `ticket.max_attempts`,
+after which a second identical failure is evidence about the skills rather than about the ticket.
 
 **A `checkout-blocked` stalls every ticket for that repository**, because it means the driver could not
 fetch it or could not resolve its default branch on origin — there is no base to cut a worktree from.

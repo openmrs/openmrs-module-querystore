@@ -3831,10 +3831,85 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
             stop.set()
         check(f"with {sorted(off)[0]} it sends nothing", not received, str(received))
 
+def test_pr_detection(tmp: Path) -> None:
+    """A merged PR is not an open PR — the outcome check must not read that as `no-pr`.
+
+    Every case drives the real functions; the one substitution is `sh`, the process boundary to
+    `gh`, restored in a finally so later cases keep the shipped one. The eight tickets whose
+    delivered PRs were recorded `no-pr`, with their merge times, are in
+    `.claude/skill-lessons/2026-09-17-pool-pr-detection.md`.
+    """
+    OPEN_417 = {"number": 417, "title": "finding citation extent", "isDraft": False,
+                "headRefName": "fix/409-finding-citation-extent-prose-anchored",
+                "closingIssuesReferences": [], "url": "u417", "createdAt": "2026-09-13T15:43:22Z",
+                "body": "Refs #409.\n`main` gained #416 (issue #294) after this branch was reviewed"}
+    OPEN_452 = {"number": 452, "title": "linear citation split", "isDraft": False,
+                "headRefName": "fix/448-linear-citation-split", "closingIssuesReferences": [],
+                "url": "u452", "createdAt": "2026-09-17T01:00:00Z", "body": "Refs #448."}
+    OPEN_424 = {"number": 424, "title": "unstated dosing ceiling", "isDraft": False,
+                "headRefName": "feat/no-number-here", "closingIssuesReferences": [], "url": "u424",
+                "createdAt": "2026-09-14T04:51:51Z",
+                "body": "Refs [#276](https://github.com/openmrs/openmrs-module-chartsearchai/issues/276) ..."}
+    BODY_ONLY = {**OPEN_417, "number": 500, "headRefName": "fix/no-number", "title": "anchored prose"}
+    MERGED_431 = {"number": 431, "isDraft": False, "state": "MERGED", "url": "u431",
+                  "headRefName": "feat/315-ended-order-stop-date", "title": "ended order stop date",
+                  "closingIssuesReferences": [], "createdAt": "2026-09-14T17:21:06Z",
+                  "body": "Refs #315."}
+    SINCE = pool.iso_to_epoch("2026-09-13T00:00:00Z")
+
+    def fake_sh(out="", code=0):
+        # The real `sh` returns what subprocess.run returns, so the stand-in returns that type too.
+        return lambda args, cwd=None, timeout=300: subprocess.CompletedProcess(
+            args=args, returncode=code, stdout=out, stderr="")
+
+    real_sh = pool.sh
+    try:
+        got = pool.pr_for_ticket([OPEN_417], "294", since=SINCE)
+        check("prose mention of #294 is not #294's PR", (got and got["number"]) is None)
+        got = pool.pr_for_ticket([OPEN_417], "409", since=SINCE)
+        check("its `Refs #409` still is #409's PR", (got and got["number"]) == 417)
+        got = pool.pr_for_ticket([BODY_ONLY], "409", since=SINCE)
+        check("body tier alone: `Refs #409` with nothing in the branch", (got and got["number"]) == 500)
+        got = pool.pr_for_ticket([BODY_ONLY], "294", since=SINCE)
+        check("body tier alone: the bare mention of #294 does not", (got and got["number"]) is None)
+        got = pool.pr_for_ticket([OPEN_424], "276", since=SINCE)
+        check("`Refs [#276](url)` on a numberless branch matches", (got and got["number"]) == 424)
+        got = pool.pr_for_ticket([OPEN_452], "448", since=None)
+        check("branch tier needs no `since`", (got and got["number"]) == 452)
+        check("a None list is not an exception", pool.pr_for_ticket(None, "448") is None)
+
+        pool.sh = fake_sh(out="", code=0)
+        check("open_prs: exit 0 with empty stdout is unknown", pool.open_prs("o/r") is None)
+        pool.sh = fake_sh(out="[]", code=1)
+        check("open_prs: a non-zero exit is unknown", pool.open_prs("o/r") is None)
+        pool.sh = fake_sh(out=json.dumps([OPEN_452]), code=0)
+        check("open_prs: a real answer is a list",
+              [x["number"] for x in pool.open_prs("o/r")] == [452])
+
+        pool.sh = fake_sh(out=json.dumps(MERGED_431), code=0)
+        pr, asked = pool.outcome_pr("o/r", "315", {"pr": 431}, SINCE, [])
+        check("the gate's number finds a MERGED PR the open list cannot see",
+              ((pr and pr["number"]), asked) == (431, True))
+        check("and the ladder calls that ready", bool(pr and not pr.get("isDraft")))
+
+        pool.sh = fake_sh(out="", code=1)
+        pr, asked = pool.outcome_pr("o/r", "448", {}, SINCE, [OPEN_452])
+        check("an open-list hit never asks gh again", ((pr and pr["number"]), asked) == (452, True))
+        pr, asked = pool.outcome_pr("o/r", "999", {}, SINCE, [])
+        check("nothing found and the ask worked is no-pr territory", (pr, asked) == (None, True))
+        pr, asked = pool.outcome_pr("o/r", "999", {}, SINCE, None)
+        check("a failed ask with nothing to fall back on is unknown", (pr, asked) == (None, False))
+        pr, asked = pool.outcome_pr("o/r", "315", {"pr": 431}, SINCE, None)
+        check("a failed list still consults the gate", (pr, asked) == (None, False))
+    finally:
+        pool.sh = real_sh
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        for name, fn in [("ticket-identity", test_ticket_identity),
+        for name, fn in [("pr detection", test_pr_detection),
+                         ("ticket-identity", test_ticket_identity),
                          ("legacy-ticket-state", test_legacy_ticket_state),
                          ("worktrees", test_worktrees), ("slots", test_slots),
                          ("gate-state", test_gate_state_locking), ("waves", test_waves),

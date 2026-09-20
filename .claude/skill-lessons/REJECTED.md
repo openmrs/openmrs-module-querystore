@@ -3272,3 +3272,273 @@ recorded sha would have been the answer.
 state** (previous 3, this block above). The first three were about work; this one is about
 VERIFICATION, which is the more dangerous shape: a stale check reports a clean result it has not
 earned, and nothing about the output distinguishes it from one that has.
+
+## 2026-09-20 (window: 6 run records — #444/PR460, #445/PR461, #446/PR453, #447/PR456, #448/PR452, #450/PR457 — plus 2 notes and one carried draft) — 5 edits applied from 8 proposals, 2 killed, 2 parked, 1 driver patch shipped, 1 lesson the proposals missed; linter 10 files, 0 findings; `pool-test.py` 523 passed / 0 failed
+
+The window's records were written by six runs; the `#450` file carries two, its `resolve-ticket`
+record and a separate `pr-harden` one for PR 457. Three further 2026-09-17 files were on `origin/main`
+and **not on this machine** — the wall-clock measurement note, the pool-PR-detection defect note, and
+`proposals/2026-09-17-wall-clock-two-levers.md`, whose own header says "Step 5 has NOT run". They were
+pulled down before reading, and that omission is what P0 below is about.
+
+**APPLIED · `pr-harden` 0.25.0 — "check it out detached" binds only an agent with its OWN checkout
+(P1).** Bar **(a)**, three records, and **:2234-2237**'s reopen (*"1 record, a cleanup detour. REOPEN
+ON: a second record"*) met twice: `#446` (the brief left the ORCHESTRATOR's tree detached, the next
+phase's fixer edited in detached HEAD, reattaching needed `--ignore-other-worktrees` past a leftover
+agent worktree; rounds 2-3 briefed "the worktree is already at the head" and it did not recur) and
+`#444` (a reviewer that died on a 429 left it detached, every later round passed
+`isolation: "worktree"`). It is also the shared-worktree hazard `harden`:120-131 documents and
+`pr-harden`:954 forbids, instructed by `pr-harden`'s own Step 1.
+- **The gate cut `#247` to a clause** rather than the paragraph it had in the draft, on document-growth
+  grounds (`skill-retro`:24-26). Nothing measured is lost: `#247`'s own remedy, *"return the worktree to
+  `<branch>`"*, is a cleanup after the fact and both shipped options are preventive.
+- **Scoped to the REVIEWER on purpose.** `#445` records that an isolated FIXER "cannot push to the
+  pipeline worktree (the harness refuses git operations against another worktree)", so this must never
+  read as "isolate everything"; parked below.
+- Net **+6 lines**.
+
+**APPLIED · `pr-harden` 0.25.0 — the index line is owed by the commit that ADDS an entry (P5).**
+**:1817-1822** parks the INDEX at two failure sightings (`#280/PR383`, `#348/PR369`), both found after
+a merge; this window is a third, found with no merge anywhere near it.
+- **The draft's own characterisation was FALSE and the gate measured it.** The draft said one branch
+  wrote Decision 103 and three others detected it missing — "three detections of ONE authoring
+  failure". It is **four branches, four different decisions, four missing index lines**, each writing
+  its own: `6cd160a5` (#448), `93a14bbe` (#447), `818b23cd` (#444), `0c9eeb21` (#445, still only on its
+  own branch). `#444`'s instance is in the git history and in **no record**. The draft understated its
+  own case, which is the direction this ledger sees least often and should not reward.
+- The same fact strengthens the paragraph's OTHER half, so both were edited: four concurrent branches
+  taking one number from a shared sequence is the collision `pr-harden`:159-161 already records at
+  "three consecutive runs, twice within a single run".
+- **OPEN, carried rather than argued: placement.** The gate's objection stands — the clause now sits
+  inside a block conditioned on *"where the base MOVED"*, and the reader who owes the index line is the
+  agent WRITING the entry, not the round that merges. No skill has a step where an ADR decision is
+  written, and the root `CLAUDE.md` is 24,999 of 25,000 bytes (`#444`), so it cannot take the rule.
+  **REOPEN ON:** a home for an authoring obligation, or a record where the merge-scoped placement is
+  what let one through.
+- Net **+5 lines**.
+
+**APPLIED · `harden` 0.33.0 and `pr-harden` 0.25.0 — an exemption is where the next defect gets
+written (P4).** Bar **(a)**, two records, each costing a round or cycle and each raised by a fresh
+agent: `#448` pr r1 (*"allow-listed a whole METHOD, so an uncharged per-marker splitter written inside
+it passed"*, non-blocking, 1 round) and pr r2 (*"BOTH tightened rules walked through again"*,
+blocking, 1 round); `#445` harden p2 pass 10 (*"the endpoint class was then exempted from the new
+dialect rule it most needed"*, 2 cycles). Nothing in this ledger occupies the territory — the gate
+grepped `exempt|allow-list|allowlist|carve-out` over all 3,274 lines and found only unrelated hits.
+- **The `api/src` limb was CUT.** The gate cited `harden`:283-285, which already says to relocate a
+  guard's subject "outside the slice the guard reads": a client written in the omod controller against
+  a rule reading `api/src` IS that mutation, so it is **:1196-1198**'s instruction-not-followed class.
+  What survives is the half about a carve-out the author WROTE, which no rule reaches.
+- **Placed on the positive-control rule, not the relocation bullet**, because it is that rule's mirror
+  — build the case the exemption ADMITS and watch it PASS, against build the case a negative assertion
+  exists for and watch it FAIL. In BOTH skills, per **:3xxx**'s reachability finding restated by the
+  gate: `pr-harden`:261 means a rule living only in `harden`'s Termination is not in a `pr-harden`
+  fixer's brief, and both of `#448`'s instances were `pr-harden` rounds.
+- Net **+8 in `harden`, +3 in `pr-harden`**.
+
+**APPLIED as a PRUNE, from the gate rather than from a proposal · `pr-harden` 0.25.0 — the polling
+paragraph argued a lever the harness no longer has.** The paragraph at `pr-harden`:917-931 named
+`TaskOutput` and a `run_in_background` flag and argued a CHOICE between a background spawn and a
+foreground one. **The retiring measurement, recorded here as Step 4 requires:** in the harness of
+2026-09-20 the `Agent` tool's schema carries `description, isolation, model, prompt, subagent_type`
+and no `run_in_background`; `ToolSearch "select:TaskOutput"` returns no matching tool; and the pool
+launches the same `claude` binary (`pool.json` `binary: null` → `/opt/homebrew/bin/claude` 2.1.278)
+that this session runs. The spawn result now carries the warning itself. What outlived the tool is the
+transcript file, and the paragraph now says that and nothing about a tool name. The 2026-09-01
+953,119-byte measurement is kept, compressed, because it still supports the surviving rule. Net
+**−1 line**, and a dead instruction removed.
+
+**KILLED · P2, "the polling decision is made at the SPAWN".** Bar (a) was met — `#445`, `#447` and
+`#448` each record polling raw JSONL windows — but the proposal's structural premise was false, and the
+gate measured it rather than arguing. Parsing all six orchestrator transcripts and mapping every
+`TaskOutput` call's `task_id` back to the `Agent` spawn that issued that `agentId`: **106 polls, 54 of
+them against agents spawned with NO flag** — #444 11/11 flagged, #445 11 of 40, #446 0 of 23, #447
+22/22, #448 7/7, #450 0 of 3. #445, one of the proposal's own three records, is 29 of its 40 polls
+against unflagged spawns. So the choice was never at the spawn even on the harness those runs used, and
+the drafted rule would not have prevented what it cites. It is separately unfollowable, per the prune
+above. **The records' three quoted figures are undercounts** (#447's "six polls" against 22 for that
+run; #448's "three" against 7) — recorded here, attributed to the gate's method, and NOT written back
+into the records, because this pass did not reproduce the parse and the records' figures are scoped to
+subsets the gate's totals are not. **REOPEN ON:** nothing, unless a harness reintroduces the lever.
+
+**KILLED · P3, a TELL for when a guard is asking the wrong question.** Three objections, two
+sufficient. **The headline evidence was paid where the edit cannot reach**: `#444`'s nine defeats were
+`pr-harden` ROUNDS (its header, `rounds: 8 (pr-harden…)`; its heading, "nine rounds bought this"), and
+the edit was drafted into `harden`'s Termination, which `pr-harden`:261 does not route to a fixer —
+leaving `#446`'s ~4 cycles, one record, which is not the case the proposal argued from. **And the tell
+contradicts its own bullet**: `harden`:291-304 already works `#421`, whose escapes were exact type
+equality, then a raw type, then wildcard bounds — defeats that do not behave identically — so
+"the tell is that the defeat BEHAVES identically" narrows the bullet's own example out of its
+antecedent. Also a restatement of `pr-harden`:210-219 and `harden`:235. **:2002-2012** killed a
+proposal in this territory before, partly as instruction-not-followed, and `#448` records the existing
+rule working ("the operative rule of this whole run"), which **:1993-1995** rules is not a sighting.
+
+**PARKED · P6, collapsing Step 6's enumerated `cmp` bullets into the tracked list — and P0's full
+form with it.** The document facts all check out (184 paths tracked under `.claude/` on `origin/main`;
+`.claude/pipeline/` holds five, including `gate-state`, the only writer of either state file; no Step 6
+clause names it), and the sweep was calibrated both ways this session — it reported the three records
+this machine was missing, and a one-byte append to a live skill fired `DRIFT` and cleared on restore.
+It is parked anyway, on three blocking objections:
+- **The pipeline limb is a re-proposal at the same bar.** **:882-887** killed exactly it (*"0 records,
+  and the proposal said so itself ('no observed drift')"*). The drift count is still zero: the sweep
+  found no `DRIFT` on any of the 184 paths.
+- **Bar (c) is unavailable for it.** **:870-873**, with **:773-775** and **:434-440**, rules that
+  "which files sit in two directories is a fact about two filesystems", not a contradiction in a
+  document. The proposal claimed (c) on that ground.
+- **The sweep cannot replace the mirror clause, which is what the collapse would have retired.** It
+  iterates `git ls-tree origin/main`, so a live file absent from the repo is never visited — and that
+  is the exact direction the mirror paragraph exists for (**:1524-1526**). Measured while parked: seven
+  live files under `~/.claude/skill-lessons/` were absent from `origin/main`.
+- Two further OPEN objections worth carrying: the draft's coverage arithmetic omitted
+  `skill-lessons/artifacts/` (43 tracked files), in a proposal whose whole claim was that it had read
+  the document; and `pool-run`'s own `parity_problems` already compares live skills, hooks and the
+  pipeline scripts against the source repo and walks the LIVE tree, so it already catches the direction
+  the sweep misses — its docstring's *"two copies of a consistency check drift exactly like the thing
+  they are checking"* is the argument against a third.
+**REOPEN ON:** a drift actually observed in a vendored family no clause names, or an extension of
+`parity_problems` rather than more prose — which **:1524-1526** already prescribes for this class.
+
+**APPLIED in reduced form · `skill-retro` 0.2.9 — Step 6's comparison is owed BEFORE Step 1's read
+(what remained of P0).** The gate's two blocking objections were about the bar claimed and the cause
+named, not about the guard, so this is the revision those objections license rather than the proposal
+they refused. It states no cause: the draft said "the store is written by more than one machine", and
+the gate showed one committer and this machine's own querystore checkout in the harness path, which is
+`skill-retro`:80-84's *write the guard, not the diagnosis*. What ships is an ordering fact about the
+document — Step 1 depends on an invariant only Step 6 checks, and Step 6 runs last — plus the measured
+instance. **Deviation, recorded:** the reduced form did not go back through Step 5. Net **+5 lines**.
+
+**SHIPPED · `ticket-pool` 0.24.0 — a merged PR is not an open PR (P7).** Not a lesson but a prepared,
+tested patch from `2026-09-17-pool-pr-detection.md` whose stated apply condition ("once no pool run is
+executing the file") held. `open_prs()` asked `gh pr list --state open` and `work_ticket` decided the
+outcome from that list alone, so a PR merged before the check was recorded `no-pr`: eight tickets over
+two days (#413, #421, #337, #276, #412, #409, #425, #315), each charged an attempt against
+`max_attempts: 2`, and the queue's "already has an open PR" guard read the same open-only list, which
+is the path on which one issue gets two PRs. #294's row still reads `ready pr=417`, and 417 is #409's.
+- **Controls, both directions.** 16 cases pass against the patched driver; against the pre-patch driver
+  the same cases fail 2 and then raise `TypeError: 'NoneType' object is not iterable`. Re-calibrated
+  after integration into `pool-test.py`, where they behave identically. Full suite **523 passed /
+  0 failed** (previous total 507).
+- **The cases were integrated rather than left beside the suite**, because a test file nothing runs is
+  not a test; `pool.sh` is restored in a `finally` so later cases keep the shipped one, and the
+  stand-in returns a real `subprocess.CompletedProcess` rather than a `SimpleNamespace`.
+- **The documentation change is forced by the code, not cosmetic.** `ticket-pool`:401-402 read
+  *"Everything else is retried on a later invocation until `ticket.max_attempts`"*, which `unknown`
+  joining `NEEDS_HUMAN` makes false.
+- **DECLINED, with the citation:** the gate called the patch's new comment "Tier 3 reads PROSE" an
+  inversion against the code's `tier = 1`. It is not. `pr_for_ticket`'s docstring numbers "three
+  descending tiers of how sure the link is" — Tier 1 `closingIssuesReferences`, Tier 3 the body — while
+  the code's `tier` variable is a sort key where higher wins. The patch matches the docstring four
+  lines above it; "fixing" it would have made the two disagree.
+- **OPEN, not fixed, because it is untested code in an unattended driver:** nothing retries the `gh`
+  ask before `open_prs` returns `None`, and `prs_for` caches that `None` per slug, so one transient
+  failure both strands a delivered-or-not ticket for a human AND makes the queue builder skip every
+  ticket for that repository in that invocation. Both directions fail SAFE, which is the whole point of
+  the change, but the availability cost is real. **REOPEN ON:** a window where a transient `gh` failure
+  actually strands a queue.
+
+**Corrections applied to the store.**
+- **`~/.claude/bin/run-timing.py` vendored at `.claude/bin/`**, with its `.bak-20260917`. The
+  2026-09-17 note argues for it and nothing objected: it is the harness the "is the pipeline getting
+  faster?" question runs on, two measurement passes have leaned on it, one published wrong numbers from
+  it, and it was fixed in place with no copy anywhere else. Evidence preservation, not a rule.
+- **Six run records and this window's proposals file mirrored**, per Step 6.
+
+**Parked.**
+- **`harden-set` written only when a cycle spawns an agent, not at every cycle CLOSE: 2 records** —
+  previous 1 (**:2241-2245**, `#387`, a missing cycle label). `#445` is the stale-label sibling: the
+  entry "went stale at cycle 7 / head 5ec91f5e and was never updated through cycles 8-12 (the context
+  compaction sits in that gap), so the Stop gate refused the handover quoting 'cycle 7 made 16 edits'
+  about a head 20 commits old", and the run closed on a labelled override rather than a cycle 13.
+  **The proposals missed this entirely and the gate found it.** No clause proposed: `harden`:315 already
+  says "At the close of **every** cycle", so prose would be **:1196-1198**'s class — though that
+  sentence is separated from its own `harden-set` snippet by some twenty lines of `awaiting` material,
+  which is a layout defect nobody has measured a cost for. **REOPEN ON:** the mechanical check
+  **:2241-2245** asks for — `harden-set --count-edits` already prints when it cannot measure the commit
+  half, so a missing or stale cycle label may be within reach of the helper itself.
+- **`pull/<n>/head` LAGS a push, and `gh pr view --json headRefOid` is cached too: 1 record.** `#444`
+  — round 2's first fetch returned round 1's sha; every later round used a delete-ref + re-fetch retry
+  loop. `pr-harden`:133-145 already names "the push had not landed when the fetch ran" as one of the
+  causes of two rounds sharing a sha and prescribes **no remedy**, and explicitly refuses to name a
+  cause for the two observed pairs. This is the first record to establish one. **REOPEN ON:** a second,
+  or one where a reviewer actually reviewed the previous round's sha.
+- **Orphaned `agent-*` worktrees: 2 records.** `#446` — "35 orphaned `agent-*` worktrees accumulated
+  from isolated /harden agents; nothing reaped them, and one held the PR branch", which is the
+  `--ignore-other-worktrees` detour P1's shipped text quotes. `harden`:146-149 names the class on
+  `#348/PR369`. Nothing reaps them because the run that leaves one is the run that died. **REOPEN ON:**
+  a third, or a reaper.
+- **An isolated fixer cannot write to the pipeline worktree: 1 record, no round cost.** `#445` — its
+  edits were extracted as a patch and applied by the orchestrator, which then "discarded one of the
+  seven files with `git checkout --` while restoring its OWN mutation probe", caught by `git diff
+  --stat` reading 6 files instead of 7. Constrains P1's shipped text rather than standing alone.
+  **REOPEN ON:** a second, or one where the hand-off cost a round.
+- **A script that aborts mid-batch, and the recovery re-applying only the edit that FAILED: 1 record.**
+  `#446` — three corrections silently never landed and "the follow-up only re-applied the one that had
+  failed", caught a cycle later by a fresh agent. The per-edit-write rule exists (`pr-harden`, *Editing
+  by script*, fourth bullet) and the record says it "was not followed"; what is new is the recovery
+  asymmetry. `#444`'s "a helper script aborted before writing and I committed without reading the build
+  output" is the same family from the other end. **REOPEN ON:** a second recovery that re-applied only
+  the failing edit.
+- **A correction that states a NUMBER, announcing itself as re-derived while repeating the original's
+  arithmetic: 2 sightings, 1 record.** `#445`, blocking at round 1 — "the budget entry is now derived
+  rather than asserted — read the file's size and add a tenth" against 3,884 + a tenth = 4,272 and an
+  entry saying 3,900, where "the second draft repeated the first draft's arithmetic while announcing
+  the correction"; and, same record, "a correction falsified by its own commit". `#447` c4 is the
+  adjacent shape, blocking at 1 cycle: "the cycle-3 correction of an overstatement overstated ~2.4x the
+  other way". Held back because all three skills carry *prefer deleting to rewording*, and the residue
+  is the case where a number MUST be stated. **REOPEN ON:** a second record where deletion was not
+  available.
+- **A fresh lens's prediction logged as a risk instead of acted on: 1 record.** `#446` — a `/harden`
+  lens predicted "a macOS number doing a cross-platform job" and "the orchestrator logged it as a risk
+  rather than acting", costing 1 `pr-harden` round and a red CI run. **REOPEN ON:** a second.
+- **A threshold calibrated on one platform, and CI never green: 1 record.** `#446`'s
+  `ERROR_BODY_BUDGET`, 2 MiB from ~0.7 MB of macOS loopback slack, red on Linux at 2.67-2.75 MB on all
+  three Java jobs and red at the previous head too. No skill mentions the PR's own CI checks at all;
+  `pr-harden` step 5 proves the build locally and stops. Counted as ONE round: the record states it
+  twice, as the measurement and as r2's blocking finding, and that is one event. **REOPEN ON:** a
+  second, or a window where a round went to a check the loop never looked at.
+- **The prose loop: ~4 more records, remedy unchanged.** `#447` (cycles 5-7 each finding only text the
+  cycle before wrote; ended by "delete the CLAIM SHAPE", "exactly as written"), `#448` (nine false
+  sentences across four rounds, 3 cycles; ended by publishing two measured points and no rule), `#450`
+  (from cycle 3 on every finding in prose the previous cycle wrote, cycle 4's own cut introducing 3 of
+  its 7; ended on the labelled override, after which "pr-harden's separate fixer then produced two
+  blocking findings the author had had four cycles to find"), `#444`. Two of the three ended INSIDE
+  `harden` with the existing remedy, so nothing licenses a new one — and `#450`'s implied remedy, hand
+  the prose to the fresh-context loop, would license ending a run early, which Termination refuses.
+  **REOPEN ON:** a record where the existing remedy was applied and failed.
+- **Wall-clock P1 — the verifier that covers the merging head running in the reviewer's wave.**
+  Carried from `proposals/2026-09-17-wall-clock-two-levers.md`, which its author marked "Step 5 has NOT
+  run". This pass was that gate and the answer is PARK, on the draft's own first objection: `pr-harden`
+  §7 pushes its non-blocking edits AFTER the last verifier run in the documented normal case
+  (`:630-631`), so the saving exists only where §7 edits nothing, and three runs in which nothing was
+  pushed is the whole evidence base. It buys 8-19 min in the clean case against a discarded agent, a
+  standalone deploy and rate-limit exposure in the non-clean one, and the rate-limit-death entries are
+  the cost side nobody has priced. **REOPEN ON:** a count of how often §7 pushes, over a window large
+  enough to price the discard.
+- **Wall-clock P2 — the cheaper confirming cycle as a two-agent wave.** Its own open question was
+  "read those four records once they land and classify every single-agent wave". They landed and do
+  **not** close it: from the findings lists `#450` c4 and `#447` c3 look documentation-only while
+  `#448` c4 (a test in the causal path) and `#450` c3 (a cache-hit disconnect window) do not — but that
+  is inferred from findings, not measured off the waves, and the draft's own third objection stands
+  ("it spends an agent to save wall clock on the cheapest cycle in the run, which is the opposite of
+  where the measurement says the mass is"). **REOPEN ON:** a wave-level classification taken from the
+  transcripts.
+- **`mode` has a reader and no writer: verified, still 0 cost.** `pr-harden`'s **State** section says
+  so itself ("Either something writes `mode` or that branch goes"). Verified 2026-09-20: `gate-state`
+  contains no occurrence of `mode` in 341 lines, while `pr-harden-gate.sh`:295-306 reads `.mode` and
+  has a distinct `--plan-only` block behind it, so a plan-only run that stops mid-plan gets the generic
+  `building` message telling it to implement — work its own mode excludes. No record has met it.
+  **REOPEN ON:** a `--plan-only` run that was told to implement, or take the skill's own second option
+  and delete the branch.
+- **Two pool slots sharing `chartsearchai.llm.serverPort` 18085 and evicting each other's
+  llama-server: 1 record.** `#450` `[verify]`, recorded as `environment`. A pool configuration fact.
+  **REOPEN ON:** a record where it cost a round.
+- **The proposer not verifying its own citations: 34 cycles, unchanged** — previous 34 (**:3227**).
+  The gate checked every line number and ledger position this window's proposals cite and reported
+  "None" did not resolve. What failed instead was three CHARACTERISATIONS built on resolved citations
+  (P2's premise about the flag, P5's "one branch … three others", P6's coverage arithmetic), which is
+  a different defect and is counted with each proposal above rather than here.
+- **A measurement command self-matching its own shell: 1 incident.** `ps aux | grep -c '[p]ool-run'`
+  returned **3** inside a compound command whose own text contains `pool-run` many times, and **0**
+  when run alone — the bracket trick protects the grep's own line, not a parent shell whose argv
+  carries the literal. Caught only because the two readings disagreed. Nothing was harmed: the true
+  count was 0 both times and the patch's apply condition held. The user-level `CLAUDE.md` already
+  requires calibrating an ad-hoc measurement both ways; this is that rule paying for itself.
