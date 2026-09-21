@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.26.0
+version: 0.26.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -804,9 +804,13 @@ another in round 4.
 > **A `/pr-harden` run is complete when the SHA IT IS HANDING OVER has been reviewed with zero
 > blocking findings — and, where any verifier ran, verified on that same sha.**
 
-Not when a round makes no edits. Unlike `/harden`, every round here is *expected* to edit — the fixer
-implements the non-blocking findings too — so an edit count can never be the condition, and this is
-the one place the two skills' contracts genuinely differ.
+Not when a round makes no edits. Through round 3 the fixer implements the non-blocking findings too,
+so a round that edits has not thereby found anything that blocks, and an edit count would answer the
+wrong question. From round 4 the two coincide — blocking-only means the fixer edits for blockers
+alone — and the condition still reads the blocking count there, for the reason that outlives the
+coincidence: **the count belongs to the reviewer, whose work is not being judged, and an edit count
+hands the exit to the fixer, whose work is.** That is where the two skills' contracts differ;
+`/harden` can use edits because its cycle has no comparable split.
 
 **The condition is a property of the ARTIFACT, and it used to be a past event.** *"A review round
 reported zero blocking findings"* was true of the sha that round read, and stayed true once FINISH
