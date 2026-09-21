@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.25.0
+version: 0.26.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -93,6 +93,7 @@ blocking findings — and verified, where any verifier ran — or the override i
 
 ```
 1  REVIEW    fresh subagent · pushed head · declined ledger · last verifier report
+             from round 4 on: BLOCKING-ONLY
 2  RECORD    the reviewer's blocking count → state          {phase: "reviewed"}
 3  exit?     blocking == 0 → step 7
 4  FIX       fresh subagent · implements what it agrees with, declines the rest
@@ -105,6 +106,26 @@ blocking findings — and verified, where any verifier ran — or the override i
 ```
 
 ### 1 — REVIEW
+
+**From round 4 on, the round is BLOCKING-ONLY.** Rounds 1 to 3 are full rounds: the reviewer
+reports everything and the fixer implements the non-blocking findings too, which is how polish
+happens. From round 4 the reviewer reports blockers alone and the rest goes to the follow-up
+issue, unfixed in this branch.
+
+This is FINISH's own rule — *"a round that implements nits and then re-reviews can never
+converge, because a review is expected to produce nits"* — applied before FINISH rather than
+only at it, and the reason it has to start earlier is measured. On a 9-round run of
+`openmrs-module-chartsearchai` PR #465 (2026-09-21), **8 of the 12 blocking findings were
+introduced by an earlier round of that same loop**, by the findings' own attribution, and four
+of the eight came from a NON-blocking prose fix: a sentence written in round N that round N+2
+then correctly faulted. Rounds 4 to 9 spent 13 non-blocking prose edits and four prose blockers
+between them while the runtime behaviour had been settled since round 3, and the run's
+terminating round was blocking-only, returned zero findings, and was its cheapest.
+
+It does not grade the findings. A blocking finding is still whatever the reviewer says it is and
+the bar is unchanged; what this bounds is the surface the FIXER is asked to touch, which is what
+generates the next round's review. **Not licence to raise the cap instead** — a blocking-only
+round is cheaper, not free.
 
 Spawn a fresh reviewer and have it run the repo's `pr-review` skill on the PR — Steps 1 through 3 in
 full: read the issue the PR claims to close and not only the PR, ask whether this is the right fix
@@ -393,6 +414,13 @@ A root install is also what produces the omod the verifier deploys.
 A red build is the fixer's problem, inside the round — never a finding for the next reviewer. A round
 that pushes red code makes the next round a review of a broken build.
 
+**It is the fixer's build and the orchestrator does not re-run it.** Read the `green` field and
+spot-check what it claims: the surefire reports are on disk, and what actually needs verifying
+is `git status`, the branch, and the pushed sha. A second full root install per round buys
+nothing those do not already carry — eight duplicates on PR #465. Where the report is missing,
+vague, or names a command other than a root `mvn -o clean install`, run it yourself; the rule is
+against the reflex, not the check.
+
 ### 6 — VERIFY, when the round touched runtime behaviour
 
 Gate this on what the round actually changed, at most once per round. A round that moved only
@@ -400,6 +428,23 @@ javadoc, comments or tests needs no standalone restart. A round that changed beh
 observable at runtime does — and where tests structurally cannot answer the question (streaming,
 SSE timing, wire serialisation, prompt or latency behaviour) the verifier is not optional: skip it
 there and the loop converges on code nobody ran.
+
+**A third case had no path: runtime-visible, but not observable by THIS instrument.** The
+procedure below deploys an `.omod` and restarts `openmrs-standalone.jar`. A change to the
+published Docker image's ENTRYPOINT — `backend-init.sh`, the model-fetch library it sources, the
+container's own startup wiring — is runtime behaviour a standalone never executes, so deploying
+and restarting cannot see it however carefully it is done. Met on
+`openmrs-module-chartsearchai` PR #465 (2026-09-21), where the orchestrator reasoned its way to
+a skip with no rule to lean on; a less careful run either skips silently or spends rounds
+deploying an omod that cannot reach the changed code.
+
+So name the instrument before deciding. If the prescribed one cannot reach the change, say which
+one can, use it, and record BOTH the skip and the substitute in the report — this is not
+`--no-verify`, which asserts no round can touch runtime behaviour. On #465 the substitute was
+the repo's own harness, which pastes the entrypoint's wiring functions out of the file verbatim
+and sources the real library against a database stand-in: stronger than a proxy, because it is
+the production function. `verified_shas` stays empty there, which the gate already treats as a
+legitimate no-verifier-ran state, so the report is the only place the substitute lands.
 
 The verifier is a fresh subagent that **does the work itself** — it does not delegate to another
 skill, and nothing about it depends on one being installed. It is **not** the reviewer, for a specific
