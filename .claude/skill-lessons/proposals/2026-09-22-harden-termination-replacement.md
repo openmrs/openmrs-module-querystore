@@ -147,9 +147,11 @@ two passes under this contract.
 
 **A LEGACY entry — one with no `phase1` — keeps the zero-edit rule.** A run already in flight when
 this landed cannot re-report itself in the new shape, and of the two directions to be wrong in,
-dropping a live run's gate is the one that costs it its outstanding findings. `gate-state` prints
-`[no --phase1: written as a LEGACY entry…]` when the flag is omitted, so a new run that forgets it is
-held to the OLD contract rather than to none — the safe direction, and not a silent one.
+dropping a live run's gate is the one that costs it its outstanding findings. `gate-state` prints `[no phase1 on this
+entry: it is a LEGACY entry…]`, keyed on the ENTRY and not on the arguments, so a new run that
+forgets the flag is held to the OLD contract rather than to none — the safe direction, and not a
+silent one. Keyed on the argument, as it first shipped, it announced a legacy entry over a `phase1`
+the entry already carried and the gate was already enforcing.
 
 ## The walk-forward against #298, which the order recorded as INDETERMINATE
 
@@ -184,39 +186,43 @@ first, and not at Termination.
 
 ## The test net, with its known-bad control
 
-`skills/harden/gate-test.sh`, 13 new cases (20 → 33 including the two helper definitions; 18 → 31
-executed).
+`skills/harden/gate-test.sh` and `pipeline/pool-test.py` both grew cases for the contract, and
+**neither count is recorded here.** The first draft of this section wrote four of them down and every
+one went stale within two commits — which is the defect `gate-test.sh`'s own header names, and which
+a third reviewer then found here after the same commit had de-staled it there. Run the suites.
 
-- Against the shipped hook: **`passed=31 failed=0`.**
-- Against the pre-0.34 hook (`git show 60a4f2e:.claude/hooks/harden-cycle-gate.sh`; byte-identical at `cfe8386`): **`passed=23
-  failed=8`**, and all 8 are cases added here. The sharpest pair inverts in both directions —
-  `phase1: open` with `edits: 0` must now BLOCK where the old hook allowed, and `converged`/`done`
-  with `edits: 99` must now ALLOW where the old hook blocked. The other 5 new cases pass under both
-  hooks on purpose: they pin that the new predicate still sits behind the override, awaiting,
-  staleness and ownership guards, which did not change, and they discriminate nothing on their own.
-
-`pipeline/pool-test.py` gained six `gate-state` cases: the two writes, the printed line, that
-reopening Phase 1 clears a previous traversal's `phase2: done`, that omitting `--phase1` says so, and
-that an unknown `phase1` value is refused rather than written.
+The known-bad control is the part worth keeping, because it is a method rather than a number: point
+`gate-test.sh` at the pre-0.34 hook (`git show 60a4f2e:.claude/hooks/harden-cycle-gate.sh`;
+byte-identical at `cfe8386`) and every failure is a case added for this contract, because an
+implementation that still reads the edit count cannot pass them. The sharpest pair inverts in both
+directions — `phase1: open` with `edits: 0` must BLOCK where the old hook allowed, and
+`converged`/`done` with `edits: 99` must ALLOW where the old hook blocked. Some of the new cases pass
+under both hooks on purpose: they pin that the predicate still sits behind the override, awaiting,
+staleness and ownership guards, which did not change, and discriminate nothing on their own.
 
 ## Residue, named rather than left to be found
 
-- **No run has executed under this contract yet.** Every figure above is from the hook suite and the
-  records; the first real `/harden` under 0.34.0 is the measurement that matters, and the thing to
-  read off it is Phase 1 pass count against the old cycle count.
-- **`--phase1` is not required by `gate-state`.** Making it required would have broken the 523-case
-  `pool-test.py` suite at call sites that are about `--count-edits` semantics and not about phases.
-  The cost is that a run can silently write a legacy entry; the mitigation is the printed warning and
-  the fact that the failure direction is the old, stricter rule.
-- **A pre-existing fail-open in the LEGACY branch, found while changing the file and deliberately
-  not fixed.** Its block message builds `"run cycle " + (($c|tonumber?) + 1 | tostring)`, and with no
-  `cycle` field `$c` is `"?"`, `tonumber?` yields `empty`, and in jq an `empty` inside a string
-  concatenation makes the WHOLE object vanish — so the hook prints nothing and the stop is allowed.
-  Measured: `jq -n --arg c "?" '{reason:("x" + (($c|tonumber?) + 1 | tostring))}'` prints nothing at
-  exit 0. It is pre-existing (identical in the pre-0.34 hook), it fails in the documented open
-  direction, and the branch it lives in is dead six hours after this ships, so fixing it would add
-  risk to the change under review for a path with that lifetime. The new predicate does not have it:
-  it uses `$c` as a plain string with no `tonumber`.
+- **CLOSED — the first runs have executed.** `/harden` was run on this slice itself, 2026-09-22/23.
+  Three Phase 1 passes, by three fresh reviewers, returned 12, 14 and 6 substantive findings, and
+  almost all of them were in the contract rather than in anything else. Four were allow-direction
+  gate defects: a sticky `escalated` that wedged an escalated run, a `done` that leaked into the next
+  run in a reused checkout, an unrecognised `phase2` that disarmed an unambiguous `phase1: open` (the
+  0.34.0-to-0.35.0 migration case, since 0.34.0 wrote `escalated`), and a `--phase2` write that could
+  report against a verdict its run never made. The saving this change was for is still unmeasured:
+  no run has yet gone from a ticket to a PR under it.
+- **`--phase1` is not required by `gate-state`.** Making it required would break the `pool-test.py`
+  call sites that are about `--count-edits` semantics and not about phases. The cost is that a run
+  can write a legacy entry without meaning to; the mitigation is the printed warning and the fact
+  that the failure direction is the old, stricter rule. `--phase2`, by contrast, DOES require its
+  pair, unconditionally.
+- **CLOSED, and the decision to leave it open was wrong.** A pre-existing fail-open in the LEGACY
+  branch: its block message built `"run cycle " + (($c|tonumber?) + 1 | tostring)`, and with a
+  non-numeric `cycle` jq's `empty` propagates through the concatenation and suppresses the WHOLE
+  object, so the hook printed nothing and the harness read the silence as allow. This file first
+  recorded it as deliberately not fixed, on the grounds that the branch was short-lived — and the
+  same commit's repair of the copyability half of the same defect is what a reviewer then called
+  hunting a class and fixing only the milder member. The cycle is now resolved once in bash, with a
+  default, and no jq arithmetic touches it on either branch.
 
 - **Phase 2 escalation is not bounded.** Escalate → Phase 1 reconverges → Phase 2 runs again → could
   escalate again. The re-flagging clause (*a finding a previous Phase 2 already raised is not an

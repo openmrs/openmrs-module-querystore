@@ -515,11 +515,13 @@ def test_gate_state_locking(tmp: Path) -> None:
     check("converged + done is what the gate allows on",
           hd["phase1"] == "converged" and hd["phase2"] == "done", str(hd))
 
-    # `phase2` is the only sticky field in this entry and nothing clears the entry between
-    # interactive runs, so a Phase 1 write that does not name it must reset it. Both directions of
-    # that were live defects a fresh reviewer built: a `done` carried into the NEXT run let its
-    # first converging pass stop with its own Phase 2 never run, and a third value, `escalated`,
-    # survived `--phase1 converged` and wedged the run on the instruction it had just obeyed.
+    # Most of this entry persists across a write that does not name it -- `phase1`, `owner`, `head`
+    # and the rest all survive one -- and nothing clears it between interactive runs. What makes
+    # `phase2` the field that must not carry is that it is scoped to a TRAVERSAL while the others
+    # are scoped to the entry. Both directions of that were live defects a fresh reviewer built: a
+    # `done` carried into the NEXT run let its first converging pass stop with its own Phase 2 never
+    # run, and a third value, `escalated`, survived `--phase1 converged` and wedged the run on the
+    # instruction it had just obeyed.
     sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "converged",
         "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
@@ -573,13 +575,25 @@ def test_gate_state_locking(tmp: Path) -> None:
     # `--phase2` with no `--phase1` leaned on a verdict this run may never have written -- in a
     # reused checkout, the previous run's `converged` -- so `--phase2 done` alone could end a run
     # that had run nothing.
+    # The refusal is UNCONDITIONAL, and the entry that must drive it is one that ALREADY carries a
+    # verdict — in a reused checkout that verdict is the previous run's, and `--phase2 done` alone
+    # would end a run that has run nothing. A first version tested "no phase1 on the entry", which
+    # fires only where phase2 is never read and misses this, so both shapes are pinned here.
+    sh([sys.executable, str(helper), "--owner", "11111", "harden-set", "--cycle", "1",
+        "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
     snap = (home / ".claude/harden-state.json").read_text()
-    bad = sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
+    bad = sh([sys.executable, str(helper), "--owner", "22222", "harden-set", "--cycle", "1",
+              "--phase2", "done", "--count-edits"], cwd=repo, env=env)
+    check("--phase2 alone is refused OVER a previous run's verdict",
+          bad.returncode != 0 and "needs --phase1" in bad.stderr, bad.stderr[-160:])
+    check("and that refusal leaves the previous run's entry untouched",
+          (home / ".claude/harden-state.json").read_text() == snap)
+    sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
     bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase2", "done",
               "--count-edits"], cwd=repo, env=env)
-    check("--phase2 without --phase1 is refused on an entry with no verdict",
+    check("--phase2 alone is refused on an entry with no verdict either",
           bad.returncode != 0 and "needs --phase1" in bad.stderr, bad.stderr[-160:])
-    # That case clears the entry, so put a phased one back for the two below it.
+    # That clear empties the entry, so put a phased one back for the two cases below.
     sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
         "--count-edits"], cwd=repo, env=env)
 

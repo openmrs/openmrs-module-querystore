@@ -375,15 +375,17 @@ def main() -> int:
                 e["phase1"] = args.phase1
                 e["phase2"] = args.phase2 or "pending"
             elif args.phase2:
-                # A `--phase2` write with no `--phase1` leans on a `phase1` this run may never have
-                # written: in a reused checkout it can be the previous run's `converged`, and
-                # `--phase2 done` would then end a run that had run nothing. The skill documents no
-                # such write, so requiring the pair costs nothing and closes the last corner of the
-                # stickiness the reset above closes everywhere else.
-                if "phase1" not in e:
-                    ap.error("--phase2 needs --phase1: phase2 describes the Phase 2 pass that "
-                             "follows a Phase 1 verdict, and this entry has no verdict to follow")
-                e["phase2"] = args.phase2
+                # UNCONDITIONAL. A `--phase2` write with no `--phase1` leans on a verdict this run
+                # may never have written: in a reused checkout it is the PREVIOUS run's
+                # `converged`, and `--phase2 done` alone then ends a run that has run nothing. The
+                # first version of this guard tested `"phase1" not in e`, which fires only where
+                # `phase2` is never read anyway (the hook takes the LEGACY branch) and misses the
+                # case its own comment named -- it refused where it could not matter and allowed
+                # where it did. The skill documents no bare `--phase2` write, so requiring the pair
+                # costs nothing.
+                ap.error("--phase2 needs --phase1: phase2 describes the Phase 2 pass that follows "
+                         "a Phase 1 verdict, and a verdict this run did not write is not one it "
+                         "may report against")
             head = _git(key, "rev-parse", "HEAD")
             if head:
                 e["head"] = head          # what the NEXT cycle measures its commits against

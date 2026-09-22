@@ -384,8 +384,9 @@ the other way and would have let a second `/harden` stop with its own Phase 2 ne
 `phase1` is one the gate reads as written by a `/harden` older than this contract, and it holds that
 entry to the zero-edit rule instead — so a forgotten flag costs you the cycles this change removed,
 which is the safe direction to be wrong in but not a free one. `gate-state` says so on the line it
-prints. `--cycle` numbers the traversal, and it moves only when an escalation sends you back to
-Phase 1.
+prints. `--cycle` is a label on the traversal and nothing reads it as a number — advance it on an
+escalation if you like, but the gate does not care and the edit measurement tolerates it staying
+put, which is why the hook hands back whatever the entry already has.
 
 `--count-edits` is a REPORTED fact now, not the gate's input: uncommitted lines plus the commits made since the previous traversal
 of this run closed — both halves, because a cycle that commits its work has still changed something.

@@ -74,10 +74,21 @@ run_case "phase1 open with a stale phase2 done -> block" block \
   "{\"cycle\":1,\"phase1\":\"open\",\"phase2\":\"done\",\"ts\":$NOW}"
 run_case "unrecognised phase1 -> allow (fail open)" allow \
   "{\"cycle\":1,\"phase1\":\"maybe\",\"edits\":3,\"ts\":$NOW}"
-run_case "unrecognised phase2 -> allow (fail open)" allow \
+# An unrecognised `phase2` does NOT fail open, and these four are why. Only `done` licenses a stop,
+# which is decidable without interpreting the value — and the check used to sit ahead of the
+# `phase1` test, so any unknown value disarmed an unambiguous `open`. `escalated` is the one that
+# makes it real rather than theoretical: harden 0.34.0 wrote it, hours before this, so a run that
+# escalated under it and then upgraded had its gate silently removed. The first two cases below were
+# written the other way round and pinned the hole as correct; they are the reason it survived two
+# review passes.
+run_case "unrecognised phase2 -> block (only 'done' ends a run)" block \
   "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"soon\",\"ts\":$NOW}"
-run_case "the RETIRED phase2 escalated is just unrecognised now -> allow" allow \
+run_case "the RETIRED phase2 escalated, converged -> block" block \
   "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"escalated\",\"ts\":$NOW}"
+run_case "the RETIRED phase2 escalated, phase1 OPEN -> block (the 0.34.0 migration case)" block \
+  "{\"cycle\":2,\"phase1\":\"open\",\"phase2\":\"escalated\",\"ts\":$NOW}"
+run_case "an unrecognised phase2 never overrides an open phase1" block \
+  "{\"cycle\":1,\"phase1\":\"open\",\"phase2\":\"soon\",\"ts\":$NOW}"
 run_case "phase1 open + override -> allow" allow \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"override\":true}"
 run_case "phase1 open + awaiting fresh, attended -> allow (yield)" allow \

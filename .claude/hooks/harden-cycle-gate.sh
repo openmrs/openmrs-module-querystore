@@ -61,10 +61,12 @@
 #
 # FAIL OPEN, ALWAYS. A gate that wedges every future turn in every repo is far worse than one that
 # occasionally lets an early stop through, so every ambiguous case allows the stop: no state file,
-# unreadable or malformed JSON, no jq, no entry for this directory, an unrecognised phase value, a
+# unreadable or malformed JSON, no jq, no entry for this directory, an unrecognised `phase1`, a
 # missing or unparseable edits count on a legacy entry, or an entry older than STALE_AFTER (a run that
-# was abandoned, crashed, or /clear-ed). Only an entry that is present, fresh, parseable and
-# explicitly says a phase is still owed blocks.
+# was abandoned, crashed, or /clear-ed). An entry that is present, fresh and parseable, and that does
+# not say Phase 1 converged with its Phase 2 done, blocks. An unrecognised `phase2` is deliberately
+# NOT in the list above: only `done` ends a run and that is decidable without interpreting the value,
+# so a stop is not licensed by a word this reader has never heard of.
 
 set -uo pipefail
 
@@ -280,10 +282,18 @@ if [ -z "$PHASE1" ]; then
   exit 0
 fi
 
-# An unrecognised value for either field is an ambiguity, and every ambiguity here allows.
+# An unrecognised `phase1` IS an ambiguity -- `open` and `converged` are opposite answers and this
+# reader cannot pick -- so it allows, like every other ambiguity here.
 case "$PHASE1" in open|converged) ;; *) allow ;; esac
+
+# An unrecognised `phase2` is NOT one, and treating it as one was a live hole. The check used to sit
+# here, before the `phase1` test, so any value this reader did not know disarmed an unambiguous
+# `phase1: open` -- and `escalated` is exactly such a value, written by the 0.34.0 that shipped
+# hours before this, so the entry exists on disk rather than in theory. An upgrade mid-run would
+# have let a run that escalated stop with Phase 1 open, which is the harm the LEGACY branch exists
+# to prevent for older entries. Nothing needs interpreting: only `done` licenses a stop, and
+# "is this `done`?" is decidable whatever else the value might be.
 PHASE2=$(jq -r '.phase2 // "pending"' <<<"$ENTRY" 2>/dev/null) || allow
-case "$PHASE2" in pending|done) ;; *) allow ;; esac
 
 # Phase 1 converged and the one Phase 2 pass that follows it has run: the run is complete.
 [ "$PHASE1" = "converged" ] && [ "$PHASE2" = "done" ] && allow
