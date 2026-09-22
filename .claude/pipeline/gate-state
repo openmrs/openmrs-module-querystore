@@ -337,15 +337,23 @@ def main() -> int:
             e = held.entry("harden")
             note = ""
             if args.count_edits:
-                # A recorded head belongs to THIS run only when the same owner wrote it at an earlier
-                # cycle. Nothing clears the harden entry -- the skill requires it to survive, saying
+                # A recorded head belongs to THIS run only when the same owner wrote it and the
+                # traversal has not gone BACKWARDS (a fresh run restarting at 1 in a reused
+                # checkout). It used to demand the cycle ADVANCE, `>` not `>=`, which was right when
+                # a cycle was written once per cycle -- but `--cycle` now numbers the traversal and
+                # only an escalation moves it, so on the ordinary run it never advanced and the
+                # commit half was never measured at all. Driven: two real commits between two
+                # writes, reported as `edits=0 [commit half not measured]`. Each write now measures
+                # what changed since this run's previous write, which is what a per-pass figure
+                # wants, and re-recording one pass correctly reports zero.
+                # Nothing clears the harden entry -- the skill requires it to survive, saying
                 # `phase1: converged` with `phase2: done`, or `override: true`, when the run finishes
                 # -- so without this test a fresh `/harden` in a reused checkout would count from the
                 # previous run's head. That same non-clearing is why a Phase 1 write resets `phase2`
                 # above: this guard protects `head` from a previous run and nothing protected that.
                 prev = (e.get("head") if (args.owner is not None and e.get("owner") == args.owner
                                           and isinstance(e.get("cycle"), int)
-                                          and args.cycle > e["cycle"]) else None)
+                                          and args.cycle >= e["cycle"]) else None)
                 edits, note = count_edits(key, prev)
             elif args.edits is None:
                 ap.error("harden-set needs --edits N or --count-edits")
@@ -355,16 +363,26 @@ def main() -> int:
             if args.phase1:
                 # `phase2` describes THIS traversal's Phase 2 pass, so a Phase 1 write that does
                 # not name it resets it: Phase 1 has just run and the Phase 2 after it has not.
-                # Resetting on `converged` as well as on `open` is not tidiness. `phase2` is the
-                # only sticky field in this entry -- `edits` is recomputed every write and nothing
-                # clears the entry between interactive runs (see the `head` guard below) -- so
-                # without it a second `/harden` in the same checkout whose FIRST Phase 1 pass
-                # converges inherits the previous run's `done` and is allowed to stop with its own
-                # Phase 2 never run. A fresh reviewer built that case; the terminal write the skill
-                # documents names `--phase2 done` explicitly, so nothing legitimate needs the carry.
+                # Resetting on `converged` as well as on `open` is not tidiness. Most of this entry
+                # persists across writes -- `phase1`, `owner`, `head`, `override_reason` and the
+                # rest all survive one that does not name them -- and nothing clears the entry
+                # between interactive runs, so a second `/harden` in the same checkout whose FIRST
+                # Phase 1 pass converges would inherit the previous run's `done` and be allowed to
+                # stop with its own Phase 2 never run. What makes `phase2` the one that must not
+                # carry is that it is scoped to a traversal while the others are scoped to the
+                # entry. A fresh reviewer built that case; the terminal write the skill documents
+                # names `--phase2 done` explicitly, so nothing legitimate needs the carry.
                 e["phase1"] = args.phase1
                 e["phase2"] = args.phase2 or "pending"
             elif args.phase2:
+                # A `--phase2` write with no `--phase1` leans on a `phase1` this run may never have
+                # written: in a reused checkout it can be the previous run's `converged`, and
+                # `--phase2 done` would then end a run that had run nothing. The skill documents no
+                # such write, so requiring the pair costs nothing and closes the last corner of the
+                # stickiness the reset above closes everywhere else.
+                if "phase1" not in e:
+                    ap.error("--phase2 needs --phase1: phase2 describes the Phase 2 pass that "
+                             "follows a Phase 1 verdict, and this entry has no verdict to follow")
                 e["phase2"] = args.phase2
             head = _git(key, "rev-parse", "HEAD")
             if head:

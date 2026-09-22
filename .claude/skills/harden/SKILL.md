@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.34.0
+version: 0.35.0
 ---
 
 # Harden
@@ -188,7 +188,7 @@ the re-flagging that signals context drift, and it ends the phase rather than re
 
 > "Phase 2 ran once, over [N] agents. Substantive findings: [none | enumerated, so Phase 1 resumes]. Edits made: [N]. Deferred: [enumerated | none]."
 
-## Termination: the run ends when Phase 1 converges
+## Termination: Phase 1 converges, then one Phase 2 pass
 
 The two gates above end a *phase*. Which one ends the RUN is what this skill kept losing, and the
 answer used to be "one cycle that produces zero edits". This skill is 55-72% of a `resolve-ticket`
@@ -403,7 +403,7 @@ corrupt the figure you report, so this stays.
 Where it cannot measure the commit half — a first cycle with no earlier head, or a recorded head that
 stopped resolving after a rebase or a recreated checkout — the helper prints that, instead of counting
 it as zero; that line is yours to answer with your own `git log`. It is counted THERE and not here
-so that the number the gate reads and the number you report cannot be two different numbers.
+so that the number recorded and the number you report cannot be two different numbers.
 
 **Why a helper rather than the inline `python3` this used to be.** The read, the change and the write
 are one critical section, and they were not: every writer read the whole file, changed its own entry

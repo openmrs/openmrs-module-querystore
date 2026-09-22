@@ -2471,13 +2471,15 @@ def clear_gate_state(path: Path, say) -> list[str]:
     """
     removed = gate_state_cmd("--cwd", str(path), "clear", "--json")
     names = {"pr": PR_STATE.name, "harden": HARDEN_STATE.name}
-    # Name each gate's OWN predicate. Records quote this line verbatim, and for a harden leftover
-    # it used to read `phase=None blocking=None edits=N pr=None round=None` -- the one number that
-    # gates nothing, and neither of the two that do.
+    # Name each gate's OWN predicate. This line reaches a run record (`2026-09-17-pool-pr-detection`
+    # quotes the pr half of it), and for a harden leftover it used to read
+    # `phase=None blocking=None edits=N pr=None round=None` -- the one number that gates nothing,
+    # and neither of the two that do.
     def _fields(w: str, e: dict) -> str:
         if w == "harden":
-            return (f"cycle={e.get('cycle')} phase1={e.get('phase1')} "
-                    f"phase2={e.get('phase2')} edits={e.get('edits')}")
+            phases = (f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')}"
+                      if "phase1" in e else "LEGACY (no phase1: zero-edit rule)")
+            return f"cycle={e.get('cycle')} {phases} edits={e.get('edits')}"
         return (f"phase={e.get('phase')} blocking={e.get('blocking')} "
                 f"pr={e.get('pr')} round={e.get('round')}")
 

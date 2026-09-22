@@ -550,6 +550,39 @@ def test_gate_state_locking(tmp: Path) -> None:
         check(f"and a refused {flag} {value} leaves the entry alone",
               (home / ".claude/harden-state.json").read_text() == snap)
 
+    # The commit half must be measured on the ORDINARY run. The head-reuse guard demanded the
+    # cycle ADVANCE, which was right when a cycle was written once per cycle -- but `--cycle` now
+    # numbers the traversal and only an escalation moves it, so on a run with no escalation it
+    # never advanced and the figure silently lost its commit half on every write.
+    sh([sys.executable, str(helper), "--owner", "4141", "harden-set", "--cycle", "1",
+        "--phase1", "open", "--count-edits"], cwd=repo, env=env)
+    (repo / "later").write_text("x\n")
+    sh(["git", "add", "-A"], cwd=repo)
+    sh(["git", "commit", "-qm", "work inside one traversal"], cwd=repo)
+    got = sh([sys.executable, str(helper), "--owner", "4141", "harden-set", "--cycle", "1",
+              "--phase1", "converged", "--count-edits"], cwd=repo, env=env).stdout
+    check("a commit made inside one traversal is counted, without the cycle advancing",
+          "edits=1" in got and "not measured" not in got, got.strip())
+    # ...and the guard it relaxes still holds: a DIFFERENT session must not count from this run's
+    # head, which is what `>=` could have given away.
+    got = sh([sys.executable, str(helper), "--owner", "4242", "harden-set", "--cycle", "1",
+              "--phase1", "open", "--count-edits"], cwd=repo, env=env).stdout
+    check("another session's head is still not consumed as this run's baseline",
+          "not measured" in got, got.strip())
+
+    # `--phase2` with no `--phase1` leaned on a verdict this run may never have written -- in a
+    # reused checkout, the previous run's `converged` -- so `--phase2 done` alone could end a run
+    # that had run nothing.
+    snap = (home / ".claude/harden-state.json").read_text()
+    bad = sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
+    bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase2", "done",
+              "--count-edits"], cwd=repo, env=env)
+    check("--phase2 without --phase1 is refused on an entry with no verdict",
+          bad.returncode != 0 and "needs --phase1" in bad.stderr, bad.stderr[-160:])
+    # That case clears the entry, so put a phased one back for the two below it.
+    sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
+        "--count-edits"], cwd=repo, env=env)
+
     # The LEGACY warning reads the ENTRY, not the arguments. Keyed on the argument it announced a
     # legacy entry over a `phase1` the entry already carried and the gate was already enforcing.
     got = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--count-edits"],

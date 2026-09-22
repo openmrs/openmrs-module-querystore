@@ -164,16 +164,27 @@ def print_live(show_all: bool = False) -> int:
         # prints its own predicate. Keyed on `edits` alone this said `cycle=1 edits=0` about a run
         # the gate was holding open, and printed nothing at all for an entry that has a phase and
         # no count -- so the operator watching a run that would not end could not see why.
-        if h:
+        # `cycle` alone is not worth a line: an entry created by `await --only harden` carries no
+        # cycle, no phase and no count, and printing `harden: cycle=None` for it is noise where
+        # nothing printed before.
+        if h.get("phase1") or h.get("edits") is not None:
             bits = [f"cycle={h.get('cycle')}"]
             if h.get("phase1"):
                 bits.append(f"phase1={h['phase1']}")
                 bits.append(f"phase2={h.get('phase2', 'pending')}")
+            else:
+                bits.append("LEGACY (no phase1: held to the zero-edit rule)")
             if h.get("edits") is not None:
                 bits.append(f"edits={h['edits']}")
             if h.get("override"):
                 bits.append("OVERRIDE")
             print("    harden: " + "  ".join(bits))
+        # The harden gate has its own `awaiting`, and `--only harden` is a documented write, so an
+        # operator diagnosing a stuck run needs it here as well as on the pr half above.
+        for a in h.get("awaiting") or []:
+            age = int(now_ts - (a.get("since") or now_ts))
+            warn = "  (past the gate's 1h allowance)" if age > 3600 else ""
+            print(f"    harden waiting on: {a.get('agent')} — {age // 60}m{age % 60:02d}s{warn}")
         # A `--work` session is an ordinary interactive `claude`; only the headless driver writes a
         # stream. Saying so is the point — otherwise "no session found" reads like something is lost.
         if s["stream"]:

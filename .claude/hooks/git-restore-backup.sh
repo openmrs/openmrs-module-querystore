@@ -23,9 +23,11 @@
 # the model where. Nothing is blocked, there are no false positives, and a loss becomes one `cp` from
 # recovery instead of a re-derivation.
 #
-# OUTSIDE THE REPO, deliberately: an in-repo backup would land in the `git status --porcelain` that the
-# harden cycle gate uses as its edit count, fabricating an edit and demanding another cycle, and it
-# would be invisible to the `git diff | shasum` residue guard, which does not report untracked paths.
+# OUTSIDE THE REPO, deliberately: an in-repo backup would land in the `git status --porcelain` that a
+# harden run reports as its edit count, fabricating an edit, and it would be invisible to the
+# `git diff | shasum` residue guard, which does not report untracked paths. That count stopped being
+# what the gate reads at harden 0.34.0 -- so a fabricated edit no longer demands another cycle, but
+# it still corrupts the figure the run is obliged to report, and on a pre-0.34 entry it does both.
 #
 # This does NOT replace "commit before you probe" — that is what makes the restore correct in the first
 # place, and it remains the rule. This is the net under it.

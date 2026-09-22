@@ -1,12 +1,16 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
-status: **EXECUTED 2026-09-22.** `harden` 0.34.0, `pr-harden` 0.26.2, `resolve-ticket` 0.17.0,
+status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.35.0, `pr-harden` 0.26.3,
+`resolve-ticket` 0.17.0,
 `hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. The order's six sites, plus
 two it did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
 `Re-entry` section, which the escalation clause replaced — deleted rather than reworded), plus three
-more live readers of the harden entry that a fresh reviewer found after the first push and that no
-list had: `pipeline/pool-watch`, `pipeline/pool-run`'s leftover report, and both copies of
-`pr-harden-gate.sh`. The order's warning that a partial application is worse than the status quo was
+more sites a fresh reviewer found after the first push and that no list had: two live READERS of the
+harden entry, `pipeline/pool-watch` and `pipeline/pool-run`'s leftover report, and — not a reader of
+it, which the first draft of this sentence got wrong — both copies of `pr-harden-gate.sh`, whose
+header drew a contrast with `/harden`'s edit count that no longer has another side. A later pass
+added `hooks/README.md` and `hooks/git-restore-backup.sh`, both of which describe the retired
+mechanism as current. The order's warning that a partial application is worse than the status quo was
 right, and its own site list was not complete. The two
 things it owed are discharged at the end of this file: the `#298` walk-forward, and the test net with
 its known-bad control. Like `pr-harden` 0.26.0 before it, this was applied at the maintainer's
@@ -31,7 +35,8 @@ than inventing a second one.
 
 ## Why this shape, and not the two obvious ones
 
-Both obvious answers are already refuted in `REJECTED.md`, each twice, each on a walk-forward:
+Both obvious answers are already refuted in `REJECTED.md` — the cap twice, the provenance
+signal at least twice — each on a walk-forward:
 
 - **A cycle cap** (P-A, :1433). Killed twice. `#298` ran 5 cycles and `outcome: converged`, so a cap
   of 4 ends a converged run as did-not-converge and loses cycle 5's measured zero. Runs past 4
@@ -126,10 +131,19 @@ becomes defensible in a way it is not today.
 > run without escalating.**
 
 The state entry grew two fields, written by `gate-state --owner $PPID harden-set --cycle N --phase1
-open|converged [--phase2 pending|done|escalated] --count-edits`. The hook blocks while `phase1` is
-`open`, while `phase2` is `escalated`, and while `phase1` is `converged` with no Phase 2 run yet; it
-allows on `converged` + `done`. `edits` is still written, still printed and still owed by the report,
-and gates nothing.
+open|converged [--phase2 done] --count-edits`. The hook blocks while `phase1` is `open`, and while
+`phase1` is `converged` with no Phase 2 run yet; it allows on `converged` + `done`. `edits` is still
+written, still printed and still owed by the report, and gates nothing.
+
+**There are two `phase2` values and the first draft's third is deleted.** `escalated` was sticky —
+`--phase1 converged` did not clear it and the hook tested it before `phase1` — so a run whose Phase 2
+escalated and whose next Phase 1 pass then converged was handed back the instruction it had just
+obeyed, to the six-hour expiry. An escalation resumes Phase 1, which is `--phase1 open`, which
+already blocks. Any `--phase1` write with no `--phase2` now resets it to `pending`, which closes the
+same stickiness pointing the other way: a `done` left in a reused checkout by the PREVIOUS run, which
+let a second `/harden` stop with its own Phase 2 never run. The writer refuses `--phase2` without
+`--phase1` for the last corner of it. Both were found by fresh reviewers, in this skill's own first
+two passes under this contract.
 
 **A LEGACY entry — one with no `phase1` — keeps the zero-edit rule.** A run already in flight when
 this landed cannot re-report itself in the new shape, and of the two directions to be wrong in,

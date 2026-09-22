@@ -46,14 +46,15 @@ run_case "no entry -> allow" allow none
 # THE PHASE CONTRACT. `/harden` ends when Phase 1 has converged and the one Phase 2 pass that
 # follows it has run without escalating; `edits` is reported and gates nothing.
 #
-# The KNOWN-BAD CONTROL, run rather than asserted: against the pre-0.34 hook this suite reports
-# `passed=23 failed=8`, and every one of the 8 is a case added here — an implementation that still
-# reads the edit count fails them. The other 5 of the 13 pass under BOTH hooks, because they
-# exercise the override, awaiting, staleness and ownership guards the new predicate sits behind and
-# which did not change; they pin that the predicate is still behind them, and they discriminate
-# nothing on their own. Reproduce with
-# `git show <pre-0.34>:.claude/hooks/harden-cycle-gate.sh > /tmp/old && bash "$0" /tmp/old`.
-# The first two below are the sharpest pair: they invert, one in each direction.
+# The KNOWN-BAD CONTROL is RUN, not recorded. Point this suite at the pre-0.34 hook —
+# `git show <pre-0.34>:.claude/hooks/harden-cycle-gate.sh > /tmp/old && bash "$0" /tmp/old` — and
+# every failure is a case from this block: an implementation that still reads the edit count cannot
+# pass them. No tally is written down, for the reason the header 40 lines up gives; the first draft
+# of this comment recorded one and it went stale two commits later, when two cases were added below.
+# Some cases here pass under BOTH hooks on purpose, exercising the override, awaiting, staleness and
+# ownership guards the new predicate sits behind and which did not change; they pin that it is still
+# behind them and discriminate nothing on their own. The first two are the sharpest pair: they
+# invert, one in each direction.
 run_case "phase1 open with edits 0 -> block (an edit count does not end it)" block \
   "{\"cycle\":1,\"phase1\":\"open\",\"edits\":0,\"ts\":$NOW}"
 run_case "converged + phase2 done with edits 99 -> allow (nor does it extend it)" allow \
@@ -91,10 +92,33 @@ run_case "phase1 open but STALE -> allow" allow \
 run_case "no cycle number -> still blocks" block \
   "{\"phase1\":\"open\",\"ts\":$NOW}"
 
+# ...and the command it hands back must be RUNNABLE. `--cycle` is required by the writer, so the
+# first repair — omitting the flag when there was no number — swapped an unparseable argument for a
+# missing one, and a case asserting only `block` could not tell. This one reads the text.
+run_cmd_case() { # name expected_substring entry_json
+  local name="$1" want="$2" entry="$3" work="$TMP/work"
+  mkdir -p "$work"; rm -rf "$TMP/.claude/pipeline/unattended"
+  jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
+  local got; got=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null | jq -r '.reason // ""')
+  if [[ "$got" == *"$want"* ]]; then PASS=$((PASS+1)); echo "  ok   $name"
+  else FAIL=$((FAIL+1)); echo "  FAIL $name: no '$want' in: ${got:0:160}"; fi
+}
+run_cmd_case "the emitted command names a cycle even when the entry has none" \
+  "harden-set --cycle 1 --phase1" "{\"phase1\":\"open\",\"ts\":$NOW}"
+run_cmd_case "and uses the entry's cycle when it has one" \
+  "harden-set --cycle 7 --phase1" "{\"cycle\":7,\"phase1\":\"converged\",\"ts\":$NOW}"
+
 # LEGACY entries — no `phase1`, written by a /harden that predates the contract. The zero-edit rule
 # still applies to them, so a run already in flight when this changed is not silently disarmed.
 run_case "legacy: edits 0 -> allow (converged)" allow "{\"cycle\":2,\"edits\":0,\"ts\":$NOW}"
 run_case "legacy: edits 3, no awaiting -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW}"
+# A legacy entry with no usable cycle number used to print NOTHING and be read as allow: jq's
+# `empty` from `tonumber?` on "?" propagates through the concatenation and suppresses the whole
+# object. Silence from this hook is indistinguishable from a deliberate allow, so these two are the
+# fail-open that mattered most, and neither expects a number in the message.
+run_case "legacy: edits 3, NO cycle -> block" block "{\"edits\":3,\"ts\":$NOW}"
+run_case "legacy: edits 3, non-numeric cycle -> block" block \
+  "{\"cycle\":\"abc\",\"edits\":3,\"ts\":$NOW}"
 run_case "awaiting fresh, attended -> allow (yield)" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}"
 run_case "awaiting fresh, marker LIVE -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" $$
 run_case "awaiting fresh, marker DEAD -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" 999999

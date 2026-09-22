@@ -4,9 +4,10 @@ The hooks this pipeline registers. They are SEPARATE copies from the ones the sk
 `~/.claude/hooks/` is what `settings.json` points at, and a skill push alone leaves the registered
 gate running old logic, which is why `skill-retro` Step 6 requires `cmp` across both.
 
-- `harden-cycle-gate.sh` — Stop hook. Enforces `harden`'s termination contract (a cycle that edited is
-  not the last cycle) and refuses an unattended yield with an agent outstanding. Also carried in
-  `.claude/skills/harden/`.
+- `harden-cycle-gate.sh` — Stop hook. Enforces `harden`'s termination contract (Phase 1 converges,
+  then one Phase 2 pass) and refuses an unattended yield with an agent outstanding. An entry written
+  before 0.34.0 carries no `phase1` and is still held to the zero-edit rule it was written under.
+  Also carried in `.claude/skills/harden/`.
 - `pr-harden-gate.sh` — Stop hook. Same, for `pr-harden`'s phase/blocking contract. Also carried in
   `.claude/skills/pr-harden/`.
 - `no-subagent-model-override.sh` — PreToolUse(Agent). Refuses an `Agent` call that sets an explicit

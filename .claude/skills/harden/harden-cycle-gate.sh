@@ -9,16 +9,19 @@
 # phase, cycle). Not that polish ALWAYS edits -- #298 converged on a cycle whose measured zero
 # covers Phase 2 as well, so that universal is false and a fresh reviewer said so. Phase 1's gate is the one that was
 # already severity-aware — "a pass that itself found a substantive (non-cosmetic) issue cannot be the
-# last pass" — so the run's condition is now keyed on it. A cycle cap and a prose-provenance signal
-# was refused twice and a prose-provenance signal at least twice, both on the walk-forward that a cap ends a converged run as
-# did-not-converge; this changes what RE-OPENS the loop, never what counts as having finished.
+# last pass" — so the run's condition is now keyed on it. A cycle cap was refused twice, and a
+# prose-provenance signal at least twice, both on the walk-forward that a cap ends a converged run
+# as did-not-converge; this changes what RE-OPENS the loop, never what counts as having finished.
 #
 # Contract with the skill: at the close of every Phase 1 pass, and again when Phase 2 finishes, it
 # writes an entry to the state file below, keyed by the repo it is hardening:
 #
 #   { "/abs/path/to/repo": { "cycle": 1, "phase1": "converged", "phase2": "done", "edits": 3,
-#                            "ts": 1755400000, "override": false,
+#                            "ts": 1755400000, "override": false, "owner": 10560, "head": "1ec8735a",
 #                            "awaiting": [ { "agent": "phase2 quality", "since": 1755400000 } ] } }
+#
+# `owner` and `unattended` are read below and `head` is the helper's; the example carries the two it
+# reads that a reader would not otherwise expect.
 #
 # `edits` is still written and still reported, and it no longer gates anything. It was never an
 # artifact claim — a zero-edit cycle licenses "this process has stopped producing", not "complete" —
@@ -241,7 +244,16 @@ if [ "$AWAITING" -gt 0 ]; then
   fi
 fi
 
-CYCLE=$(jq -r '.cycle // "?"' <<<"$ENTRY" 2>/dev/null)
+# Resolve the cycle ONCE, here, and never let jq arithmetic near it. Two defects came out of that:
+# `(($c|tonumber?) + 1 | tostring)` on a non-numeric cycle yields jq `empty`, which propagates
+# through the string concatenation and suppresses the WHOLE object -- so the hook printed nothing
+# and the harness read the silence as ALLOW on an entry that had to block. And the first repair,
+# omitting `--cycle` from the emitted command when there was no number, swapped an unparseable
+# argument for a missing one, because `--cycle` is `required=True`. An entry with no cycle is a run
+# that has recorded none, so 1 is the number, and the command is runnable either way.
+CYCLE=$(jq -r '.cycle // empty' <<<"$ENTRY" 2>/dev/null)
+case "$CYCLE" in ''|*[!0-9]*) CYCLE=1 ;; esac
+NEXT=$((CYCLE + 1))
 
 # THE TERMINATION PREDICATE.
 #
@@ -254,11 +266,11 @@ if [ -z "$PHASE1" ]; then
   EDITS=$(jq -r '.edits // empty' <<<"$ENTRY" 2>/dev/null) || allow
   case "$EDITS" in ''|*[!0-9]*) allow ;; esac
   [ "$EDITS" -gt 0 ] || allow
-  jq -n --arg c "$CYCLE" --arg e "$EDITS" '{
+  jq -n --arg c "$CYCLE" --arg n "$NEXT" --arg e "$EDITS" '{
     decision: "block",
     reason: ("harden termination contract (legacy entry, zero-edit rule): cycle " + $c + " made "
       + $e + " edit(s), so it was not the last cycle. Run cycle "
-      + (($c|tonumber?) + 1 | tostring) + " — Phase 1 then Phase 2 — and record its measured edit "
+      + $n + " — Phase 1 then Phase 2 — and record its measured edit "
       + "count. Do NOT hand back to the user and do NOT ask whether to continue; if you are "
       + "deliberately stopping early, take the labelled override in the skill'"'"'s Termination "
       + "section and set override:true in ~/.claude/harden-state.json so the deviation is on the "
@@ -286,16 +298,12 @@ else
 "turned up something SUBSTANTIVE it escalates, which resumes Phase 1, so record --phase1 open"
 fi
 
-# `--cycle "?"` is what an entry with no cycle number would render, and argparse takes an int, so
-# the instruction would be uncopyable. Emit the flag only when there is a number for it.
-case "$CYCLE" in ''|*[!0-9]*) CYCLE_ARG="" ;; *) CYCLE_ARG="--cycle $CYCLE " ;; esac
-
 # `decision: block` on a Stop hook feeds the reason back and keeps the turn going rather than
 # ending it.
-jq -n --arg c "$CYCLE_ARG" --arg w "$WHAT" --arg d "$DO" '{
+jq -n --arg c "$CYCLE" --arg w "$WHAT" --arg d "$DO" '{
   decision: "block",
   reason: ("harden termination contract: " + $w + ". " + $d + ", via `gate-state --owner $PPID "
-    + "harden-set " + $c + "--phase1 <open|converged> [--phase2 done] "
+    + "harden-set --cycle " + $c + " --phase1 <open|converged> [--phase2 done] "
     + "--count-edits`. Do NOT hand back to the user and do NOT ask whether to continue; if you are "
     + "deliberately stopping early, take the labelled override in the skill'"'"'s Termination "
     + "section and set override:true in ~/.claude/harden-state.json so the deviation is on the "
