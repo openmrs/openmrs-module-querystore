@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.36.0
+version: 0.37.0
 ---
 
 # Harden
@@ -347,8 +347,8 @@ the gate cannot tell your entry from one a co-located run left in the same direc
 **State** section carries that reasoning as well:
 
 ```bash
-~/.claude/pipeline/gate-state --owner $PPID await "phase2 quality" --only harden
-~/.claude/pipeline/gate-state --owner $PPID clear-await --only harden
+~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN await "phase2 quality" --only harden
+~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN clear-await --only harden
 ```
 
 Drop `--only harden` and it writes BOTH gates' entries, which is what a `/harden` cycle nested inside
@@ -360,21 +360,29 @@ which is what the gate exists to prevent, so the gate's allow is bounded by an h
 has not returned inside it is treated as dead rather than outstanding.
 
 ```bash
-# ONCE, before the first pass: this checkout may still hold a finished run's entry, and nothing
-# clears it between interactive runs. `pool-run` does exactly this when it sets a worktree up; the
-# interactive path had no equivalent, and three allow-direction defects came out of one field or
-# another surviving that boundary.
-~/.claude/pipeline/gate-state clear --only harden
+# ONCE, at the top of the run: mint an id for it, and pass it on every write below.
+HARDEN_RUN="$PPID-$(date +%s)"
 
 # after a Phase 1 pass that found something substantive:
-~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 open --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 1 --phase1 open --count-edits
 # after the Phase 1 pass that found nothing substantive:
-~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 converged --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 1 --phase1 converged --count-edits
 # after a Phase 2 that found only polish — this is what ends the run:
-~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 converged --phase2 done --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 1 --phase1 converged --phase2 done --count-edits
 # after a Phase 2 that ESCALATED — that resumes Phase 1, so it is a Phase 1 write and nothing else:
-~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 2 --phase1 open --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 2 --phase1 open --count-edits
 ```
+
+**`--run` is what makes this checkout's leftovers yours to ignore.** Nothing clears the entry between
+interactive runs, and SIX allow-direction defects came out of one field or another surviving that
+boundary — a `phase2: done`, an `escalated`, an unrecognised value, a whole terminal verdict, and
+finally an `awaiting` from a run that had died, which allowed the stop on `phase1: open`, the
+strictest block there is. Five were closed one rule at a time and the fifth closure was a list of
+five field names to drop; the sixth got in through the name nobody listed. A write whose `--run`
+differs from the entry's now REPLACES it, so the default is *drop unless this run wrote it* and a
+field added later cannot become a seventh leak. It is not `--owner`, which answers whether a live
+foreign session holds this checkout — a different question, one a resume changes and a run id does
+not, and conflating them is what left the same-pid corner this replaces.
 
 **There is no `--phase2 escalated`, and the first draft's was deleted rather than repaired.** It was
 sticky: `--phase1 converged` did not clear it and the hook tested it before `phase1`, so a run whose

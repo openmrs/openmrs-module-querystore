@@ -1,6 +1,6 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
-status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.36.0, `pr-harden` 0.26.3,
+status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.37.0, `pr-harden` 0.26.3,
 `resolve-ticket` 0.17.0,
 `hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. The order's six sites, plus
 two it did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
@@ -207,8 +207,8 @@ staleness and ownership guards, which did not change, and discriminate nothing o
 ## Residue, named rather than left to be found
 
 - **CLOSED — the first runs have executed.** `/harden` was run on this slice itself, 2026-09-22/23.
-  Three Phase 1 passes, by three fresh reviewers, returned 12, 14 and 6 substantive findings, and
-  almost all of them were in the contract rather than in anything else. Four were allow-direction
+  Five Phase 1 passes, by five fresh reviewers, returned 12, 14, 6, 4 and 4 substantive findings,
+  and almost all of them were in the contract rather than in anything else. Six were allow-direction
   gate defects: a sticky `escalated` that wedged an escalated run, a `done` that leaked into the next
   run in a reused checkout, an unrecognised `phase2` that disarmed an unambiguous `phase1: open` (the
   0.34.0-to-0.35.0 migration case, since 0.34.0 wrote `escalated`), and a `--phase2` write that could
@@ -230,15 +230,19 @@ staleness and ownership guards, which did not change, and discriminate nothing o
   hunting a class and fixing only the milder member. The cycle is now resolved once in bash, with a
   default, and no jq arithmetic touches it on either branch.
 
-- **Run identity: closed twice over, with one corner left.** The entry is keyed on the checkout and
-  says nothing about WHICH run wrote it, and that is where four of this slice's allow-direction
-  defects came from — a `done`, an `escalated`, an unrecognised value, and a whole terminal verdict
-  picked up by a write that omitted `--phase1`. Two closures now: a `harden-set` whose `--owner`
-  differs from the entry's drops the previous run's verdict, count and head first, and the skill
-  clears the entry once before its first pass, which is what `pool-run` has always done when it sets
-  a worktree up. **The corner:** a second `/harden` in the SAME session and checkout that skips the
-  clear has the same pid, so the owner test cannot see it. That needs a real run id, and it is a
-  redesign; the two closures above make it the only remaining shape rather than the common one.
+- **Run identity: the entry now carries a run id, and that is what closed the family.** The entry is
+  keyed on the checkout and used to say nothing about WHICH run wrote it. Five of this slice's six
+  allow-direction defects crossed that boundary — a `phase2: done`, an `escalated`, a whole terminal
+  verdict picked up by a write that omitted `--phase1`, and an `awaiting` from a dead run that
+  allowed a stop on `phase1: open`; the sixth, an unrecognised `phase2` disarming an open verdict,
+  was a validity-ordering bug and does not belong in this list. Each of the first four was closed by
+  a rule naming a field or a flag, and the fifth got in through the field name the fourth rule did
+  not list — which is what said the rule was the wrong SHAPE. A write whose `--run` differs from the
+  entry's now replaces the entry, so the default is *drop unless this run wrote it* and a field
+  added later cannot become a seventh. Deleted by it: the five-name drop list, and the start-of-run
+  `clear` the pass before had added. `--owner` stays for the different question it answers well —
+  whether a live foreign session holds this checkout — and conflating the two is what left the
+  same-pid corner that the run id simply does not have.
 
 - **Phase 2 escalation is not bounded.** Escalate → Phase 1 reconverges → Phase 2 runs again → could
   escalate again. The re-flagging clause (*a finding a previous Phase 2 already raised is not an

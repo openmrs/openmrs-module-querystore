@@ -30,7 +30,7 @@ Writes are atomic (temp file, then rename), so the hooks — which read without 
 hook must never block on someone else's lock — always see one whole version or the other.
 
   gate-state --owner $PPID pr-set --pr 93 --round 2 --phase reviewed --blocking 1 [--override]
-  gate-state --owner $PPID harden-set --cycle 3 --phase1 open --count-edits [--override]
+  gate-state --owner $PPID --run $RUN harden-set --cycle 3 --phase1 open --count-edits [--override]
   gate-state --owner $PPID harden-set --cycle 3 --phase1 converged --phase2 done --count-edits
   gate-state await "review r3" [--only pr|harden|both]
   gate-state clear-await [--only pr|harden|both]
@@ -121,6 +121,21 @@ class Held:
             tmp.replace(path)
         fcntl.flock(self.fh, fcntl.LOCK_UN)
         self.fh.close()
+
+
+def adopt(entry: dict, run: str | None) -> None:
+    """Make `entry` belong to `run`, replacing it wholesale if it belonged to another.
+
+    The alternative was a list of field names to drop, and it grew a leak per review pass -- a
+    `phase2`, then a whole verdict, then an `awaiting` -- because `carry unless listed` makes every
+    field added to this entry a new candidate. Replacing inverts the default. An unstamped write
+    adopts nothing, because it cannot tell whose entry this is.
+    """
+    if run is None:
+        return
+    if entry.get("run") not in (None, run):
+        entry.clear()
+    entry["run"] = run
 
 
 def stamp(entry: dict, owner: int | None = None) -> None:
@@ -219,6 +234,15 @@ class _Parser(argparse.ArgumentParser):
 def main() -> int:
     ap = _Parser(description=__doc__.splitlines()[0])
     ap.add_argument("--cwd", default=None, help="the tenant key; defaults to the working directory")
+    ap.add_argument("--run", default=None,
+                    help="this RUN's id, minted once at the top of the run and passed on every "
+                         "write it makes. A write whose --run differs from the harden entry's "
+                         "REPLACES that entry, so a new run in a reused checkout inherits nothing "
+                         "at all rather than everything that is not on a list -- which is what let "
+                         "an `awaiting` from a dead run allow a stop on `phase1: open`. Distinct "
+                         "from --owner, which answers whether a live foreign session holds this "
+                         "checkout and survives a resume; conflating the two is what left the "
+                         "same-pid corner.")
     ap.add_argument("--owner", type=int, default=None,
                     help="the pid of the claude session this entry belongs to. Pass $PPID from a "
                          "tool shell — that IS this session's process, and both gates use it to tell "
@@ -337,18 +361,26 @@ def main() -> int:
 
         elif args.cmd == "harden-set":
             e = held.entry("harden")
-            # A DIFFERENT run inherits nothing from the one before it in this checkout. Nothing
-            # clears the entry between interactive runs, and three separate allow-direction defects
-            # have now come out of one field or another carrying across that boundary -- a `done`,
-            # an `escalated`, and a whole terminal verdict picked up by a write that simply did not
-            # pass `--phase1`. Keying on the writer rather than on which flags it passed is what
-            # ends that family: `head` is already owner-guarded below for exactly this reason, and
-            # this generalises it to the rest of the run-scoped state. An UNSTAMPED write (no
-            # `--owner`) cannot be told apart from anyone else's, so it changes nothing, exactly as
-            # it relaxes nothing at the gate.
-            if args.owner is not None and e and e.get("owner") not in (None, args.owner):
-                for stale in ("phase1", "phase2", "override", "override_reason", "head"):
-                    e.pop(stale, None)
+            # A DIFFERENT run REPLACES this entry. Nothing clears it between interactive runs, and
+            # SIX allow-direction defects came out of one field or another crossing that boundary:
+            # a `done`, an `escalated`, an unrecognised value, a whole terminal verdict picked up by
+            # a write that omitted `--phase1`, and finally an `awaiting` from a run that had died,
+            # which allowed the stop on `phase1: open` -- the strictest block in the contract.
+            #
+            # Five of those were closed one rule at a time, and the fifth closure was a list of five
+            # field names to drop. `awaiting` was the sixth member and it got in through the name
+            # nobody listed, which is what says the rule was still the wrong SHAPE: `carry unless
+            # listed` makes every field added here a new candidate leak, and the reviewer has to
+            # re-derive the whole list. Replacing makes it `drop unless this run wrote it`, which
+            # cannot grow a seventh member, and it deletes the list rather than extending it.
+            #
+            # Keyed on `run`, not on `owner`. They answer different questions and conflating them
+            # is what left the same-pid corner: `owner` answers "is a live foreign session using
+            # this checkout", which the gate needs and which a resumed session changes; `run`
+            # answers "is this the same run", which a resumed session does not. An UNSTAMPED write
+            # (no `--run`) replaces nothing, because it cannot tell whose entry this is -- the same
+            # reason the gate relaxes nothing for an entry with no `owner`.
+            adopt(e, args.run)
             note = ""
             if args.count_edits:
                 # A recorded head belongs to THIS run only when the same owner wrote it and the
@@ -365,8 +397,15 @@ def main() -> int:
                 # -- so without this test a fresh `/harden` in a reused checkout would count from the
                 # previous run's head. That same non-clearing is why a Phase 1 write resets `phase2`
                 # above: this guard protects `head` from a previous run and nothing protected that.
-                prev = (e.get("head") if (args.owner is not None and e.get("owner") == args.owner
-                                          and isinstance(e.get("cycle"), int)
+                # Same question as the replace above, so the same key where there is one: a head
+                # belongs to THIS run. `run` answers that exactly; `owner` answered it approximately
+                # and is the fallback for a caller that stamps no run, because demanding `run` here
+                # silently cost every such caller the commit half of its count -- which is the
+                # regression this guard was last repaired for, arriving by the other door.
+                same_run = (e.get("run") == args.run if args.run is not None
+                            else (args.owner is not None and e.get("run") is None
+                                  and e.get("owner") == args.owner))
+                prev = (e.get("head") if (same_run and isinstance(e.get("cycle"), int)
                                           and args.cycle >= e["cycle"]) else None)
                 edits, note = count_edits(key, prev)
             elif args.edits is None:
@@ -427,6 +466,8 @@ def main() -> int:
         elif args.cmd == "await":
             for w in which[args.only]:
                 e = held.entry(w)
+                if w == "harden":
+                    adopt(e, args.run)
                 e.setdefault("awaiting", []).append({"agent": args.agent, "since": int(time.time())})
                 stamp(e, args.owner)
             print(f"awaiting: {args.agent} ({args.only})")

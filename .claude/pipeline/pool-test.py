@@ -600,35 +600,56 @@ def test_gate_state_locking(tmp: Path) -> None:
     sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
         "--count-edits"], cwd=repo, env=env)
 
-    # A DIFFERENT run inherits nothing. This is the fourth allow-direction defect of the same
-    # family: the phase2 reset fires only on a `--phase1` write, so a new run whose first write
-    # omitted the flag carried the previous run's whole terminal verdict and the gate allowed on it.
-    # The inverse mutation matters here -- a suite that cannot tell the fixed writer from the broken
-    # one is what let this through, so both the drop AND the same-owner keep are pinned.
-    sh([sys.executable, str(helper), "--owner", "31313", "harden-set", "--cycle", "1",
-        "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
-    got = sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
-              "--count-edits"], cwd=repo, env=env).stdout
+    # The run boundary. Two of the family's six defects arrived here after the others were closed:
+    # a whole terminal verdict picked up by a write that omitted `--phase1`, and then an `awaiting`
+    # that the five-name drop list did not name. The inverse mutation matters -- a suite that cannot
+    # tell the fixed writer from the broken one is what let both through -- so the replacement, the
+    # await path, the same-run keep and the unstamped no-op are all pinned.
+    # A DIFFERENT run REPLACES the entry. The predecessor of this rule dropped a LIST of five
+    # field names, and `awaiting` -- the one name not on it -- was the sixth allow-direction defect
+    # of the family, letting a dead run's outstanding agent allow a stop on `phase1: open`. So the
+    # property to pin is not "these fields went" but "nothing of the old run survived", which is
+    # what makes a seventh member impossible rather than merely absent.
+    sh([sys.executable, str(helper), "--owner", "31313", "--run", "A", "harden-set", "--cycle", "1",
+        "--phase1", "converged", "--phase2", "done", "--override", "--reason", "A's reason",
+        "--count-edits"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "31313", "--run", "A", "await", "A's agent",
+        "--only", "harden"], cwd=repo, env=env)
+    before = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("run A's entry carries a verdict, an override, a head and an outstanding agent",
+          before.get("phase1") == "converged" and before.get("override") is True
+          and before.get("head") and before.get("awaiting"), str(before))
+    got = sh([sys.executable, str(helper), "--owner", "41414", "--run", "B", "harden-set",
+              "--cycle", "1", "--count-edits"], cwd=repo, env=env).stdout
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
-    check("a new owner's write drops the previous run's verdict, not just its phase2",
-          "phase1" not in hd and "phase2" not in hd, str(hd))
-    # It records its OWN head on the way out -- that is the next write's baseline -- so the thing
-    # to assert is that the PREVIOUS run's head was not consumed as this one's.
+    survived = [k for k in ("phase1", "phase2", "override_reason") if k in hd]
+    check("a new run's write leaves NOTHING of the old one -- not a field, not the awaiting",
+          not survived and hd.get("awaiting") == [] and hd.get("override") is False, str(hd))
     check("and does not measure against the previous run's head",
           "no head from an earlier cycle" in got, got.strip())
-    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
+    # An `await` creates this entry as readily as a `harden-set` does, and that is the path the
+    # sixth defect came in on, so the boundary has to hold there too.
+    sh([sys.executable, str(helper), "--owner", "31313", "--run", "A", "harden-set", "--cycle", "1",
+        "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "41414", "--run", "B", "await", "B's agent",
+        "--only", "harden"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("an await from a new run replaces the entry too",
+          "phase1" not in hd and [a["agent"] for a in hd["awaiting"]] == ["B's agent"], str(hd))
+    # The SAME run keeps its own state across writes, or nothing could accumulate.
+    sh([sys.executable, str(helper), "--owner", "41414", "--run", "B", "harden-set", "--cycle", "1",
         "--phase1", "open", "--count-edits"], cwd=repo, env=env)
-    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
+    sh([sys.executable, str(helper), "--owner", "41414", "--run", "B", "harden-set", "--cycle", "1",
         "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
-    check("but the SAME owner's bare write keeps its own verdict",
+    check("but the SAME run's later write keeps its own verdict",
           hd.get("phase1") == "open", str(hd))
-    # An unstamped write cannot be told from anyone else's, so it must change nothing -- the same
-    # reason the gate relaxes nothing for an unstamped entry.
+    # An unstamped write cannot tell whose entry this is, so it replaces nothing -- the same reason
+    # the gate relaxes nothing for an entry with no owner.
     sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--count-edits"],
        cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
-    check("an UNSTAMPED write drops nothing, because it cannot tell whose entry this is",
+    check("an UNSTAMPED write replaces nothing, because it cannot tell whose entry this is",
           hd.get("phase1") == "open", str(hd))
 
     # `override` is rewritten by every write, so its reason has to go with it or the entry carries a

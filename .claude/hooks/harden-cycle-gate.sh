@@ -42,6 +42,7 @@
 # AWAIT_TTL and an agent that has not returned inside it counts as dead rather than outstanding.
 # Same field, same semantics as pr-harden-gate.sh, which solved this first.
 #
+# run stamped, no phase1 -> a run is in flight and has stated no verdict. Block.
 # phase1 == open        -> another Phase 1 pass is required; this hook blocks the turn from ending.
 # phase1 == converged
 #   and phase2 == pending -> the one Phase 2 pass has not run yet. Block.
@@ -54,8 +55,8 @@
 # escalation resumes Phase 1, which is `phase1: open`, which already blocks -- and `gate-state`
 # resets `phase2` to `pending` on every `phase1` write, so the Phase 2 owed after that convergence
 # cannot be satisfied by the one that escalated.
-# no phase1 field       -> an entry from before this contract: the old `edits > 0` rule still applies
-#                          to it, so a run already in flight is not silently disarmed mid-run.
+# no run AND no phase1  -> an entry from before this contract: the old `edits > 0` rule still
+#                          applies, so a run already in flight is not silently disarmed mid-run.
 # override == true      -> the skill took the labelled override; allow (the deviation is on the record).
 # no entry              -> no harden run in flight here; allow.
 #
@@ -259,12 +260,24 @@ NEXT=$((CYCLE + 1))
 
 # THE TERMINATION PREDICATE.
 #
-# A LEGACY entry — no `phase1`, written by a /harden that predates this contract — keeps the
-# zero-edit rule it was written under. That run is mid-flight and cannot re-report itself in the new
-# shape, and of the two directions to be wrong in, dropping a live run's gate is the one that costs
-# it its outstanding findings. Everything else reads `phase1` and `phase2`.
+# A LEGACY entry keeps the zero-edit rule it was written under: no `run` id AND no verdict, which
+# is what a /harden older than this contract left. That run is mid-flight and cannot re-report
+# itself in the new shape, and of the two directions to be wrong in, dropping a live run's gate is
+# the one that costs it its outstanding findings.
+#
+# BOTH halves of that condition are load-bearing, and each was wrong on its own.
+#   Chosen by the absence of `phase1` alone, it was wrong in the ALLOW direction: a current run
+#   whose first write states no verdict — a bare `harden-set` measuring the count — landed in a
+#   contract it was not written for, and at `edits: 0`, the ordinary reading on a clean tree before
+#   anything is committed, the zero-edit rule allows.
+#   Chosen by the absence of `run` alone, it is wrong the other way: entries written by 0.34.0
+#   through 0.36.0 carry a real verdict and no run id, and judging those on an edit count throws
+#   the verdict away.
+# So: a run that has stamped this entry is never legacy, and a verdict is honoured wherever it
+# came from. A run that has stamped the entry and stated no verdict owes one.
+RUN=$(jq -r '.run // empty' <<<"$ENTRY" 2>/dev/null) || allow
 PHASE1=$(jq -r '.phase1 // empty' <<<"$ENTRY" 2>/dev/null) || allow
-if [ -z "$PHASE1" ]; then
+if [ -z "$RUN" ] && [ -z "$PHASE1" ]; then
   EDITS=$(jq -r '.edits // empty' <<<"$ENTRY" 2>/dev/null) || allow
   case "$EDITS" in ''|*[!0-9]*) allow ;; esac
   [ "$EDITS" -gt 0 ] || allow
@@ -282,9 +295,17 @@ if [ -z "$PHASE1" ]; then
   exit 0
 fi
 
-# An unrecognised `phase1` IS an ambiguity -- `open` and `converged` are opposite answers and this
-# reader cannot pick -- so it allows, like every other ambiguity here.
-case "$PHASE1" in open|converged) ;; *) allow ;; esac
+# A run that has written here without stating a verdict owes one. This is not an ambiguity: the
+# entry says a run is in flight and says nothing about a pass having converged.
+if [ -z "$PHASE1" ]; then
+  WHAT="this run has recorded no Phase 1 verdict, and a run that has written to its gate entry "\
+"without reporting a pass owes one"
+  DO="Run a Phase 1 pass and record its verdict"
+else
+  # An unrecognised `phase1` IS an ambiguity -- `open` and `converged` are opposite answers and this
+  # reader cannot pick -- so it allows, like every other ambiguity here.
+  case "$PHASE1" in open|converged) ;; *) allow ;; esac
+fi
 
 # An unrecognised `phase2` is NOT one, and treating it as one was a live hole. The check used to sit
 # here, before the `phase1` test, so any value this reader did not know disarmed an unambiguous
@@ -298,7 +319,9 @@ PHASE2=$(jq -r '.phase2 // "pending"' <<<"$ENTRY" 2>/dev/null) || allow
 # Phase 1 converged and the one Phase 2 pass that follows it has run: the run is complete.
 [ "$PHASE1" = "converged" ] && [ "$PHASE2" = "done" ] && allow
 
-if [ "$PHASE1" = "open" ]; then
+if [ -n "${WHAT:-}" ]; then
+  :                       # the no-verdict case above already said what is owed
+elif [ "$PHASE1" = "open" ]; then
   WHAT="Phase 1 has not converged: the last pass found a substantive (non-cosmetic) issue, and a "\
 "pass that found one cannot be the last pass"
   DO="Run another Phase 1 pass and record its verdict with --phase1 open|converged"

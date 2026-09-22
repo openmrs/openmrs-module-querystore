@@ -119,7 +119,21 @@ run_cmd_case "the emitted command names a cycle even when the entry has none" \
 run_cmd_case "and uses the entry's cycle when it has one" \
   "harden-set --cycle 7 --phase1" "{\"cycle\":7,\"phase1\":\"converged\",\"ts\":$NOW}"
 
-# LEGACY entries — no `phase1`, written by a /harden that predates the contract. The zero-edit rule
+# A run that has STAMPED this entry and stated no verdict owes one. Chosen by the absence of
+# `phase1` alone, this fell to the legacy branch — and at `edits: 0`, the ordinary reading on a
+# clean tree, the zero-edit rule allowed it. `edits: 0` is the case that matters here.
+run_case "run stamped, no verdict, 0 edits -> block" block \
+  "{\"run\":\"r1\",\"cycle\":1,\"edits\":0,\"ts\":$NOW}"
+run_case "run stamped, no verdict, N edits -> block" block \
+  "{\"run\":\"r1\",\"cycle\":1,\"edits\":9,\"ts\":$NOW}"
+run_case "run stamped and complete -> allow" allow \
+  "{\"run\":\"r1\",\"cycle\":1,\"edits\":9,\"phase1\":\"converged\",\"phase2\":\"done\",\"ts\":$NOW}"
+# A 0.34.0-0.36.0 entry carries a real verdict and no run id. Judging it on an edit count would
+# throw the verdict away, so the legacy branch needs BOTH halves of its condition.
+run_case "no run but a verdict -> the phase contract, not the edit count" block \
+  "{\"cycle\":1,\"edits\":0,\"phase1\":\"open\",\"ts\":$NOW}"
+
+# LEGACY entries — no run id AND no verdict, written by a /harden that predates the contract. The zero-edit rule
 # still applies to them, so a run already in flight when this changed is not silently disarmed.
 run_case "legacy: edits 0 -> allow (converged)" allow "{\"cycle\":2,\"edits\":0,\"ts\":$NOW}"
 run_case "legacy: edits 3, no awaiting -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW}"
