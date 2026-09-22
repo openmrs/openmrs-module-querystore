@@ -811,8 +811,8 @@ alone — and the condition still reads the blocking count there, for the reason
 coincidence: **the count belongs to the reviewer, whose work is not being judged, and an edit count
 hands the exit to the fixer, whose work is.** That is where the two skills' contracts differ, and
 `/harden` no longer uses edits either: it ends when its Phase 1 passes stop finding substantive
-issues, for the same reason — polish always edits, so an edit count answers the wrong question in
-both loops.
+issues, for the same reason — an edit count cannot tell a polish edit from a substantive one, so it
+answers the wrong question in both loops.
 
 **The condition is a property of the ARTIFACT, and it used to be a past event.** *"A review round
 reported zero blocking findings"* was true of the sha that round read, and stayed true once FINISH

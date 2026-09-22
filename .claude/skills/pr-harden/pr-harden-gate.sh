@@ -3,9 +3,13 @@
 #
 # The contract: a /pr-harden run is complete only when the SHA IT IS HANDING OVER has been reviewed
 # with ZERO blocking findings, and — where a verifier ran at all — verified on that same sha. Edit
-# counts are irrelevant here: unlike /harden, every round is expected to make edits, so "the cycle
-# changed nothing" can never be the condition. Only a reviewer's blocking count can end the run, and
-# the reviewer that produced it must have been a fresh agent — see the skill.
+# counts are irrelevant here, and as of harden 0.34.0 they are irrelevant THERE too, so this is no
+# longer a contrast between the two skills. Through round 3 the fixer implements the non-blocking
+# findings as well, so a round that edits has not thereby found anything that blocks; what outlives
+# that, from round 4 on where blocking-only makes the two nearly coincide, is whose number it is.
+# Only a reviewer's blocking count can end the run — an edit count would hand the exit to the fixer,
+# whose work is the thing being judged — and the reviewer that produced it must have been a fresh
+# agent. See the skill.
 #
 # THE CONDITION IS A PROPERTY OF THE ARTIFACT, NOT A PAST EVENT, and it used to be the latter. A
 # reviewer clears sha N; FINISH then applies that round's non-blocking findings, commits and pushes

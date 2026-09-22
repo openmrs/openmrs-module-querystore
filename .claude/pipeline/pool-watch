@@ -160,8 +160,20 @@ def print_live(show_all: bool = False) -> int:
                 warn = "  (past the gate's 1h allowance)" if age > 3600 else ""
                 print(f"    waiting on: {a.get('agent')} — {age // 60}m{age % 60:02d}s{warn}")
         h = s["harden"]
-        if h.get("edits") is not None:
-            print(f"    harden: cycle={h.get('cycle')} edits={h.get('edits')}")
+        # Print the fields the harden gate actually reads, the way the `pr` half two blocks up
+        # prints its own predicate. Keyed on `edits` alone this said `cycle=1 edits=0` about a run
+        # the gate was holding open, and printed nothing at all for an entry that has a phase and
+        # no count -- so the operator watching a run that would not end could not see why.
+        if h:
+            bits = [f"cycle={h.get('cycle')}"]
+            if h.get("phase1"):
+                bits.append(f"phase1={h['phase1']}")
+                bits.append(f"phase2={h.get('phase2', 'pending')}")
+            if h.get("edits") is not None:
+                bits.append(f"edits={h['edits']}")
+            if h.get("override"):
+                bits.append("OVERRIDE")
+            print("    harden: " + "  ".join(bits))
         # A `--work` session is an ordinary interactive `claude`; only the headless driver writes a
         # stream. Saying so is the point — otherwise "no session found" reads like something is lost.
         if s["stream"]:

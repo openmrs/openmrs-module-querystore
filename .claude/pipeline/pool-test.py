@@ -475,7 +475,7 @@ def test_gate_state_locking(tmp: Path) -> None:
     check("an await stamps the owner on the entry it creates too", hd.get("owner") == 4242, str(hd))
 
     # `--count-edits` is the one definition of what a harden cycle changed. A retyped count is the
-    # thing that drifts from the gate's reading of it.
+    # thing that drifts from the number the run reports. It is reported only; the gate reads phase1.
     repo = tmp / "repo"
     repo.mkdir()
     for args in (["git", "init", "-q", "."], ["git", "config", "user.email", "t@t"],
@@ -499,10 +499,7 @@ def test_gate_state_locking(tmp: Path) -> None:
           (home / ".claude/harden-state.json").read_text() == snapshot,
           "the error path wrote to the file")
 
-    # `phase1`/`phase2` are what END a /harden run; `edits` is reported and gates nothing. The two
-    # cases that matter to the gate are the transition to `converged`/`done` and the one where an
-    # escalation sends Phase 1 back open, because a `phase2: done` left by the traversal before it
-    # must not survive into the reopened one.
+    # `phase1`/`phase2` are what END a /harden run; `edits` is reported and gates nothing.
     # Resolved, like the worktree keys above: the tenant key is the PHYSICAL path, and on macOS
     # `tmp` sits under a symlinked `/var`, so an unresolved `str(repo)` finds no entry at all.
     key = str(repo.resolve())
@@ -517,22 +514,56 @@ def test_gate_state_locking(tmp: Path) -> None:
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("converged + done is what the gate allows on",
           hd["phase1"] == "converged" and hd["phase2"] == "done", str(hd))
+
+    # `phase2` is the only sticky field in this entry and nothing clears the entry between
+    # interactive runs, so a Phase 1 write that does not name it must reset it. Both directions of
+    # that were live defects a fresh reviewer built: a `done` carried into the NEXT run let its
+    # first converging pass stop with its own Phase 2 never run, and a third value, `escalated`,
+    # survived `--phase1 converged` and wedged the run on the instruction it had just obeyed.
+    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "converged",
+        "--count-edits"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("a converging Phase 1 write does not inherit a previous traversal's phase2 done",
+          hd["phase2"] == "pending", str(hd))
+    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "converged",
+        "--phase2", "done", "--count-edits"], cwd=repo, env=env)
     sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
         "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("reopening Phase 1 clears the previous traversal's phase2 done",
           hd["phase2"] == "pending", str(hd))
+
+    # Both argparse guards, because an unrecognised value the hook reads FAILS OPEN — it would end
+    # a run with Phase 2 never run. Only the phase1 half was covered when this shipped; deleting
+    # `choices=HARDEN_PHASE2` reddened nothing, which is how the gap was found.
+    # `escalated` is in the pair on purpose: it is the RETIRED third value, and a behavioural
+    # refusal is what pins its removal. The first draft of this case asserted the string was absent
+    # from the file — which fails on the comment explaining why the value is gone, and would pass
+    # on a writer that still accepted it under another name.
+    for flag, value in (("--phase1", "finished"), ("--phase2", "dome"),
+                        ("--phase2", "escalated")):
+        snap = (home / ".claude/harden-state.json").read_text()
+        bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1",
+                  "converged", flag, value, "--count-edits"], cwd=repo, env=env)
+        check(f"{flag} {value} is refused rather than written",
+              bad.returncode != 0, bad.stderr[-120:])
+        check(f"and a refused {flag} {value} leaves the entry alone",
+              (home / ".claude/harden-state.json").read_text() == snap)
+
+    # The LEGACY warning reads the ENTRY, not the arguments. Keyed on the argument it announced a
+    # legacy entry over a `phase1` the entry already carried and the gate was already enforcing.
     got = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--count-edits"],
              cwd=repo, env=env).stdout
-    check("omitting --phase1 says so, because the gate then applies the old zero-edit rule",
+    check("omitting --phase1 on a PHASED entry does not claim it went legacy",
+          "LEGACY" not in got and "phase1=open" in got, got.strip())
+    sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
+    got = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--count-edits"],
+             cwd=repo, env=env).stdout
+    check("a genuinely phase-less entry says so, because the gate then applies the zero-edit rule",
           "LEGACY entry" in got, got.strip())
-    bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "finished",
-              "--count-edits"], cwd=repo, env=env)
-    check("an unknown phase1 value is refused rather than written",
-          bad.returncode != 0, bad.stderr[-120:])
 
     # A branch with no upstream is the pre-PR configuration, and `@{u}..HEAD` has no answer there:
-    # on #255 and #229 a cycle that committed 9 and 3 commits scored edits=0, which the gate reads as
+    # on #255 and #229 a cycle that committed 9 and 3 commits scored edits=0, which the gate then read as
     # converged. The commit half is measured against the head the previous cycle of the same run
     # recorded instead.
     sh(["git", "add", "-A"], cwd=repo)

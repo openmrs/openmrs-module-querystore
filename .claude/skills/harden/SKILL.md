@@ -173,9 +173,9 @@ One polish pass, run after Phase 1 has converged. A second one happens only wher
 4. Verify with the build.
 5. Report what it found, and whether any of it was substantive.
 
-**Phase 2 runs ONCE — not to convergence.** Polish always edits, so a phase that re-runs until it
-changes nothing is a loop feeding on its own output, and it was the larger half of what made this
-skill take hours. Apply what the agents found, build, and stop. Polish you did not reach is a
+**Phase 2 runs ONCE — not to convergence.** A phase that re-runs until it changes nothing is a loop
+feeding on its own output, because its gate cannot tell a polish edit from a substantive one and
+polish normally produces some; it was the larger half of what made this skill take hours. Apply what the agents found, build, and stop. Polish you did not reach is a
 deferral, and Reporting says what a deferral owes.
 
 **The exception is severity, not volume.** If Phase 2 turns up something SUBSTANTIVE rather than
@@ -196,8 +196,11 @@ run's wall clock (196-251 min of 335-379, measured over the four runs of 2026-09
 maintainer's instruction on 2026-09-22 was that the zero-edit condition is why. Three convergence
 loops were nested: a pass confirming a pass, a phase confirming a phase, a cycle confirming a cycle. Only the innermost was severity-aware. Phase 1's gate asks whether
 the last pass found anything SUBSTANTIVE; Phase 2's and the cycle's asked whether anything was
-EDITED — and polish always edits, so the outer two re-opened the loop on the loop's own output, and a
-one-clause javadoc fix bought a whole fresh Phase 1 + Phase 2 (#298, cycles 3 and 4).
+EDITED, which cannot tell a polish edit from a substantive one. So the outer two re-opened the loop
+on the loop's own output whenever it produced any, and a one-clause javadoc fix bought a whole fresh
+Phase 1 + Phase 2 (#298, cycles 3 and 4). Not that polish ALWAYS edits — #298 converged on a cycle
+whose measured zero covers its Phase 2 as well, so that universal is false, and the anti-pattern
+below on *any / only / exactly / all / never* is the rule it broke.
 
 So the run's condition is Phase 1's, and there is one loop:
 
@@ -206,8 +209,10 @@ So the run's condition is Phase 1's, and there is one loop:
 **What this does not license.** It changes what RE-OPENS the loop, never what counts as having
 finished, and Phase 1's own bar is untouched: a now-false comment is still a Phase 1 finding, a false
 universal in a javadoc is still substantive, and "it's basically converged" is still not the
-condition. Measured on #229, where every one of the last seven passes found exactly one real defect,
-all prose, and six would have shipped under that stop. What is gone is the confirming CYCLE, not the
+condition — on #229 every one of the last seven passes found exactly one real defect, all prose, and
+six would have shipped under that stop. Read that as a bound rather than a measurement of this rule:
+#229's record carries no phase attribution at all, so whether those seven were Phase 1 passes is a
+classification by the rule above and not something the record settles. What is gone is the confirming CYCLE, not the
 confirming PASS. Two remedies that WOULD have relaxed the bar are refused and stay refused: a cycle
 cap, which at the obvious value of 4 ends #298's converged 5-cycle run as did-not-converge, and
 classifying a cycle by the provenance of its edits.
@@ -359,9 +364,21 @@ has not returned inside it is treated as dead rather than outstanding.
 ~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 open --count-edits
 # after the Phase 1 pass that found nothing substantive:
 ~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 converged --count-edits
-# after Phase 2, which ends the run unless it escalates:
+# after a Phase 2 that found only polish — this is what ends the run:
 ~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 converged --phase2 done --count-edits
+# after a Phase 2 that ESCALATED — that resumes Phase 1, so it is a Phase 1 write and nothing else:
+~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 2 --phase1 open --count-edits
 ```
+
+**There is no `--phase2 escalated`, and the first draft's was deleted rather than repaired.** It was
+sticky: `--phase1 converged` did not clear it and the hook tested it before `phase1`, so a run whose
+Phase 2 escalated and whose next Phase 1 pass then CONVERGED was handed back the instruction it had
+just obeyed, every turn, to the six-hour expiry — built by a fresh reviewer, in this skill's own
+first run under this contract. An escalation resumes Phase 1, which is `--phase1 open`, which the
+gate already blocks on. And **any `--phase1` write with no `--phase2` resets it to `pending`**, so
+the Phase 2 owed after that convergence cannot be satisfied by the one that escalated — nor, in a
+reused checkout, by a `done` the PREVIOUS run left behind, which was the same stickiness pointing
+the other way and would have let a second `/harden` stop with its own Phase 2 never run.
 
 **`--phase1` is what ends the run, and omitting it does not mean "converged".** An entry with no
 `phase1` is one the gate reads as written by a `/harden` older than this contract, and it holds that
@@ -397,7 +414,7 @@ somebody's `awaiting`, and their gate then sees a run that quit with agents outs
 valid JSON throughout, nothing raised. `gate-state` holds an exclusive `flock` across both state files
 and writes atomically. Do not retype the mechanism; call the helper.
 
-`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says Phase 1 is `open`, or that Phase 2 `escalated`, or that Phase 1 has converged and Phase 2 has not run. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, unrecognised phase value), so it can only ever cost you the pass you owed. It CAN hold a session, though — an
+`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says Phase 1 is `open`, or that Phase 1 has converged and Phase 2 has not run. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, unrecognised phase value), so it can only ever cost you the pass you owed. It CAN hold a session, though — an
 entry this session owns and never clears blocks every turn in that directory until the six-hour expiry,
 and the way out is to finish the phase or take the labelled override, not to wait.
 

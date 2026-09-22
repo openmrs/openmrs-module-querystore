@@ -2471,11 +2471,17 @@ def clear_gate_state(path: Path, say) -> list[str]:
     """
     removed = gate_state_cmd("--cwd", str(path), "clear", "--json")
     names = {"pr": PR_STATE.name, "harden": HARDEN_STATE.name}
-    cleared = [
-        f"{names[w]}: phase={e.get('phase')} blocking={e.get('blocking')} "
-        f"edits={e.get('edits')} pr={e.get('pr')} round={e.get('round')}"
-        for w, e in sorted(removed.items()) if e
-    ]
+    # Name each gate's OWN predicate. Records quote this line verbatim, and for a harden leftover
+    # it used to read `phase=None blocking=None edits=N pr=None round=None` -- the one number that
+    # gates nothing, and neither of the two that do.
+    def _fields(w: str, e: dict) -> str:
+        if w == "harden":
+            return (f"cycle={e.get('cycle')} phase1={e.get('phase1')} "
+                    f"phase2={e.get('phase2')} edits={e.get('edits')}")
+        return (f"phase={e.get('phase')} blocking={e.get('blocking')} "
+                f"pr={e.get('pr')} round={e.get('round')}")
+
+    cleared = [f"{names[w]}: {_fields(w, e)}" for w, e in sorted(removed.items()) if e]
     for line in cleared:
         say(f"    cleared leftover gate state — {line}")
     return cleared

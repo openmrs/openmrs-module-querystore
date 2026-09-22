@@ -1,9 +1,13 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
 status: **EXECUTED 2026-09-22.** `harden` 0.34.0, `pr-harden` 0.26.2, `resolve-ticket` 0.17.0,
-`hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. All six sites plus two the
-order did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
-`Re-entry` section, which the escalation clause replaced — deleted rather than reworded). The two
+`hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. The order's six sites, plus
+two it did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
+`Re-entry` section, which the escalation clause replaced — deleted rather than reworded), plus three
+more live readers of the harden entry that a fresh reviewer found after the first push and that no
+list had: `pipeline/pool-watch`, `pipeline/pool-run`'s leftover report, and both copies of
+`pr-harden-gate.sh`. The order's warning that a partial application is worse than the status quo was
+right, and its own site list was not complete. The two
 things it owed are discharged at the end of this file: the `#298` walk-forward, and the test net with
 its known-bad control. Like `pr-harden` 0.26.0 before it, this was applied at the maintainer's
 instruction and has NOT been through `skill-retro`'s refutation pass; a later retro should treat it
@@ -39,7 +43,7 @@ Both obvious answers are already refuted in `REJECTED.md`, each twice, each on a
 The standing reopen condition on both is **"a signal that separates this from spinning, not a cap."**
 This is that signal, and the reason it is worth trying is structural: **Phase 1's gate is already
 severity-aware** ("nothing substantive"), while **Phase 2's and the cycle's are edit-based** — and
-polish always edits, so those two are what self-feed.
+polish normally edits and an edit count cannot tell that from substance, so those two are what self-feed.
 
 **It cannot produce the failure that killed P-A and P3.** It never declares a converged run
 unconverged; it changes what RE-OPENS the loop, not what counts as having finished.
@@ -154,7 +158,9 @@ minutes**, because no record times a Phase 2 loop separately.
 #298 still ends as converged. The rule changes what re-opens the loop, never what counts as having
 finished.
 
-**What this means for the prose loop (~44 records, the ledger's heaviest parked class): it is not
+**What this means for the prose loop — the ledger's heaviest parked class, whose last published
+running count is `REJECTED.md:3084`'s ~40 plus the 2026-09-20 block's "~4 more records", which that
+block did not total: it is not
 what this fixes.** A false claim in prose stays a Phase 1 finding, so a run that keeps writing them
 keeps buying passes. `harden`'s own *Don't rewrite prose faster than you verify it* — delete the
 clause, and when deleting keeps buying passes, delete the CLAIM SHAPE — is still the whole remedy,

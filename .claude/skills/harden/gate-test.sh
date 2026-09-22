@@ -1,5 +1,5 @@
 #!/bin/bash
-# Same shape as gate-test.sh, for harden-cycle-gate.sh (harden-state.json, `phase1`/`phase2`,
+# Same shape as pr-harden's gate-test.sh, for harden-cycle-gate.sh (harden-state.json, `phase1`/`phase2`,
 # with the pre-0.34 `edits` rule surviving for entries that carry no `phase1`).
 set -uo pipefail
 HOOK="${1:?hook path}"
@@ -63,14 +63,20 @@ run_case "converged, phase2 pending -> block (the one Phase 2 pass is owed)" blo
   "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"pending\",\"ts\":$NOW}"
 run_case "converged, phase2 ABSENT -> block (absent defaults to pending)" block \
   "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW}"
-run_case "converged, phase2 escalated -> block (Phase 1 resumes)" block \
-  "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"escalated\",\"ts\":$NOW}"
+# An escalation resumes Phase 1, so it is written as `phase1: open` and blocks on that. There is
+# no `phase2: escalated`; the first draft had one and it wedged a run that then converged, because
+# `--phase1 converged` did not clear it and this hook tested it first. The retired value is now
+# simply unrecognised, which fails open -- pinned two cases below.
+run_case "escalation is phase1 open, and blocks" block \
+  "{\"cycle\":1,\"phase1\":\"open\",\"phase2\":\"pending\",\"ts\":$NOW}"
 run_case "phase1 open with a stale phase2 done -> block" block \
   "{\"cycle\":1,\"phase1\":\"open\",\"phase2\":\"done\",\"ts\":$NOW}"
 run_case "unrecognised phase1 -> allow (fail open)" allow \
   "{\"cycle\":1,\"phase1\":\"maybe\",\"edits\":3,\"ts\":$NOW}"
 run_case "unrecognised phase2 -> allow (fail open)" allow \
   "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"soon\",\"ts\":$NOW}"
+run_case "the RETIRED phase2 escalated is just unrecognised now -> allow" allow \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"escalated\",\"ts\":$NOW}"
 run_case "phase1 open + override -> allow" allow \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"override\":true}"
 run_case "phase1 open + awaiting fresh, attended -> allow (yield)" allow \
@@ -79,6 +85,11 @@ run_case "phase1 open + awaiting fresh, marker LIVE -> block" block \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":$AW}" $$
 run_case "phase1 open but STALE -> allow" allow \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$((NOW - 25000))}"
+
+# An entry with no `cycle` must still render a copyable command. `--cycle ?` is what it used to
+# emit, and argparse takes an int, so the instruction could not be run; the flag is now omitted.
+run_case "no cycle number -> still blocks" block \
+  "{\"phase1\":\"open\",\"ts\":$NOW}"
 
 # LEGACY entries — no `phase1`, written by a /harden that predates the contract. The zero-edit rule
 # still applies to them, so a run already in flight when this changed is not silently disarmed.
