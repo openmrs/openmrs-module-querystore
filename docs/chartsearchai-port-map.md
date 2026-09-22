@@ -1,5 +1,9 @@
 # chartsearchai port map
 
+> **Status: historical and superseded.** This document records the source-analysis used while
+> building QueryStore. It is not the current integration design. ChartSearchAI is now a thin
+> OpenMRS relay, and med-agent-hub owns clinical context assembly and answer orchestration.
+
 A starting map for the implementation phase: which files in [openmrs-module-chartsearchai](https://github.com/openmrs/openmrs-module-chartsearchai) are worth porting into querystore, which are not, and what each maps to.
 
 The architectural decisions are in [adr.md](./adr.md); the chartsearchai-specific gap analysis is in [migration-chartsearchai.md](./migration-chartsearchai.md). This doc is just a code-level pointer — written so the implementation team doesn't have to re-derive it from first principles.

@@ -194,7 +194,8 @@ public class ElasticsearchBackendStoreIntegrationTest {
 	public void findAllByPatient_returnsAllDocsAcrossTypesOrderedByRecordDateDesc() {
 		// ADR Decision 15: getPatientChart returns every indexed doc for the patient, no filtering,
 		// ordered by record_date desc with (resource_type, resource_uuid) tie-breaker. The ES
-		// backend uses a single wildcard search sorted ES-side by record_date desc with _doc asc as
+		// backend uses a single wildcard search sorted ES-side by record_date desc with the stable
+		// (index/resource type, resource UUID) tie-breaker as
 		// the deterministic secondary key; this test pins both the cross-type completeness and the
 		// CHART_ORDER re-sort that aligns the ES tier byte-for-byte with MySQL and Lucene.
 		QueryDocument recentObs = doc("obs", "patient-A", "Glucose 8.1", null);
@@ -482,8 +483,10 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		// v1 ships the default-method shape: backend.hybrid() runs bm25 + knn + RRF on the JVM
 		// side. ES is permitted to override with native RRF when measurable benefit justifies it
 		// (Decision 3 SPI sub-point 2). Empty corpus + no matches → empty result, no throw.
+		float[] queryVector = new float[8];
+		queryVector[0] = 1.0f; // cosine similarity rejects a zero-magnitude query vector
 		SearchResult result = backend.hybrid(
-		    SearchRequest.builder().queryText("anything").queryVector(new float[8]).limit(5).build());
+		    SearchRequest.builder().queryText("anything").queryVector(queryVector).limit(5).build());
 		assertEquals(0, result.getHits().size());
 	}
 

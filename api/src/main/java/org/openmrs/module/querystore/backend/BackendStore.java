@@ -151,6 +151,15 @@ public interface BackendStore {
 	 */
 	List<QueryDocument> findAllByPatient(String patientUuid);
 
+	/**
+	 * Full-chart read with explicit loss information. Existing backends inherit a complete result;
+	 * backends override this method when they know a cap or handled read failure may have omitted
+	 * records.
+	 */
+	default PatientChartRead findPatientChart(String patientUuid) {
+		return PatientChartRead.complete(findAllByPatient(patientUuid));
+	}
+
 	SearchResult bm25(SearchRequest req);
 
 	SearchResult knn(SearchRequest req);
