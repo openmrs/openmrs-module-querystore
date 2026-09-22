@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.26.1
+version: 0.26.2
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -809,8 +809,10 @@ so a round that edits has not thereby found anything that blocks, and an edit co
 wrong question. From round 4 the two coincide — blocking-only means the fixer edits for blockers
 alone — and the condition still reads the blocking count there, for the reason that outlives the
 coincidence: **the count belongs to the reviewer, whose work is not being judged, and an edit count
-hands the exit to the fixer, whose work is.** That is where the two skills' contracts differ;
-`/harden` can use edits because its cycle has no comparable split.
+hands the exit to the fixer, whose work is.** That is where the two skills' contracts differ, and
+`/harden` no longer uses edits either: it ends when its Phase 1 passes stop finding substantive
+issues, for the same reason — polish always edits, so an edit count answers the wrong question in
+both loops.
 
 **The condition is a property of the ARTIFACT, and it used to be a past event.** *"A review round
 reported zero blocking findings"* was true of the sha that round read, and stayed true once FINISH
@@ -1120,8 +1122,8 @@ after you.
 ## Where `/harden` sits, and why it is not inside the round
 
 `/harden` is itself a convergence loop with its own Stop gate. Nesting it here would give two
-termination contracts arguing on every turn, and each round would have to drive harden to zero edits
-before the next reviewer even looked. It also supplies the *weaker* review for this purpose: its
+termination contracts arguing on every turn, and each round would have to drive harden's Phase 1 to
+convergence before the next reviewer even looked. It also supplies the *weaker* review for this purpose: its
 passes run in the context that wrote the code, which is what this loop is built to avoid. And its
 Phase 2 polish rewrites lines the next fresh reviewer then reads for the first time — new unreviewed
 surface, so it can *raise* the round count.

@@ -1,8 +1,13 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
-status: WORK ORDER for a fresh session. Nothing applied, no version bumped. The maintainer has
-instructed the change directly; this is not a proposal awaiting approval, it is a specification
-awaiting execution. What it still owes is the walk-forward and the hook's test net.
+status: **EXECUTED 2026-09-22.** `harden` 0.34.0, `pr-harden` 0.26.2, `resolve-ticket` 0.17.0,
+`hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. All six sites plus two the
+order did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
+`Re-entry` section, which the escalation clause replaced — deleted rather than reworded). The two
+things it owed are discharged at the end of this file: the `#298` walk-forward, and the test net with
+its known-bad control. Like `pr-harden` 0.26.0 before it, this was applied at the maintainer's
+instruction and has NOT been through `skill-retro`'s refutation pass; a later retro should treat it
+as an unrefuted proposal that happens to be live.
 
 requested by: the maintainer, 2026-09-22, on the grounds that `/harden` has taken hours on every
 run for a month and the zero-edit condition is the reason. That is a month of observation, which is
@@ -103,3 +108,97 @@ fires only on an `@claude review` issue comment, never on push, and no GitHub Ap
 Either that claim needs scoping to the repos where it holds, or FINISH should post the `@claude
 review` comment itself — and with a second gate that actually fires, stopping `pr-harden` earlier
 becomes defensible in a way it is not today.
+
+
+---
+
+# Executed — what shipped, and the two things the order owed
+
+## The new contract, as it now reads
+
+`harden`:Termination, and `harden-cycle-gate.sh` enforces exactly this rather than prose about it:
+
+> **`/harden` is complete when Phase 1 has converged and the single Phase 2 pass that follows it has
+> run without escalating.**
+
+The state entry grew two fields, written by `gate-state --owner $PPID harden-set --cycle N --phase1
+open|converged [--phase2 pending|done|escalated] --count-edits`. The hook blocks while `phase1` is
+`open`, while `phase2` is `escalated`, and while `phase1` is `converged` with no Phase 2 run yet; it
+allows on `converged` + `done`. `edits` is still written, still printed and still owed by the report,
+and gates nothing.
+
+**A LEGACY entry — one with no `phase1` — keeps the zero-edit rule.** A run already in flight when
+this landed cannot re-report itself in the new shape, and of the two directions to be wrong in,
+dropping a live run's gate is the one that costs it its outstanding findings. `gate-state` prints
+`[no --phase1: written as a LEGACY entry…]` when the flag is omitted, so a new run that forgets it is
+held to the OLD contract rather than to none — the safe direction, and not a silent one.
+
+## The walk-forward against #298, which the order recorded as INDETERMINATE
+
+**Answer: the new rule would have left #298 at 5 traversals' worth of Phase 1 passes, not 3. It
+removes no Phase 1 pass from that run.** The record's cycles 2, 3 and 4 each found a false
+universal in a javadoc or a comment (`:53-57`, and the five-regex-claims entry at `:18-20`), and
+`harden`'s Phase 1 says in terms that *"A now-false comment is a Phase 1 finding even though it
+'doesn't break runtime'"* — while the gate's cosmetic examples are *"test assertion tightening,
+import ordering"*. So those findings are substantive, Phase 1 stays open on each of them, and the
+prose loop runs inside Phase 1 exactly as long as it ran across cycles.
+
+**What it removes on #298 is the other two loops.** The run was five traversals of *(Phase 1 to
+convergence + Phase 2 to convergence)*, each confirmed by a further traversal. Under the new rule it
+is one Phase 1 loop of the same length plus one Phase 2 pass. Gone: four repeated Phase 2 loops, and
+the confirming pass each of those loops owed, and the four confirming cycles on top. The saving is
+structural — three nested convergence loops collapse to one — and it is **not quantified in
+minutes**, because no record times a Phase 2 loop separately.
+
+**It does not have P-A's failure mode**, which is the thing the order needed the walk-forward for:
+#298 still ends as converged. The rule changes what re-opens the loop, never what counts as having
+finished.
+
+**What this means for the prose loop (~44 records, the ledger's heaviest parked class): it is not
+what this fixes.** A false claim in prose stays a Phase 1 finding, so a run that keeps writing them
+keeps buying passes. `harden`'s own *Don't rewrite prose faster than you verify it* — delete the
+clause, and when deleting keeps buying passes, delete the CLAIM SHAPE — is still the whole remedy,
+and the parked entry's reopen (*"a record where the existing remedy was applied and failed"*) is
+untouched by this change. Anyone reading a post-0.34 run that still took hours should look there
+first, and not at Termination.
+
+## The test net, with its known-bad control
+
+`skills/harden/gate-test.sh`, 13 new cases (20 → 33 including the two helper definitions; 18 → 31
+executed).
+
+- Against the shipped hook: **`passed=31 failed=0`.**
+- Against the pre-0.34 hook (`git show 60a4f2e:.claude/hooks/harden-cycle-gate.sh`; byte-identical at `cfe8386`): **`passed=23
+  failed=8`**, and all 8 are cases added here. The sharpest pair inverts in both directions —
+  `phase1: open` with `edits: 0` must now BLOCK where the old hook allowed, and `converged`/`done`
+  with `edits: 99` must now ALLOW where the old hook blocked. The other 5 new cases pass under both
+  hooks on purpose: they pin that the new predicate still sits behind the override, awaiting,
+  staleness and ownership guards, which did not change, and they discriminate nothing on their own.
+
+`pipeline/pool-test.py` gained six `gate-state` cases: the two writes, the printed line, that
+reopening Phase 1 clears a previous traversal's `phase2: done`, that omitting `--phase1` says so, and
+that an unknown `phase1` value is refused rather than written.
+
+## Residue, named rather than left to be found
+
+- **No run has executed under this contract yet.** Every figure above is from the hook suite and the
+  records; the first real `/harden` under 0.34.0 is the measurement that matters, and the thing to
+  read off it is Phase 1 pass count against the old cycle count.
+- **`--phase1` is not required by `gate-state`.** Making it required would have broken the 523-case
+  `pool-test.py` suite at call sites that are about `--count-edits` semantics and not about phases.
+  The cost is that a run can silently write a legacy entry; the mitigation is the printed warning and
+  the fact that the failure direction is the old, stricter rule.
+- **A pre-existing fail-open in the LEGACY branch, found while changing the file and deliberately
+  not fixed.** Its block message builds `"run cycle " + (($c|tonumber?) + 1 | tostring)`, and with no
+  `cycle` field `$c` is `"?"`, `tonumber?` yields `empty`, and in jq an `empty` inside a string
+  concatenation makes the WHOLE object vanish — so the hook prints nothing and the stop is allowed.
+  Measured: `jq -n --arg c "?" '{reason:("x" + (($c|tonumber?) + 1 | tostring))}'` prints nothing at
+  exit 0. It is pre-existing (identical in the pre-0.34 hook), it fails in the documented open
+  direction, and the branch it lives in is dead six hours after this ships, so fixing it would add
+  risk to the change under review for a path with that lifetime. The new predicate does not have it:
+  it uses `$c` as a plain string with no `tonumber`.
+
+- **Phase 2 escalation is not bounded.** Escalate → Phase 1 reconverges → Phase 2 runs again → could
+  escalate again. The re-flagging clause (*a finding a previous Phase 2 already raised is not an
+  escalation*) is what is supposed to stop it, and it is prose, not a gate. If a run ping-pongs, that
+  is the thing to measure.

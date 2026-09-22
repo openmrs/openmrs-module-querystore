@@ -1,7 +1,7 @@
 ---
 name: harden
-description: Run iterative /review and /simplify passes on the current slice in two phases, cycling until a whole cycle changes nothing. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.33.0
+description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
+version: 0.34.0
 ---
 
 # Harden
@@ -95,9 +95,9 @@ If you cannot truthfully complete ALL THREE sentences, the slice is NOT ready fo
 
 ## Phase 2: Polish (/simplify style)
 
-Run simplify passes until polish opportunities converge. Each pass:
+One polish pass, run after Phase 1 has converged. A second one happens only where the first escalated and Phase 1 re-converged; the gate below says so. The pass:
 
-1. Spawn four parallel review agents (reuse, quality, efficiency, integration) over the current diff. After the first pass, brief subsequent passes' agents with the applied and deferred lists from prior passes so they don't re-surface them.
+1. Spawn four parallel review agents (reuse, quality, efficiency, integration) over the current diff. Where a previous Phase 2 ran, brief its agents with the applied and deferred lists from it so they don't re-surface them.
    - **Never pass `model` to any of them.** A per-call override beats both the agent definition's
      frontmatter and settings.json, so it is the strongest of the levers and the only one a running
      pass can pull on its own initiative — the others are set in a file or on the command line,
@@ -171,67 +171,77 @@ Run simplify passes until polish opportunities converge. Each pass:
 2. Aggregate findings across the four agents.
 3. Apply genuinely actionable items; skip stylistic noise and items prior passes addressed.
 4. Verify with the build.
-5. Decide: another simplify pass, or stop?
+5. Report what it found, and whether any of it was substantive.
 
-**Stop Phase 2 when ANY are true:**
-- Two consecutive passes return "nothing actionable" or only sub-noise-floor stylistic items.
-- Agents start re-flagging items prior passes addressed (context-drift signal).
-- All remaining findings are below the noise floor: micro-optimizations, naming preferences, debatable style.
+**Phase 2 runs ONCE — not to convergence.** Polish always edits, so a phase that re-runs until it
+changes nothing is a loop feeding on its own output, and it was the larger half of what made this
+skill take hours. Apply what the agents found, build, and stop. Polish you did not reach is a
+deferral, and Reporting says what a deferral owes.
 
-**Stopping gate** (say this out loud in the final report before declaring `/harden` done):
+**The exception is severity, not volume.** If Phase 2 turns up something SUBSTANTIVE rather than
+polish — a real correctness bug, a missing test for a critical path, a leaky abstraction — it
+escalates on the spot: Phase 1 resumes and runs to its own convergence, and Phase 2 then runs once
+against what that produced. A finding a previous Phase 2 already raised is not an escalation; it is
+the re-flagging that signals context drift, and it ends the phase rather than reopening the run.
 
-> "Phase 2 stopping condition met: [last two consecutive passes returned nothing actionable / only sub-noise-floor items | agents re-flagging prior items | all remaining findings below the noise floor]. Edits made by that last pass: [N]."
+**Phase 2 gate** (say this out loud before declaring the phase done):
 
-If you cannot truthfully complete that sentence, run another Phase 2 pass. Same rule as Phase 1, and state it the same way: **a pass that itself changed something cannot be the last pass**, because applying a fix is evidence the slice was not fully explored — convergence requires a *subsequent* pass that changes nothing. Pass count is not the threshold; convergence is.
+> "Phase 2 ran once, over [N] agents. Substantive findings: [none | enumerated, so Phase 1 resumes]. Edits made: [N]. Deferred: [enumerated | none]."
 
-## Termination: keep cycling until a whole cycle changes nothing
+## Termination: the run ends when Phase 1 converges
 
-The two gates above end a *phase*. They do not end the run, and this is the rule the skill most often loses. Both gates are finding-based — "no further review value", "nothing actionable" — so the obvious reading is: fix what this pass found, declare the pass returned nothing further, stop. That ends the invocation **with changes in it**, and the next `/harden` then finds more, which is how a slice gets re-hardened five times and yields something real every time.
+The two gates above end a *phase*. Which one ends the RUN is what this skill kept losing, and the
+answer used to be "one cycle that produces zero edits". This skill is 55-72% of a `resolve-ticket`
+run's wall clock (196-251 min of 335-379, measured over the four runs of 2026-09-17), and the
+maintainer's instruction on 2026-09-22 was that the zero-edit condition is why. Three convergence
+loops were nested: a pass confirming a pass, a phase confirming a phase, a cycle confirming a cycle. Only the innermost was severity-aware. Phase 1's gate asks whether
+the last pass found anything SUBSTANTIVE; Phase 2's and the cycle's asked whether anything was
+EDITED — and polish always edits, so the outer two re-opened the loop on the loop's own output, and a
+one-clause javadoc fix bought a whole fresh Phase 1 + Phase 2 (#298, cycles 3 and 4).
 
-So the run has its own condition, and it is a fact rather than a judgment:
+So the run's condition is Phase 1's, and there is one loop:
 
-> **`/harden` is complete when one cycle produces zero edits.** If the cycle changed anything — a line of code, a comment, a test, a doc — that cycle was not the last one. Start another. Do not hand back to the user in between. That next cycle is a full Phase 1 + Phase 2 unless the classification below makes it a documentation pass, which is a cheaper cycle and not a skipped one.
+> **`/harden` is complete when Phase 1 has converged and the single Phase 2 pass that follows it has run without escalating.** Phase 1 keeps its existing rule — a pass that found a substantive (non-cosmetic) issue cannot be the last pass. Phase 2's edits do not re-open Phase 1 and do not buy another traversal. Do not hand back to the user in between.
 
-Check it, do not estimate it. At the end of a cycle run `git status --porcelain` and count the commits the cycle made; report both. "I think it has converged" is not the condition; "this cycle made 0 edits" is.
+**What this does not license.** It changes what RE-OPENS the loop, never what counts as having
+finished, and Phase 1's own bar is untouched: a now-false comment is still a Phase 1 finding, a false
+universal in a javadoc is still substantive, and "it's basically converged" is still not the
+condition. Measured on #229, where every one of the last seven passes found exactly one real defect,
+all prose, and six would have shipped under that stop. What is gone is the confirming CYCLE, not the
+confirming PASS. Two remedies that WOULD have relaxed the bar are refused and stay refused: a cycle
+cap, which at the obvious value of 4 ends #298's converged 5-cycle run as did-not-converge, and
+classifying a cycle by the provenance of its edits.
 
-**Classify the cycle before deciding what the next one costs.** The confirming cycle is owed either
-way; what can change is its price. Where a cycle's only edits are DOCUMENTATION, it may be confirmed
-by a single agent rather than a full Phase 1 + Phase 2 — provided that agent does three things: the
-correction method in *Don't stop correcting a claim at the site you noticed it*, in full; the build;
-and, for any claim about behaviour, RUNS it rather than reads it.
+**And a prose finding about BEHAVIOUR is checked by running it, not by reading it.** A
+documentation-only diff can carry a behavioural falsehood: on #302 the claim that `clauseScoped=true`
+supersedes that issue's own treatment was written into `config.xml` and the README, and only driving
+the real `verify` refuted it — the flag REMOVES the rule and reinstates the symptom. A coherence
+sweep would have found that sentence coherent, and false. And where prose IS behaviour, the file it
+lives in does not save it: a prompt paragraph a test asserts a substring of, a log or failure message
+under assertion, a global-property default or the description shipped beside it.
 
-That third condition is what makes this a cheaper cycle rather than a weaker one, and it is not
-optional. A documentation-only diff can carry a behavioural falsehood: on the #302 run the claim that
-`clauseScoped=true` supersedes that issue's own treatment was written into `config.xml` and the
-README, and only driving the real `verify` refuted it — the flag REMOVES the rule and reinstates the
-symptom. A coherence sweep would have found that sentence coherent, and false.
+**Report the edit count. It no longer gates.** At the close of each traversal run `git status
+--porcelain`, count the commits, and report both. It is a fact the report owes, and it was never the
+artifact claim the old rule made of it: a zero-edit cycle licenses "this process has stopped
+producing", not "complete" — which is why `pr-harden` reviews the result in a context that did not
+write it.
 
-**What counts as documentation is a fact about the diff, and narrower than it reads.** One production
-line, one changed assertion, one new arrangement, and it is a full cycle. And where prose IS
-behaviour, the file it lives in does not save it: a prompt paragraph a test asserts a substring of, a
-log or failure message under assertion, a global-property default or the description shipped beside
-it — none of those are documentation for this purpose.
+**Termination gate** (forcing function — the phase gates demand verbatim sentences and get them; this one was prose and got skipped, so it is the same shape). Before ending the run, say this out loud with the measured values filled in:
 
-A documentation pass that turns up anything behavioural escalates on the spot, to a full cycle
-starting at Phase 1. And the gate is unmoved: the pass still has to reach `edits: 0`, and the run
-still ends only on a cycle that changed nothing.
+> "Phase 1 verdict: [converged — the last pass found nothing substantive | open]. Phase 2: [ran once, nothing substantive | escalated]. Edits this traversal, measured: `git status --porcelain` = [empty | N files], commits = N."
 
-**Cycle gate** (forcing function — the two phase gates demand verbatim sentences and get them; this one was prose and got skipped, so it is now the same shape). At the close of **every** cycle, before anything else, say this out loud with the measured values filled in:
+Emit it even when the answer is obvious. If you cannot fill in the Phase 1 verdict from a pass that actually ran, you have not run the check.
 
-> "Cycle N edit count, measured: `git status --porcelain` = [empty | N files], commits this cycle = N. Cycle N+1 is therefore [required | not required]."
+**If you are going to stop early anyway, label it.** Cost, elapsed time and turn length are **not** termination conditions and appear nowhere above; the rule has no cost exception. But a rule with no escape valve gets broken rather than invoked, so if you judge the remaining passes not worth their cost, take the valve and make the deviation legible:
 
-Emit it even when the answer is obvious, and especially when the cycle's last pass reported "nothing actionable" — that is a *phase* verdict and says nothing about whether the cycle edited a file. If you cannot fill in both measured values, you have not run the check.
-
-**If you are going to stop early anyway, label it.** Cost, elapsed time and turn length are **not** termination conditions and appear nowhere above; the rule has no cost exception. But a rule with no escape valve gets broken rather than invoked, so if you judge the remaining cycles not worth their cost, take the valve and make the deviation legible:
-
-> "I am overriding the termination rule after cycle N, because [reason]. This run did **not** converge; cycle N+1 was required and I did not run it."
+> "I am overriding the termination rule, because [reason]. This run did **not** converge; Phase 1 was still open [or: Phase 2 escalated] and I did not run the pass that was required."
 
 That is a permitted move. What is not permitted is ending the run without either the convergence line or the override line. And do not launder the override into a question — see the anti-pattern on handing the decision back.
 
 This is deliberately cheap to satisfy and expensive to fake, which is the point — but it cuts both ways, so:
 
-- **Do not manufacture a change to look thorough.** An empty cycle is the goal, not a failure. If a cycle finds nothing, say so and stop; padding it with a comment tweak just buys another mandatory cycle.
-- **Do not withhold a warranted change to end sooner.** If you find something real on what you hoped was the final cycle, fix it and run another. The rule exists precisely to stop "it's basically converged" from ending a run that still had a finding in it.
+- **Do not manufacture a finding to look thorough.** A Phase 1 pass that finds nothing substantive is the goal, not a failure. If it finds nothing, say so and move to Phase 2; inventing a cosmetic item to justify the pass just buys another mandatory one.
+- **Do not withhold a warranted finding to end sooner.** If you find something substantive on what you hoped was the last Phase 1 pass, fix it and run another. The rule exists precisely to stop "it's basically converged" from ending a run that still had a finding in it.
 - Every applied change still needs its evidence: verified by build or test, and where it fixes a behavior, checked by reverting it and confirming the failure. **Where it ADDS a guard or clause, the same check is owed on that — deleted, its arms swapped, its comparison loosened, or rewritten in a semantically equivalent way** — because a clause the suite never discriminates is one the next change can remove for free.
 - **A mutation that reddened nothing has not shown the guard is dead until you know it RAN.** It is a
   zero result, so ask of it what its inputs could not have produced — and where that zero would
@@ -317,9 +327,9 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
   cover and to a swap that preserved the size it checked. So mutate the VALUE under an asserted key, not
   only the key.
 
-### Record the cycle so the gate can enforce it
+### Record the verdict so the gate can enforce it
 
-Emitting the cycle gate is a forcing function, and forcing functions are exactly what got skipped. So also write the count where something other than you can read it. At the close of **every** cycle, alongside the gate sentence:
+Emitting the termination gate is a forcing function, and forcing functions are exactly what got skipped. So also write the verdict where something other than you can read it. At the close of **every** Phase 1 pass, and again when Phase 2 finishes:
 
 **And record an `awaiting` entry whenever a cycle delegates, or the gate will not let the cycle
 wait for its own agents.** Phase 2 spawns subagents, so a cycle is routinely blocked on one with
@@ -345,20 +355,34 @@ which is what the gate exists to prevent, so the gate's allow is bounded by an h
 has not returned inside it is treated as dead rather than outstanding.
 
 ```bash
-~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 4 --count-edits
+# after a Phase 1 pass that found something substantive:
+~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 open --count-edits
+# after the Phase 1 pass that found nothing substantive:
+~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 converged --count-edits
+# after Phase 2, which ends the run unless it escalates:
+~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 converged --phase2 done --count-edits
 ```
 
-`--count-edits` is what counts them: uncommitted lines plus the commits made since the previous cycle
+**`--phase1` is what ends the run, and omitting it does not mean "converged".** An entry with no
+`phase1` is one the gate reads as written by a `/harden` older than this contract, and it holds that
+entry to the zero-edit rule instead — so a forgotten flag costs you the cycles this change removed,
+which is the safe direction to be wrong in but not a free one. `gate-state` says so on the line it
+prints. `--cycle` numbers the traversal, and it moves only when an escalation sends you back to
+Phase 1.
+
+`--count-edits` is a REPORTED fact now, not the gate's input: uncommitted lines plus the commits made since the previous traversal
 of this run closed — both halves, because a cycle that commits its work has still changed something.
 That is why the helper records this cycle's `head` on every write. **Do not read the fallback as the
 same measurement**: where no recorded head resolves, the commit half becomes `@{u}..HEAD`, which is
 everything unpushed on the BRANCH and does not return to zero until the push, so it can read non-zero
 on a cycle that changed nothing. Both directions have been paid for — on #255 and #229 an upstream-only
-reading scored `edits=0` for cycles carrying 9 and 3 unpushed commits, which the gate reads as
-converged; on #357 the branch had an upstream and cycle 8 read `edits=16` at convergence. Which one a
+reading scored `edits=0` for cycles carrying 9 and 3 unpushed commits; on #357 the branch had an
+upstream and cycle 8 read `edits=16` at convergence. Which one a
 run met was decided by whether its branch was cut in a form that sets an upstream (`git checkout -b
 <branch> origin/main` does; pulling `main` first and branching off it does not) — a choice
-`resolve-ticket` Step 4 leaves open, and neither form is wrong.
+`resolve-ticket` Step 4 leaves open, and neither form is wrong. Neither misreading can end or extend
+a run any more, which is one thing keying the gate on Phase 1's verdict buys outright; both still
+corrupt the figure you report, so this stays.
 Where it cannot measure the commit half — a first cycle with no earlier head, or a recorded head that
 stopped resolving after a rebase or a recreated checkout — the helper prints that, instead of counting
 it as zero; that line is yours to answer with your own `git log`. It is counted THERE and not here
@@ -373,9 +397,9 @@ somebody's `awaiting`, and their gate then sees a run that quit with agents outs
 valid JSON throughout, nothing raised. `gate-state` holds an exclusive `flock` across both state files
 and writes atomically. Do not retype the mechanism; call the helper.
 
-`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says `edits > 0`. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, non-numeric count), so it can only ever cost you the cycle you owed. It CAN hold a session, though — an
+`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says Phase 1 is `open`, or that Phase 2 `escalated`, or that Phase 1 has converged and Phase 2 has not run. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, unrecognised phase value), so it can only ever cost you the pass you owed. It CAN hold a session, though — an
 entry this session owns and never clears blocks every turn in that directory until the six-hour expiry,
-and the way out is to finish the cycle or take the labelled override, not to wait.
+and the way out is to finish the phase or take the labelled override, not to wait.
 
 A skill cannot register its own hook, so this is a one-time install per machine:
 
@@ -389,20 +413,16 @@ mkdir -p ~/.claude/hooks && cp .claude/skills/harden/harden-cycle-gate.sh ~/.cla
 
 Until it is installed the gate is prose only, which is exactly the state that let the rule get skipped — so write the entry regardless, and treat an uninstalled gate as a reason to be stricter with yourself rather than looser.
 
-Two consequences worth internalising: **the state file lives under `$HOME`, never in the repo**, because an in-repo file would itself show up in `git status --porcelain` and corrupt the measurement it exists to record. And **when you finish** — converged, or overridden — the entry must say so (`edits: 0`, or `override: true`); leaving a stale `edits > 0` behind is what the 6-hour expiry is there to clean up after you.
+Two consequences worth internalising: **the state file lives under `$HOME`, never in the repo**, because an in-repo file would itself show up in `git status --porcelain` and corrupt the measurement it exists to record. And **when you finish** — converged, or overridden — the entry must say so (`phase1: converged` with `phase2: done`, or `override: true`); leaving a stale entry that still owes a phase behind is what the 6-hour expiry is there to clean up after you.
 
 If the user has also set a goal to the same effect, it is enforcing this rule from outside too; nothing changes about how you run.
-
-## Re-entry
-
-If Phase 2 surfaces a *structural* concern (not polish — e.g., a real correctness bug, a missing test for a critical path, a leaky abstraction), return to Phase 1 for one targeted pass before resuming Phase 2. Don't bounce back and forth more than once.
 
 ## Reporting
 
 After stopping, summarize:
-- Total cycles, and passes per phase within them.
-- **The terminating cycle's edit count, as measured** — `git status --porcelain` clean and 0 commits — so the reader can see the run ended on an empty cycle rather than on a judgment that it had converged. This is the cycle gate from Termination; the report is not complete without either it or the override line, and neither may be replaced by a question to the user.
-- What was changed across them (one bullet per real fix, separated by phase). If earlier cycles made changes and the last did not, say which cycle each fix landed in; that is what shows the run converged rather than ran out of patience.
+- Phase 1 passes run, and whether Phase 2 ran once or escalated.
+- **Phase 1's verdict on its last pass, and the traversal's edit count as measured** — the termination gate from Termination, filled in. The report is not complete without either it or the override line, and neither may be replaced by a question to the user. The edit count is reported, not a claim of completeness: what a run of this skill licenses is "the review passes stopped finding substantive issues", which is why the fresh-context loop reviews the result afterwards.
+- What was changed (one bullet per real fix, separated by phase), and which pass each fix landed in; that is what shows the run converged rather than ran out of patience.
 - **For every deferred item, a concrete failure-mode sentence in the form "if we ship without this, X breaks because Y."** A deferral without that sentence is not a deferral — it is an unanalyzed item. Re-read and either apply or write the sentence. Group sentences by item; do not collapse multiple deferrals into a single label like "remaining items below noise floor."
 - Current build / test status.
 - Recommended next action (commit + push, or move on).
@@ -411,11 +431,11 @@ After stopping, summarize:
 
 - **Don't invent concerns** to justify another pass — diminishing returns are real signals.
 - **Don't re-litigate** decisions from prior passes (e.g., "we deferred test fixture unification — should we revisit?" — no, ship).
-- **Don't run another pass** if the only items are below the noise floor or the agents start agreeing on "nothing actionable." This governs passes *within* a phase; it is not licence to skip the confirming cycle that Termination requires after a cycle that changed something. That cycle is expected to be empty — running it is how you prove it, and a documentation pass, where the classification allows one, still is it.
-- **Don't end a cycle that changed something.** "It's basically converged, and the last fix was small" is the single most common way this skill stops early, because both phase gates are about findings and neither asks whether you just edited a file. If the cycle made an edit, it was not the last cycle — see Termination.
-- **Don't pause for user input between passes** unless something is genuinely ambiguous. The skill is meant to converge autonomously up to the stopping rules — including across cycles, not just across passes within a cycle.
-- **Don't hand the termination decision back to the user.** This is the disguised form of stopping early, and it is harder to catch than the honest form because it reads as deference. "You should get to decide whether to spend another cycle", "want me to keep going?", "say the word and I'll run cycle N+1" — all of these end the run with edits in it while looking like good practice. Note what a naive check misses: reporting *truthfully* that the run has not converged and then handing back is still a violation, so a detector aimed at false convergence claims will not see it. The tell is the handback, not the claim. If the rule requires another cycle, run it; if you are not going to, use the labelled override in Termination, which states plainly that you overrode a rule rather than asking permission you already had instructions about.
-- **Don't rewrite prose faster than you verify it.** When a cycle's findings are all in text *you wrote in the previous cycle* — a comment, a failure message, a doc paragraph — stop rewriting and change tactics: delete the unsupported clause instead of replacing it with a better-sounding one. Replacing an unverified causal claim with a different unverified causal claim reads as progress and buys another mandatory cycle; several cycles in a row of this is the signature. Prefer stating only the mechanism you can check, naming candidates without ranking them, and saying outright that the evidence does not distinguish them. "I could not establish which" is a finished sentence. **And when deleting the clause is itself what
+- **Don't run another pass** if the only items are below the noise floor or the agents start agreeing on "nothing actionable." That is Phase 1's convergence, and reaching it is the point; it is not licence to skip the Phase 2 pass that Termination requires after it.
+- **Don't end with Phase 1 open.** "It's basically converged, and the last finding was small" is the single most common way this skill stops early. A pass that found something substantive was not the last pass, whatever its edit count — see Termination.
+- **Don't pause for user input between passes** unless something is genuinely ambiguous. The skill is meant to converge autonomously up to the stopping rules.
+- **Don't hand the termination decision back to the user.** This is the disguised form of stopping early, and it is harder to catch than the honest form because it reads as deference. "You should get to decide whether to spend another cycle", "want me to keep going?", "say the word and I'll run cycle N+1" — all of these end the run with Phase 1 open while looking like good practice. Note what a naive check misses: reporting *truthfully* that the run has not converged and then handing back is still a violation, so a detector aimed at false convergence claims will not see it. The tell is the handback, not the claim. If the rule requires another cycle, run it; if you are not going to, use the labelled override in Termination, which states plainly that you overrode a rule rather than asking permission you already had instructions about.
+- **Don't rewrite prose faster than you verify it.** When a cycle's findings are all in text *you wrote in the previous cycle* — a comment, a failure message, a doc paragraph — stop rewriting and change tactics: delete the unsupported clause instead of replacing it with a better-sounding one. Replacing an unverified causal claim with a different unverified causal claim reads as progress and buys another mandatory Phase 1 pass, because a now-false comment is a Phase 1 finding; several passes in a row of this is the signature. Prefer stating only the mechanism you can check, naming candidates without ranking them, and saying outright that the evidence does not distinguish them. "I could not establish which" is a finished sentence. **And when deleting the clause is itself what
   keeps buying cycles, delete the CLAIM SHAPE.** On #330 four rules for one count were written in
   succession and each measured false, across ten cycles; what ended it was publishing the measurement
   with its arrangement and no rule about it. Once a second attempt at a claim of some kind has been

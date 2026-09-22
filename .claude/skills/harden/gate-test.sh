@@ -1,5 +1,6 @@
 #!/bin/bash
-# Same shape as gate-test.sh, for harden-cycle-gate.sh (harden-state.json, `edits` not `phase`).
+# Same shape as gate-test.sh, for harden-cycle-gate.sh (harden-state.json, `phase1`/`phase2`,
+# with the pre-0.34 `edits` rule surviving for entries that carry no `phase1`).
 set -uo pipefail
 HOOK="${1:?hook path}"
 # Resolve to an absolute path and prove it exists BEFORE any case runs. Each case invokes the hook
@@ -41,8 +42,48 @@ run_case() { # name expected entry_json [marker_pid]
 
 AW="[{\"agent\":\"phase2 quality\",\"since\":$NOW}]"
 run_case "no entry -> allow" allow none
-run_case "edits 0 -> allow (converged)" allow "{\"cycle\":2,\"edits\":0,\"ts\":$NOW}"
-run_case "edits 3, no awaiting -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW}"
+
+# THE PHASE CONTRACT. `/harden` ends when Phase 1 has converged and the one Phase 2 pass that
+# follows it has run without escalating; `edits` is reported and gates nothing.
+#
+# The KNOWN-BAD CONTROL, run rather than asserted: against the pre-0.34 hook this suite reports
+# `passed=23 failed=8`, and every one of the 8 is a case added here — an implementation that still
+# reads the edit count fails them. The other 5 of the 13 pass under BOTH hooks, because they
+# exercise the override, awaiting, staleness and ownership guards the new predicate sits behind and
+# which did not change; they pin that the predicate is still behind them, and they discriminate
+# nothing on their own. Reproduce with
+# `git show <pre-0.34>:.claude/hooks/harden-cycle-gate.sh > /tmp/old && bash "$0" /tmp/old`.
+# The first two below are the sharpest pair: they invert, one in each direction.
+run_case "phase1 open with edits 0 -> block (an edit count does not end it)" block \
+  "{\"cycle\":1,\"phase1\":\"open\",\"edits\":0,\"ts\":$NOW}"
+run_case "converged + phase2 done with edits 99 -> allow (nor does it extend it)" allow \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"done\",\"edits\":99,\"ts\":$NOW}"
+run_case "phase1 open -> block" block "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW}"
+run_case "converged, phase2 pending -> block (the one Phase 2 pass is owed)" block \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"pending\",\"ts\":$NOW}"
+run_case "converged, phase2 ABSENT -> block (absent defaults to pending)" block \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW}"
+run_case "converged, phase2 escalated -> block (Phase 1 resumes)" block \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"escalated\",\"ts\":$NOW}"
+run_case "phase1 open with a stale phase2 done -> block" block \
+  "{\"cycle\":1,\"phase1\":\"open\",\"phase2\":\"done\",\"ts\":$NOW}"
+run_case "unrecognised phase1 -> allow (fail open)" allow \
+  "{\"cycle\":1,\"phase1\":\"maybe\",\"edits\":3,\"ts\":$NOW}"
+run_case "unrecognised phase2 -> allow (fail open)" allow \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"soon\",\"ts\":$NOW}"
+run_case "phase1 open + override -> allow" allow \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"override\":true}"
+run_case "phase1 open + awaiting fresh, attended -> allow (yield)" allow \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":$AW}"
+run_case "phase1 open + awaiting fresh, marker LIVE -> block" block \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":$AW}" $$
+run_case "phase1 open but STALE -> allow" allow \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$((NOW - 25000))}"
+
+# LEGACY entries — no `phase1`, written by a /harden that predates the contract. The zero-edit rule
+# still applies to them, so a run already in flight when this changed is not silently disarmed.
+run_case "legacy: edits 0 -> allow (converged)" allow "{\"cycle\":2,\"edits\":0,\"ts\":$NOW}"
+run_case "legacy: edits 3, no awaiting -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW}"
 run_case "awaiting fresh, attended -> allow (yield)" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}"
 run_case "awaiting fresh, marker LIVE -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" $$
 run_case "awaiting fresh, marker DEAD -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" 999999

@@ -499,6 +499,38 @@ def test_gate_state_locking(tmp: Path) -> None:
           (home / ".claude/harden-state.json").read_text() == snapshot,
           "the error path wrote to the file")
 
+    # `phase1`/`phase2` are what END a /harden run; `edits` is reported and gates nothing. The two
+    # cases that matter to the gate are the transition to `converged`/`done` and the one where an
+    # escalation sends Phase 1 back open, because a `phase2: done` left by the traversal before it
+    # must not survive into the reopened one.
+    # Resolved, like the worktree keys above: the tenant key is the PHYSICAL path, and on macOS
+    # `tmp` sits under a symlinked `/var`, so an unresolved `str(repo)` finds no entry at all.
+    key = str(repo.resolve())
+    got = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "open",
+              "--count-edits"], cwd=repo, env=env).stdout
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("--phase1 open writes the verdict and defaults phase2 to pending",
+          hd.get("phase1") == "open" and hd.get("phase2") == "pending", str(hd))
+    check("the printed line names both phases", "phase1=open phase2=pending" in got, got.strip())
+    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "converged",
+        "--phase2", "done", "--count-edits"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("converged + done is what the gate allows on",
+          hd["phase1"] == "converged" and hd["phase2"] == "done", str(hd))
+    sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
+        "--count-edits"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("reopening Phase 1 clears the previous traversal's phase2 done",
+          hd["phase2"] == "pending", str(hd))
+    got = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--count-edits"],
+             cwd=repo, env=env).stdout
+    check("omitting --phase1 says so, because the gate then applies the old zero-edit rule",
+          "LEGACY entry" in got, got.strip())
+    bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "finished",
+              "--count-edits"], cwd=repo, env=env)
+    check("an unknown phase1 value is refused rather than written",
+          bad.returncode != 0, bad.stderr[-120:])
+
     # A branch with no upstream is the pre-PR configuration, and `@{u}..HEAD` has no answer there:
     # on #255 and #229 a cycle that committed 9 and 3 commits scored edits=0, which the gate reads as
     # converged. The commit half is measured against the head the previous cycle of the same run

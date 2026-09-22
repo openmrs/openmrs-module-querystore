@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.16.0
+version: 0.17.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -433,8 +433,9 @@ another branch shadows the reactor's classes and reddens tests on a drift that i
 Run `/harden` here, before the PR exists. This is the one place its passes are the right tool: they
 run in the context that wrote the code, which makes them good at polish and at the boundaries you were
 just thinking about — trace outward, the invariants in unchanged neighbours your edit may have
-falsified, the test named for each behaviour change. Let it converge on its own terms (a cycle that
-changes nothing) and let its own Stop gate do its job.
+falsified, the test named for each behaviour change. Let it converge on its own terms (Phase 1
+passes until one finds nothing substantive, then a single Phase 2 pass) and let its own Stop gate do
+its job.
 
 Do not skip it on the grounds that the loop will review anyway. The two are not substitutes: polish
 with context first, adversarial review without it second. Skipping this hands the first clean reviewer
@@ -458,10 +459,12 @@ override** — a fresh await left in `pr-harden-state.json` licenses a real quit
 hour-long TTL while Step 8 runs.
 
 **Then confirm `harden` left its own state entry finished**, because two Stop gates are now live in
-this run and both must allow the turn to end. `~/.claude/harden-state.json` must say `edits: 0` for
-this repo, or `override: true` if it took the labelled override. A `harden` run that was interrupted
-leaves `edits > 0` there, and that entry then blocks the end of *this* run even after the review loop
-has converged — a wedge with nothing wrong with the PR, cleared only by the 6-hour expiry. Check it
+this run and both must allow the turn to end. `~/.claude/harden-state.json` must say `phase1: converged` with
+`phase2: done` for this repo, or `override: true` if it took the labelled override. An entry with no
+`phase1` at all is one written by a `/harden` older than that contract, and there the finished state
+is still `edits: 0`. A `harden` run that was interrupted
+leaves the entry saying a phase is owed (or, on a legacy entry, `edits > 0`), and that then blocks the
+end of *this* run even after the review loop has converged — a wedge with nothing wrong with the PR, cleared only by the 6-hour expiry. Check it
 here, where it is one line, rather than discovering it after the loop.
 
 ## Step 8 — Draft PR

@@ -30,7 +30,8 @@ Writes are atomic (temp file, then rename), so the hooks — which read without 
 hook must never block on someone else's lock — always see one whole version or the other.
 
   gate-state --owner $PPID pr-set --pr 93 --round 2 --phase reviewed --blocking 1 [--override]
-  gate-state --owner $PPID harden-set --cycle 3 --count-edits [--override]
+  gate-state --owner $PPID harden-set --cycle 3 --phase1 open --count-edits [--override]
+  gate-state --owner $PPID harden-set --cycle 3 --phase1 converged --phase2 done --count-edits
   gate-state await "review r3" [--only pr|harden|both]
   gate-state clear-await [--only pr|harden|both]
   gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"   # writes the pr entry; no --only
@@ -56,6 +57,13 @@ FILES = {"pr": CLAUDE / "pr-harden-state.json", "harden": CLAUDE / "harden-state
 LOCK = CLAUDE / "gate-state.lock"
 
 PHASES = ("building", "init", "fixing", "reviewed")
+# `/harden`'s run condition, which is Phase 1's own severity-aware verdict rather than an edit
+# count. `open` means the last Phase 1 pass found a substantive issue, so it cannot be the last
+# pass. `escalated` means the single Phase 2 pass turned up something substantive rather than
+# polish, which resumes Phase 1. An entry carrying neither field is one a pre-0.34 `/harden`
+# wrote, and `harden-cycle-gate.sh` holds that entry to the zero-edit rule it was written under.
+HARDEN_PHASE1 = ("open", "converged")
+HARDEN_PHASE2 = ("pending", "done", "escalated")
 
 
 class Held:
@@ -225,6 +233,13 @@ def main() -> int:
                         "or on a branch with no upstream the commits made since the previous cycle "
                         "closed. One definition of 'what this cycle changed', so a retyped one "
                         "cannot drift from the gate's reading of it.")
+    h.add_argument("--phase1", choices=HARDEN_PHASE1,
+                   help="Phase 1's verdict at the close of this pass. This is what ends the run: "
+                        "`converged` plus a `--phase2 done` is complete. Omitting it writes a "
+                        "LEGACY entry, which the gate holds to the old zero-edit rule.")
+    h.add_argument("--phase2", choices=HARDEN_PHASE2,
+                   help="where the single Phase 2 pass stands. Defaults to `pending` whenever "
+                        "--phase1 open is written, because a resumed Phase 1 owes a Phase 2 again.")
     h.add_argument("--override", action="store_true")
     h.add_argument("--reason")
 
@@ -322,6 +337,17 @@ def main() -> int:
             else:
                 edits = args.edits
             e.update({"cycle": args.cycle, "edits": edits, "override": bool(args.override)})
+            if args.phase1:
+                e["phase1"] = args.phase1
+                # A resumed Phase 1 owes its Phase 2 again, so an explicit `open` clears a `done`
+                # left by the traversal before it. The gate does not depend on this -- it allows
+                # only on `converged` -- but a state file that says `open`/`done` describes a
+                # position no run is ever in, and the next reader of it should not have to know
+                # which field wins.
+                if args.phase1 == "open" and args.phase2 is None:
+                    e["phase2"] = "pending"
+            if args.phase2:
+                e["phase2"] = args.phase2
             head = _git(key, "rev-parse", "HEAD")
             if head:
                 e["head"] = head          # what the NEXT cycle measures its commits against
@@ -329,8 +355,14 @@ def main() -> int:
                 e["override_reason"] = args.reason
             e.setdefault("awaiting", [])
             stamp(e, args.owner)
-            print(f"cycle {args.cycle}: edits={edits}" + (" OVERRIDE" if args.override else "")
-                  + (f" [{note}]" if note else ""))
+            print(f"cycle {args.cycle}: "
+                  + (f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')} "
+                     if args.phase1 else "")
+                  + f"edits={edits}" + (" OVERRIDE" if args.override else "")
+                  + (f" [{note}]" if note else "")
+                  + ("" if args.phase1 else
+                     " [no --phase1: written as a LEGACY entry, so the gate holds this run to the"
+                     " zero-edit rule rather than to Phase 1's verdict]"))
 
         elif args.cmd == "await":
             for w in which[args.only]:
