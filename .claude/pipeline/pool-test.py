@@ -535,9 +535,12 @@ def test_gate_state_locking(tmp: Path) -> None:
     check("reopening Phase 1 clears the previous traversal's phase2 done",
           hd["phase2"] == "pending", str(hd))
 
-    # Both argparse guards, because an unrecognised value the hook reads FAILS OPEN — it would end
-    # a run with Phase 2 never run. Only the phase1 half was covered when this shipped; deleting
-    # `choices=HARDEN_PHASE2` reddened nothing, which is how the gap was found.
+    # Both argparse guards. An unrecognised `phase1` fails open at the hook -- `open` and
+    # `converged` are opposite answers and it cannot pick -- so a bad one written here would end a
+    # run outright; an unrecognised `phase2` blocks there, so a bad one wedges instead. Refusing at
+    # the writer is what keeps either from being written at all. Only the phase1 half was covered
+    # when this shipped; deleting `choices=HARDEN_PHASE2` reddened nothing, which is how the gap was
+    # found.
     # `escalated` is in the pair on purpose: it is the RETIRED third value, and a behavioural
     # refusal is what pins its removal. The first draft of this case asserted the string was absent
     # from the file — which fails on the comment explaining why the value is gone, and would pass
@@ -596,6 +599,50 @@ def test_gate_state_locking(tmp: Path) -> None:
     # That clear empties the entry, so put a phased one back for the two cases below.
     sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
         "--count-edits"], cwd=repo, env=env)
+
+    # A DIFFERENT run inherits nothing. This is the fourth allow-direction defect of the same
+    # family: the phase2 reset fires only on a `--phase1` write, so a new run whose first write
+    # omitted the flag carried the previous run's whole terminal verdict and the gate allowed on it.
+    # The inverse mutation matters here -- a suite that cannot tell the fixed writer from the broken
+    # one is what let this through, so both the drop AND the same-owner keep are pinned.
+    sh([sys.executable, str(helper), "--owner", "31313", "harden-set", "--cycle", "1",
+        "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
+    got = sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
+              "--count-edits"], cwd=repo, env=env).stdout
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("a new owner's write drops the previous run's verdict, not just its phase2",
+          "phase1" not in hd and "phase2" not in hd, str(hd))
+    # It records its OWN head on the way out -- that is the next write's baseline -- so the thing
+    # to assert is that the PREVIOUS run's head was not consumed as this one's.
+    check("and does not measure against the previous run's head",
+          "no head from an earlier cycle" in got, got.strip())
+    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
+        "--phase1", "open", "--count-edits"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
+        "--count-edits"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("but the SAME owner's bare write keeps its own verdict",
+          hd.get("phase1") == "open", str(hd))
+    # An unstamped write cannot be told from anyone else's, so it must change nothing -- the same
+    # reason the gate relaxes nothing for an unstamped entry.
+    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--count-edits"],
+       cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("an UNSTAMPED write drops nothing, because it cannot tell whose entry this is",
+          hd.get("phase1") == "open", str(hd))
+
+    # `override` is rewritten by every write, so its reason has to go with it or the entry carries a
+    # justification for a deviation it no longer records.
+    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1", "--phase1",
+        "open", "--override", "--reason", "cost", "--count-edits"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("a taken override records its reason",
+          hd.get("override") is True and hd.get("override_reason") == "cost", str(hd))
+    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
+        "--phase1", "open", "--count-edits"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("and a later write retracts both, never the flag alone",
+          hd.get("override") is False and "override_reason" not in hd, str(hd))
 
     # The LEGACY warning reads the ENTRY, not the arguments. Keyed on the argument it announced a
     # legacy entry over a `phase1` the entry already carried and the gate was already enforcing.

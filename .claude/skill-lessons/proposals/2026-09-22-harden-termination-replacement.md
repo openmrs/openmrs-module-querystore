@@ -1,6 +1,6 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
-status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.35.0, `pr-harden` 0.26.3,
+status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.36.0, `pr-harden` 0.26.3,
 `resolve-ticket` 0.17.0,
 `hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. The order's six sites, plus
 two it did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
@@ -148,10 +148,13 @@ two passes under this contract.
 **A LEGACY entry — one with no `phase1` — keeps the zero-edit rule.** A run already in flight when
 this landed cannot re-report itself in the new shape, and of the two directions to be wrong in,
 dropping a live run's gate is the one that costs it its outstanding findings. `gate-state` prints `[no phase1 on this
-entry: it is a LEGACY entry…]`, keyed on the ENTRY and not on the arguments, so a new run that
-forgets the flag is held to the OLD contract rather than to none — the safe direction, and not a
-silent one. Keyed on the argument, as it first shipped, it announced a legacy entry over a `phase1`
-the entry already carried and the gate was already enforcing.
+entry: it is a LEGACY entry…]`, keyed on the ENTRY and not on the arguments, so on a FRESH entry a
+run that forgets the flag is held to the old contract rather than to none. Keyed on the argument, as
+it first shipped, it announced a legacy entry over a `phase1` the entry already carried and the gate
+was already enforcing. On an entry that already has a verdict a bare write keeps it and says
+nothing — which across runs was an allow-direction hole, closed by dropping the previous run's
+verdict when the `--owner` changes, and within a run is just a reason to state the verdict on every
+write.
 
 ## The walk-forward against #298, which the order recorded as INDETERMINATE
 
@@ -193,8 +196,9 @@ a third reviewer then found here after the same commit had de-staled it there. R
 
 The known-bad control is the part worth keeping, because it is a method rather than a number: point
 `gate-test.sh` at the pre-0.34 hook (`git show 60a4f2e:.claude/hooks/harden-cycle-gate.sh`;
-byte-identical at `cfe8386`) and every failure is a case added for this contract, because an
-implementation that still reads the edit count cannot pass them. The sharpest pair inverts in both
+byte-identical at `cfe8386`) and every failure is a case added for this contract. Not all of them
+for the same reason — some fail on the edit count the old hook reads, others on defects found and
+closed during the repairs — so read the failures rather than a one-line cause. The sharpest pair inverts in both
 directions — `phase1: open` with `edits: 0` must BLOCK where the old hook allowed, and
 `converged`/`done` with `edits: 99` must ALLOW where the old hook blocked. Some of the new cases pass
 under both hooks on purpose: they pin that the predicate still sits behind the override, awaiting,
@@ -212,9 +216,11 @@ staleness and ownership guards, which did not change, and discriminate nothing o
   no run has yet gone from a ticket to a PR under it.
 - **`--phase1` is not required by `gate-state`.** Making it required would break the `pool-test.py`
   call sites that are about `--count-edits` semantics and not about phases. The cost is that a run
-  can write a legacy entry without meaning to; the mitigation is the printed warning and the fact
-  that the failure direction is the old, stricter rule. `--phase2`, by contrast, DOES require its
-  pair, unconditionally.
+  can write a legacy entry without meaning to on a FRESH entry; the mitigation is the printed
+  warning and the fact that the failure direction is the old, stricter rule. On an entry that
+  already carries a verdict a bare write keeps it, which across runs was the fourth allow-direction
+  defect of this slice and is closed by the owner test rather than by another rule about flags.
+  `--phase2`, by contrast, DOES require its pair, unconditionally.
 - **CLOSED, and the decision to leave it open was wrong.** A pre-existing fail-open in the LEGACY
   branch: its block message built `"run cycle " + (($c|tonumber?) + 1 | tostring)`, and with a
   non-numeric `cycle` jq's `empty` propagates through the concatenation and suppresses the WHOLE
@@ -223,6 +229,16 @@ staleness and ownership guards, which did not change, and discriminate nothing o
   same commit's repair of the copyability half of the same defect is what a reviewer then called
   hunting a class and fixing only the milder member. The cycle is now resolved once in bash, with a
   default, and no jq arithmetic touches it on either branch.
+
+- **Run identity: closed twice over, with one corner left.** The entry is keyed on the checkout and
+  says nothing about WHICH run wrote it, and that is where four of this slice's allow-direction
+  defects came from — a `done`, an `escalated`, an unrecognised value, and a whole terminal verdict
+  picked up by a write that omitted `--phase1`. Two closures now: a `harden-set` whose `--owner`
+  differs from the entry's drops the previous run's verdict, count and head first, and the skill
+  clears the entry once before its first pass, which is what `pool-run` has always done when it sets
+  a worktree up. **The corner:** a second `/harden` in the SAME session and checkout that skips the
+  clear has the same pid, so the owner test cannot see it. That needs a real run id, and it is a
+  redesign; the two closures above make it the only remaining shape rather than the common one.
 
 - **Phase 2 escalation is not bounded.** Escalate → Phase 1 reconverges → Phase 2 runs again → could
   escalate again. The re-flagging clause (*a finding a previous Phase 2 already raised is not an

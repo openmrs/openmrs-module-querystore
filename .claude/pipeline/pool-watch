@@ -159,7 +159,9 @@ def print_live(show_all: bool = False) -> int:
                 age = int(now_ts - (a.get("since") or now_ts))
                 warn = "  (past the gate's 1h allowance)" if age > 3600 else ""
                 print(f"    waiting on: {a.get('agent')} — {age // 60}m{age % 60:02d}s{warn}")
-        h = s["harden"]
+        h = s["harden"] or {}
+        # `or {}`, because the pr half two blocks up guards with `if g:` and this one did not, so a
+        # JSON-null entry raised here. Unreachable through `gate-state`, which always writes a dict.
         # Print the fields the harden gate actually reads, the way the `pr` half two blocks up
         # prints its own predicate. Keyed on `edits` alone this said `cycle=1 edits=0` about a run
         # the gate was holding open, and printed nothing at all for an entry that has a phase and

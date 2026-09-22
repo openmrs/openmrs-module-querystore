@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.35.0
+version: 0.36.0
 ---
 
 # Harden
@@ -360,6 +360,12 @@ which is what the gate exists to prevent, so the gate's allow is bounded by an h
 has not returned inside it is treated as dead rather than outstanding.
 
 ```bash
+# ONCE, before the first pass: this checkout may still hold a finished run's entry, and nothing
+# clears it between interactive runs. `pool-run` does exactly this when it sets a worktree up; the
+# interactive path had no equivalent, and three allow-direction defects came out of one field or
+# another surviving that boundary.
+~/.claude/pipeline/gate-state clear --only harden
+
 # after a Phase 1 pass that found something substantive:
 ~/.claude/pipeline/gate-state --owner $PPID harden-set --cycle 1 --phase1 open --count-edits
 # after the Phase 1 pass that found nothing substantive:
@@ -380,10 +386,14 @@ the Phase 2 owed after that convergence cannot be satisfied by the one that esca
 reused checkout, by a `done` the PREVIOUS run left behind, which was the same stickiness pointing
 the other way and would have let a second `/harden` stop with its own Phase 2 never run.
 
-**`--phase1` is what ends the run, and omitting it does not mean "converged".** An entry with no
-`phase1` is one the gate reads as written by a `/harden` older than this contract, and it holds that
-entry to the zero-edit rule instead — so a forgotten flag costs you the cycles this change removed,
-which is the safe direction to be wrong in but not a free one. `gate-state` says so on the line it
+**`--phase1` is what ends the run, and omitting it leaves whatever the entry already says.** On a
+fresh entry that is nothing, and the gate reads a `phase1`-less entry as one a `/harden` older than
+this contract wrote and holds it to the zero-edit rule — a forgotten flag then costs you the passes
+this change removed, which is the safe direction to be wrong in but not a free one. On an entry that
+already carries a verdict, a bare write keeps it, so **do not use one to refresh the count**: say the
+verdict every time. Across runs this is handled for you — a write whose `--owner` differs from the
+entry's drops the previous run's verdict, count and head before recording yours — but that guard
+needs `--owner`, which is the other reason to pass it. `gate-state` says so on the line it
 prints. `--cycle` is a label on the traversal and nothing reads it as a number — advance it on an
 escalation if you like, but the gate does not care and the edit measurement tolerates it staying
 put, which is why the hook hands back whatever the entry already has.
@@ -415,7 +425,7 @@ somebody's `awaiting`, and their gate then sees a run that quit with agents outs
 valid JSON throughout, nothing raised. `gate-state` holds an exclusive `flock` across both state files
 and writes atomically. Do not retype the mechanism; call the helper.
 
-`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says Phase 1 is `open`, or that Phase 1 has converged and Phase 2 has not run. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, unrecognised phase value), so it can only ever cost you the pass you owed. It CAN hold a session, though — an
+`harden-cycle-gate.sh` ships next to this file and is what reads that entry. On a Stop event it refuses to end the turn while the newest entry for this directory says Phase 1 is `open`, or that Phase 1 has converged and Phase 2 has not run. It fails open on every ambiguity (no file, malformed JSON, no jq, stale entry, an unrecognised `phase1`), so it can only ever cost you the pass you owed. An unrecognised `phase2` is deliberately not in that list: only `done` ends a run, which is decidable without knowing what the value means, and the check used to sit ahead of the `phase1` test so any unknown value disarmed an open verdict. It CAN hold a session, though — an
 entry this session owns and never clears blocks every turn in that directory until the six-hour expiry,
 and the way out is to finish the phase or take the labelled override, not to wait.
 

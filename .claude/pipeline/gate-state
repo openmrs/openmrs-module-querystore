@@ -247,8 +247,10 @@ def main() -> int:
                         "is reported only; --phase1 is what the gate reads.")
     h.add_argument("--phase1", choices=HARDEN_PHASE1,
                    help="Phase 1's verdict at the close of this pass. This is what ends the run: "
-                        "`converged` plus a `--phase2 done` is complete. Omitting it writes a "
-                        "LEGACY entry, which the gate holds to the old zero-edit rule.")
+                        "`converged` plus a `--phase2 done` is complete. Omitting it leaves "
+                        "whatever the entry says -- nothing on a fresh one, which the gate then "
+                        "holds to the old zero-edit rule, but a verdict already there if there is "
+                        "one, so say it every time.")
     h.add_argument("--phase2", choices=HARDEN_PHASE2,
                    help="whether the ONE Phase 2 pass this traversal owes has run. Any --phase1 "
                         "write that does not say resets it to `pending`, because a Phase 1 pass "
@@ -335,6 +337,18 @@ def main() -> int:
 
         elif args.cmd == "harden-set":
             e = held.entry("harden")
+            # A DIFFERENT run inherits nothing from the one before it in this checkout. Nothing
+            # clears the entry between interactive runs, and three separate allow-direction defects
+            # have now come out of one field or another carrying across that boundary -- a `done`,
+            # an `escalated`, and a whole terminal verdict picked up by a write that simply did not
+            # pass `--phase1`. Keying on the writer rather than on which flags it passed is what
+            # ends that family: `head` is already owner-guarded below for exactly this reason, and
+            # this generalises it to the rest of the run-scoped state. An UNSTAMPED write (no
+            # `--owner`) cannot be told apart from anyone else's, so it changes nothing, exactly as
+            # it relaxes nothing at the gate.
+            if args.owner is not None and e and e.get("owner") not in (None, args.owner):
+                for stale in ("phase1", "phase2", "override", "override_reason", "head"):
+                    e.pop(stale, None)
             note = ""
             if args.count_edits:
                 # A recorded head belongs to THIS run only when the same owner wrote it and the
@@ -363,15 +377,13 @@ def main() -> int:
             if args.phase1:
                 # `phase2` describes THIS traversal's Phase 2 pass, so a Phase 1 write that does
                 # not name it resets it: Phase 1 has just run and the Phase 2 after it has not.
-                # Resetting on `converged` as well as on `open` is not tidiness. Most of this entry
-                # persists across writes -- `phase1`, `owner`, `head`, `override_reason` and the
-                # rest all survive one that does not name them -- and nothing clears the entry
-                # between interactive runs, so a second `/harden` in the same checkout whose FIRST
-                # Phase 1 pass converges would inherit the previous run's `done` and be allowed to
-                # stop with its own Phase 2 never run. What makes `phase2` the one that must not
-                # carry is that it is scoped to a traversal while the others are scoped to the
-                # entry. A fresh reviewer built that case; the terminal write the skill documents
-                # names `--phase2 done` explicitly, so nothing legitimate needs the carry.
+                # Resetting on `converged` as well as on `open` is not tidiness. `phase1` and
+                # `head` survive a write that does not name them, `override` is rewritten by every
+                # write, and `phase2` would carry too -- so a traversal that had converged and
+                # finished its Phase 2 would hand `done` to the next traversal, whose Phase 2 has
+                # not run. It is scoped to a traversal, and the write that opens a traversal is a
+                # `--phase1` one. A fresh reviewer built that case; the terminal write the skill
+                # documents names `--phase2 done` explicitly, so nothing legitimate needs the carry.
                 e["phase1"] = args.phase1
                 e["phase2"] = args.phase2 or "pending"
             elif args.phase2:
@@ -389,8 +401,13 @@ def main() -> int:
             head = _git(key, "rev-parse", "HEAD")
             if head:
                 e["head"] = head          # what the NEXT cycle measures its commits against
+            # `override` is rewritten by every `harden-set`, so a write that does not repeat
+            # `--override` retracts one that was taken. The reason has to go with it or the entry
+            # carries a justification for a deviation it no longer records.
             if args.reason:
                 e["override_reason"] = args.reason
+            elif not args.override:
+                e.pop("override_reason", None)
             e.setdefault("awaiting", [])
             stamp(e, args.owner)
             # Both of these read the ENTRY, never the arguments. Keyed on `args.phase1` the
