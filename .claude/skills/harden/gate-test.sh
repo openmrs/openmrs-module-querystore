@@ -97,6 +97,14 @@ run_case "phase1 open + awaiting fresh, marker LIVE -> block" block \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":$AW}" $$
 run_case "phase1 open but STALE -> allow" allow \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$((NOW - 25000))}"
+# AWAIT_TTL is what bounds the awaiting-allow, and it is the whole reason a forgotten `awaiting`
+# cannot license a six-hour window of early stops — the harm the run-id family was about. Every
+# other awaiting case here is fresh, so making the TTL effectively infinite left the suite green.
+STALE_AW="[{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7200))}]"
+run_case "awaiting STALE on an ATTENDED session -> block (AWAIT_TTL)" block \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_case "awaiting stale AND converged+done -> allow (nothing owed)" allow \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"done\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
 
 # An entry with no `cycle` must still render a copyable command. `--cycle ?` is what it used to
 # emit, and argparse takes an int, so the instruction could not be run; the flag is now omitted.
@@ -203,5 +211,22 @@ run_symlink_case() { # name expected entry_json marker_pid
 }
 run_symlink_case "cwd reached via symlink: live marker still found -> block" block \
   "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"owner\":$$,\"awaiting\":$AW}" $$
+
+# `owns_this_session` returns 0 ours / 1 positively somebody else's / 2 could not be established,
+# and its header says "only 1 may relax anything". Widening that to `1|2)` is an allow-direction
+# relaxation of exactly that rung and left the suite green, because nothing here could produce a 2.
+# A stub `ps` on PATH does: the walk gets nothing usable and cannot establish ancestry.
+run_ps_stub_case() { # name expected entry_json
+  local name="$1" expect="$2" entry="$3" work="$TMP/work" stub="$TMP/stub"
+  mkdir -p "$work" "$stub"; rm -rf "$TMP/.claude/pipeline/unattended"
+  printf '#!/bin/sh\necho "not a pid"\n' > "$stub/ps"; chmod +x "$stub/ps"
+  jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
+  local out; out=$(cd "$work" && HOME="$TMP" PATH="$stub:$PATH" bash "$HOOK" 2>/dev/null)
+  local got="allow"; grep -q '"block"' <<<"$out" && got="block"
+  if [ "$got" = "$expect" ]; then PASS=$((PASS+1)); echo "  ok   $name ($got)"
+  else FAIL=$((FAIL+1)); echo "  FAIL $name: expected $expect, got $got"; fi
+}
+run_ps_stub_case "owner live but ancestry INDETERMINATE -> block, not allow" block \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"owner\":$$}"
 
 echo "passed=$PASS failed=$FAIL"; rm -rf "$TMP"; [ "$FAIL" -eq 0 ]

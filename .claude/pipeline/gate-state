@@ -155,8 +155,8 @@ def adopt(entry: dict, run: str) -> None:
 
     The alternative was a list of field names to drop, and it grew a leak per review pass -- a
     `phase2`, then a whole verdict, then an `awaiting` -- because `carry unless listed` makes every
-    field added to this entry a new candidate. Replacing inverts the default. An unstamped write
-    adopts nothing, because it cannot tell whose entry this is.
+    field added to this entry a new candidate. Replacing inverts the default. There is no unstamped
+    write to consider: `_require_run` refuses one before this is called.
     """
     # No `run is None` guard: every caller is preceded by `_require_run`, so there is no such
     # caller to guard against, and a branch no caller reaches is one the next change removes for
@@ -172,8 +172,8 @@ def adopt(entry: dict, run: str) -> None:
     # carries `--run`" -- and a premise about documentation is not a gate. It was false in this
     # file's own usage block, 118 lines above where it was written, and a run typing what the helper
     # documents rode the previous run's entry. So the callers that can reach a verdict now REQUIRE
-    # `--run` (see `_require_run`), and this function's `run is None` early return is reachable only
-    # from a caller that cannot write one. The premise is now enforced where it is relied on.
+    # `--run` (see `_require_run`), so the premise is enforced where it is relied on rather than
+    # asserted in a comment — which is what it was when it was false.
     if entry.get("run") != run:
         entry.clear()
     entry["run"] = run
@@ -419,9 +419,8 @@ def main() -> int:
             # Keyed on `run`, not on `owner`. They answer different questions and conflating them
             # is what left the same-pid corner: `owner` answers "is a live foreign session using
             # this checkout", which the gate needs and which a resumed session changes; `run`
-            # answers "is this the same run", which a resumed session does not. An UNSTAMPED write
-            # (no `--run`) replaces nothing, because it cannot tell whose entry this is -- the same
-            # reason the gate relaxes nothing for an entry with no `owner`.
+            # answers "is this the same run", which a resumed session does not. There is no
+            # unstamped write: `_require_run` refuses one for every command that reaches here.
             #
             adopt(e, args.run)
             note = ""
@@ -495,23 +494,17 @@ def main() -> int:
             # verdict alone this told a run with a stamped id that it was held to the zero-edit
             # rule while the gate was blocking it for having stated no verdict -- and the skill
             # tells the run to trust this line.
-            # Three states, not two, and the middle one is what crashed this line when the LEGACY
-            # test was widened without widening the format beside it: a run-stamped entry that has
-            # stated no verdict has no `phase1` to print. The writer is the only writer of this
-            # file, so an exception here loses the write entirely -- the lock deliberately persists
-            # nothing on the way out -- which is a worse failure than the wrong word it was fixing.
-            if "phase1" in e:
-                where = f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')} "
-            elif "run" in e:
-                where = "no verdict recorded yet "
-            else:
-                where = ""
+            # Two states. `adopt` above stamps `run` unconditionally and `_require_run` guarantees
+            # it ran, so an entry reaching this line always carries an id -- the third state and the
+            # LEGACY suffix that used to live here were proved unreachable by instrumenting them,
+            # and a branch no input reaches is one the next change removes while believing it was
+            # load-bearing. A legacy entry is still a thing the HOOK meets on disk; it is no longer
+            # a thing this line can print.
+            where = (f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')} "
+                     if "phase1" in e else "no verdict recorded yet ")
             print(f"cycle {args.cycle}: " + where
                   + f"edits={edits}" + (" OVERRIDE" if args.override else "")
-                  + (f" [{note}]" if note else "")
-                  + ("" if ("phase1" in e or "run" in e) else
-                     " [no run id and no phase1 on this entry: it is a LEGACY entry, so the gate"
-                     " holds this run to the zero-edit rule rather than to Phase 1's verdict]"))
+                  + (f" [{note}]" if note else ""))
 
         elif args.cmd == "await":
             if "harden" in which[args.only]:

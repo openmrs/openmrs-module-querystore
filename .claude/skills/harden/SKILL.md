@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.40.0
+version: 0.41.0
 ---
 
 # Harden
@@ -378,11 +378,10 @@ has not returned inside it is treated as dead rather than outstanding.
 ```
 
 **`--run` is what makes this checkout's leftovers yours to ignore.** Nothing clears the entry between
-interactive runs, and SEVEN allow-direction defects came out of one field or another surviving that
-boundary — a `phase2: done`, an `escalated`, an unrecognised value, a whole terminal verdict, and
-finally an `awaiting` from a run that had died, which allowed the stop on `phase1: open`, the
-strictest block there is. Five were closed one rule at a time and the fifth closure was a list of
-five field names to drop; the sixth got in through the name nobody listed. A write whose `--run`
+interactive runs, and successive reviewers found a leak per pass while the rule was *carry unless
+listed* — each through the field or the caller the last fix did not name, and the worst of them an
+`awaiting` from a dead run, which allowed a stop on `phase1: open`. No count is kept here; `git log`
+has them, and three passes running found the count itself wrong. A write whose `--run`
 differs from the entry's — or that carries no id at all — REPLACES it, so the default is *drop
 unless this run wrote it*, and what a field added later inherits is nothing rather than everything
 absent from a list. The first version of this exempted an entry with no id, on the reading that an

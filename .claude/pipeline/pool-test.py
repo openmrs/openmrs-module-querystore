@@ -1187,6 +1187,14 @@ def test_skills_commands_run(tmp: Path) -> None:
     from_usage = [i for src, i in found if src == "gate-state usage block"]
     check("and gate-state's own usage block is among the sources scanned",
           len(from_usage) >= 6, f"only {len(from_usage)} from the usage block")
+    # Name the lines that matter rather than counting them. A `>= 6` pin passed while the four
+    # harden-touching invocations -- the two verdict writes, the await and the clear-await, whose
+    # missing `--run` was the eighth defect -- all stopped matching, because the block has ten.
+    for want in ("harden-set", "await", "clear-await"):
+        hits = [i for i in from_usage
+                if re.search(rf"(?:^|\s){re.escape(want)}(?:\s|$)", i) and "--run" in i]
+        check(f"the usage block's `{want}` is scanned and carries --run",
+              hits, f"no --run-carrying `{want}` among {from_usage}")
 
     bad = []
     for name, invocation in found:

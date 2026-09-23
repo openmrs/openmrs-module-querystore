@@ -62,9 +62,10 @@
 #
 # FAIL OPEN, ALWAYS. A gate that wedges every future turn in every repo is far worse than one that
 # occasionally lets an early stop through, so every ambiguous case allows the stop: no state file,
-# unreadable or malformed JSON, no jq, no entry for this directory, an unrecognised `phase1`, a
-# missing or unparseable edits count on a legacy entry, or an entry older than STALE_AFTER (a run that
-# was abandoned, crashed, or /clear-ed). An entry that is present, fresh and parseable, and that does
+# unreadable or malformed JSON, no jq, no entry for this directory, an entry that is not an object,
+# a `ts` that is present but not a number, an `awaiting` that is not a list of objects, an
+# unrecognised `phase1`, a missing or unparseable edits count on a legacy entry, or an entry older
+# than STALE_AFTER (a run that was abandoned, crashed, or /clear-ed). An entry that is present, fresh and parseable, and that does
 # not say Phase 1 converged with its Phase 2 done, blocks. An unrecognised `phase2` is deliberately
 # NOT in the list above: only `done` ends a run and that is decidable without interpreting the value,
 # so a stop is not licensed by a word this reader has never heard of.
@@ -285,11 +286,15 @@ if [ -z "$RUN" ] && [ -z "$PHASE1" ]; then
     decision: "block",
     reason: ("harden termination contract (legacy entry, zero-edit rule): cycle " + $c + " made "
       + $e + " edit(s), so it was not the last cycle. Run cycle "
-      + $n + " — Phase 1 then Phase 2 — and record its measured edit "
-      + "count. Do NOT hand back to the user and do NOT ask whether to continue; if you are "
-      + "deliberately stopping early, take the labelled override in the skill'"'"'s Termination "
-      + "section and set override:true in ~/.claude/harden-state.json so the deviation is on the "
-      + "record."),
+      + $n + " — Phase 1 then Phase 2. This entry predates the run-id contract, so do NOT try to "
+      + "drive its edit count to zero: `gate-state` refuses a write with no --run, and a write WITH "
+      + "one replaces the entry, which is what you want. Record your verdict the ordinary way, "
+      + "`gate-state --owner $PPID --run <this run'"'"'s id> harden-set --cycle " + $n
+      + " --phase1 <open|converged> [--phase2 done] --count-edits`. Do NOT hand back to the user "
+      + "and do NOT ask whether to continue; if you are deliberately stopping early, take the "
+      + "labelled override in the skill'"'"'s Termination section and record it with that same "
+      + "command plus --override --reason, never by editing the state file, which is shared with "
+      + "every live session and only `gate-state` serialises."),
     systemMessage: ("harden: cycle " + $c + " made " + $e + " edit(s) — another cycle is required")
   }'
   exit 0
@@ -340,8 +345,8 @@ jq -n --arg c "$CYCLE" --arg w "$WHAT" --arg d "$DO" '{
     + " --phase1 <open|converged> [--phase2 done] "
     + "--count-edits`. Do NOT hand back to the user and do NOT ask whether to continue; if you are "
     + "deliberately stopping early, take the labelled override in the skill'"'"'s Termination "
-    + "section and set override:true in ~/.claude/harden-state.json so the deviation is on the "
-    + "record."),
+    + "section and record it with that same command plus --override --reason, never by editing the "
+    + "state file, which is shared with every live session and only `gate-state` serialises."),
   systemMessage: ("harden: " + $w)
 }'
 exit 0

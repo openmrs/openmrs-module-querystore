@@ -461,7 +461,6 @@ count measures against; typed the other way round it leaves the await in `pr-har
 alone, which is the stale-await quit this step exists to prevent. `harden-1758600000` is the
 example the harden skill uses; read the id out of that run's own report and use it.
 
-
 Clear it in both **at the end of this step, and when a harden cycle dies or takes its labelled
 override** — a fresh await left in `pr-harden-state.json` licenses a real quit for up to the gate's
 hour-long TTL while Step 8 runs.
