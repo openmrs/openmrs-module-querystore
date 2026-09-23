@@ -9,6 +9,7 @@
  */
 package org.openmrs.module.querystore.util;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -16,9 +17,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 
 /**
- * Shared date formatting for clinical record serializers. Renders {@link Date} values to ADR
- * decision 7's {@code yyyy-MM-dd} format in UTC; the time-zone convention is tracked under the
- * Timestamp time-zone convention open question.
+ * Shared date formatting for clinical record serializers. Renders timestamps to ADR decision 7's
+ * {@code yyyy-MM-dd} format in UTC; the time-zone convention is tracked under the Timestamp
+ * time-zone convention open question. Date-only values go through {@link #formatCalendarDate}.
  */
 public final class DateFormatUtil {
 
@@ -39,6 +40,22 @@ public final class DateFormatUtil {
 			return null;
 		}
 		return date.toInstant().atZone(UTC).toLocalDate().format(DATE_FORMAT);
+	}
+
+	/**
+	 * Renders a date-only value — one core stores in a {@code DATE} column, such as
+	 * {@code person.birthdate} — as the calendar date it holds. JDBC materializes such a column at
+	 * midnight in the JVM default zone, so the date is read back in that zone rather than through a
+	 * UTC instant, which moves it one day back wherever the offset is positive (#81). Timestamps keep
+	 * {@link #formatDate}. Never calls {@code toInstant()}, which {@link java.sql.Date} throws on.
+	 */
+	public static String formatCalendarDate(Date date) {
+		if (date == null) {
+			return null;
+		}
+		LocalDate localDate = date instanceof java.sql.Date ? ((java.sql.Date) date).toLocalDate()
+		        : Instant.ofEpochMilli(date.getTime()).atZone(ZoneId.systemDefault()).toLocalDate();
+		return localDate.format(DATE_FORMAT);
 	}
 
 	public static String formatDateTime(Date date) {
