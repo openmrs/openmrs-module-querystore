@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.38.0
+version: 0.39.0
 ---
 
 # Harden
@@ -378,7 +378,7 @@ has not returned inside it is treated as dead rather than outstanding.
 ```
 
 **`--run` is what makes this checkout's leftovers yours to ignore.** Nothing clears the entry between
-interactive runs, and FIVE allow-direction defects came out of one field or another surviving that
+interactive runs, and SEVEN allow-direction defects came out of one field or another surviving that
 boundary — a `phase2: done`, an `escalated`, an unrecognised value, a whole terminal verdict, and
 finally an `awaiting` from a run that had died, which allowed the stop on `phase1: open`, the
 strictest block there is. Five were closed one rule at a time and the fifth closure was a list of
@@ -402,9 +402,11 @@ reused checkout, by a `done` the PREVIOUS run left behind, which was the same st
 the other way and would have let a second `/harden` stop with its own Phase 2 never run.
 
 **`--phase1` is what ends the run, and omitting it leaves whatever the entry already says.** On a
-fresh entry that is nothing, and the gate reads a `phase1`-less entry as one a `/harden` older than
-this contract wrote and holds it to the zero-edit rule — a forgotten flag then costs you the passes
-this change removed, which is the safe direction to be wrong in but not a free one. On an entry that
+fresh entry that is nothing, and the gate reads a run-stamped entry with no verdict as a run in
+flight that owes one, so it BLOCKS — a forgotten flag costs you a pass, not the contract. Only an
+entry with neither a run id nor a verdict is legacy, and `gate-state` can no longer write one:
+`--run` is required wherever a verdict is reachable, so the legacy branch now serves only entries
+that were already on disk before ids existed. On an entry that
 already carries a verdict, a bare write keeps it, so **do not use one to refresh the count**: say the
 verdict every time. Across runs this is handled for you by `--run`, which replaces the whole entry
 rather than dropping fields from it — NOT by `--owner`, which answers a different question and whose

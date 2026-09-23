@@ -437,7 +437,7 @@ def test_gate_state_locking(tmp: Path) -> None:
 
     def churn(n: int) -> None:
         for i in range(6):
-            sh([sys.executable, str(helper), "await", f"agent-{n}-{i}"], cwd=d, env=env)
+            sh([sys.executable, str(helper), "--run", f"r{n}", "await", f"agent-{n}-{i}"], cwd=d, env=env)
             sh([sys.executable, str(helper), "clear-await"], cwd=d, env=env)
 
     threads = [threading.Thread(target=churn, args=(n,)) for n in range(6)]
@@ -451,8 +451,12 @@ def test_gate_state_locking(tmp: Path) -> None:
 
     # resolve-ticket Step 7 needs the await in BOTH files or the armed gate refuses the yield the
     # harden cycle needs. One command, so the two cannot come apart.
-    sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--edits", "3"], cwd=d, env=env)
-    sh([sys.executable, str(helper), "await", "harden phase 2"], cwd=d, env=env)
+    # The SAME id on both, because it is one run. A different one here replaced the entry and the
+    # count vanished -- which is what `resolve-ticket` Step 7 did, hard-coding an id of its own
+    # while the nested `/harden` minted another.
+    sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "2", "--edits", "3"],
+       cwd=d, env=env)
+    sh([sys.executable, str(helper), "--run", "r0", "await", "harden phase 2"], cwd=d, env=env)
     pr = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(d)]
     hd = json.loads((home / ".claude/harden-state.json").read_text())[str(d)]
     check("one await reaches the pr-harden gate", [a["agent"] for a in pr["awaiting"]] == ["harden phase 2"])
@@ -470,7 +474,8 @@ def test_gate_state_locking(tmp: Path) -> None:
         "--phase", "init", "--blocking", "1"], cwd=d, env=env)
     pr = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(d)]
     check("the owning session's pid is stamped on the entry", pr.get("owner") == 4242, str(pr))
-    sh([sys.executable, str(helper), "--owner", "4242", "await", "review r1"], cwd=d, env=env)
+    sh([sys.executable, str(helper), "--owner", "4242", "--run", "rt1", "await", "review r1"],
+       cwd=d, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[str(d)]
     check("an await stamps the owner on the entry it creates too", hd.get("owner") == 4242, str(hd))
 
@@ -485,15 +490,15 @@ def test_gate_state_locking(tmp: Path) -> None:
     sh(["git", "add", "-A"], cwd=repo)
     sh(["git", "commit", "-qm", "seed"], cwd=repo)
     check("a clean tree counts zero edits",
-          "edits=0" in sh([sys.executable, str(helper), "harden-set", "--cycle", "1",
+          "edits=0" in sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1",
                            "--count-edits"], cwd=repo, env=env).stdout)
     (repo / "a").write_text("2\n")
     (repo / "b").write_text("new\n")
-    got = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--count-edits"],
+    got = sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1", "--count-edits"],
              cwd=repo, env=env).stdout
     check("an uncommitted change and an untracked file both count", "edits=2" in got, got.strip())
     snapshot = (home / ".claude/harden-state.json").read_text()
-    bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "1"], cwd=repo, env=env)
+    bad = sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1"], cwd=repo, env=env)
     check("harden-set refuses to guess an edit count", bad.returncode != 0, bad.stderr[-120:])
     check("a refused command leaves the state files exactly as they were",
           (home / ".claude/harden-state.json").read_text() == snapshot,
@@ -503,13 +508,13 @@ def test_gate_state_locking(tmp: Path) -> None:
     # Resolved, like the worktree keys above: the tenant key is the PHYSICAL path, and on macOS
     # `tmp` sits under a symlinked `/var`, so an unresolved `str(repo)` finds no entry at all.
     key = str(repo.resolve())
-    got = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "open",
+    got = sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1", "--phase1", "open",
               "--count-edits"], cwd=repo, env=env).stdout
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("--phase1 open writes the verdict and defaults phase2 to pending",
           hd.get("phase1") == "open" and hd.get("phase2") == "pending", str(hd))
     check("the printed line names both phases", "phase1=open phase2=pending" in got, got.strip())
-    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "converged",
+    sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1", "--phase1", "converged",
         "--phase2", "done", "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("converged + done is what the gate allows on",
@@ -522,14 +527,14 @@ def test_gate_state_locking(tmp: Path) -> None:
     # `done` carried into the NEXT run let its first converging pass stop with its own Phase 2 never
     # run, and a third value, `escalated`, survived `--phase1 converged` and wedged the run on the
     # instruction it had just obeyed.
-    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "converged",
+    sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1", "--phase1", "converged",
         "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("a converging Phase 1 write does not inherit a previous traversal's phase2 done",
           hd["phase2"] == "pending", str(hd))
-    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase1", "converged",
+    sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1", "--phase1", "converged",
         "--phase2", "done", "--count-edits"], cwd=repo, env=env)
-    sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
+    sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "2", "--phase1", "open",
         "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("reopening Phase 1 clears the previous traversal's phase2 done",
@@ -548,7 +553,7 @@ def test_gate_state_locking(tmp: Path) -> None:
     for flag, value in (("--phase1", "finished"), ("--phase2", "dome"),
                         ("--phase2", "escalated")):
         snap = (home / ".claude/harden-state.json").read_text()
-        bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1",
+        bad = sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "2", "--phase1",
                   "converged", flag, value, "--count-edits"], cwd=repo, env=env)
         check(f"{flag} {value} is refused rather than written",
               bad.returncode != 0, bad.stderr[-120:])
@@ -559,18 +564,18 @@ def test_gate_state_locking(tmp: Path) -> None:
     # cycle ADVANCE, which was right when a cycle was written once per cycle -- but `--cycle` now
     # numbers the traversal and only an escalation moves it, so on a run with no escalation it
     # never advanced and the figure silently lost its commit half on every write.
-    sh([sys.executable, str(helper), "--owner", "4141", "harden-set", "--cycle", "1",
+    sh([sys.executable, str(helper), "--owner", "4141", "--run", "r4141", "harden-set", "--cycle", "1",
         "--phase1", "open", "--count-edits"], cwd=repo, env=env)
     (repo / "later").write_text("x\n")
     sh(["git", "add", "-A"], cwd=repo)
     sh(["git", "commit", "-qm", "work inside one traversal"], cwd=repo)
-    got = sh([sys.executable, str(helper), "--owner", "4141", "harden-set", "--cycle", "1",
+    got = sh([sys.executable, str(helper), "--owner", "4141", "--run", "r4141", "harden-set", "--cycle", "1",
               "--phase1", "converged", "--count-edits"], cwd=repo, env=env).stdout
     check("a commit made inside one traversal is counted, without the cycle advancing",
           "edits=1" in got and "not measured" not in got, got.strip())
     # ...and the guard it relaxes still holds: a DIFFERENT session must not count from this run's
     # head, which is what `>=` could have given away.
-    got = sh([sys.executable, str(helper), "--owner", "4242", "harden-set", "--cycle", "1",
+    got = sh([sys.executable, str(helper), "--owner", "4242", "--run", "r4242", "harden-set", "--cycle", "1",
               "--phase1", "open", "--count-edits"], cwd=repo, env=env).stdout
     check("another session's head is still not consumed as this run's baseline",
           "not measured" in got, got.strip())
@@ -582,22 +587,22 @@ def test_gate_state_locking(tmp: Path) -> None:
     # verdict — in a reused checkout that verdict is the previous run's, and `--phase2 done` alone
     # would end a run that has run nothing. A first version tested "no phase1 on the entry", which
     # fires only where phase2 is never read and misses this, so both shapes are pinned here.
-    sh([sys.executable, str(helper), "--owner", "11111", "harden-set", "--cycle", "1",
+    sh([sys.executable, str(helper), "--owner", "11111", "--run", "r11111", "harden-set", "--cycle", "1",
         "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
     snap = (home / ".claude/harden-state.json").read_text()
-    bad = sh([sys.executable, str(helper), "--owner", "22222", "harden-set", "--cycle", "1",
+    bad = sh([sys.executable, str(helper), "--owner", "22222", "--run", "r22222", "harden-set", "--cycle", "1",
               "--phase2", "done", "--count-edits"], cwd=repo, env=env)
     check("--phase2 alone is refused OVER a previous run's verdict",
           bad.returncode != 0 and "needs --phase1" in bad.stderr, bad.stderr[-160:])
     check("and that refusal leaves the previous run's entry untouched",
           (home / ".claude/harden-state.json").read_text() == snap)
     sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
-    bad = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--phase2", "done",
+    bad = sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "1", "--phase2", "done",
               "--count-edits"], cwd=repo, env=env)
     check("--phase2 alone is refused on an entry with no verdict either",
           bad.returncode != 0 and "needs --phase1" in bad.stderr, bad.stderr[-160:])
     # That clear empties the entry, so put a phased one back for the two cases below.
-    sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--phase1", "open",
+    sh([sys.executable, str(helper), "--run", "r0", "harden-set", "--cycle", "2", "--phase1", "open",
         "--count-edits"], cwd=repo, env=env)
 
     # The run boundary. Two of the family's six defects arrived here after the others were closed:
@@ -632,10 +637,15 @@ def test_gate_state_locking(tmp: Path) -> None:
     # written before the id existed has no id, so its `awaiting` merged into the new run and
     # allowed a stop on that run's own `phase1: open`.
     sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
-    sh([sys.executable, str(helper), "--owner", "31313", "harden-set", "--cycle", "1",
+    sh([sys.executable, str(helper), "--owner", "31313", "--run", "r31313", "harden-set", "--cycle", "1",
         "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
-    sh([sys.executable, str(helper), "--owner", "31313", "await", "a dead run's agent",
-        "--only", "harden"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "31313", "--run", "unstamped-stand-in", "await",
+        "a dead run's agent", "--only", "harden"], cwd=repo, env=env)
+    # ...then strip the id, to stand in for an entry written before ids existed. `gate-state` can no
+    # longer produce one, which is the point of the requirement; the hook still meets them on disk.
+    _sf = home / ".claude/harden-state.json"
+    _st = json.loads(_sf.read_text()); _st[key].pop("run", None)
+    _sf.write_text(json.dumps(_st, indent=2, sort_keys=True) + "\n")
     sh([sys.executable, str(helper), "--owner", "41414", "--run", "C", "harden-set", "--cycle", "1",
         "--phase1", "open", "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
@@ -643,6 +653,20 @@ def test_gate_state_locking(tmp: Path) -> None:
           hd.get("phase1") == "open" and hd.get("phase2") == "pending"
           and hd.get("awaiting") == [] and hd.get("run") == "C"
           and "override_reason" not in hd, str(hd))
+
+    # `--run` is REQUIRED wherever `adopt` can reach a verdict. It used to be safe only because a
+    # docstring said every documented write carried it, and that sentence was false in the helper's
+    # own usage block -- so a run typing what the helper documented rode the previous run's entry.
+    for cmd in (["harden-set", "--cycle", "1", "--phase1", "open", "--count-edits"],
+                ["await", "an agent", "--only", "harden"],
+                ["await", "an agent"]):
+        bad = sh([sys.executable, str(helper), "--owner", "51515", *cmd], cwd=repo, env=env)
+        check(f"`{cmd[0]} {cmd[1]}` without --run is refused",
+              bad.returncode != 0 and "needs --run" in bad.stderr, bad.stderr[-140:])
+    ok = sh([sys.executable, str(helper), "--owner", "51515", "await", "a pr agent", "--only", "pr"],
+            cwd=repo, env=env)
+    check("but a pr-only await does not need one, because it cannot reach the harden entry",
+          ok.returncode == 0, ok.stderr[-140:])
 
     # An empty id is shared by every run and reads to the gate as no id at all, which puts a
     # verdict-less write back in the legacy branch where `edits: 0` allows. It is also what quoting
@@ -680,22 +704,18 @@ def test_gate_state_locking(tmp: Path) -> None:
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("but the SAME run's later write keeps its own verdict",
           hd.get("phase1") == "open", str(hd))
-    # An unstamped write cannot tell whose entry this is, so it replaces nothing -- the same reason
-    # the gate relaxes nothing for an entry with no owner.
-    sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--count-edits"],
-       cwd=repo, env=env)
-    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
-    check("an UNSTAMPED write replaces nothing, because it cannot tell whose entry this is",
-          hd.get("phase1") == "open", str(hd))
+    # There is no longer an unstamped write to worry about: the refusal above makes one impossible
+    # for any command that can reach a verdict, which is what turned `adopt`'s safety from a
+    # sentence in a docstring into something the writer enforces.
 
     # `override` is rewritten by every write, so its reason has to go with it or the entry carries a
     # justification for a deviation it no longer records.
-    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1", "--phase1",
+    sh([sys.executable, str(helper), "--owner", "41414", "--run", "r41414", "harden-set", "--cycle", "1", "--phase1",
         "open", "--override", "--reason", "cost", "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("a taken override records its reason",
           hd.get("override") is True and hd.get("override_reason") == "cost", str(hd))
-    sh([sys.executable, str(helper), "--owner", "41414", "harden-set", "--cycle", "1",
+    sh([sys.executable, str(helper), "--owner", "41414", "--run", "r41414", "harden-set", "--cycle", "1",
         "--phase1", "open", "--count-edits"], cwd=repo, env=env)
     hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
     check("and a later write retracts both, never the flag alone",
@@ -703,15 +723,31 @@ def test_gate_state_locking(tmp: Path) -> None:
 
     # The LEGACY warning reads the ENTRY, not the arguments. Keyed on the argument it announced a
     # legacy entry over a `phase1` the entry already carried and the gate was already enforcing.
-    got = sh([sys.executable, str(helper), "harden-set", "--cycle", "2", "--count-edits"],
-             cwd=repo, env=env).stdout
-    check("omitting --phase1 on a PHASED entry does not claim it went legacy",
+    sh([sys.executable, str(helper), "--run", "r41414", "harden-set", "--cycle", "2", "--phase1",
+        "open", "--count-edits"], cwd=repo, env=env)
+    got = sh([sys.executable, str(helper), "--run", "r41414", "harden-set", "--cycle", "2",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("omitting --phase1 on this run's own PHASED entry does not claim it went legacy",
           "LEGACY" not in got and "phase1=open" in got, got.strip())
+    # A FRESH entry for a run that has stated no verdict. A bare write over this run's own earlier
+    # verdict keeps it, which is the case above; this is the other one.
     sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
-    got = sh([sys.executable, str(helper), "harden-set", "--cycle", "1", "--count-edits"],
-             cwd=repo, env=env).stdout
-    check("a genuinely phase-less entry says so, because the gate then applies the zero-edit rule",
-          "LEGACY entry" in got, got.strip())
+    got = sh([sys.executable, str(helper), "--run", "r41414", "harden-set", "--cycle", "3",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("a run-stamped entry with no verdict says that, not LEGACY",
+          "LEGACY" not in got and "no verdict recorded yet" in got, got.strip())
+    # `gate-state` can no longer WRITE a legacy entry -- `--run` is required wherever a verdict is
+    # reachable -- so the only legacy entries are the ones already on disk from before the id
+    # existed. Build one the way the world does, by hand, and check both readers still honour it.
+    sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--run", "r41414", "harden-set", "--cycle", "1",
+        "--count-edits"], cwd=repo, env=env)
+    sfile = home / ".claude/harden-state.json"
+    st = json.loads(sfile.read_text()); st[key].pop("run", None); st[key]["edits"] = 4
+    sfile.write_text(json.dumps(st, indent=2, sort_keys=True) + "\n")
+    hd = json.loads(sfile.read_text())[key]
+    check("a pre-run-id entry on disk keeps no run and no verdict",
+          "run" not in hd and "phase1" not in hd, str(hd))
 
     # A branch with no upstream is the pre-PR configuration, and `@{u}..HEAD` has no answer there:
     # on #255 and #229 a cycle that committed 9 and 3 commits scored edits=0, which the gate then read as
@@ -719,18 +755,18 @@ def test_gate_state_locking(tmp: Path) -> None:
     # recorded instead.
     sh(["git", "add", "-A"], cwd=repo)
     sh(["git", "commit", "-qm", "cycle one's work"], cwd=repo)
-    got = sh([sys.executable, str(helper), "--owner", "777", "harden-set", "--cycle", "1",
+    got = sh([sys.executable, str(helper), "--owner", "777", "--run", "r777", "harden-set", "--cycle", "1",
               "--count-edits"], cwd=repo, env=env).stdout
     check("with no upstream and no earlier cycle, the commit half is reported unmeasured",
           "commit half not measured" in got, got.strip())
     (repo / "c").write_text("cycle two\n")
     sh(["git", "add", "-A"], cwd=repo)
     sh(["git", "commit", "-qm", "cycle two's work"], cwd=repo)
-    got = sh([sys.executable, str(helper), "--owner", "777", "harden-set", "--cycle", "2",
+    got = sh([sys.executable, str(helper), "--owner", "777", "--run", "r777", "harden-set", "--cycle", "2",
               "--count-edits"], cwd=repo, env=env).stdout
     check("a committed cycle on an upstreamless branch counts its commit", "edits=1" in got,
           got.strip())
-    got = sh([sys.executable, str(helper), "--owner", "888", "harden-set", "--cycle", "3",
+    got = sh([sys.executable, str(helper), "--owner", "888", "--run", "r888", "harden-set", "--cycle", "3",
               "--count-edits"], cwd=repo, env=env).stdout
     check("another session's head is not consumed as this run's baseline",
           "commit half not measured" in got, got.strip())
@@ -739,7 +775,7 @@ def test_gate_state_locking(tmp: Path) -> None:
     repo_key = next(k for k in state if k.endswith("/repo"))
     state[repo_key]["head"] = "0" * 40
     (home / ".claude/harden-state.json").write_text(json.dumps(state))
-    got = sh([sys.executable, str(helper), "--owner", "888", "harden-set", "--cycle", "4",
+    got = sh([sys.executable, str(helper), "--owner", "888", "--run", "r888", "harden-set", "--cycle", "4",
               "--count-edits"], cwd=repo, env=env).stdout
     check("a recorded head that no longer resolves is reported, not counted as zero",
           "no longer resolves" in got, got.strip())
@@ -756,11 +792,11 @@ def test_gate_state_locking(tmp: Path) -> None:
     (repo / "d").write_text("cycle five\n")
     sh(["git", "add", "-A"], cwd=repo)
     sh(["git", "commit", "-qm", "cycle five's work"], cwd=repo)
-    got = sh([sys.executable, str(helper), "--owner", "999", "harden-set", "--cycle", "5",
+    got = sh([sys.executable, str(helper), "--owner", "999", "--run", "r999", "harden-set", "--cycle", "5",
               "--count-edits"], cwd=repo, env=env).stdout
     check("with an upstream and no head yet, the per-branch fallback says what it counted",
           "rather than this cycle's work" in got, got.strip())
-    got = sh([sys.executable, str(helper), "--owner", "999", "harden-set", "--cycle", "6",
+    got = sh([sys.executable, str(helper), "--owner", "999", "--run", "r999", "harden-set", "--cycle", "6",
               "--count-edits"], cwd=repo, env=env).stdout
     check("a converged cycle counts zero even with commits unpushed behind it",
           "edits=0" in got, got.strip())
@@ -1059,6 +1095,9 @@ def test_db_port_hosts(tmp: Path) -> None:
           str(pool.slot_problems(cfg, 2)))
 
 
+Q = chr(34) * 3          # the docstring delimiter, spelled so this file can contain it
+
+
 def test_skills_commands_run(tmp: Path) -> None:
     """Every `gate-state` invocation the skills tell a run to type, executed as written.
 
@@ -1085,6 +1124,11 @@ def test_skills_commands_run(tmp: Path) -> None:
     # a file the commit under test had not changed: six invocations that cannot run went green,
     # and only syncing the install afterwards turned it red. Repo-vs-installed drift is
     # `parity_problems`' job; this test's job is the file being committed.
+    # `gate-state`'s OWN usage block is scanned too. It is documentation a run reads and copies,
+    # it drifted from the skills it summarises, and the eighth defect of the inheritance family
+    # came straight out of it: two harden writes with no `--run`, 118 lines above a comment
+    # asserting that every documented write carries one.
+    usage = (HERE / "gate-state").read_text().split(Q)[1]
     skills = HERE.parent / "skills"
     found = []
     for name in ("resolve-ticket", "pr-harden", "harden", "ticket-pool"):
@@ -1093,6 +1137,15 @@ def test_skills_commands_run(tmp: Path) -> None:
             invocation = m.group(1).strip().rstrip("`").strip()
             if invocation and not invocation.startswith("("):
                 found.append((name, invocation))
+    for m in re.finditer(r"^  gate-state ([^\n]+)", usage, re.M):
+        # `[--flag]` is this block's notation for optional, so drop the optional parts and run the
+        # required spine. A placeholder like `<sha>` is passed through as a literal, which is what
+        # a reader would type before substituting and is harmless to the helper.
+        inv = re.sub(r"\[[^\]]*\]", "", m.group(1).split("#")[0])
+        # `<sha>` is a placeholder, and to a shell it is a redirection — substitute before running.
+        inv = re.sub(r"<[^>]+>", "placeholder", inv).strip()
+        if inv and not inv.startswith("("):
+            found.append(("gate-state usage block", inv))
     check("the skills do document the helper", len(found) >= 8, f"only found {len(found)}")
 
     bad = []
@@ -1106,7 +1159,8 @@ def test_skills_commands_run(tmp: Path) -> None:
 
     # And the ones that must be understood as a pair really are one: an await written by the
     # resolve-ticket form has to be visible to BOTH gates, which is the whole of Step 7.
-    sh([sys.executable, str(helper), "--owner", str(os.getpid()), "await", "x"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", str(os.getpid()), "--run", "rt1", "await", "x"],
+       cwd=repo, env=env)
     both = [json.loads((home / ".claude" / f).read_text()).get(str(repo.resolve()), {}).get("awaiting")
             for f in ("pr-harden-state.json", "harden-state.json")]
     check("the default-scope await lands in both gates", all(both), str(both))

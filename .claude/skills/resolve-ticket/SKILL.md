@@ -454,6 +454,16 @@ command writes both**, so the pair cannot come apart the way two commands could:
 ~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 clear-await
 ```
 
+**`--run` here must be the id the nested `/harden` minted, not one of your own.** A write whose id
+differs from the entry's REPLACES it, so a second id does not coexist with the first — it deletes
+it. Typed in the order above it destroys the harden run's verdict, its cycle and the head its edit
+count measures against; typed the other way round it leaves the await in `pr-harden-state.json`
+alone, which is the stale-await quit this step exists to prevent. `harden-1758600000` is the
+example the harden skill uses; read the id out of that run's own report and use it.
+
+```bash
+```
+
 Clear it in both **at the end of this step, and when a harden cycle dies or takes its labelled
 override** — a fresh await left in `pr-harden-state.json` licenses a real quit for up to the gate's
 hour-long TTL while Step 8 runs.

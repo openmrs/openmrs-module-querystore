@@ -117,6 +117,11 @@ run_cmd_case() { # name expected_substring entry_json
 }
 run_cmd_case "the emitted command names a cycle even when the entry has none" \
   "harden-set --cycle 1 --phase1" "{\"phase1\":\"open\",\"ts\":$NOW}"
+# ...and it must tell the run to stamp its id. This is the one text a blocked run is guaranteed to
+# read, and every member of the inheritance family traces to a write that carried no `--run`.
+# Deleting the flag from this message left both suites green, so nothing pinned the fix.
+run_cmd_case "the emitted command tells the run to stamp its id" \
+  "--run <this run" "{\"phase1\":\"open\",\"ts\":$NOW}"
 run_cmd_case "and uses the entry's cycle when it has one" \
   "harden-set --cycle 7 --phase1" "{\"cycle\":7,\"phase1\":\"converged\",\"ts\":$NOW}"
 

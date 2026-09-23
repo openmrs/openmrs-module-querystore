@@ -30,9 +30,9 @@ Writes are atomic (temp file, then rename), so the hooks — which read without 
 hook must never block on someone else's lock — always see one whole version or the other.
 
   gate-state --owner $PPID pr-set --pr 93 --round 2 --phase reviewed --blocking 1 [--override]
-  gate-state --owner $PPID --run $RUN harden-set --cycle 3 --phase1 open --count-edits [--override]
-  gate-state --owner $PPID harden-set --cycle 3 --phase1 converged --phase2 done --count-edits
-  gate-state await "review r3" [--only pr|harden|both]
+  gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 3 --phase1 open --count-edits
+  gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 3 --phase1 converged --phase2 done --count-edits
+  gate-state --run harden-1758600000 await "review r3" [--only pr|harden|both]
   gate-state clear-await [--only pr|harden|both]
   gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"   # writes the pr entry; no --only
   gate-state reviewed-sha <sha>                                        # writes the pr entry; no --only
@@ -123,6 +123,21 @@ class Held:
         self.fh.close()
 
 
+def _require_run(ap: "argparse.ArgumentParser", run: str | None, what: str) -> None:
+    """Refuse a write that could reach a verdict without saying which run is making it.
+
+    This is the mechanical half of `adopt`. Without it `adopt` is a no-op on an unstamped write and
+    the previous run's entry -- its verdict, its head, its outstanding agents -- is simply inherited,
+    which is the sixth, seventh and eighth defects of one family. Refusing costs a caller one flag
+    and is loud; the alternative was a sentence in a docstring, and that sentence was already false
+    in this file when it was written.
+    """
+    if run is None:
+        ap.error(f"{what} needs --run <id>: it writes the harden entry, and without an id this "
+                 f"cannot tell your run's entry from one a previous run left in this directory. "
+                 f"--run goes BEFORE the subcommand, beside --owner.")
+
+
 def _run_id(value: str) -> str:
     """A run id that is actually one. Empty is the dangerous value, not merely a useless one: every
     run shares it, so no write ever replaces another, and the hook's `.run // empty` reads it as no
@@ -149,9 +164,14 @@ def adopt(entry: dict, run: str | None) -> None:
     # came back a seventh time: a predecessor that stamped no `run` -- every 0.34.0-0.36.0 entry,
     # and any write that omitted the flag -- was merged into rather than replaced, and its
     # `awaiting` allowed a stop on the new run's `phase1: open`. An entry this run did not stamp is
-    # not this run's, whatever else is true of it. Every documented write now carries `--run`, so
-    # the only thing this can discard is somebody else's; the failure direction if one is missed is
-    # a lost `awaiting`, which BLOCKS a yield rather than allowing a stop.
+    # not this run's, whatever else is true of it.
+    #
+    # The eighth member arrived because this was made safe by a PREMISE -- "every documented write
+    # carries `--run`" -- and a premise about documentation is not a gate. It was false in this
+    # file's own usage block, 118 lines above where it was written, and a run typing what the helper
+    # documents rode the previous run's entry. So the callers that can reach a verdict now REQUIRE
+    # `--run` (see `_require_run`), and this function's `run is None` early return is reachable only
+    # from a caller that cannot write one. The premise is now enforced where it is relied on.
     if entry.get("run") != run:
         entry.clear()
     entry["run"] = run
@@ -256,7 +276,10 @@ def main() -> int:
     ap.add_argument("--run", default=None, type=_run_id,
                     help="this RUN's id, minted once at the top of the run and passed on every "
                          "write it makes. A write whose --run differs from the harden entry's "
-                         "REPLACES that entry, so a new run in a reused checkout inherits nothing "
+                         "REPLACES that entry, so a new run in a reused checkout starts from what "
+                         "it writes rather than from what it found. Required wherever a verdict is "
+                         "reachable, because the alternative was a docstring claiming every caller "
+                         "passes it, and that claim was false in this file's own usage block. "
                          "at all rather than everything that is not on a list -- which is what let "
                          "an `awaiting` from a dead run allow a stop on `phase1: open`. Distinct "
                          "from --owner, which answers whether a live foreign session holds this "
@@ -291,8 +314,9 @@ def main() -> int:
     h.add_argument("--phase1", choices=HARDEN_PHASE1,
                    help="Phase 1's verdict at the close of this pass. This is what ends the run: "
                         "`converged` plus a `--phase2 done` is complete. Omitting it leaves "
-                        "whatever the entry says -- nothing on a fresh one, which the gate then "
-                        "holds to the old zero-edit rule, but a verdict already there if there is "
+                        "whatever the entry says -- nothing on a fresh one, which the gate reads "
+                        "as a run in flight that owes a verdict and BLOCKS on, but a verdict "
+                        "already there if there is "
                         "one, so say it every time.")
     h.add_argument("--phase2", choices=HARDEN_PHASE2,
                    help="whether the ONE Phase 2 pass this traversal owes has run. Any --phase1 "
@@ -379,9 +403,10 @@ def main() -> int:
                   + (" OVERRIDE" if args.override else ""))
 
         elif args.cmd == "harden-set":
+            _require_run(ap, args.run, "harden-set")
             e = held.entry("harden")
             # A DIFFERENT run REPLACES this entry. Nothing clears it between interactive runs, and
-            # FIVE allow-direction defects came out of one field or another crossing that boundary:
+            # SEVEN allow-direction defects came out of one field or another crossing that boundary:
             # a `done`, an `escalated`, an unrecognised value, a whole terminal verdict picked up by
             # a write that omitted `--phase1`, and finally an `awaiting` from a run that had died,
             # which allowed the stop on `phase1: open` -- the strictest block in the contract.
@@ -391,7 +416,9 @@ def main() -> int:
             # nobody listed, which is what says the rule was still the wrong SHAPE: `carry unless
             # listed` makes every field added here a new candidate leak, and the reviewer has to
             # re-derive the whole list. Replacing makes it `drop unless this run wrote it`, which
-            # cannot grow a seventh member, and it deletes the list rather than extending it.
+            # deletes the list rather than extending it. It grew two more members anyway, both
+            # through a write that stamped no id, so the property is not that no member can exist
+            # -- it is that one now needs a caller the writer refuses.
             #
             # Keyed on `run`, not on `owner`. They answer different questions and conflating them
             # is what left the same-pid corner: `owner` answers "is a live foreign session using
@@ -400,12 +427,6 @@ def main() -> int:
             # (no `--run`) replaces nothing, because it cannot tell whose entry this is -- the same
             # reason the gate relaxes nothing for an entry with no `owner`.
             #
-            # Read the predecessor's identity BEFORE adopting. The head test below used to compare
-            # `e["run"]` against `args.run` after this line had written one into the other, so its
-            # `--run` arm could never answer no -- replacing it with the literal `True` left both
-            # suites green. It was masked, not harmless: `adopt`'s clear removes the head as well,
-            # so the right answer arrived for the wrong reason and the guard was dead.
-            prev_run, prev_owner = e.get("run"), e.get("owner")
             adopt(e, args.run)
             note = ""
             if args.count_edits:
@@ -428,16 +449,14 @@ def main() -> int:
                 # and is the fallback for a caller that stamps no run, because demanding `run` here
                 # silently cost every such caller the commit half of its count -- which is the
                 # regression this guard was last repaired for, arriving by the other door.
-                # With `--run`, `adopt` above has emptied the entry unless this run wrote it, so a
-                # head still present is this run's by construction. The comparison that used to be
-                # here tested a value `adopt` had just written, could never answer no, and survived
-                # being replaced by the literal `True` in both suites -- dead, and reading as a
-                # guard. Without `--run` there is no run identity, and `owner` is the fallback with
-                # the same-pid corner it has always had.
-                own_head = (args.run is not None
-                            or (args.owner is not None and prev_run is None
-                                and prev_owner == args.owner))
-                prev = (e.get("head") if (own_head and isinstance(e.get("cycle"), int)
+                # No identity test here at all, and that is not an omission. `--run` is required
+                # for this subcommand and `adopt` above has emptied the entry unless this run wrote
+                # it, so a head still present is this run's by construction. Two versions of a test
+                # have stood here and both were dead: one compared a value `adopt` had just
+                # written, the other kept an `owner` fallback for a caller that can no longer
+                # exist. Each survived being replaced by `True` in both suites. What remains is the
+                # cycle bound, which is about this run's own traversals.
+                prev = (e.get("head") if (isinstance(e.get("cycle"), int)
                                           and args.cycle >= e["cycle"]) else None)
                 edits, note = count_edits(key, prev)
             elif args.edits is None:
@@ -509,6 +528,8 @@ def main() -> int:
                      " holds this run to the zero-edit rule rather than to Phase 1's verdict]"))
 
         elif args.cmd == "await":
+            if "harden" in which[args.only]:
+                _require_run(ap, args.run, "await (it reaches the harden entry)")
             for w in which[args.only]:
                 e = held.entry(w)
                 if w == "harden":

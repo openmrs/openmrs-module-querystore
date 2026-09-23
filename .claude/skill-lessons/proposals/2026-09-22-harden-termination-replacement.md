@@ -1,6 +1,6 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
-status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.38.0, `pr-harden` 0.26.3,
+status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.39.0, `pr-harden` 0.26.3,
 `resolve-ticket` 0.17.0,
 `hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. The order's six sites, plus
 two it did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
@@ -145,7 +145,7 @@ let a second `/harden` stop with its own Phase 2 never run. The writer refuses `
 `--phase1` for the last corner of it. Both were found by fresh reviewers, in this skill's own first
 two passes under this contract.
 
-**A LEGACY entry — one with no `phase1` — keeps the zero-edit rule.** A run already in flight when
+**A LEGACY entry — no run id AND no verdict — keeps the zero-edit rule.** A run already in flight when
 this landed cannot re-report itself in the new shape, and of the two directions to be wrong in,
 dropping a live run's gate is the one that costs it its outstanding findings. `gate-state` prints `[no phase1 on this
 entry: it is a LEGACY entry…]`, keyed on the ENTRY and not on the arguments, so on a FRESH entry a
