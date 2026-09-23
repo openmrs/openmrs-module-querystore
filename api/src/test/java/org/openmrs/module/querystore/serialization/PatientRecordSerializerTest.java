@@ -15,6 +15,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.openmrs.module.querystore.serialization.ConceptFixtures.concept;
+import static org.openmrs.module.querystore.serialization.DateFixtures.localMidnight;
 import static org.openmrs.module.querystore.serialization.DateFixtures.utcDate;
 
 import java.sql.Timestamp;
@@ -55,7 +56,7 @@ public class PatientRecordSerializerTest {
 		        utcDate(2018, Calendar.APRIL, 22));
 		patient.addName(name("Achieng", null, "Otieno"));
 		patient.setGender("F");
-		patient.setBirthdate(utcDate(1982, Calendar.JULY, 14));
+		patient.setBirthdate(localMidnight(1982, Calendar.JULY, 14));
 		patient.setBirthdateEstimated(false);
 		patient.setDead(false);
 		patient.addIdentifier(identifier(1,

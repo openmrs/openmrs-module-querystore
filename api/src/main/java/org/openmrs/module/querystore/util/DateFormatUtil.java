@@ -53,9 +53,8 @@ public final class DateFormatUtil {
 		if (date == null) {
 			return null;
 		}
-		LocalDate localDate = date instanceof java.sql.Date ? ((java.sql.Date) date).toLocalDate()
-		        : Instant.ofEpochMilli(date.getTime()).atZone(ZoneId.systemDefault()).toLocalDate();
-		return localDate.format(DATE_FORMAT);
+		return Instant.ofEpochMilli(date.getTime()).atZone(ZoneId.systemDefault()).toLocalDate()
+		        .format(DATE_FORMAT);
 	}
 
 	public static String formatDateTime(Date date) {
