@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.27.0
+version: 0.28.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -171,6 +171,11 @@ Two pairs of refs across four earlier runs each shared a sha (`pr-288-r1`/`r2`, 
 **Which cause produced them was never established**, so this is a guard, not a diagnosis — worth
 having because the cost of the case it catches does not depend on how the case arose.
 
+**And where this run pushed the head, compare it against the sha it pushed** (`git rev-parse HEAD`),
+which also covers a first round and a lag of more than one commit. The ref lagged the push on #379, #444 and #491, and
+`headRefOid` was stale beside it on #444. Where they differ, re-fetch in a bounded until-loop, and
+spawn nothing on the lagging sha.
+
 **Tell the reviewer what to diff against, and never let it be a local branch name.** Fetch the base
 too and name it explicitly: `git fetch origin main` then `git diff origin/main...pr-<n>-r<round>` — or
 better, the PR's own base from `gh pr view <n> --json baseRefName`. A local `main` is stale on any
@@ -222,8 +227,8 @@ with the reasoning written into the guard.
 What the reviewer is given, and nothing more:
 
 - the PR, its diff, and **the ticket it claims to resolve** — read with its comments, not just its
-  title. A GitHub issue via `gh issue view <m> --comments` — an empty result at exit 0 is a `gh`
-  failure and not an empty ticket, see `resolve-ticket` Step 1; a JIRA key (`O3-1234`, `TRUNK-6429`,
+  title. A GitHub issue via `gh issue view <m> --json title,body,comments` — never
+  `--comments`, which drops the body off a terminal, see `resolve-ticket` Step 1; a JIRA key (`O3-1234`, `TRUNK-6429`,
   carried in the PR title or branch name) via
   `https://openmrs.atlassian.net/rest/api/2/issue/<KEY>?fields=summary,description,status,comment`,
   which serves unauthenticated. The `issues.openmrs.org` link people paste redirects to a dashboard

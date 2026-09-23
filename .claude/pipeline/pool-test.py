@@ -689,6 +689,16 @@ def test_gate_state_locking(tmp: Path) -> None:
         ok = sh([sys.executable, str(helper), "--owner", "51515", *cmd], cwd=repo, env=env)
         check(f"but `{cmd[0]} --only pr` does not need one -- it cannot reach the harden entry",
               ok.returncode == 0, ok.stderr[-140:])
+    # `--only` BEFORE the subcommand fails as argparse's `invalid choice: 'pr'`, a message that does
+    # not name `--only`, so guidance keyed on the message never reached it (#480, #485, #488). And
+    # #488 was steered there by the --run refusal, which named where --run goes and not --only.
+    for cmd in (["--only", "pr", "await", "x"], ["--only", "harden", "clear"]):
+        bad = sh([sys.executable, str(helper), "--owner", "51515", *cmd], cwd=repo, env=env)
+        check(f"`{' '.join(cmd)}` says --only goes AFTER the subcommand",
+              bad.returncode != 0 and "AFTER the subcommand" in bad.stderr, bad.stderr[-200:])
+    bad = sh([sys.executable, str(helper), "--owner", "51515", "await", "an agent"], cwd=repo, env=env)
+    check("the --run refusal on await names `--only pr` placed after the subcommand",
+          "await <label> --only pr" in bad.stderr, bad.stderr[-240:])
     # `clear-await` adopts, like `await`. Without it, it was the last writer that could touch the
     # harden entry with no id: on a virgin file it created one the hook reads as LEGACY, and its
     # `stamp` restarted the six-hour expiry on a dead run's entry -- the documented way out of a

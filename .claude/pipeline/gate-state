@@ -135,7 +135,11 @@ def _require_run(ap: "argparse.ArgumentParser", run: str | None, what: str) -> N
     if run is None:
         ap.error(f"{what} needs --run <id>: it writes the harden entry, and without an id this "
                  f"cannot tell your run's entry from one a previous run left in this directory. "
-                 f"--run goes BEFORE the subcommand, beside --owner.")
+                 f"--run goes BEFORE the subcommand, beside --owner"
+                 + (". One that is only the pr gate's needs no --run: `await <label> --only pr`, "
+                    "--only AFTER the subcommand." if what.startswith("await") else
+                    ". One that is only the pr gate's needs no --run: `clear-await --only pr`, "
+                    "--only AFTER the subcommand." if what.startswith("clear-await") else "."))
 
 
 def _run_id(value: str) -> str:
@@ -264,7 +268,13 @@ class _Parser(argparse.ArgumentParser):
     """
 
     def error(self, message: str):
-        if "--only" in message:
+        # `--only` ahead of the subcommand fails as `invalid choice: 'pr'`, which names no `--only`
+        # (#480, #485, #488), so the argv is read here rather than the message.
+        argv = sys.argv[1:]
+        if "invalid choice" in message and "--only" in argv:
+            message += ("\n--only goes AFTER the subcommand, and only await, clear-await and clear "
+                        "take it: gate-state --owner $PPID await \"review r3\" --only pr")
+        elif "unrecognized arguments" in message and "--only" in message:
             message += ("\n--only is accepted by await, clear-await and clear. The subcommands that "
                         "write an entry -- pr-set, harden-set, declined, reviewed-sha, "
                         "verified-sha -- each write "

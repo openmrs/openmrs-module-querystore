@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.18.0
+version: 0.18.1
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -122,18 +122,17 @@ Parse the argument:
 
 | shape | it is | read it with |
 |---|---|---|
-| `github.com/<owner>/<repo>/issues/123` | GitHub issue | `gh issue view 123 --repo <owner>/<repo> --comments` |
-| `123`, `#123` | GitHub issue, this repo | `gh issue view 123 --comments` |
+| `github.com/<owner>/<repo>/issues/123` | GitHub issue | `gh issue view 123 --repo <owner>/<repo> --json title,body,comments` |
+| `123`, `#123` | GitHub issue, this repo | `gh issue view 123 --json title,body,comments` |
 | `openmrs.atlassian.net/browse/KEY`, `O3-1234`, `TRUNK-6429` | JIRA | the REST call below |
 
 ```bash
 curl -s "https://openmrs.atlassian.net/rest/api/2/issue/<KEY>?fields=summary,description,status,comment"
 ```
 
-**Empty output at exit 0 from `gh issue view` is that failure, not an empty ticket** — three runs met
-it (#236, #255, #347), each carrying the workaround into every agent brief, and #347 two wasted calls
-before it. `gh api repos/<owner>/<repo>/issues/<n>` returns the body; fetch the comments separately and
-confirm you got them before briefing anyone.
+**Never `--comments` for the ticket itself.** Off a terminal, gh 2.87.3 printed the comments and not
+the body (measured 2026-09-23), so an issue without comments read as empty — seven runs, #236 to #491 —
+and #480's with one comment read as that comment alone. `--json` carries both and paginates comments.
 
 That endpoint serves **unauthenticated** (verified: `TRUNK-6429` → 200). The `issues.openmrs.org`
 link people paste redirects to a dashboard and will not serve REST, so never reach for it.

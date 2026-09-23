@@ -3722,3 +3722,64 @@ implementation stays stated at :110-112 and :807. Net **±0 lines**.
   P3's "cause not established", "no window counted it", and the PR426 paragraph (its round 5 returned
   `findings: []` plus six notes, not one finding "routed nowhere"; and r2-2 was neither implemented nor
   declined).
+
+## 2026-09-23 (second window of the day: 7 run records — #479/PR486, #480/PR484, #482/PR487, #485/PR493, #488/PR490, #489/PR492, #491/PR495) — 3 applied after revision, 0 killed, 9 parked; one refutation round; linter 10 files, 0 findings
+
+Proposals and the gate's objections: `proposals/2026-09-23-window-479-491.md`. The gate killed nothing
+and revised all three, so the bar this window was exercised by REVISION, not by a kill.
+
+- **P1 APPLIED (resolve-ticket 0.18.1, pr-harden 0.28.0, pr-review 0.17.1): read a GitHub ticket with
+  `gh issue view <n> --json title,body,comments`, never `--comments`.** Bar (a) 4 records (#482:20,
+  #485:20, #488:20, #491:20) plus the 3 the retired warning cited; and (c) a document fact, the route
+  :1146-1151 and :1823-1826 named. Measured 2026-09-23 on gh 2.87.3, off a TTY: `--comments` prints the
+  comments only, so a 0-comment issue is 0 bytes (#491) and #480's 1-comment read is 655 bytes with the
+  body absent; the gate re-ran each, confirmed under `script -q`/`GH_FORCE_TTY=1` that a TTY prints the
+  body, and found every "empty" run's issue had 0 comments at run time (#347's two comments post-date
+  its record). **The gate found the silent case LIVE in #480's transcript** (2026-09-23T14:06:57Z, only
+  the comment returned, recovered by `gh api`), which the #480 record never mentions. The gate also
+  measured `gh api …/comments` truncating at 30 (cli/cli#13840: 148 via `--json`, 30 via the bare
+  endpoint), so the retired paragraph's "fetch the comments separately" was itself lossy past 30. The
+  paragraph "three runs met it … confirm you got them" is DELETED, its diagnosis ("that failure") being
+  what the measurement retires. Revised per the gate: "never prints" became the version and date.
+  **Not edited, reported to the owner:** `~/.claude/CLAUDE.md`'s `gh` bullet carries the same diagnosis.
+- **P2 APPLIED (pipeline/gate-state + pool-test.py): `--only` ahead of the subcommand now gets
+  guidance, and the `--run` refusal on await/clear-await names the `--only pr` form.** Bar (a) 2
+  records (#485:21, #488:18) plus a transcript-only third the gate found (#480:
+  `gate-state --owner $PPID --only pr await …`), and (c) `_Parser`'s docstring claiming the guidance
+  reaches "the one text the caller is certain to read" — false for `invalid choice: 'pr'`. The gate's
+  missed half: #488 was steered into the misplacement by `_require_run`'s "--run goes BEFORE the
+  subcommand", so that message now names the pr-only form. The old `--only` branch was narrowed to
+  `unrecognized arguments`, because the new refusal text contains `--only` and otherwise drew the
+  contradictory "Re-run without it". Accepting `--only` before the subcommand (the gate's alternative)
+  was not taken: the guidance approach is the shipped design.
+- **P3 APPLIED (pr-harden 0.28.0): where this run pushed the head, compare the fetched sha against it,
+  and re-fetch in a bounded loop on a mismatch.** Bar (a) at **3** records, not the 2 drafted — the gate
+  found #379 (`2026-09-13-…-379.md:29`, parked :2459-2470) beside #444 (:3457-3461, reopen "a second",
+  met) and #491:21. #379's own reopen condition (a round lost, a ≥2-commit lag, a first round) is NOT
+  met; the edit's value is that it covers the first-round and multi-commit holes that park named, which
+  the `reviewed_shas` equality check cannot see, and against a reference `headRefOid` is not (#444:70:
+  cached too). Revised per the gate: the forced `+` refspec was unverified and is gone; the loop is bounded.
+  Scoped to runs that pushed the head themselves, since a standalone pr-harden's first round has no
+  pushed sha of its own.
+
+**Parked.**
+- **Stop hook refusing a yield while a background build/capture runs: 2 records** (#479:20, #489:18,
+  one turn). The draft parked it on `resolve-ticket`:448, which the gate showed covers Phase-2 agent
+  awaits, not command waits; `pr-harden-gate.sh` refuses a yield in phase `building`, and pr-harden's
+  "a background loop hands the turn back at once" sits in the verifier's section. Bar (a) met, but
+  whether this is (c) skill-vs-gate depends on who that sentence binds, which is open. **REOPEN ON:**
+  establishing that, or a record where it cost more than a turn.
+- **harden Phase 2 run as 1-2 agents over the four lenses: 3 records** (#479:21, #488:19, #491:22)
+  against harden:100's "Spawn four parallel". Bar met, no cost measured either way, so any text is an
+  unchecked claim. **REOPEN ON:** a merged-lens pass missing what a later fresh agent finds in that lens.
+- **A shipped KIND-of-question rule (harden:313) not applied across three Phase-2 passes: 1 record,
+  ≥2 cycles** (#482). More prose is :1196-1198's class.
+- 1 record each: measurement deliverable vs Step 5's test-first framing (#480); `clear-await` has no
+  per-agent clear (#480, confirmed gate-state:334); base moved by a clean non-required merge after
+  round 1 (#489); editing while a read-only refuter runs (#485); user CLAUDE.md naming
+  `git-restore-backup.sh` as a command when it is a PreToolUse hook (#485); shell decoding `–` before
+  Python in a mutation script (#482).
+
+**Gate-side effect, undone:** the gate's probe `gate-state --cwd /nonexistent-x await --only pr x`
+wrote an `awaiting` entry into `~/.claude/pr-harden-state.json`; it cleared it with `clear --only pr`,
+and this pass re-checked that no key containing `nonexistent` remains.
