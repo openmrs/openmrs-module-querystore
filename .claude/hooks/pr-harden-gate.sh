@@ -4,9 +4,9 @@
 # The contract: a /pr-harden run is complete only when the SHA IT IS HANDING OVER has been reviewed
 # with ZERO blocking findings, and — where a verifier ran at all — verified on that same sha. Edit
 # counts are irrelevant here, and as of harden 0.34.0 they are irrelevant THERE too, so this is no
-# longer a contrast between the two skills. Through round 3 the fixer implements the non-blocking
+# longer a contrast between the two skills. In a full round the fixer implements the non-blocking
 # findings as well, so a round that edits has not thereby found anything that blocks; what outlives
-# that, from round 4 on where blocking-only makes the two nearly coincide, is whose number it is.
+# that, in a blocking-only round where the two nearly coincide, is whose number it is.
 # Only a reviewer's blocking count can end the run — an edit count would hand the exit to the fixer,
 # whose work is the thing being judged — and the reviewer that produced it must have been a fresh
 # agent. See the skill.
@@ -57,7 +57,7 @@
 # awaiting non-empty, fresh -> a background agent this run delegated to is outstanding; ALLOW the
 #                              yield, whatever the phase says. Bounded by AWAIT_TTL.
 # phase "building"      -> a resolve-ticket run is in flight and has not opened its PR yet; block.
-# phase "init"/"fixing" -> a run is in flight and no clean review has been recorded yet; block.
+# phase "init"/"fixing" -> a run is in flight and the head it will hand over is not reviewed yet; block.
 # phase "reviewed", blocking > 0  -> another round is required; block.
 # phase "reviewed", blocking == 0 -> converged; allow.
 # override == true                -> the skill took the labelled override; allow (on the record).
@@ -326,7 +326,7 @@ case "$PHASE" in
     jq -n --arg p "$PR" --arg r "$ROUND" --arg ph "$PHASE" '{
       decision: "block",
       reason: ("pr-harden termination contract: a run on PR #" + $p + " is in flight (round " + $r
-        + ", phase " + $ph + ") and no review round has yet reported zero blocking findings. The run "
+        + ", phase " + $ph + ") and the head it will hand over has not been reviewed yet. The run "
         + "ends on a REVIEW, never on a fix: spawn a fresh reviewer agent (a new subagent — never "
         + "subagent_type \"fork\", which would inherit this context and defeat the whole point), "
         + "record its blocking count, and continue the loop. Do NOT hand back to the user and do "
@@ -334,7 +334,7 @@ case "$PHASE" in
         + "override in the skill'"'"'s Termination section and set override:true in "
         + "~/.claude/pr-harden-state.json so the deviation is on the record."),
       systemMessage: ("pr-harden: PR #" + $p + " round " + $r + " is mid-flight (" + $ph
-        + ") — no clean review recorded yet")
+        + ") — the head it will hand over is not reviewed yet")
     }'
     exit 0
     ;;
@@ -364,8 +364,8 @@ if [ "$BLOCKING" -eq 0 ]; then
         + "property of the artifact, not a past event. Something edited the branch after the last "
         + "review. So "
         + "either hand over the reviewed sha, or run one more round on this head: a FRESH reviewer "
-        + "agent (a new subagent, never subagent_type \"fork\"), BLOCKING-ONLY so it terminates -- "
-        + "any non-blocking finding it raises goes to a follow-up issue rather than into this branch "
+        + "agent (a new subagent, never subagent_type \"fork\"), BLOCKING-ONLY so it terminates, "
+        + "reporting blockers alone and filing nothing "
         + "-- then record it with `gate-state reviewed-sha " + $h + "`. Do NOT hand back to the user "
         + "and do NOT ask whether to continue; if you are deliberately stopping early, take the "
         + "labelled override in the skill'"'"'s Termination section and set override:true in "

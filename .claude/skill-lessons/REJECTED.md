@@ -3787,3 +3787,126 @@ and this pass re-checked that no key containing `nonexistent` remains.
 **Not in this window:** `…-494.md` (21:33) and `…-496.md` (21:42) were written by the pool after this
 window was read, and are mirrored unread. They open the next window; `LAST` holds a date, so a pass
 starting from it re-reads this day and must skip the seven records above.
+
+## 2026-09-23 (third pass of the day, targeted, owner-directed: the review loop files no follow-up issue) — 2 applied after revision (P1, P2) plus 5 homes and 1 test case the gates found, 0 killed, 4 parked; two refutation rounds, the second over the staged diff; linter 10 files, 0 findings; `gate-test.sh` 36 passed / 0 failed on the edited gate and on the original, 13 failed / exit 1 on an always-allow copy
+
+The owner's instruction, verbatim (session `11df53f2`, 2026-09-23): *"i think i am getting tired of the
+skill retro skill creating new issue after issue when working on any issue. Can't it resolve it all in
+the same pull request without creating a chain of issues? I work on a created issue, and then it also
+creates another one, and the cycle continues"*. The proposal as it went to Step 5 is
+`proposals/2026-09-23-owner-no-follow-up-issues.md`; round 1's revisions and how each was taken are
+below. No window of records was read: `…-494.md` and `…-496.md` (mirrored unread by `846a225`) were
+read ONLY for this question, and remain the next window's to derive from.
+
+**The census, measured 2026-09-23 on `openmrs/openmrs-module-chartsearchai`** (`gh api …/issues?since=`,
+every body's first line read). Of the 18 issues opened that day, 13 were review-loop follow-ups: #479,
+#480, #482, #485, #488, #489, #491, #494, #496, #498, #500, #503, #504. Three chains: #471 → #479 → #488
+→ {#491 via PR490, #503 via PR501}; #472 → #482 → #489 → #494 → #498 → #504 (08:50Z to 19:06Z); #473 →
+#480 → #485 → #496 → #500. **#480 was filed by FINISH** — `ebdba95d` L1792-1793, *"Meanwhile I'm filing
+the follow-up issue, which FINISH calls for"*, then `gh issue create` — so the first window's census
+excluding it as "feature scope left by #475" (`proposals/2026-09-23-retro-finish-rule.md`:62-63) was a
+misclassification. Every worked link was an owner-launched `--work` session (`ledger.json`
+`launched_by: work`) and none of the issues was labelled, so each link needed both the filing and the
+owner's choice to work it; this change removes the filing, which is the part the owner named.
+
+**APPLIED after revision · `pr-harden` 0.29.0 — a clean FULL round's non-blocking findings go to a
+fresh fixer in this PR, under one blocking-only round; FINISH files no issue (P1).** Bar: owner-directed,
+and **:3616-3634**'s REOPEN ON for resolution B, point by point: a full round's findings only; once per
+run (every round after it is blocking-only); a fresh fixer at step 4, not FINISH or the orchestrator;
+the confirming round named by its heading; the cost stated as at least one round with PR465's r6-6 →
+r7-3; the four records of **:3684-3686** (#294:162-166, #409:28, #412:26, #276:28). What goes beyond
+resolution B — deleting the issue for everything else — rests on the owner's instruction, not on the
+REOPEN ON. The mechanism reaches #409, #412 and #276; #294's class (a FINISH verifier's non-blocking
+observation on the merging head) is not fixed, and goes into the PR description.
+- **Round 1 revised seven of the ten `pr-harden` edits and killed none.** The settled blocking
+  objections: the decline-all path (a fixer that declines everything commits nothing, and step 1's
+  guard then reads the next round as *the fixer declined everything — did not converge*) — so step 3
+  now routes it, and a finding naming only the PR description, straight to FINISH with the count
+  re-recorded; the cap path's decline had no failure-mode sentence, against :377-379; a misattached
+  "Otherwise go to step 7"; "Rounds 1 to 3 are full rounds" and "Through round 3 the fixer implements…"
+  (:808, gate :7-8) left as universals the exception falsifies; and "nothing else it notices is
+  implemented or filed" would have sent a blocking-only reviewer's other observations NOWHERE, making
+  **:3690-3691**'s reopen condition impossible to meet — so they return as `notes`, copied into the
+  run record unfixed, never to a fixer or an issue, and a finding the orchestrator downgrades in such a
+  round is a note too (the parked path at **:3715-3718** now reaches rounds 2-3). Round 2 sent the
+  notes to the PR description as well; see below.
+- **The embedded measurement was already false when drafted** — "ten … eight … seven of those eight"
+  missed #480, and #503 and #504 were filed while it was being written. The text now states the one
+  chain with its times instead of a count a later reader would re-measure.
+- **Three homes the gate found:** Step 0's takeover terminus (:77, now `phase: reviewed` with
+  `blocking: 0`, since an exception's live fixer runs at `phase: fixing, blocking: 0`); the gate
+  header's "Through round 3" (:7-8, four copies); and `resolve-ticket` Step 8's body sentence (:521),
+  now pointing at FINISH's one-line-each list.
+- **Round 1's OPEN scope objection** (a "follow-up suggestion" reaching the exception's fixer is
+  never reviewed for scope, since only blocking-only rounds follow) is answered in step 3: a finding
+  beyond the PR's own scope is declined there, not implemented.
+- **Retired, with the measurement that retires it:** 0.27.0's *"file it yourself before you report,
+  rather than offering to"* (the first window's P3, bar (a) on PR410/PR417/PR426/PR470). Its concern —
+  a finding routed "to a follow-up" that nothing files is lost — is kept: a full round's finding is now
+  implemented or declined in the PR, a decline and a FINISH verifier observation are named in the PR
+  description, and a blocking-only round's notes reach the run record and the PR description.
+- Gate: the unreviewed-head block message no longer routes non-blocking findings to a follow-up issue.
+  Rendered through the real hook under a temp `HOME`, before and after.
+
+**APPLIED after revision · `resolve-ticket` 0.19.0, `ticket-pool` 0.24.2 — the rest of the pipeline
+files no issue either (P2).** `resolve-ticket`:663 "or a new ticket" becomes the report and the PR
+description, extended at the gate's suggestion to items `/harden` deferred as outside the ticket (the
+riders: #485:27 into #496, #494:11 into #498). Round 1: its bar-(c) claim for :663 FAILS — "or a new
+ticket" is `resolve-ticket`'s own licence, not an issue the loop files — so it rests on the owner's
+instruction alone. `ticket-pool`:326-327's in-your-name disclosure loses the follow-up issue, a true
+(c) correction once P1 lands. This also gives **:3701-3704**'s *adjacent product defect … with nowhere
+durable to go* a home.
+
+**Round 2 — a fresh agent over the staged diff, before anything went live: ship with fixes.** It ran
+the real staged hook under a temp `HOME` through every exception path — mid-fix, decline-all,
+description-only, the cap, a blocker in the confirming round, a FINISH edit after the exception — and
+each got the right verdict. Five fixes, each taken as given:
+- **Notes had two destinations.** FINISH said what the loop did not implement goes in the PR
+  description, while E3 and the confirming round sent a blocking-only round's notes to the run record
+  alone. Taken on the side of the diff's own stated reason (*"with no issue filed, the PR is where it
+  stays visible"*): notes reach both, and every home now says so. The case it decides is #482's — its
+  item 1, a real defect later fixed by #487, was PR478's blocking-only r3 note (`…-472.md`:3).
+- **The gate's `init|fixing` message said "no review round has yet reported zero blocking findings"**,
+  false on the exception's normal path and pointing a run that lost context at a second full round.
+  Now *"the head it will hand over has not been reviewed yet"* in the header comment, the reason and
+  the systemMessage of both copies. `gate-test.sh` gains the case it lacked, `fixing, blocking 0 ->
+  block`: passes on the edited and the original gate, fails on the always-allow copy.
+- The scope sentence's passive "is declined" left the orchestrator as a possible decliner, against
+  the Roles table; now the fixer declines, told so by its brief.
+- State's `fixing` span, "until the next reviewer reports", was false on the decline-all path; now
+  "until a reviewer's count is recorded again".
+- A second home of E13's terminus, at *When the run finishes*.
+Also from round 2, recorded here rather than in the text: the chain sentence departs from round 1's
+wording — "each issue after the first", since #472 is the original ticket — and was re-verified on
+GitHub; the cap path's decline is the orchestrator's, not a fixer's, which round 1 accepted as
+procedural; a blocking-only round's notes have no state-file home and live in context until the run
+record is written, as the follow-up material did before FINISH filed it.
+
+**Parked.**
+- **The step-3 exception is enforced by prose only.** The gate reads `phase: reviewed, blocking: 0` on
+  the reviewed head as converged (`pr-harden-gate.sh`:62, :348-407), so a run that goes from RECORD
+  straight to FINISH drops the findings with every check green; the FINISH rule it replaces, prose only
+  as well, went unfollowed on 4 runs (**:3558-3559**). Cheapest lever named by the gate: record `--phase fixing` at step 2 when
+  the exception fires. **REOPEN ON:** a record where a clean full round's non-blocking findings reached
+  FINISH neither implemented nor declined.
+- **Caps.** Under a caller cap N, an exception at round N-1 whose fix brings a blocker ends as
+  did-not-converge where it converged before; and after an exception at round 3, a FINISH-owed round is
+  round 5 — whether FINISH's owed round counts against the cap was never stated. The pool passes no cap
+  (`pool-run`:1644). **REOPEN ON:** a record where either cost a convergence.
+- **"Taken at most once per run" is recorded by no state field** (`gate-state`:380-381); after a
+  compaction a run could fire it again at round 2 or 3, bounded by the full-round limit and the cap.
+  **REOPEN ON:** a record where it fired twice.
+- **Cost: at least one more round on most runs** — the gate header calls a terminating round with a
+  non-blocking finding "the normal case" (:18); the three precedents (PR414, PR423, PR478) each paid
+  one confirming round that returned zero blocking. **REOPEN ON:** a window of 0.29.0 records, read
+  for rounds per run and for any 8h kill.
+
+**Corrections to the record.** #500 did not come from a fixer decline, as the draft said: PR499's loop
+ran one round and spawned no fixer (`0e6a9f09`), the decline at `…-496.md`:22 is the plan-time
+refuter's, and FINISH filed round 1's r1-1. Resolution B's REOPEN ON runs to **:3634**, not :3633.
+
+**Mirrored in the same commit:** `…-498.md` (22:06), unread for derivation like `…-494.md` and
+`…-496.md`. **And a record the store lost:** the second run on #488 (PR #501) wrote its record over the
+first run's (PR #490) under the same name, where both skills say *append*. The first run's record is
+restored from `846a225` at `…-488.md`, and the second's is kept beside it as `…-488-PR501.md`, in the
+store and the repo alike.

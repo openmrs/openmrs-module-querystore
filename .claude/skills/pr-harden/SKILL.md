@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.28.0
+version: 0.29.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -75,9 +75,9 @@ Refuse the run, with the reason, if any of these fails:
   run has nobody to ask**, which is settled for the verifier at step 6 and settles the same way here.
   The gate already draws the line the ask stood in for: past `STALE_AFTER` (6h) it treats a run as
   abandoned rather than in flight. So take over an entry past that bound, or one whose run recorded a
-  terminus (`blocking: 0` or `override: true`), and say in the report which PR's entry you cleared and
-  what it said; refuse a fresher entry claiming a live round on another PR rather than adopting it,
-  since two runs in one checkout is what the ask was preventing.
+  terminus (`phase: reviewed` with `blocking: 0`, or `override: true`), and say in the report which
+  PR's entry you cleared and what it said; refuse a fresher entry claiming a live round on another PR
+  rather than adopting it, since two runs in one checkout is what the ask was preventing.
   A reused worktree inherits the previous PR's ledger: on #337/PR375 the entry carried three
   `reviewed_shas` from that ticket's earlier run on PR #345 in the same worktree. `pr-set` now drops
   `reviewed_shas` and `declined` when the PR number changes and prints the prior number and what it
@@ -93,24 +93,29 @@ blocking findings — and verified, where any verifier ran — or the override i
 
 ```
 1  REVIEW    fresh subagent · pushed head · declined ledger · last verifier report
-             from round 4 on: BLOCKING-ONLY
+             BLOCKING-ONLY from round 4, and after a clean full round
 2  RECORD    the reviewer's blocking count → state          {phase: "reviewed"}
-3  exit?     blocking == 0 → step 7
+3  exit?     blocking == 0 → step 7 · a clean FULL round's non-blocking
+             findings go to step 4 first, and every round after is BLOCKING-ONLY
 4  FIX       fresh subagent · implements what it agrees with, declines the rest
              on the record                                   {phase: "fixing"}
 5  GREEN     mvn -o clean install, from the ROOT
 6  VERIFY?   runtime-visible change → fresh verifier on the standalone
    COMMIT    one commit, push · round++ → step 1
-7  FINISH    do NOT edit the cleared sha · re-derive the body · VERIFY the merging
-             head if nothing has · mark ready. An edit here owes a BLOCKING-ONLY round
+7  FINISH    do NOT edit the cleared sha · file NO issue · re-derive the body ·
+             VERIFY the merging head if nothing has · mark ready.
+             An edit here owes a BLOCKING-ONLY round
 ```
 
 ### 1 — REVIEW
 
-**From round 4 on, the round is BLOCKING-ONLY.** Rounds 1 to 3 are full rounds: the reviewer
-reports everything and the fixer implements the non-blocking findings too, which is how polish
-happens. From round 4 the reviewer reports blockers alone and the rest goes to the follow-up
-issue, unfixed in this branch.
+**From round 4 on, the round is BLOCKING-ONLY** — and so is every round after a full round that
+found nothing blocking (step 3). Otherwise rounds 1 to 3 are full rounds: the reviewer reports
+everything and the fixer implements the non-blocking findings too, which is how polish happens. A
+blocking-only reviewer's findings are its blockers; anything else it notices it returns as `notes`,
+which the orchestrator copies into the run record's *Raised by a fresh agent*, marked unfixed, and
+FINISH names in the PR description — never to a fixer, never to an issue. A finding the
+orchestrator downgrades in such a round is a note too.
 
 This is FINISH's own rule — *"a round that implements nits and then re-reviews can never
 converge, because a review is expected to produce nits"* — applied before FINISH rather than
@@ -120,7 +125,7 @@ introduced by an earlier round of that same loop, and **three of them — r7-1, 
 an edit that implemented a NON-blocking finding**, which is the edit this rule stops the fixer
 making; the other five came from blocking fixes, which it does not touch. The same run carries the
 cost: r6-6, a non-blocking finding in the PR's own defect class whose fixer verified the hole was
-real, would have gone to the follow-up issue unfixed.
+real, would have stayed unfixed, named in the PR description and the run record.
 
 It does not grade the findings. A blocking finding is still whatever the reviewer says it is and
 the bar is unchanged; what this bounds is the surface the FIXER is asked to touch, which is what
@@ -261,7 +266,8 @@ It returns JSON as its final text, and nothing else:
   "findings": [
     { "id": "r2-1", "blocking": true,
       "file": "api/src/main/java/.../DrugSafetyValidator.java", "line": 412,
-      "finding": "…", "failure_mode": "…", "evidence": "…" } ] }
+      "finding": "…", "failure_mode": "…", "evidence": "…" } ],
+  "notes": [ "a blocking-only round only: anything else it noticed" ] }
 ```
 
 **"Does not resolve the ticket" is a blocking finding, and it is the first one to look for.**
@@ -284,8 +290,26 @@ belongs to the agent whose work is not being judged.
 
 ### 3 — Exit test
 
-`blocking == 0` ends the loop. Non-blocking findings do not extend it — that is the whole point of
-separating the fixer's scope from the exit condition. Go to step 7.
+`blocking == 0` ends the loop, with one exception, taken at most once per run: **a FULL round that
+finds nothing blocking but raises non-blocking findings.** Those go to a fixer in this PR rather than
+to an issue. Run step 4 on them with a fresh fixer, then steps 5 and 6 and COMMIT as usual, and
+review the head that produces under *That confirming round is BLOCKING-ONLY* in FINISH — as is every
+round after it, which is what stops the loop implementing nits forever. A commit here costs at least
+that round, and more when a fix brings a blocker of its own: on PR #465 the fix for non-blocking r6-6
+introduced blocking r7-3. A finding beyond the PR's own scope — a redesign, an adjacent defect,
+behaviour the ticket did not ask for — is one that fixer declines rather than implements, and its
+brief says so, since only blocking-only rounds follow it. Where nothing moved the head — the fixer
+declined them all, or they named only the PR description — no round is owed, and it is not step 1's
+*the fixer declined everything*: record the same count again (`phase: reviewed`) and go to step 7.
+Where the round cap leaves no round for that review, decline them on the record instead, each with
+its failure-mode sentence and the cap as the reason, and go to step 7. A clean round with no
+non-blocking findings goes to step 7.
+
+**Filing them, or a blocking-only round's notes, as an issue is what this replaced.** On
+`openmrs-module-chartsearchai` on 2026-09-23 the chain #472 → #482 → #489 → #494 → #498 → #504 ran
+from 08:50Z to 19:06Z, each issue after the first filed by the PR that worked the one before it, and
+the owner's instruction that day was to resolve it in the same pull request, without a chain of
+issues.
 
 ### 4 — FIX
 
@@ -294,7 +318,9 @@ first, and tell the fixer to restore any measurement mutation **before** it repo
 edits stay, its measurement scaffolding does not.
 
 Spawn a fresh fixer. It implements **every finding it agrees with**, and declines the rest on the
-record. Its brief carries harden's Phase 1 discipline:
+record. **Filing an issue is neither.** A finding that asks for a follow-up or tracking issue is
+implemented — the thing it would track — or declined; on #494/PR497 round 1 asked for one, and
+filing it began #498. Its brief carries harden's Phase 1 discipline:
 
 - **Trace outward** one level on each thread: trigger paths, optional dependencies absent at runtime,
   lifecycle order, state propagation across module boundaries, invalidated invariants in *unchanged*
@@ -658,14 +684,16 @@ rounds, which such a commit only ever appends to.
 ### 7 — FINISH
 
 The reviewer found nothing blocking, so this is the sha you are handing over — and **FINISH does not
-edit it.** That round's non-blocking findings go to a follow-up issue rather than into this branch —
-file it yourself before you report, rather than offering to, and name it by number in the report.
+edit it.** Nor does it file an issue, or offer to: step 3 has already had a clean full round's
+non-blocking findings fixed or declined, a blocking-only round hands a fixer nothing but blockers,
+and what the loop did not implement goes into the PR description this step re-derives.
 
-That is the whole change from the version of this step that applied them, and the argument it
-replaces was *"those edits carry no blocking finding by construction, so no further round is owed"*.
-It graded the FINDINGS, which the reviewer saw, and not the FIXES, which did not exist when it
-looked. The run records name what actually landed here: a whitespace normal form defined
-twice, a citation carve-out pinned at only two markers, an assertion that pinned nothing.
+A version of this step applied those findings here, and the argument it rested on was *"those edits
+carry no blocking finding by construction, so no further round is owed"*. It graded the FINDINGS,
+which the reviewer saw, and not the FIXES, which did not exist when it looked. The run records name
+what actually landed here: a whitespace normal form defined twice, a citation carve-out pinned at
+only two markers, an assertion that pinned nothing. That is why step 3, not this step, implements
+them: there the fixes get a review.
 Re-deriving the PR description is still owed and is not an exception, because the body is not in the
 tree and does not move the head.
 
@@ -683,7 +711,10 @@ describes code that later rounds change under it, so the patches this loop appli
 something false: on the fourth run, four consecutive rounds had their top finding in the description, one
 of them a sentence an earlier round had itself added. Patching mid-loop is right when a finding names the
 body; leaving those patches as the final text is not. Rewrite it whole here, re-measuring every figure in
-it rather than carrying one forward.
+it rather than carrying one forward. Name in it, one line each, every finding the loop did not
+implement — each decline with its failure-mode sentence, each note a blocking-only reviewer returned,
+and any non-blocking observation the verifier made on the merging head — since with no issue filed,
+the PR is where it stays visible.
 
 **A runtime-visible change is not ready until a verifier has run against the head that will merge.**
 Step 6 sits on the fix path, so without this a PR whose round 1 found nothing blocking would reach
@@ -740,8 +771,8 @@ the merging head reports one. Implement it, and run one more round.
 **That confirming round is BLOCKING-ONLY, and this is what makes the rule terminate.** A round that
 implements nits and then re-reviews can never converge, because a review is expected to produce nits;
 a round that may only *report* blockers converges as soon as there are none. So brief the confirming
-reviewer to return blocking findings alone, and send anything else it notices to the follow-up issue
-with the rest.
+reviewer to return blocking findings alone, and anything else it notices as `notes`, which reach
+the run record and the PR description; nothing in them is implemented or filed.
 
 ## Editing by script, which is how edits get silently lost
 
@@ -805,9 +836,9 @@ another in round 4.
 > **A `/pr-harden` run is complete when the SHA IT IS HANDING OVER has been reviewed with zero
 > blocking findings — and, where any verifier ran, verified on that same sha.**
 
-Not when a round makes no edits. Through round 3 the fixer implements the non-blocking findings too,
+Not when a round makes no edits. In a full round the fixer implements the non-blocking findings too,
 so a round that edits has not thereby found anything that blocks, and an edit count would answer the
-wrong question. From round 4 the two coincide — blocking-only means the fixer edits for blockers
+wrong question. In a blocking-only round the two coincide — the fixer edits for blockers
 alone — and the condition still reads the blocking count there, for the reason that outlives the
 coincidence: **the count belongs to the reviewer, whose work is not being judged, and an edit count
 hands the exit to the fixer, whose work is.** That is where the two skills' contracts differ, and
@@ -912,7 +943,7 @@ two sessions sharing ONE directory still share one entry, and `owner` is what te
 ```
 
 `phase` is `"init"` before the first review, `"reviewed"` once a reviewer's count is recorded,
-`"fixing"` from the moment the fixer is spawned until the next reviewer reports. On `init` and
+`"fixing"` from the moment the fixer is spawned until a reviewer's count is recorded again. On `init` and
 `fixing` the gate blocks regardless of `blocking`, so leave the last measured value there for the
 record. The gate reads `pr`, `round`, `blocking`, `phase`, `ts`, `override`, `owner`, `awaiting`,
 `unattended`, `mode`, `reviewed_shas` and `verified_shas`; `declined` is the orchestrator's own
@@ -1116,8 +1147,8 @@ that a spawn never has to restate the phase:
 Kept apart from the transition write above so that a spawn never has to restate the phase. Drop
 `--only pr` and it writes both gates at once, which is what a nested `/harden` cycle needs.
 
-When the run finishes — converged or overridden — the entry must say so (`blocking: 0`, or
-`override: true`). A stale `blocking > 0` left behind is what the 6-hour expiry exists to clean up
+When the run finishes — converged or overridden — the entry must say so (`phase: reviewed` with
+`blocking: 0`, or `override: true`). A stale `blocking > 0` left behind is what the 6-hour expiry exists to clean up
 after you.
 
 ## Where `/harden` sits, and why it is not inside the round

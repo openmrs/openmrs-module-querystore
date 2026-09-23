@@ -47,6 +47,9 @@ mkdir -p "$TMP/.claude"; STATE="$TMP/.claude/pr-harden-state.json"
 run_case "no entry -> allow" allow none
 run_case "reviewed, blocking 0 -> allow" allow \
   "{\"phase\":\"reviewed\",\"blocking\":0,\"pr\":9,\"round\":2,\"ts\":$NOW}"
+# pr-harden step 3's exception: a clean full round's count stays 0 while its fixer runs.
+run_case "fixing, blocking 0 (step 3's exception mid-fix) -> block" block \
+  "{\"phase\":\"fixing\",\"blocking\":0,\"pr\":9,\"round\":2,\"ts\":$NOW}"
 run_case "building, no awaiting -> block" block \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[]}"
 run_case "awaiting fresh, attended -> allow (yield)" allow \

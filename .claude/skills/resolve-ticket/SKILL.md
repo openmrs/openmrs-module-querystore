@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.18.1
+version: 0.19.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -518,7 +518,8 @@ non-closing one without a `#` did. Both runs caught it themselves, so this makes
 already worked twice repeatable; what it guards against is the run where nobody looks, because merging
 then closes an open defect and nothing reddens.
 
-The body says what the ticket asked, what the change does, and how it was verified. It does not grade
+The body says what the ticket asked, what the change does, and how it was verified — and, once
+`pr-harden`'s FINISH re-derives it, what the loop left unimplemented, one line each. It does not grade
 the design or tour the alternatives.
 
 **Write it once here, and RE-DERIVE IT WHOLE before the PR is marked ready — never patch it across
@@ -660,8 +661,9 @@ runs, and no run can settle it about itself.
   **And the rule is not about tallies — it is about claims you cannot check.** A universal or an exhaustive characterization is the same defect in different grammar, and it slips past a reader watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. Measured on the seventh run, five such claims in three consecutive cycles, each written to correct the previous cycle's false claim and each false in turn — "any looser pattern would reject" (looseness has more than one dimension), "it only re-admits `M01AE0`" (it re-admits any single trailing digit), "matched only the 5- and 7-character shapes" (the old pattern matched 6 too), "exactly the two levels the ladder is known to be handed" (nothing on the path validates a code's shape), and one that mis-numbered the very level it was excluding. So before writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what the thing DOES over what it excludes; and name the residue rather than claiming there is none.
 - **Don't skip the failing test** because the fix is obvious. Never-executed code is unverified code,
   and a test written after the fix tends to assert what the code does.
-- **Don't widen scope.** An adjacent defect you noticed goes in the report or a new ticket, not into
-  this PR. A PR that does two things gets reviewed as neither.
+- **Don't widen scope.** An adjacent defect you noticed, or an item `/harden` deferred as outside the
+  ticket, goes in the report and the PR description rather than into this PR's diff — and not into a
+  new issue: file none, as `pr-harden` files none. A PR that does two things gets reviewed as neither.
 - **Don't spawn a subagent to write the implementation.** Then nobody holds the writing context, the
   judgement calls get made by an agent nobody can steer, and Step 7's harden loses the one advantage
   it has over the review loop. `Explore` for searching is fine; the judgement stays here.

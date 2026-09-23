@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.24.1
+version: 0.24.2
 ---
 
 # Ticket pool — the loop that learns
@@ -323,8 +323,7 @@ whether a ticket shape predicts a `draft`.
 ## What one invocation can do
 
 Unattended and in your name: per ticket, a branch, commits, and a **pull request on a public repo**,
-plus whatever its review rounds push on top and, where review left findings unfixed, a follow-up
-**issue** on that repo holding them; per retro, an edit to the skills every future run obeys,
+plus whatever its review rounds push on top; per retro, an edit to the skills every future run obeys,
 committed and pushed to the source repo. It runs for hours per ticket and spends real tokens doing it.
 
 Three caps, in different states: `claude.max_budget_usd` bounds one session's spend and is **unset**
