@@ -1,6 +1,6 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
-status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.39.0, `pr-harden` 0.26.3,
+status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.40.0, `pr-harden` 0.26.4,
 `resolve-ticket` 0.17.0,
 `hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. The order's six sites, plus
 two it did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the
@@ -147,14 +147,14 @@ two passes under this contract.
 
 **A LEGACY entry — no run id AND no verdict — keeps the zero-edit rule.** A run already in flight when
 this landed cannot re-report itself in the new shape, and of the two directions to be wrong in,
-dropping a live run's gate is the one that costs it its outstanding findings. `gate-state` prints `[no phase1 on this
-entry: it is a LEGACY entry…]`, keyed on the ENTRY and not on the arguments, so on a FRESH entry a
-run that forgets the flag is held to the old contract rather than to none. Keyed on the argument, as
-it first shipped, it announced a legacy entry over a `phase1` the entry already carried and the gate
-was already enforcing. On an entry that already has a verdict a bare write keeps it and says
-nothing — which across runs was an allow-direction hole, closed by dropping the previous run's
-verdict when the `--owner` changes, and within a run is just a reason to state the verdict on every
-write.
+dropping a live run's gate is the one that costs it its outstanding findings. `gate-state` prints
+`[no run id and no phase1 on this entry: it is a LEGACY entry…]`, keyed on the ENTRY and not on the
+arguments — keyed on the argument, as it first shipped, it announced a legacy entry over a `phase1`
+the entry already carried and the gate was already enforcing. A run can no longer forget the flag:
+every command that touches this entry refuses a write without it. On an entry that already has a
+verdict a bare write keeps it and says nothing, which across runs was an allow-direction hole,
+closed by replacing the entry when the `--run` differs, and within a run is just a reason to state
+the verdict on every write.
 
 ## The walk-forward against #298, which the order recorded as INDETERMINATE
 
@@ -207,8 +207,10 @@ staleness and ownership guards, which did not change, and discriminate nothing o
 ## Residue, named rather than left to be found
 
 - **CLOSED — the first runs have executed.** `/harden` was run on this slice itself, 2026-09-22/23.
-  Five Phase 1 passes, by five fresh reviewers, returned 12, 14, 6, 4 and 4 substantive findings,
-  and almost all of them were in the contract rather than in anything else. Six were allow-direction
+  Eight Phase 1 passes, by eight fresh reviewers. No count of the findings or of the defects is
+  kept here — three successive passes found the count itself wrong, and `git log` has them. The
+  shape is what is worth recording: almost every finding was in the contract or in the repair before
+  it, and the ones that mattered were allow-direction
   gate defects: a sticky `escalated` that wedged an escalated run, a `done` that leaked into the next
   run in a reused checkout, an unrecognised `phase2` that disarmed an unambiguous `phase1: open` (the
   0.34.0-to-0.35.0 migration case, since 0.34.0 wrote `escalated`), and a `--phase2` write that could
@@ -216,10 +218,10 @@ staleness and ownership guards, which did not change, and discriminate nothing o
   no run has yet gone from a ticket to a PR under it.
 - **`--phase1` is not required by `gate-state`.** Making it required would break the `pool-test.py`
   call sites that are about `--count-edits` semantics and not about phases. The cost is that a run
-  can write a legacy entry without meaning to on a FRESH entry; the mitigation is the printed
-  warning and the fact that the failure direction is the old, stricter rule. On an entry that
-  already carries a verdict a bare write keeps it, which across runs was the fourth allow-direction
-  defect of this slice and is closed by the owner test rather than by another rule about flags.
+  can omit `--phase1` and state no verdict; the gate blocks on that, so the failure direction is a
+  pass owed rather than a stop allowed. On an entry that already carries a verdict a bare write
+  keeps it, which across runs was an allow-direction defect of this slice and is closed by the run
+  id rather than by another rule about flags.
   `--phase2`, by contrast, DOES require its pair, unconditionally.
 - **CLOSED, and the decision to leave it open was wrong.** A pre-existing fail-open in the LEGACY
   branch: its block message built `"run cycle " + (($c|tonumber?) + 1 | tostring)`, and with a
@@ -230,7 +232,7 @@ staleness and ownership guards, which did not change, and discriminate nothing o
   hunting a class and fixing only the milder member. The cycle is now resolved once in bash, with a
   default, and no jq arithmetic touches it on either branch.
 
-- **Run identity: the entry now carries a run id, and that is what closed the family.** The entry is
+- **Run identity: the entry carries a run id, and every command that touches it must pass one.** The entry is
   keyed on the checkout and used to say nothing about WHICH run wrote it. Five of this slice's six
   allow-direction defects crossed that boundary — a `phase2: done`, an `escalated`, a whole terminal
   verdict picked up by a write that omitted `--phase1`, and an `awaiting` from a dead run that
@@ -239,8 +241,11 @@ staleness and ownership guards, which did not change, and discriminate nothing o
   a rule naming a field or a flag, and the fifth got in through the field name the fourth rule did
   not list — which is what said the rule was the wrong SHAPE. A write whose `--run` differs from the
   entry's now replaces the entry, so the default is *drop unless this run wrote it* and a field
-  added later cannot become a seventh. Deleted by it: the five-name drop list, and the start-of-run
-  `clear` the pass before had added. `--owner` stays for the different question it answers well —
+  added later inherits nothing by default. Two more members arrived after that sentence was first
+  written — an absent id read as adoptable, then two writes in this helper's own usage block — so
+  what holds is not the inversion alone but the inversion plus a writer that REFUSES an id-less
+  write to this entry. Deleted along the way: the five-name drop list, the start-of-run `clear`, and
+  two identity tests in `count_edits` that both proved dead. `--owner` stays for the different question it answers well —
   whether a live foreign session holds this checkout — and conflating the two is what left the
   same-pid corner that the run id simply does not have.
 

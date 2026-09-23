@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.26.3
+version: 0.26.4
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -82,7 +82,7 @@ Refuse the run, with the reason, if any of these fails:
   `reviewed_shas` from that ticket's earlier run on PR #345 in the same worktree. `pr-set` now drops
   `reviewed_shas` and `declined` when the PR number changes and prints the prior number and what it
   dropped. That print is a backstop, not this step's report — when you take over or clear an entry
-  naming another PR, read it with `gate-state clear --json`, which prints the whole entry it removed,
+  naming another PR, read it with `gate-state clear --only pr --json`, which prints the whole entry it removed,
   and say in the report which PR's it was and what it said.
 
 Then write the opening state entry (`phase: "init"`, `round: 1`) — see **State**. From this point the

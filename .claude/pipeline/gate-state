@@ -33,7 +33,7 @@ hook must never block on someone else's lock — always see one whole version or
   gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 3 --phase1 open --count-edits
   gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 3 --phase1 converged --phase2 done --count-edits
   gate-state --run harden-1758600000 await "review r3" [--only pr|harden|both]
-  gate-state clear-await [--only pr|harden|both]
+  gate-state --run harden-1758600000 clear-await [--only pr|harden|both]
   gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"   # writes the pr entry; no --only
   gate-state reviewed-sha <sha>                                        # writes the pr entry; no --only
   gate-state verified-sha <sha>                                        # writes the pr entry; no --only
@@ -150,7 +150,7 @@ def _run_id(value: str) -> str:
     return value
 
 
-def adopt(entry: dict, run: str | None) -> None:
+def adopt(entry: dict, run: str) -> None:
     """Make `entry` belong to `run`, replacing it wholesale if it belonged to another.
 
     The alternative was a list of field names to drop, and it grew a leak per review pass -- a
@@ -158,8 +158,10 @@ def adopt(entry: dict, run: str | None) -> None:
     field added to this entry a new candidate. Replacing inverts the default. An unstamped write
     adopts nothing, because it cannot tell whose entry this is.
     """
-    if run is None:
-        return
+    # No `run is None` guard: every caller is preceded by `_require_run`, so there is no such
+    # caller to guard against, and a branch no caller reaches is one the next change removes for
+    # free while believing it was load-bearing. The type says it.
+    #
     # NOT `not in (None, run)`. Treating an absent id as adoptable-in-place is how the sixth defect
     # came back a seventh time: a predecessor that stamped no `run` -- every 0.34.0-0.36.0 entry,
     # and any write that omitted the flag -- was merged into rather than replaced, and its
@@ -277,11 +279,11 @@ def main() -> int:
                     help="this RUN's id, minted once at the top of the run and passed on every "
                          "write it makes. A write whose --run differs from the harden entry's "
                          "REPLACES that entry, so a new run in a reused checkout starts from what "
-                         "it writes rather than from what it found. Required wherever a verdict is "
-                         "reachable, because the alternative was a docstring claiming every caller "
-                         "passes it, and that claim was false in this file's own usage block. "
-                         "at all rather than everything that is not on a list -- which is what let "
-                         "an `awaiting` from a dead run allow a stop on `phase1: open`. Distinct "
+                         "it writes rather than from what it found -- not from everything absent "
+                         "from a list, which is what let an `awaiting` from a dead run allow a "
+                         "stop on `phase1: open`. Required wherever a verdict is reachable, "
+                         "because the alternative was a docstring claiming every caller passes it "
+                         "and that claim was false in this file's own usage block. Distinct "
                          "from --owner, which answers whether a live foreign session holds this "
                          "checkout and survives a resume; conflating the two is what left the "
                          "same-pid corner.")
@@ -405,20 +407,14 @@ def main() -> int:
         elif args.cmd == "harden-set":
             _require_run(ap, args.run, "harden-set")
             e = held.entry("harden")
-            # A DIFFERENT run REPLACES this entry. Nothing clears it between interactive runs, and
-            # SEVEN allow-direction defects came out of one field or another crossing that boundary:
-            # a `done`, an `escalated`, an unrecognised value, a whole terminal verdict picked up by
-            # a write that omitted `--phase1`, and finally an `awaiting` from a run that had died,
-            # which allowed the stop on `phase1: open` -- the strictest block in the contract.
-            #
-            # Five of those were closed one rule at a time, and the fifth closure was a list of five
-            # field names to drop. `awaiting` was the sixth member and it got in through the name
-            # nobody listed, which is what says the rule was still the wrong SHAPE: `carry unless
-            # listed` makes every field added here a new candidate leak, and the reviewer has to
-            # re-derive the whole list. Replacing makes it `drop unless this run wrote it`, which
-            # deletes the list rather than extending it. It grew two more members anyway, both
-            # through a write that stamped no id, so the property is not that no member can exist
-            # -- it is that one now needs a caller the writer refuses.
+            # A DIFFERENT run REPLACES this entry rather than inheriting from it. Nothing clears
+            # it between interactive runs, and successive reviewers found a leak per pass here
+            # while the rule was `carry unless listed` -- a `phase2: done`, an `escalated`, a whole
+            # terminal verdict, an `awaiting` -- each through the field or the caller the last fix
+            # did not name. No count is kept: three passes running found the count itself wrong,
+            # and `git log` has them. What holds now is the inversion plus `_require_run` -- no
+            # write reaches this entry without an id, so `drop unless this run wrote it` is
+            # enforced rather than documented.
             #
             # Keyed on `run`, not on `owner`. They answer different questions and conflating them
             # is what left the same-pid corner: `owner` answers "is a live foreign session using
@@ -430,32 +426,22 @@ def main() -> int:
             adopt(e, args.run)
             note = ""
             if args.count_edits:
-                # A recorded head belongs to THIS run only when the same owner wrote it and the
-                # traversal has not gone BACKWARDS (a fresh run restarting at 1 in a reused
-                # checkout). It used to demand the cycle ADVANCE, `>` not `>=`, which was right when
-                # a cycle was written once per cycle -- but `--cycle` now numbers the traversal and
-                # only an escalation moves it, so on the ordinary run it never advanced and the
-                # commit half was never measured at all. Driven: two real commits between two
-                # writes, reported as `edits=0 [commit half not measured]`. Each write now measures
-                # what changed since this run's previous write, which is what a per-pass figure
-                # wants, and re-recording one pass correctly reports zero.
-                # Nothing clears the harden entry -- the skill requires it to survive, saying
-                # `phase1: converged` with `phase2: done`, or `override: true`, when the run finishes
-                # -- so without this test a fresh `/harden` in a reused checkout would count from the
-                # previous run's head. That same non-clearing is why a Phase 1 write resets `phase2`
-                # above: this guard protects `head` from a previous run and nothing protected that.
-                # Same question as the replace above, so the same key where there is one: a head
-                # belongs to THIS run. `run` answers that exactly; `owner` answered it approximately
-                # and is the fallback for a caller that stamps no run, because demanding `run` here
-                # silently cost every such caller the commit half of its count -- which is the
-                # regression this guard was last repaired for, arriving by the other door.
-                # No identity test here at all, and that is not an omission. `--run` is required
-                # for this subcommand and `adopt` above has emptied the entry unless this run wrote
-                # it, so a head still present is this run's by construction. Two versions of a test
-                # have stood here and both were dead: one compared a value `adopt` had just
-                # written, the other kept an `owner` fallback for a caller that can no longer
-                # exist. Each survived being replaced by `True` in both suites. What remains is the
-                # cycle bound, which is about this run's own traversals.
+                # No identity test here, and that is not an omission: `--run` is required for
+                # this subcommand and `adopt` above has emptied the entry unless this run wrote it,
+                # so a head still present is this run's by construction. Two versions of such a
+                # test have stood here and both were dead -- one compared a value `adopt` had just
+                # written, the other kept an `owner` fallback for a caller that can no longer exist
+                # -- and each survived being replaced by `True` in both suites. Four successive
+                # comment blocks accumulated here describing mechanisms the next commit deleted;
+                # this replaces them, because a rationale that outlives its guard is what the next
+                # reader trusts.
+                #
+                # What remains is the cycle bound, and it is about this run's own traversals. It
+                # was `>` and had to become `>=`: `--cycle` numbers the traversal and only an
+                # escalation moves it, so on an ordinary run it never advanced and the commit half
+                # was never measured at all -- two real commits between two writes, reported as
+                # `edits=0 [commit half not measured]`. Each write now measures what changed since
+                # this run's previous write, and re-recording one pass correctly reports zero.
                 prev = (e.get("head") if (isinstance(e.get("cycle"), int)
                                           and args.cycle >= e["cycle"]) else None)
                 edits, note = count_edits(key, prev)
@@ -539,8 +525,20 @@ def main() -> int:
             print(f"awaiting: {args.agent} ({args.only})")
 
         elif args.cmd == "clear-await":
+            # Same requirement and same adoption as `await`, for the same reason. This was the one
+            # caller left that wrote the harden entry without an id: on a virgin file it created an
+            # entry the hook reads as LEGACY, it ignored the `--run` its own documented forms pass,
+            # and its `stamp` refreshed `ts` on a dead run's entry -- restarting the six-hour expiry
+            # that `resolve-ticket` Step 7 names as the only way out of a wedge. Its harm was
+            # block-direction, which is why eight passes went by without it; the claim it falsified
+            # was this slice's own "there is no longer a caller that can silently write without an
+            # id", which is the third closure claim in a row to be the false universal.
+            if "harden" in which[args.only]:
+                _require_run(ap, args.run, "clear-await (it reaches the harden entry)")
             for w in which[args.only]:
                 e = held.entry(w)
+                if w == "harden":
+                    adopt(e, args.run)
                 e["awaiting"] = []
                 stamp(e, args.owner)
             print(f"awaiting cleared ({args.only})")

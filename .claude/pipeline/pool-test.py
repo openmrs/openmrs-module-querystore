@@ -438,7 +438,7 @@ def test_gate_state_locking(tmp: Path) -> None:
     def churn(n: int) -> None:
         for i in range(6):
             sh([sys.executable, str(helper), "--run", f"r{n}", "await", f"agent-{n}-{i}"], cwd=d, env=env)
-            sh([sys.executable, str(helper), "clear-await"], cwd=d, env=env)
+            sh([sys.executable, str(helper), "--run", f"r{n}", "clear-await"], cwd=d, env=env)
 
     threads = [threading.Thread(target=churn, args=(n,)) for n in range(6)]
     for t in threads:
@@ -461,7 +461,7 @@ def test_gate_state_locking(tmp: Path) -> None:
     hd = json.loads((home / ".claude/harden-state.json").read_text())[str(d)]
     check("one await reaches the pr-harden gate", [a["agent"] for a in pr["awaiting"]] == ["harden phase 2"])
     check("the same await reaches the harden gate", [a["agent"] for a in hd["awaiting"]] == ["harden phase 2"])
-    sh([sys.executable, str(helper), "clear-await"], cwd=d, env=env)
+    sh([sys.executable, str(helper), "--run", "r0", "clear-await"], cwd=d, env=env)
     pr = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(d)]
     hd = json.loads((home / ".claude/harden-state.json").read_text())[str(d)]
     check("clearing it clears both", pr["awaiting"] == [] and hd["awaiting"] == [])
@@ -654,6 +654,24 @@ def test_gate_state_locking(tmp: Path) -> None:
           and hd.get("awaiting") == [] and hd.get("run") == "C"
           and "override_reason" not in hd, str(hd))
 
+    # The head is reused across this run's own writes, and NOT across a traversal that has gone
+    # backwards -- a run restarting its numbering. The bound is the last identity test left in
+    # `count_edits`, two others having been deleted as dead, and nothing covered it.
+    sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--run", "bound", "harden-set", "--cycle", "5",
+        "--phase1", "open", "--count-edits"], cwd=repo, env=env)
+    (repo / "bound-work").write_text("x\n")
+    sh(["git", "add", "-A"], cwd=repo)
+    sh(["git", "commit", "-qm", "work inside the traversal"], cwd=repo)
+    fwd = sh([sys.executable, str(helper), "--run", "bound", "harden-set", "--cycle", "5",
+              "--phase1", "open", "--count-edits"], cwd=repo, env=env).stdout
+    check("a head recorded by this run at the same cycle is reused",
+          "edits=1" in fwd and "not measured" not in fwd, fwd.strip())
+    back = sh([sys.executable, str(helper), "--run", "bound", "harden-set", "--cycle", "1",
+               "--phase1", "open", "--count-edits"], cwd=repo, env=env).stdout
+    check("but a traversal number that went BACKWARDS does not reuse it",
+          "not measured" in back, back.strip())
+
     # `--run` is REQUIRED wherever `adopt` can reach a verdict. It used to be safe only because a
     # docstring said every documented write carried it, and that sentence was false in the helper's
     # own usage block -- so a run typing what the helper documented rode the previous run's entry.
@@ -663,10 +681,26 @@ def test_gate_state_locking(tmp: Path) -> None:
         bad = sh([sys.executable, str(helper), "--owner", "51515", *cmd], cwd=repo, env=env)
         check(f"`{cmd[0]} {cmd[1]}` without --run is refused",
               bad.returncode != 0 and "needs --run" in bad.stderr, bad.stderr[-140:])
-    ok = sh([sys.executable, str(helper), "--owner", "51515", "await", "a pr agent", "--only", "pr"],
-            cwd=repo, env=env)
-    check("but a pr-only await does not need one, because it cannot reach the harden entry",
-          ok.returncode == 0, ok.stderr[-140:])
+    for cmd in (["clear-await", "--only", "harden"], ["clear-await"]):
+        bad = sh([sys.executable, str(helper), "--owner", "51515", *cmd], cwd=repo, env=env)
+        check(f"`{' '.join(cmd)}` without --run is refused too",
+              bad.returncode != 0 and "needs --run" in bad.stderr, bad.stderr[-140:])
+    for cmd in (["await", "a pr agent", "--only", "pr"], ["clear-await", "--only", "pr"]):
+        ok = sh([sys.executable, str(helper), "--owner", "51515", *cmd], cwd=repo, env=env)
+        check(f"but `{cmd[0]} --only pr` does not need one -- it cannot reach the harden entry",
+              ok.returncode == 0, ok.stderr[-140:])
+    # `clear-await` adopts, like `await`. Without it, it was the last writer that could touch the
+    # harden entry with no id: on a virgin file it created one the hook reads as LEGACY, and its
+    # `stamp` restarted the six-hour expiry on a dead run's entry -- the documented way out of a
+    # wedge. Its harm was block-direction, which is how it survived eight review passes.
+    sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "61616", "--run", "P", "harden-set", "--cycle", "1",
+        "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "62626", "--run", "Q", "clear-await",
+        "--only", "harden"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("clear-await from a new run replaces the entry rather than refreshing it",
+          hd.get("run") == "Q" and "phase1" not in hd, str(hd))
 
     # An empty id is shared by every run and reads to the gate as no id at all, which puts a
     # verdict-less write back in the legacy branch where `edits: 0` allows. It is also what quoting
@@ -1147,6 +1181,12 @@ def test_skills_commands_run(tmp: Path) -> None:
         if inv and not inv.startswith("("):
             found.append(("gate-state usage block", inv))
     check("the skills do document the helper", len(found) >= 8, f"only found {len(found)}")
+    # ...and the usage block specifically. Its absence is what let the eighth defect through, and
+    # a scan that silently stops matching -- a reflow past the two-space anchor would do it --
+    # leaves both suites green, which is the shape this whole slice keeps paying for.
+    from_usage = [i for src, i in found if src == "gate-state usage block"]
+    check("and gate-state's own usage block is among the sources scanned",
+          len(from_usage) >= 6, f"only {len(from_usage)} from the usage block")
 
     bad = []
     for name, invocation in found:
