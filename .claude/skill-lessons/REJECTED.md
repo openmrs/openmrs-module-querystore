@@ -3542,3 +3542,183 @@ is the path on which one issue gets two PRs. #294's row still reads `ready pr=41
   carries the literal. Caught only because the two readings disagreed. Nothing was harmed: the true
   count was 0 both times and the patch's apply condition held. The user-level `CLAUDE.md` already
   requires calibrating an ad-hoc measurement both ways; this is that rule paying for itself.
+
+## 2026-09-23 (targeted, owner-directed: `pr-harden`'s FINISH rule and its round-4 extension — 8 records since `LAST` plus the 30 `pr-harden` records of the rule's live period, 2026-09-07 to 2026-09-19) — 5 applied (P1, P3 and P2 after revision, P4 as a correction, P5 from the gate) plus 2 homes the gates found, 1 killed (P3's Reporting bullet), 1 parked (P2's resolution B); net −4 lines over five files; two refutation rounds; linter 10 files, 0 findings; `gate-test.sh` 35 passed / 0 failed
+
+The window is `proposals/2026-09-23-retro-finish-rule.md`, which carries the run-by-run table of what
+FINISH did with a terminating round's non-blocking findings, the follow-up-issue census and its
+calibration. Both rules under review skipped Step 5 when they shipped (`ea574f9`'s and `0183209`'s own
+messages), so this pass was theirs as much as the proposals'. The eighth record,
+`2026-09-23-openmrs-module-chartsearchai-477`, was written at 16:58 while this pass ran, and was read
+before it committed; it bears on no proposal here.
+
+**The census, as an observation (measured 2026-09-23, `openmrs/openmrs-module-chartsearchai`).** 19
+review-loop follow-up issues filed since 2026-09-07, 17 open. Three were worked as full `resolve-ticket`
+runs — #412, #421 and #425 (`Refs`, so still open) — and two of those three PRs filed a new follow-up
+(PR427 → #429, PR428 → #430). Four more runs routed findings "to a follow-up" that nothing ever filed
+(PR410, PR417, PR426, PR470), and one wrote them into its PR body instead (PR481).
+
+**APPLIED after revision · `pr-harden` 0.27.0, `resolve-ticket` 0.18.0 — two skills said nothing is
+posted to GitHub (P1).** Bar **(c)** in each skill (`pr-harden`:1149 against its FINISH's follow-up
+issue; `resolve-ticket`:588 against its own Step 8 PR and its adjacent-defect "new ticket"), and bar
+**(a)** as well, which the proposal understated: the gate read the final reports of the four lost runs
+and each repeats `resolve-ticket`:588's line next to a follow-up list that was never filed (PR410
+*"Nothing was posted to GitHub but the commits and the description. Want me to file the two follow-up
+issues"*; PR417; PR426 *"**Nothing was posted to GitHub but the commits.**"*; PR470), plus #476:21,
+which cites the contradiction as its reason for not filing.
+- **The gate cut the proposal's rewording.** *"The PR carries N commits and no review comments"* would
+  have turned a gloss into a false standalone claim — a PR that was already ready keeps receiving the
+  GitHub App's reviews (`pr-harden`:68-70, :718-723). Both bullets now keep only the offer.
+- **A third home, found by the gate:** `ticket-pool`:325 listed what an invocation does "in your name"
+  without the follow-up issue. `ticket-pool` 0.24.1 adds it — a disclosure, since FINISH files it
+  unattended on a public repo.
+- Net **±0** in both skills, **+1** in `ticket-pool`.
+
+**APPLIED after revision · `pr-harden` 0.27.0 — FINISH files the follow-up itself (P3).** Bar **(a)**,
+four records (PR410 `…-294`:162-166, PR417 `…-409`:28/:53, PR426 `…-426`, PR470 `…-469`:18). PR417 and
+PR426 are both ticket #409 but separate runs with separate transcripts, so no double count.
+- **The draft said the cause was not established. It was, and the gates established it** from each
+  record's `transcript:` line: every report NAMED the items, and three then offered to file them or
+  declined without a go-ahead — PR410 L2101, PR426 L1729/L1777, PR470 L2250 (*"I'm not creating a
+  GitHub issue without your go-ahead"*); PR417 L1413 only named them as owed.
+- **Round 1 said all four were unattended. Round 2 measured the opposite**: all four were interactive
+  `--work` sessions with the owner present — entrypoint `cli` against the driven runs' `sdk-cli`,
+  `ledger.json`'s `launched_by: work`, and owner messages minutes from each offer (PR426's owner typed
+  a request 2m16s after its offer; PR410 was merged by the owner 3.5 min after its). The offers went
+  untaken anyway, and filing unasked is established practice (PR478's attended run filed #482).
+- **So the Reporting bullet the draft proposed was KILLED**, on **:1196-1198**'s
+  instruction-is-not-the-lever: the report was reached in all four runs, and :656 already required the
+  issue to be "named in the report". Its alternative clause (*"or that the run left no non-blocking
+  finding unimplemented"*) was also a universal, false whenever a fixer declines on the record.
+- What shipped is an instruction at the step that failed: *"file it yourself before you report, rather
+  than offering to, and name it by number in the report"*, in the same commit as P1, which removes the
+  line all four repeated. The staged diff also carried a provenance sentence naming the four as
+  having offered "unattended"; round 2 cut it as false twice over, and the corrected provenance went to
+  the commit body. Net **±0** (three lines for three).
+
+**APPLIED after revision — resolution A · `pr-harden` 0.27.0 and `pr-harden-gate.sh` — FINISH forbade
+an edit three passages still assumed (P2).** Bar **(c)**: `pr-harden`:655-657 says FINISH does not edit
+the cleared sha, while :686-688 (from `b06d6a8`) said *"this step's own non-blocking edits are pushed
+*after* the last verifier run in every case"*, :661-664 quoted that as a concession, :735 listed *"a
+nit's fix exposes a real defect"* as a FINISH event, and the gate's own block message (written by
+`ea574f9`, the same commit as the rule) called *"FINISH applying that round's non-blocking findings …
+the usual cause"*. All four deleted. The gate's clause went on a measurement, not only on consistency:
+across every transcript since 2026-09-07 its only real firing was PR478's, on a checkout sitting on
+PR465's head.
+- **The 2026-09-20 window read the stale clause as the rule** — *Wall-clock P1* (**:3507-3515**) is
+  parked on *"§7 pushes its non-blocking edits AFTER the last verifier run in the documented normal
+  case"*. That premise no longer has a home.
+- Net **−4 lines** in the skill, one clause out of the gate. `gate-test.sh` asserts allow/block only:
+  35 / 0 on the edited gate and on the original, 12 failures and exit 1 on an always-allow copy
+  (known-bad control); both edited block messages were rendered through the real hook under a temp
+  `HOME`, before and after.
+
+**PARKED · P2 resolution B — let FINISH take a non-blocking finding for one blocking-only round.** Five
+blocking objections, each cited:
+- **Its premise was false.** The draft said three runs (PR414, PR423, PR478) "took the gate's reading".
+  The gate's text appears 0 times in the PR414 and PR423 transcripts, and in PR478's only after its run
+  record, about another PR's head. What all three quoted was the skill (`pr-harden`:1221-1222 and
+  :734-737).
+- **Unscoped**, it applied at every FINISH, including after a blocking-only round, where :742-743 and
+  :112-113 route non-blocking findings to the issue — so it reopened the loop :739-741 closes.
+- **"An edit to it costs one more round" is a universal the same window refutes**: PR #465's r6-6 fix
+  introduced blocker r7-3 and a further round.
+- **Its precedent would normalise the ORCHESTRATOR editing a cleared sha**: PR414 (L1942-L1962) and
+  PR423 (L1688-L1717) wrote and committed the fixes themselves, bypassing the fresh fixer the Roles
+  table and `resolve-ticket`:554-556 require; only PR478 spawned one (L2272).
+- **Bar (c) licenses resolving the contradiction, not B's behaviour change**, and the ledger already
+  holds that question.
+**REOPEN ON:** a proposal that reopens **:2532-2534** on its records (#294:162-166, #409:28, #412:26,
+#276:28), limits the permission to a full round's findings (rounds 1-3), taken once per run by a fresh
+fixer, names the confirming round by its heading, states the cost as at least one round with PR465's
+r6-6 → r7-3 as the counter-case, and survives its own Step 5.
+
+**APPLIED as a correction · `pr-harden` 0.27.0 — the round-4 rule's PR #465 figures (P4).** Measured
+from the orchestrator transcript and `git log -S` in the chartsearchai clone, calibrated to exactly 12
+blocking findings of 38, with the record's 8 IDs among them: the 8-of-12 holds, by git rather than "by the
+findings' own attribution" (only r7-1 and r8-1 name their source). *"Four of the eight came from a
+NON-blocking prose fix … round N … N+2"* is FALSE: three trace to an edit implementing a non-blocking
+finding (r7-1 ← r6-5, r7-3 ← r6-6, r8-1 ← r5-4 then r6-6), one of those a prose fix, none N→N+2. *"13
+non-blocking prose edits"* is 13 non-blocking findings implemented, 11 of them prose. *"Runtime
+behaviour settled since round 3"* is FALSE — round 6's fixer changed executable shell and reported
+`runtime_visible: true`. The zero-findings terminating round was briefed *"An empty findings array is
+the expected, correct outcome"*, so the clause is deleted rather than kept.
+- **Bar, stated honestly:** the no-bar precedent (**:2454-2455**) covers DELETION, and this is
+  replacement text; it ships on the gate's `apply` verdict and a calibrated measurement. (The draft
+  cited **:2731**, which was applied under bar (c).)
+- **At the gate's suggestion, the other side of the same measurement is now in the text**: r6-6, a
+  non-blocking finding in the PR's own defect class whose fixer verified the hole was real, would have
+  gone to the follow-up issue unfixed under this rule.
+- Net **±0 lines**.
+
+**APPLIED from the gate · `pr-harden` 0.27.0 and `pr-harden-gate.sh` — "blocking and non-blocking alike"
+had no round scope (P5).** Bar **(c)**, found by the round-1 gate and missed by the proposals: from
+round 4 the skill routes non-blocking findings to the issue (`pr-harden`:110-113, `0183209`), while the
+FIX step (:291) and the gate's blocking>0 message (:413-416, unchanged since `b06d6a8`) still said
+"blocking and non-blocking alike" for every round. Deleted from both; rounds 1-3's non-blocking
+implementation stays stated at :110-112 and :807. Net **±0 lines**.
+
+**Round 2 — a fresh agent over the staged diff, before anything went live: ship with fixes.**
+- **P3's provenance sentence cut**, on the two blocking objections above.
+- **A residual home the proposals and round 1 both missed:** `~/.claude/pipeline/gate-state`:348-350's
+  comment said *"FINISH pushes after the last verifier run in every case"* — P2's deleted claim, in the
+  script that writes both state files. Fixed in the same commit; `py_compile` clean.
+- **The 160-character line P2(1)'s deletion left**, reflowed.
+- **`resolve-ticket`'s bump:** only `babbda7` added a rule without one; `44b382c` rewrote two commands,
+  `f31dbea` and `9f4d0da` deleted an empty fence and a blank line.
+- Every other hunk: ship, re-checked against its citations; both edited block messages rendered through
+  the real hook.
+
+**Corrections to the store and this ledger.**
+- **:2504** records *"`pr-harden` FINISH not editing the cleared sha, in all three records"*; false for
+  #379/PR414 in that same window, whose record says "applied at FINISH" and whose orchestrator committed
+  `b711bd81` after round 1 cleared `392f6c13`.
+- The windows DID count the FINISH records — as the rule working (#409 at **:2666-2667**, #276 in the
+  2026-09-14 window's *Corroborated as WORKING*, #374:25 crediting it). What none counted was the cost
+  the same records name, so **:2532-2534** stayed at 1.
+- Dated correction notes appended to `2026-09-14-openmrs-module-chartsearchai-426.md` (the "all twelve
+  implemented" line), `2026-09-21-chartsearchai-PR465.md` (*"by the findings' own attribution"*) and
+  `2026-09-13-openmrs-module-chartsearchai-409.md` (its `transcript:` path does not exist).
+
+**Parked counts (superseding earlier blocks where they differ).**
+- **A FINISH rule costing something real: 4 records** — previous 1 (**:2532-2534**): #294:162-166,
+  #276:28, #409:28, #412:26. The reopen condition was met on 2026-09-14; the proposal it produced here
+  (resolution B) is parked above with its own reopen.
+- **The round-4 rule owes its own Step 5.** It shipped without one on one record; this pass corrected
+  its figures and did not refute the rule. Its founding record carries its counter-case (r6-6), and
+  `0183209`'s *"rounds 1-3 … where every code defect in that run was found"* is false (r6-5, r6-6).
+  **REOPEN ON:** a second record where a round-4+ non-blocking finding was a real defect routed
+  unfixed, or one where the rule stopped a fixer-introduced blocker.
+- **`:734-737`'s "the description was false" read as licence to implement a non-blocking finding: 1
+  record** (PR478 L2268), against :666-667's *the body does not move the head*. **REOPEN ON:** a second.
+- **A confirming reviewer briefed that zero findings is the expected outcome: 1 record** (PR465 r9's
+  retry brief). The nearest rule is :1212-1213's *Don't brief the reviewer with what was fixed*.
+  **REOPEN ON:** a second.
+- **Wall-clock P1** (**:3507-3515**): its premise's home is deleted (P2 above). Its REOPEN asked how
+  often §7 pushes: FINISH pushed an edit to a cleared sha BEFORE ready on PR414, PR423 and PR478 — each
+  a non-blocking finding the corrected rule reads as the issue's. PR417's, PR424's and PR426's merges
+  came AFTER ready and do not count.
+- **An adjacent product defect noticed and not fixed, with nowhere durable to go:** **:532-533** reads 0
+  records; #294's report names one it never filed (*"it deserves its own issue and I have not filed
+  one"*, `171b90dd` L2101) and #374:30 another ("reported, not filed"). Recorded, not reopened here —
+  outside this window's scope.
+- **Unpushed skill commits that changed a skill without a version bump: 1 incident** — `babbda7`, one of
+  the 2026-09-23 overnight commits, added a rule to `resolve-ticket` and left it at 0.17.0. This pass's
+  bump to 0.18.0 covers it.
+- **A retro gate's own evidence being false: 1 incident** — this window's round 1 said the four
+  lost-follow-up runs were unattended; round 2 measured them interactive, before anything shipped. Not
+  **:2483-2489**'s class (that is a run reviewer's finding, and its reopen needs one that reached the
+  branch). It is the case for running a second round over the staged diff rather than applying round
+  1's revisions directly.
+- **A fixer implementing a blocking finding's DIAGNOSIS a different way than its recommendation, which
+  Termination cannot tell from a decline: 1 record** (#477:26, `did-not-converge`). **REOPEN ON:** a second.
+- **A round-4+ fixer handed a non-blocking finding anyway: 0 records, document analysis (round 2).** The
+  orchestrator's downgrade (:269-271) can produce one in any round, :372-374 (*"without that sentence
+  it is not a decline … so implement it"*) then pushes the fixer to implement it, against :112-113's
+  *"unfixed in this branch"*. Predates this diff. **REOPEN ON:** a record where it happened.
+- **The proposer not verifying its own citations: 35 cycles** — previous 34 (**:3534**): one citation cut
+  at the gate (P4's **:2731**). Six line-number slips were caught before the gate by re-reading. Refuted
+  characterisations, counted with their proposals above rather than here: P2-B's "the gate's reading",
+  P3's "cause not established", "no window counted it", and the PR426 paragraph (its round 5 returned
+  `findings: []` plus six notes, not one finding "routed nowhere"; and r2-2 was neither implemented nor
+  declined).

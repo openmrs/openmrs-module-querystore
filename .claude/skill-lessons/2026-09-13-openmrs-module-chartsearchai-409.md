@@ -65,3 +65,6 @@ CONFLICTING. rounds: 2 · verifier: ran twice (both "works at runtime")
 
 ### Assumptions review overturned
 - "the merged head is covered by the round-1 verifier run" -> a runtime verdict is a statement about one commit; re-taken on c40d95c3 and identical ({"carried": 7, "cited": 6}, [355] unanchored, all three invariants) · merge round
+
+**Corrected by the 2026-09-23 retro:** the `transcript:` path above does not exist. This run's
+transcript is `~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-openmrs-openmrs-module-chartsearchai-409/d588c8a7-f979-4583-9898-b145c0a9506e.jsonl`.

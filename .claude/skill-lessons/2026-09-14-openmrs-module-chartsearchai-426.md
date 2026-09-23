@@ -41,3 +41,11 @@ transcript: ~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-op
 ## Assumptions review overturned
 - "The remaining #409 ask that is a module defect is the per-item accusation" -> both plan-gate passes and two reviewers held that the reporter's Mode A misattribution is also a module defect, just a harder one; the PR is `Refs`, not `Fixes`, and says so.
 - "The evidence Decision 94 wanted does not exist" -> it is one comment away and the reporter is waiting; recorded as available-on-request rather than absent.
+
+**Corrected by the 2026-09-23 retro, which measured it from this run's transcript
+(`~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-openmrs-openmrs-module-chartsearchai-409/0102617e-5075-4baa-9afe-3a29fc459eab.jsonl`):**
+"twelve findings raised across five rounds, all twelve implemented" is not what it shows. The
+reviewers of rounds 1-4 returned 13 findings (4, 2, 5, 2 at L1279, L1406, L1528, L1636); round 2's
+fixer implemented `["r2-1"]` and declined none (L1444), so r2-2 was neither implemented nor declined.
+Round 5 returned `findings: []` plus notes (L1719) — the `[r5]` line above is one of them — and the
+run routed those "to a follow-up issue" and offered to file it (L1729, L1777); none was filed.

@@ -362,7 +362,7 @@ if [ "$BLOCKING" -eq 0 ]; then
         + "blocking findings, but it reported that about " + $s + ", and this worktree'"'"'s head is "
         + $h + ". The sha you hand over must be one a review round cleared -- the condition is a "
         + "property of the artifact, not a past event. Something edited the branch after the last "
-        + "review, and FINISH applying that round'"'"'s non-blocking findings is the usual cause. So "
+        + "review. So "
         + "either hand over the reviewed sha, or run one more round on this head: a FRESH reviewer "
         + "agent (a new subagent, never subagent_type \"fork\"), BLOCKING-ONLY so it terminates -- "
         + "any non-blocking finding it raises goes to a follow-up issue rather than into this branch "
@@ -411,8 +411,8 @@ fi
 jq -n --arg p "$PR" --arg r "$ROUND" --arg b "$BLOCKING" '{
   decision: "block",
   reason: ("pr-harden termination contract: round " + $r + " on PR #" + $p + " reported " + $b
-    + " blocking finding(s), so it was not the last round. Apply that round'"'"'s findings — all of "
-    + "them, blocking and non-blocking alike — commit and push to the PR branch, then run round "
+    + " blocking finding(s), so it was not the last round. Apply that round'"'"'s findings, commit and "
+    + "push to the PR branch, then run round "
     + (($r|tonumber?) + 1 | tostring) + ": a FRESH reviewer agent (a new subagent, never "
     + "subagent_type \"fork\") over the pushed head. Do NOT hand back to the user and do NOT ask "
     + "whether to continue; if you are deliberately stopping early, take the labelled override in "

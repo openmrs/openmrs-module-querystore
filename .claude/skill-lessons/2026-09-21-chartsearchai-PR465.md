@@ -103,3 +103,9 @@ One proposal was NOT applied, because REJECTED.md already killed it: a stopping 
 provenance (2026-08-24 P3, died on a walk-forward that ended a converged run as did-not-converge).
 The orchestrator had reached for it independently, which is itself evidence the rejection is worth
 keeping findable — it was found only by grepping REJECTED.md before proposing.
+
+**Corrected by the 2026-09-23 retro, which measured it:** the 8-of-12 above holds by `git log -S`
+provenance in the chartsearchai clone, not "by the findings' own attribution" — only r7-1 and r8-1 name
+the commit that introduced them. The figures `pr-harden` 0.26.0 took from this run beyond that ("four
+of the eight came from a NON-blocking prose fix", "13 non-blocking prose edits" in rounds 4-9, "runtime
+behaviour settled since round 3") were measured wrong; `REJECTED.md`'s 2026-09-23 window has the table.

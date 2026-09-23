@@ -345,9 +345,8 @@ def main() -> int:
 
     # The verifier's counterpart, and it exists for the same reason: the gate compares the head being
     # handed over against the last entry of each list, because a blocking count and a runtime verdict
-    # are both statements about a SHA and neither survives the next commit. FINISH pushes after the
-    # last verifier run in every case, so without this the "verified the merging head" rule was prose
-    # with nothing able to check it.
+    # are both statements about a SHA and neither survives the next commit. Without this the
+    # "verified the merging head" rule was prose with nothing able to check it.
     v = sub.add_parser("verified-sha", help="record the sha a verifier run covered")
     v.add_argument("sha")
 

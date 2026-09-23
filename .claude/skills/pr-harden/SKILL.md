@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.26.4
+version: 0.27.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -115,12 +115,12 @@ issue, unfixed in this branch.
 This is FINISH's own rule — *"a round that implements nits and then re-reviews can never
 converge, because a review is expected to produce nits"* — applied before FINISH rather than
 only at it, and the reason it has to start earlier is measured. On a 9-round run of
-`openmrs-module-chartsearchai` PR #465 (2026-09-21), **8 of the 12 blocking findings were
-introduced by an earlier round of that same loop**, by the findings' own attribution, and four
-of the eight came from a NON-blocking prose fix: a sentence written in round N that round N+2
-then correctly faulted. Rounds 4 to 9 spent 13 non-blocking prose edits and four prose blockers
-between them while the runtime behaviour had been settled since round 3, and the run's
-terminating round was blocking-only, returned zero findings, and was its cheapest.
+`openmrs-module-chartsearchai` PR #465 (2026-09-21), 8 of the 12 blocking findings were
+introduced by an earlier round of that same loop, and **three of them — r7-1, r7-3 and r8-1 — by
+an edit that implemented a NON-blocking finding**, which is the edit this rule stops the fixer
+making; the other five came from blocking fixes, which it does not touch. The same run carries the
+cost: r6-6, a non-blocking finding in the PR's own defect class whose fixer verified the hole was
+real, would have gone to the follow-up issue unfixed.
 
 It does not grade the findings. A blocking finding is still whatever the reviewer says it is and
 the bar is unchanged; what this bounds is the surface the FIXER is asked to touch, which is what
@@ -288,8 +288,8 @@ Record the await before spawning, clear it on the result — see **State**. Snap
 first, and tell the fixer to restore any measurement mutation **before** it reports; a fixer's intended
 edits stay, its measurement scaffolding does not.
 
-Spawn a fresh fixer. It implements **every finding it agrees with, blocking and non-blocking alike**,
-and declines the rest on the record. Its brief carries harden's Phase 1 discipline:
+Spawn a fresh fixer. It implements **every finding it agrees with**, and declines the rest on the
+record. Its brief carries harden's Phase 1 discipline:
 
 - **Trace outward** one level on each thread: trigger paths, optional dependencies absent at runtime,
   lifecycle order, state propagation across module boundaries, invalidated invariants in *unchanged*
@@ -653,15 +653,13 @@ rounds, which such a commit only ever appends to.
 ### 7 — FINISH
 
 The reviewer found nothing blocking, so this is the sha you are handing over — and **FINISH does not
-edit it.** That round's non-blocking findings go to a follow-up issue, named in the report, rather
-than into this branch.
+edit it.** That round's non-blocking findings go to a follow-up issue rather than into this branch —
+file it yourself before you report, rather than offering to, and name it by number in the report.
 
 That is the whole change from the version of this step that applied them, and the argument it
 replaces was *"those edits carry no blocking finding by construction, so no further round is owed"*.
 It graded the FINDINGS, which the reviewer saw, and not the FIXES, which did not exist when it
-looked — and this step's own rule *A runtime-visible change is not ready until a verifier has run
-against the head that will merge* concedes exactly that ("pushed *after* the last verifier run in
-every case"). The run records name what actually landed here: a whitespace normal form defined
+looked. The run records name what actually landed here: a whitespace normal form defined
 twice, a citation carve-out pinned at only two markers, an assertion that pinned nothing.
 Re-deriving the PR description is still owed and is not an exception, because the body is not in the
 tree and does not move the head.
@@ -684,11 +682,10 @@ it rather than carrying one forward.
 
 **A runtime-visible change is not ready until a verifier has run against the head that will merge.**
 Step 6 sits on the fix path, so without this a PR whose round 1 found nothing blocking would reach
-`gh pr ready` with the standalone never started — and this step's own non-blocking edits are pushed
-*after* the last verifier run in every case, so they are unverified even when a round did verify. So
-before marking ready: if the change is runtime-visible and no verifier run covers the current head,
-run one now. It is the same verifier under the same rules — it repairs the environment, never the
-artifact — and `unrepairable` aborts the run here exactly as it does inside a round.
+`gh pr ready` with the standalone never started. So before marking ready: if the change is
+runtime-visible and no verifier run covers the current head, run one now. It is the same verifier
+under the same rules — it repairs the environment, never the artifact — and `unrepairable` aborts
+the run here exactly as it does inside a round.
 
 **A PR that could not be verified is not marked ready**; report it as
 converged-but-unverified and stop.
@@ -732,9 +729,8 @@ ordering the run so the question never arises: check `git log origin/main..HEAD`
 mergeable state BEFORE marking ready, not after.
 
 **Where an edit here really is owed, it costs one more round rather than none.** A blocking finding
-turns up while you are handing over — a nit's fix exposes a real defect, `main` moved, the
-description was false — or the verifier on the merging head reports one. Implement it, and run one
-more round.
+turns up while you are handing over — `main` moved, the description was false — or the verifier on
+the merging head reports one. Implement it, and run one more round.
 
 **That confirming round is BLOCKING-ONLY, and this is what makes the rule terminate.** A round that
 implements nits and then re-reviews can never converge, because a review is expected to produce nits;
@@ -1146,8 +1142,8 @@ at the two ends instead:
   question to the user.
 - Every declined finding with its failure-mode sentence. A decline without one is not a decline.
 - Every verifier repair, with its cause — even the ones that worked.
-- What nothing posted to GitHub means in practice: the PR carries N commits and no review comments.
-  Offer to run `pr-review --post` or `--stage` once, at the end, if the user wants the record public.
+- Offer to run `pr-review --post` or `--stage` once, at the end, if the user wants the review record
+  public.
 
 ## Write the run record — always, before you finish
 

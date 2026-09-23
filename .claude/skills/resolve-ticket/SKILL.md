@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.17.0
+version: 0.18.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -585,8 +585,8 @@ One report for the whole run, in this order:
 - **The PR**, and that it is marked ready.
 - **Anything the ticket asked for that you did not do,** and why. Scope left on the table belongs in
   the report, not in a silence.
-- Nothing was posted to GitHub but the commits. Offer `pr-review <n> --post` or `--stage` once, at the
-  end, if the user wants the review record public — offer it, do not wait for an answer.
+- Offer `pr-review <n> --post` or `--stage` once, at the end, if the user wants the review record
+  public — offer it, do not wait for an answer.
 
 ## Write the run record — always, before you finish
 
