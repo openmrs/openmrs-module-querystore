@@ -15,14 +15,18 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.openmrs.module.querystore.serialization.ConceptFixtures.concept;
+import static org.openmrs.module.querystore.serialization.DateFixtures.localMidnight;
 import static org.openmrs.module.querystore.serialization.DateFixtures.utcDate;
 
+import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
+import java.util.function.Supplier;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -52,7 +56,7 @@ public class PatientRecordSerializerTest {
 		        utcDate(2018, Calendar.APRIL, 22));
 		patient.addName(name("Achieng", null, "Otieno"));
 		patient.setGender("F");
-		patient.setBirthdate(utcDate(1982, Calendar.JULY, 14));
+		patient.setBirthdate(localMidnight(1982, Calendar.JULY, 14));
 		patient.setBirthdateEstimated(false);
 		patient.setDead(false);
 		patient.addIdentifier(identifier(1,
@@ -191,6 +195,50 @@ public class PatientRecordSerializerTest {
 		assertNull(doc.getMetadata().get("birthdate"));
 		assertNull(doc.getMetadata().get("birthdate_estimated"));
 		assertNull(doc.getMetadata().get("age_years"));
+	}
+
+	// A DATE column reaches the serializer as the local midnight of the JVM zone JDBC read it in,
+	// not as the UTC-noon instant utcDate builds, so these tests build their values after pinning
+	// a zone east of UTC — the shape that moved a birthdate one day back (#81).
+	@Test
+	public void serialize_birthdateAtLocalMidnightEastOfUtc_rendersTheDateItHolds() {
+		QueryDocument doc = serializeBornIn("Africa/Nairobi",
+		    () -> Timestamp.valueOf("1962-09-21 00:00:00"));
+
+		assertEquals("Patient: Helen Roberts. Female. Born 1962-09-21", doc.getText());
+		assertEquals("1962-09-21", doc.getMetadata().get("birthdate"));
+	}
+
+	@Test
+	public void serialize_birthdateAtLocalMidnightFarEastOfUtc_rendersTheDateItHolds() {
+		// Kiritimati has been UTC+14 only since 1995, so the date must be recent to be east of UTC.
+		QueryDocument doc = serializeBornIn("Pacific/Kiritimati",
+		    () -> Timestamp.valueOf("2015-06-14 00:00:00"));
+
+		assertEquals("2015-06-14", doc.getMetadata().get("birthdate"));
+	}
+
+	@Test
+	public void serialize_birthdateAsSqlDate_rendersTheDateItHolds() {
+		QueryDocument doc = serializeBornIn("Africa/Nairobi", () -> java.sql.Date.valueOf("1962-09-21"));
+
+		assertEquals("Patient: Helen Roberts. Female. Born 1962-09-21", doc.getText());
+		assertEquals("1962-09-21", doc.getMetadata().get("birthdate"));
+	}
+
+	private QueryDocument serializeBornIn(String zone, Supplier<Date> birthdate) {
+		TimeZone original = TimeZone.getDefault();
+		TimeZone.setDefault(TimeZone.getTimeZone(zone));
+		try {
+			Patient patient = patient("p-uuid", utcDate(2018, Calendar.APRIL, 22));
+			patient.addName(name("Helen", null, "Roberts"));
+			patient.setGender("F");
+			patient.setBirthdate(birthdate.get());
+			return serializer.serialize(patient);
+		}
+		finally {
+			TimeZone.setDefault(original);
+		}
 	}
 
 	@Test
