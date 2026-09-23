@@ -3783,3 +3783,7 @@ and revised all three, so the bar this window was exercised by REVISION, not by 
 **Gate-side effect, undone:** the gate's probe `gate-state --cwd /nonexistent-x await --only pr x`
 wrote an `awaiting` entry into `~/.claude/pr-harden-state.json`; it cleared it with `clear --only pr`,
 and this pass re-checked that no key containing `nonexistent` remains.
+
+**Not in this window:** `…-494.md` (21:33) and `…-496.md` (21:42) were written by the pool after this
+window was read, and are mirrored unread. They open the next window; `LAST` holds a date, so a pass
+starting from it re-reads this day and must skip the seven records above.
