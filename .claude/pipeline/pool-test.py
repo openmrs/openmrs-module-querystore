@@ -627,6 +627,42 @@ def test_gate_state_locking(tmp: Path) -> None:
           not survived and hd.get("awaiting") == [] and hd.get("override") is False, str(hd))
     check("and does not measure against the previous run's head",
           "no head from an earlier cycle" in got, got.strip())
+    # An UNSTAMPED predecessor is replaced too, and this is the case the first version exempted.
+    # Reading an absent id as "adoptable in place" put the sixth defect straight back: every entry
+    # written before the id existed has no id, so its `awaiting` merged into the new run and
+    # allowed a stop on that run's own `phase1: open`.
+    sh([sys.executable, str(helper), "clear", "--only", "harden"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "31313", "harden-set", "--cycle", "1",
+        "--phase1", "converged", "--phase2", "done", "--count-edits"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "31313", "await", "a dead run's agent",
+        "--only", "harden"], cwd=repo, env=env)
+    sh([sys.executable, str(helper), "--owner", "41414", "--run", "C", "harden-set", "--cycle", "1",
+        "--phase1", "open", "--count-edits"], cwd=repo, env=env)
+    hd = json.loads((home / ".claude/harden-state.json").read_text())[key]
+    check("an entry with NO run id is replaced, awaiting and all",
+          hd.get("phase1") == "open" and hd.get("phase2") == "pending"
+          and hd.get("awaiting") == [] and hd.get("run") == "C"
+          and "override_reason" not in hd, str(hd))
+
+    # An empty id is shared by every run and reads to the gate as no id at all, which puts a
+    # verdict-less write back in the legacy branch where `edits: 0` allows. It is also what quoting
+    # an unset shell variable produces, which is the correction a run reaches for first.
+    snap = (home / ".claude/harden-state.json").read_text()
+    bad = sh([sys.executable, str(helper), "--run", "", "harden-set", "--cycle", "1",
+              "--phase1", "open", "--count-edits"], cwd=repo, env=env)
+    check("an empty --run is refused rather than written",
+          bad.returncode != 0 and "non-empty" in bad.stderr, bad.stderr[-140:])
+    check("and the refusal leaves the entry alone",
+          (home / ".claude/harden-state.json").read_text() == snap)
+
+    # The printed line has to agree with the gate about what LEGACY means, because the skill tells
+    # the run to trust it: keyed on the verdict alone it announced the zero-edit rule to a
+    # run-stamped entry the gate was blocking for having stated no verdict.
+    got = sh([sys.executable, str(helper), "--run", "D", "harden-set", "--cycle", "1",
+              "--count-edits"], cwd=repo, env=env).stdout
+    check("a run-stamped entry with no verdict is not reported as LEGACY",
+          "LEGACY" not in got, got.strip())
+
     # An `await` creates this entry as readily as a `harden-set` does, and that is the path the
     # sixth defect came in on, so the boundary has to hold there too.
     sh([sys.executable, str(helper), "--owner", "31313", "--run", "A", "harden-set", "--cycle", "1",
@@ -1045,7 +1081,11 @@ def test_skills_commands_run(tmp: Path) -> None:
     sh(["git", "add", "-A"], cwd=repo)
     sh(["git", "commit", "-qm", "seed"], cwd=repo)
 
-    skills = Path.home() / ".claude/skills"
+    # The REPO's skills, not `~/.claude`'s. Reading the installed copy meant this suite validated
+    # a file the commit under test had not changed: six invocations that cannot run went green,
+    # and only syncing the install afterwards turned it red. Repo-vs-installed drift is
+    # `parity_problems`' job; this test's job is the file being committed.
+    skills = HERE.parent / "skills"
     found = []
     for name in ("resolve-ticket", "pr-harden", "harden", "ticket-pool"):
         text = (skills / name / "SKILL.md").read_text()

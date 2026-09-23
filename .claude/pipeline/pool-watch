@@ -169,13 +169,17 @@ def print_live(show_all: bool = False) -> int:
         # `cycle` alone is not worth a line: an entry created by `await --only harden` carries no
         # cycle, no phase and no count, and printing `harden: cycle=None` for it is noise where
         # nothing printed before.
-        if h.get("phase1") or h.get("edits") is not None:
+        if h.get("phase1") or h.get("run") or h.get("edits") is not None:
             bits = [f"cycle={h.get('cycle')}"]
+            if h.get("run"):
+                bits.append(f"run={h['run']}")
             if h.get("phase1"):
                 bits.append(f"phase1={h['phase1']}")
                 bits.append(f"phase2={h.get('phase2', 'pending')}")
+            elif h.get("run"):
+                bits.append("no verdict recorded yet")
             else:
-                bits.append("LEGACY (no phase1: held to the zero-edit rule)")
+                bits.append("LEGACY (no run id, no phase1: held to the zero-edit rule)")
             if h.get("edits") is not None:
                 bits.append(f"edits={h['edits']}")
             if h.get("override"):

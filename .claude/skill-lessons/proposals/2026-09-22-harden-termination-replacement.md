@@ -1,6 +1,6 @@
 # proposal · replace `/harden`'s zero-edit termination · drafted 2026-09-22
 
-status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.37.0, `pr-harden` 0.26.3,
+status: **EXECUTED 2026-09-22, repaired 2026-09-23.** `harden` 0.38.0, `pr-harden` 0.26.3,
 `resolve-ticket` 0.17.0,
 `hooks/harden-cycle-gate.sh`, `pipeline/gate-state`, and both test nets. The order's six sites, plus
 two it did not enumerate (Phase 2's own stopping gate, which told it to run to convergence, and the

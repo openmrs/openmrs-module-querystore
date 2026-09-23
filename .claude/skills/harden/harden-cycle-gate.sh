@@ -336,7 +336,8 @@ fi
 jq -n --arg c "$CYCLE" --arg w "$WHAT" --arg d "$DO" '{
   decision: "block",
   reason: ("harden termination contract: " + $w + ". " + $d + ", via `gate-state --owner $PPID "
-    + "harden-set --cycle " + $c + " --phase1 <open|converged> [--phase2 done] "
+    + "--run <this run'"'"'s id> harden-set --cycle " + $c
+    + " --phase1 <open|converged> [--phase2 done] "
     + "--count-edits`. Do NOT hand back to the user and do NOT ask whether to continue; if you are "
     + "deliberately stopping early, take the labelled override in the skill'"'"'s Termination "
     + "section and set override:true in ~/.claude/harden-state.json so the deviation is on the "

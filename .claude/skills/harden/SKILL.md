@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.37.0
+version: 0.38.0
 ---
 
 # Harden
@@ -347,8 +347,8 @@ the gate cannot tell your entry from one a co-located run left in the same direc
 **State** section carries that reasoning as well:
 
 ```bash
-~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN await "phase2 quality" --only harden
-~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN clear-await --only harden
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 await "phase2 quality" --only harden
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 clear-await --only harden
 ```
 
 Drop `--only harden` and it writes BOTH gates' entries, which is what a `/harden` cycle nested inside
@@ -360,27 +360,34 @@ which is what the gate exists to prevent, so the gate's allow is bounded by an h
 has not returned inside it is treated as dead rather than outstanding.
 
 ```bash
-# ONCE, at the top of the run: mint an id for it, and pass it on every write below.
-HARDEN_RUN="$PPID-$(date +%s)"
+# ONCE, at the top of the run: pick an id for it — any string unique to this run — and use the same
+# LITERAL on every write below. NOT a shell variable: shell state does not survive between tool
+# calls, so it would be unset at the point of use, and unquoted an unset one makes `--run` swallow
+# the next argument and the write fail — which is the gate's fail-OPEN case, so the contract would
+# simply never engage. State the id in your report, so you retype it rather than re-derive it.
+# `harden-1758600000` here is an example; use your own.
 
 # after a Phase 1 pass that found something substantive:
-~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 1 --phase1 open --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 1 --phase1 open --count-edits
 # after the Phase 1 pass that found nothing substantive:
-~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 1 --phase1 converged --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 1 --phase1 converged --count-edits
 # after a Phase 2 that found only polish — this is what ends the run:
-~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 1 --phase1 converged --phase2 done --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 1 --phase1 converged --phase2 done --count-edits
 # after a Phase 2 that ESCALATED — that resumes Phase 1, so it is a Phase 1 write and nothing else:
-~/.claude/pipeline/gate-state --owner $PPID --run $HARDEN_RUN harden-set --cycle 2 --phase1 open --count-edits
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 harden-set --cycle 2 --phase1 open --count-edits
 ```
 
 **`--run` is what makes this checkout's leftovers yours to ignore.** Nothing clears the entry between
-interactive runs, and SIX allow-direction defects came out of one field or another surviving that
+interactive runs, and FIVE allow-direction defects came out of one field or another surviving that
 boundary — a `phase2: done`, an `escalated`, an unrecognised value, a whole terminal verdict, and
 finally an `awaiting` from a run that had died, which allowed the stop on `phase1: open`, the
 strictest block there is. Five were closed one rule at a time and the fifth closure was a list of
 five field names to drop; the sixth got in through the name nobody listed. A write whose `--run`
-differs from the entry's now REPLACES it, so the default is *drop unless this run wrote it* and a
-field added later cannot become a seventh leak. It is not `--owner`, which answers whether a live
+differs from the entry's — or that carries no id at all — REPLACES it, so the default is *drop
+unless this run wrote it*, and what a field added later inherits is nothing rather than everything
+absent from a list. The first version of this exempted an entry with no id, on the reading that an
+absent id means adoptable; that put the same `awaiting` back through the same door, because every
+pre-0.37 entry has no id. It is not `--owner`, which answers whether a live
 foreign session holds this checkout — a different question, one a resume changes and a run id does
 not, and conflating them is what left the same-pid corner this replaces.
 
@@ -399,10 +406,9 @@ fresh entry that is nothing, and the gate reads a `phase1`-less entry as one a `
 this contract wrote and holds it to the zero-edit rule — a forgotten flag then costs you the passes
 this change removed, which is the safe direction to be wrong in but not a free one. On an entry that
 already carries a verdict, a bare write keeps it, so **do not use one to refresh the count**: say the
-verdict every time. Across runs this is handled for you — a write whose `--owner` differs from the
-entry's drops the previous run's verdict, count and head before recording yours — but that guard
-needs `--owner`, which is the other reason to pass it. `gate-state` says so on the line it
-prints. `--cycle` is a label on the traversal and nothing reads it as a number — advance it on an
+verdict every time. Across runs this is handled for you by `--run`, which replaces the whole entry
+rather than dropping fields from it — NOT by `--owner`, which answers a different question and whose
+drop is gone. `gate-state` says which it did on the line it prints. `--cycle` is a label on the traversal and nothing reads it as a number — advance it on an
 escalation if you like, but the gate does not care and the edit measurement tolerates it staying
 put, which is why the hook hands back whatever the entry already has.
 

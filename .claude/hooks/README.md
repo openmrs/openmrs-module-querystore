@@ -6,7 +6,8 @@ gate running old logic, which is why `skill-retro` Step 6 requires `cmp` across 
 
 - `harden-cycle-gate.sh` — Stop hook. Enforces `harden`'s termination contract (Phase 1 converges,
   then one Phase 2 pass) and refuses an unattended yield with an agent outstanding. An entry written
-  before 0.34.0 carries no `phase1` and is still held to the zero-edit rule it was written under.
+  before 0.34.0 carries neither a run id nor a verdict and is still held to the zero-edit rule it
+  was written under.
   Also carried in `.claude/skills/harden/`.
 - `pr-harden-gate.sh` — Stop hook. Same, for `pr-harden`'s phase/blocking contract. Also carried in
   `.claude/skills/pr-harden/`.

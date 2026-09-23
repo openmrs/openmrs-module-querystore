@@ -123,6 +123,18 @@ class Held:
         self.fh.close()
 
 
+def _run_id(value: str) -> str:
+    """A run id that is actually one. Empty is the dangerous value, not merely a useless one: every
+    run shares it, so no write ever replaces another, and the hook's `.run // empty` reads it as no
+    run at all -- which puts a verdict-less write back in the legacy branch, where `edits: 0`
+    allows. It is also the value a run reaches for after quoting an unset shell variable."""
+    if not value.strip():
+        raise argparse.ArgumentTypeError(
+            "--run needs a non-empty id; an empty one is shared by every run and reads to the gate "
+            "as no run at all")
+    return value
+
+
 def adopt(entry: dict, run: str | None) -> None:
     """Make `entry` belong to `run`, replacing it wholesale if it belonged to another.
 
@@ -133,7 +145,14 @@ def adopt(entry: dict, run: str | None) -> None:
     """
     if run is None:
         return
-    if entry.get("run") not in (None, run):
+    # NOT `not in (None, run)`. Treating an absent id as adoptable-in-place is how the sixth defect
+    # came back a seventh time: a predecessor that stamped no `run` -- every 0.34.0-0.36.0 entry,
+    # and any write that omitted the flag -- was merged into rather than replaced, and its
+    # `awaiting` allowed a stop on the new run's `phase1: open`. An entry this run did not stamp is
+    # not this run's, whatever else is true of it. Every documented write now carries `--run`, so
+    # the only thing this can discard is somebody else's; the failure direction if one is missed is
+    # a lost `awaiting`, which BLOCKS a yield rather than allowing a stop.
+    if entry.get("run") != run:
         entry.clear()
     entry["run"] = run
 
@@ -234,7 +253,7 @@ class _Parser(argparse.ArgumentParser):
 def main() -> int:
     ap = _Parser(description=__doc__.splitlines()[0])
     ap.add_argument("--cwd", default=None, help="the tenant key; defaults to the working directory")
-    ap.add_argument("--run", default=None,
+    ap.add_argument("--run", default=None, type=_run_id,
                     help="this RUN's id, minted once at the top of the run and passed on every "
                          "write it makes. A write whose --run differs from the harden entry's "
                          "REPLACES that entry, so a new run in a reused checkout inherits nothing "
@@ -362,7 +381,7 @@ def main() -> int:
         elif args.cmd == "harden-set":
             e = held.entry("harden")
             # A DIFFERENT run REPLACES this entry. Nothing clears it between interactive runs, and
-            # SIX allow-direction defects came out of one field or another crossing that boundary:
+            # FIVE allow-direction defects came out of one field or another crossing that boundary:
             # a `done`, an `escalated`, an unrecognised value, a whole terminal verdict picked up by
             # a write that omitted `--phase1`, and finally an `awaiting` from a run that had died,
             # which allowed the stop on `phase1: open` -- the strictest block in the contract.
@@ -380,6 +399,13 @@ def main() -> int:
             # answers "is this the same run", which a resumed session does not. An UNSTAMPED write
             # (no `--run`) replaces nothing, because it cannot tell whose entry this is -- the same
             # reason the gate relaxes nothing for an entry with no `owner`.
+            #
+            # Read the predecessor's identity BEFORE adopting. The head test below used to compare
+            # `e["run"]` against `args.run` after this line had written one into the other, so its
+            # `--run` arm could never answer no -- replacing it with the literal `True` left both
+            # suites green. It was masked, not harmless: `adopt`'s clear removes the head as well,
+            # so the right answer arrived for the wrong reason and the guard was dead.
+            prev_run, prev_owner = e.get("run"), e.get("owner")
             adopt(e, args.run)
             note = ""
             if args.count_edits:
@@ -402,10 +428,16 @@ def main() -> int:
                 # and is the fallback for a caller that stamps no run, because demanding `run` here
                 # silently cost every such caller the commit half of its count -- which is the
                 # regression this guard was last repaired for, arriving by the other door.
-                same_run = (e.get("run") == args.run if args.run is not None
-                            else (args.owner is not None and e.get("run") is None
-                                  and e.get("owner") == args.owner))
-                prev = (e.get("head") if (same_run and isinstance(e.get("cycle"), int)
+                # With `--run`, `adopt` above has emptied the entry unless this run wrote it, so a
+                # head still present is this run's by construction. The comparison that used to be
+                # here tested a value `adopt` had just written, could never answer no, and survived
+                # being replaced by the literal `True` in both suites -- dead, and reading as a
+                # guard. Without `--run` there is no run identity, and `owner` is the fallback with
+                # the same-pid corner it has always had.
+                own_head = (args.run is not None
+                            or (args.owner is not None and prev_run is None
+                                and prev_owner == args.owner))
+                prev = (e.get("head") if (own_head and isinstance(e.get("cycle"), int)
                                           and args.cycle >= e["cycle"]) else None)
                 edits, note = count_edits(key, prev)
             elif args.edits is None:
@@ -454,14 +486,27 @@ def main() -> int:
             # a `phase1` the entry already carried and the gate was already holding the run to --
             # and the skill leans on this line ("`gate-state` says so on the line it prints"), so a
             # run that believed it would drive `edits` to 0 and be blocked anyway.
-            phased = "phase1" in e
-            print(f"cycle {args.cycle}: "
-                  + (f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')} " if phased else "")
+            # LEGACY is no run AND no verdict, which is what the hook branches on. Keyed on the
+            # verdict alone this told a run with a stamped id that it was held to the zero-edit
+            # rule while the gate was blocking it for having stated no verdict -- and the skill
+            # tells the run to trust this line.
+            # Three states, not two, and the middle one is what crashed this line when the LEGACY
+            # test was widened without widening the format beside it: a run-stamped entry that has
+            # stated no verdict has no `phase1` to print. The writer is the only writer of this
+            # file, so an exception here loses the write entirely -- the lock deliberately persists
+            # nothing on the way out -- which is a worse failure than the wrong word it was fixing.
+            if "phase1" in e:
+                where = f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')} "
+            elif "run" in e:
+                where = "no verdict recorded yet "
+            else:
+                where = ""
+            print(f"cycle {args.cycle}: " + where
                   + f"edits={edits}" + (" OVERRIDE" if args.override else "")
                   + (f" [{note}]" if note else "")
-                  + ("" if phased else
-                     " [no phase1 on this entry: it is a LEGACY entry, so the gate holds this run"
-                     " to the zero-edit rule rather than to Phase 1's verdict]"))
+                  + ("" if ("phase1" in e or "run" in e) else
+                     " [no run id and no phase1 on this entry: it is a LEGACY entry, so the gate"
+                     " holds this run to the zero-edit rule rather than to Phase 1's verdict]"))
 
         elif args.cmd == "await":
             for w in which[args.only]:

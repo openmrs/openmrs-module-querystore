@@ -103,9 +103,10 @@ run_case "phase1 open but STALE -> allow" allow \
 run_case "no cycle number -> still blocks" block \
   "{\"phase1\":\"open\",\"ts\":$NOW}"
 
-# ...and the command it hands back must be RUNNABLE. `--cycle` is required by the writer, so the
-# first repair — omitting the flag when there was no number — swapped an unparseable argument for a
-# missing one, and a case asserting only `block` could not tell. This one reads the text.
+# ...and the command it hands back must be RUNNABLE. `--cycle` is required by the writer, and an
+# early repair that omitted the flag when there was no number swapped an unparseable argument for a
+# missing one; the hook resolves the cycle to 1 instead and always emits the flag. A case asserting
+# only `block` could not tell the two apart, so these read the text.
 run_cmd_case() { # name expected_substring entry_json
   local name="$1" want="$2" entry="$3" work="$TMP/work"
   mkdir -p "$work"; rm -rf "$TMP/.claude/pipeline/unattended"

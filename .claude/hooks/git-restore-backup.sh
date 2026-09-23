@@ -27,7 +27,8 @@
 # harden run reports as its edit count, fabricating an edit, and it would be invisible to the
 # `git diff | shasum` residue guard, which does not report untracked paths. That count stopped being
 # what the gate reads at harden 0.34.0 -- so a fabricated edit no longer demands another cycle, but
-# it still corrupts the figure the run is obliged to report, and on a pre-0.34 entry it does both.
+# it still corrupts the figure the run is obliged to report, and on a pre-0.34 entry (no run id and
+# no verdict, the one shape still judged on the count) it does both.
 #
 # This does NOT replace "commit before you probe" — that is what makes the restore correct in the first
 # place, and it remains the rule. This is the net under it.

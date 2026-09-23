@@ -450,8 +450,8 @@ run with four agents live. That is what `gate-state`'s default scope is for — 
 command writes both**, so the pair cannot come apart the way two commands could:
 
 ```bash
-~/.claude/pipeline/gate-state --owner $PPID await "harden phase 2"
-~/.claude/pipeline/gate-state --owner $PPID clear-await
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 await "harden phase 2"
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 clear-await
 ```
 
 Clear it in both **at the end of this step, and when a harden cycle dies or takes its labelled
@@ -460,9 +460,9 @@ hour-long TTL while Step 8 runs.
 
 **Then confirm `harden` left its own state entry finished**, because two Stop gates are now live in
 this run and both must allow the turn to end. `~/.claude/harden-state.json` must say `phase1: converged` with
-`phase2: done` for this repo, or `override: true` if it took the labelled override. An entry with no
-`phase1` at all is one written by a `/harden` older than that contract, and there the finished state
-is still `edits: 0`. A `harden` run that was interrupted
+`phase2: done` for this repo, or `override: true` if it took the labelled override. An entry with neither a
+`run` id nor a `phase1` is one written by a `/harden` older than that contract, and there the
+finished state is still `edits: 0`. A `harden` run that was interrupted
 leaves the entry saying a phase is owed (or, on a legacy entry, `edits > 0`), and that then blocks the
 end of *this* run even after the review loop has converged — a wedge with nothing wrong with the PR, cleared only by the 6-hour expiry. Check it
 here, where it is one line, rather than discovering it after the loop.

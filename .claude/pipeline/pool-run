@@ -2483,8 +2483,14 @@ def clear_gate_state(path: Path, say) -> list[str]:
             # not `in`, so the three readers of this entry agree on `phase1: ""`.
             if not e.get("phase1") and e.get("edits") is None:
                 return f"cycle={e.get('cycle')} no verdict and no count recorded"
-            phases = (f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')}"
-                      if e.get("phase1") else "LEGACY (no phase1: zero-edit rule)")
+            # LEGACY is no run AND no verdict, matching the hook. A run-stamped entry with no
+            # verdict is a run that owes one, not one held to an edit count.
+            if e.get("phase1"):
+                phases = f"phase1={e['phase1']} phase2={e.get('phase2', 'pending')}"
+            elif e.get("run"):
+                phases = f"run={e['run']} no verdict recorded"
+            else:
+                phases = "LEGACY (no run id, no phase1: zero-edit rule)"
             return f"cycle={e.get('cycle')} {phases} edits={e.get('edits')}"
         return (f"phase={e.get('phase')} blocking={e.get('blocking')} "
                 f"pr={e.get('pr')} round={e.get('round')}")
