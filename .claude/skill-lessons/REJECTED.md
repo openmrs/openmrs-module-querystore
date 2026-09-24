@@ -4147,3 +4147,39 @@ overwrite. The three `-driver.md` files each hold one capture. **REOPEN ON:** a 
   `harden`:489 followed late, not a new lesson.
 - 1 record: `gate-state` has no remove subcommand; an entry written with placeholder values was removed
   by hand under the lock (#514:27, no harm).
+
+## 2026-09-24 (sixth window of the day: 2 run records — #512/PR525, #515 driver capture) — 0 proposed, 0 applied, 0 killed, parked below; no refutation round (nothing to refute); linter 10 files, 0 findings
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except these two,
+local-only. No other file changed since `c37a8e7`, so no earlier window's record is re-counted.
+
+**#515 is not skill evidence.** The driver capture says `claude -p` exited 1 with an empty `.err`. The
+stream's last lines (`logs/20260924T102400Z-…-515.jsonl`) are an `api_retry` and then *"API Error: No
+response from API (waited 4m, then 10m on the retry)"* (`is_error: true`, 95 turns, 2666s). That was
+mid-Step 5 (the last tool call edits the REST controller after *"New test is green"*). The gate entry
+it left (`phase=building`) is what `claim_slot`'s clear from the fifth window (P5) exists for.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 8 records** (+#512: one escalation, a preview
+  test that could not tell a read of the focused chart from a literal ABSENT, one Phase 1 pass). That
+  escalation caught a real defect, which is the park's REOPEN ON condition read the other way. Unchanged.
+- **Prose the change made false, found by a fresh agent: 8 records** (+#512 r2: the PR body's "on both
+  paths", description-only, non-blocking). A second false PR-body claim ("each new test failed before
+  the production change") was the author's own self-reread, so it does not count here. None reached
+  a merged head. REOPEN unchanged.
+- **main moving under a run: 4 records** (+#512: ADR 116 taken by #523 between branch cut and ADR
+  write, renumbered to 117 before the PR, 0 cost). #514 hit the same collision with the same PR. It
+  still has not cost a round. REOPEN unchanged.
+
+**Parked, 1 record each.**
+- A verification the ticket's comment mandated (standalone + loopback) was missing from the PR, and
+  was blocking at r1 (#512:16). Cost: one verifier run, no code round. `resolve-ticket`:165 already
+  makes the comments mandatory reading. What the run missed was carrying the comment's verification
+  into the PR, not reading it. **REOPEN ON:** a second record, or one that cost a code round.
+- No documented recipe for loopback capture of the LOCAL engine (#512:21). The verifier improvised a
+  wrapper at `appdata/chartsearchai/bin/llama-server` and a raw-TCP proxy, which worked first try.
+  This belongs with #438's substitute-instrument park: a verifier building its own instrument, and
+  twice now it did not cost a round. **REOPEN ON:** an improvised instrument that fails or costs a round.
+- A run killed by an API no-response timeout (#515). It is infrastructure, and so is the
+  usage-limit park (2 records), but the mechanism differs. #369:66's per-agent 429/529 deaths are a
+  third shape. **REOPEN ON:** a skill-side lever, e.g. a resume that the driver could offer.
