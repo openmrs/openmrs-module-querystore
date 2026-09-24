@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.21.0
+version: 0.21.1
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -77,7 +77,9 @@ nobody will notice.
 work — see **State** in `pr-harden`, which owns the format. From that moment `pr-harden-gate.sh`
 refuses to let the turn end until the head being handed over has been reviewed with zero blocking
 findings — and verified, where any verifier ran — or an override is recorded. That is what makes the
-run unattended rather than merely intended to be.
+run unattended rather than merely intended to be. It refuses a yield on a backgrounded build or Monitor
+too, so wait inside the turn with `pr-harden`'s bounded foreground loop (*And this session must not
+busy-wait either*) — #273, #429.
 
 Two obligations come with it. On any abort above, **write the override into the state entry with its
 reason** — an abort that leaves `blocking > 0` behind wedges the next turn in this repo until the

@@ -4262,3 +4262,41 @@ Proposals and the gate's reply: `proposals/2026-09-24-window-394-429.md`.
 **Parked, 1 record each.**
 - A harden P2 lens finding a new parenthetical restated what moved rather than why (#394:12, one polish
   commit). No cost beyond polish.
+
+## 2026-09-24 (ninth window of the day: 2 run records — #273/PR533, #430/PR532, both converged) — 2 proposed, 1 applied after revision, 1 parked by the refuter; one refutation round; linter 10 files, 0 findings
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except
+`…-273.md` and `…-430.md` (local-only). Proposals and the gate's reply:
+`proposals/2026-09-24-window-273-430.md`.
+
+- **P2 APPLIED after revision (resolve-ticket 0.21.1): the autonomy contract points at `pr-harden`'s
+  bounded foreground wait.** Closes the eighth window's park *Orchestrator yield on a background
+  build/Monitor refused by the Stop gate, AFTER pr-harden 0.30.0* on its own REOPEN ON ("a second
+  post-0.30.0 record"): #429:18 and #273:21 (resolve-ticket Step 6, under 0.21.0). resolve-ticket had no
+  waiting guidance, and the rule lived only in `pr-harden`. Revised per the gate: #429 names no step, so
+  the sentence sits in *The Stop gate covers the whole run*, not Step 6. Net +2 lines, a pointer rather
+  than a restatement. **Still not edited, reported to the owner:** `~/.claude/CLAUDE.md`'s *Wait on a
+  condition* still steers to `run_in_background` + the completion notification.
+
+**Parked by the refuter.**
+- **pr-harden step 1's identical-head guard omits the blocking PR-description fix: 2 records / 0 cost**
+  (PR393:40-46, #273:23). Re-proposed as bar (c). Killed back to this park on :1972-1980's ruling (a gap,
+  not a contradiction). The guard fired and was resolved at no cost. REOPEN ON unchanged. Readmission
+  wording is in the proposals file.
+
+**Parked counts advanced.**
+- **Prose the change made false, found by a fresh agent: 11 records** (+#273 harden P2 c1: "PR #271"
+  called an issue, "the display name is not a match at all", "json is the DEFAULT format" at 9 homes, and
+  r2's PR body "Not done here" listing r1's work as undone, blocking, 1 round). REOPEN unchanged.
+- **Phase 2 escalating repeatedly on the run's own fixes: 11 records** (+#273 one escalation, +#430 one
+  escalation, each on a real substantive finding). REOPEN unchanged.
+
+**Parked, 1 record each.**
+- An author's control measured on `main` confounded by an unrelated later change (#296's trim), and
+  re-measured on the historical sha (#273:8). Caught at the gate pre-code, one throwaway run. It is
+  related to the eighth window's other-sha park (#394) but is the author's own control, not a ticket's
+  measurement. **REOPEN ON:** a second record.
+- A background root build started before the last edits landed, killed and re-run (#273:21, one stale
+  build). **REOPEN ON:** a second record.
+- The author's own mutation probe blind to a case it claimed to cover (#430:9, :14 — the spelling sort
+  cannot flip 0.5/5), found by harden P2, 1 cycle. **REOPEN ON:** a second record.
