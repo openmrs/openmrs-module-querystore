@@ -4006,3 +4006,33 @@ pass that opened #505 as a consolidation).
   already addressed by `99594f1` and `669b906`. None of the six 0.29.0 records mention it.
 - 1 record each: an unfilled PLAN_PLACEHOLDER in a refuter brief (#469:21); a refuter's own doc-sweep
   list incomplete (#433:23); main took the ADR decision number mid-run (#477:30).
+
+## 2026-09-24 (second window of the day: 2 run records — #438/PR517, #454/PR518, both pool-launched 02:55:52Z, 52s after `dcafb6c`) — 0 proposed, 0 applied, 0 killed, parked below; no refutation round (nothing to refute); linter 10 files, 0 findings
+
+Both transcripts carry the 0.30.0 / 0.42.0 / 0.20.0 text (`run_in_background: false` 3 times each, the
+2026-09-20 *"neither exists in the harness"* sentence 0 times), so these are the first two records under
+`dcafb6c`. **Its P1/P2, read against them:** every `Agent` tool_use passes `"run_in_background":false`
+(22 and 24 occurrences over 11 and 13 `Agent` calls), and the gate's refusal strings (`ended your turn`,
+`is mid-run and has not`) occur 0 times in either. Two records, both unattended; not yet a window.
+
+**Parked.**
+- **Prose the change itself made false, found by a fresh agent rather than the author's sweep: 3 records**
+  — #433:23 (parked above as a refuter's incomplete doc-sweep list), #438 (gate: ADR 101 paragraph; harden
+  P2: ADR "one delta becomes one frame" x2; r1: test javadoc, cost one blocking-only round), #454 (harden
+  P2: "is what every OVERSIZED case asserts", two further homes found only by the second Phase 2). Bar (a)
+  is met but no remedy is: `harden`:497 and `pr-harden` *Correcting a claim means finding every home of
+  it* already prescribe the subject enumeration, and the fresh agents caught every instance before merge.
+  More prose on a rule that exists is the class the previous entry declined. **REOPEN ON:** a mechanical
+  lever (a check a script can run), or a record where such prose reached a merged head.
+- **main moving under a run: 2 records** — #477:30 (took the ADR decision number), #438 (moved between
+  the first read and branching from `origin/main`; a script's anchor assert caught it, cost one re-read).
+  Different shapes, both cheap, both caught by an existing assert. **REOPEN ON:** one that cost a round.
+- **Verifier "could not determine" on the local instrument, settled by a substitute instrument: 1 record**
+  (#438: llama-server emits whole UTF-8 per delta; a fake OpenAI-compatible server behind the remote engine,
+  with a pre-fix positive control, reproduced the split). `pr-harden` FINISH's "could not determine stops
+  as converged-but-unverified" was avoided, not contradicted.
+- **Plan going past the ticket's recommended fix when measurement shows it misses the ticket's own
+  regression: 1 record** (#454: the ticket's 16 MiB literal left its own mutation 11/0 green; handled as an
+  assumption, the gate accepted it).
+- #438's r2 note (token/preliminary separation unpinned) went unfixed, which is what `pr-harden` :115-118
+  prescribes for a blocking-only round's notes — not a defect.
