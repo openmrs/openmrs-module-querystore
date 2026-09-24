@@ -4061,3 +4061,38 @@ Both transcripts carry the 0.30.0 / 0.42.0 / 0.20.0 text (`run_in_background: fa
   named. REOPEN unchanged.
 - 1 record each: a ticket's stated mutation not reaching the row it names, refuted by measurement at 0
   cost (#408); harden's full cycle as a fixed cost on a 2-line change, lenses under a minute each (#408).
+
+## 2026-09-24 (fourth window of the day: 2 run records — #513 (aborted, no PR), #516/PR522) — 1 derived, killed at this ledger before the gate, 0 applied; no refutation round (nothing survived to refute); linter 10 files, 0 findings
+
+**Killed before the gate.**
+- **Draft: harden Phase 2 corrects a sentence the change made false in place, without escalating.**
+  Rests on #516 ("Phase 2 escalation on a one-sentence false javadoc bought a whole extra Phase 1 + a
+  second 4-agent Phase 2; the second Phase 2 found only polish") and the escalation park, now 5
+  records. Killed on `harden`:209-213 — "a false universal in a javadoc is still substantive", with
+  #229's seven one-prose-defect passes behind it — and on two records where an escalation on prose
+  caught a second real defect: #433:14 (the narrowed javadoc was false the other way) and #458:13
+  (SourceScan's "Every lookup fails LOUDLY", the root claim behind a vacuous guard). The draft would
+  have lost both. It fails the escalation park's REOPEN ON by that condition's own words.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 5 records** (+#516: one escalation, on a
+  false javadoc; the second Phase 2 found only polish). REOPEN unchanged.
+- **Prose the change made false, found by a fresh agent: 5 records** (+#516: harden P2 javadoc "Not
+  shared with measure", the canonical FindingPartnerCoverage paragraph, the containment-residue
+  direction). None reached a merged head. REOPEN unchanged.
+- **chartsearchai's nested `CLAUDE.md` byte budget: 5 records** (+#513: 7 bytes of headroom, +#516:
+  11 bytes). Both were caught by the Step 3 gate as blocking, at 0 rounds, which is a skill-side catch
+  already working. REOPEN unchanged.
+
+**Parked, 1 record each.**
+- resolve-ticket Step 3's one re-run after a SETTLING pass-1 objection cost ~6 min and found nothing
+  (#516). Not a contradiction: outcome 2 (:356-360) governs the pass AFTER the re-run, and the re-run
+  exists for the measured case where pass 2 caught a claim the pass-1 revision introduced
+  (:342-350). **REOPEN ON:** a second record of a re-run finding nothing after a settling objection, read
+  together with the rate at which re-runs catch revision-introduced claims.
+- resolve-ticket Step 3's "before any code" was overridden: #513 implemented the plan before
+  re-gating so the full suite could measure what reddened, and that measurement decided the abort
+  (condition 3), at 0 rounds. Consistent with :363-375's "check it, do not estimate it", which binds
+  the run and involves building. **REOPEN ON:** a record where code before the re-gate cost something.
+- #513's driver capture ("left its gate entry unfinished: phase=building … override=True") is the
+  abort having recorded its override as :82-83 requires, not a defect.
