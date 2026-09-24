@@ -4300,3 +4300,44 @@ Step 6's pre-read comparison: `origin/main` and this store agreed on every file 
   build). **REOPEN ON:** a second record.
 - The author's own mutation probe blind to a case it claimed to cover (#430:9, :14 — the spelling sort
   cannot flip 0.5/5), found by harden P2, 1 cycle. **REOPEN ON:** a second record.
+
+## 2026-09-24 (tenth window of the day: 2 run records — #272/PR534, 1 round, and #432/PR536, 4 rounds / 4 cycles, both converged) — 1 proposed, 0 applied, 1 killed; one refutation round; linter 10 files, 0 findings; **no skill file changed**
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except `…-272.md` and
+`…-432.md` (local-only). Proposal and the gate's reply: `proposals/2026-09-24-window-272-432.md`.
+
+**KILLED · P1, resolve-ticket Step 3: a gate objection that narrows coverage is settled by the mutation
+it exempts.** Drafted as bar (a) on #407:8/:18 plus #432:8/:13, and bar (b) on #432 alone. Subsumed by
+`harden`:272-278 (*an exemption you WRITE into a guard … build the case the exemption ADMITS*), which
+is what caught #432's exclusion in harden c1 P2. Bar (b) was misapplied: #432:8 records ONE cycle, and
+`skill-retro`:75 needs two. The draft cited #432:9/:14 for :8/:13. The two records are different
+classes: #407 is a reasoned sufficiency cut, while #432's gate objection was correct and only the
+remedy the run adopted was too coarse (transcript jsonl :132, :135). A whole-class exclusion also
+names no single mutation to run. The #407 park above stays open with its REOPEN ON unchanged, and #432
+is logged below as the exemption rule working in its home.
+
+**Parked counts advanced.**
+- **harden's KIND-of-question rule triggered at the second escape: 3 records** (+#432:21). Four
+  successive escapes on one guard (direct pass, method handle, setter, putfield), 3 harden cycles + 1
+  round. The record itself says the rule was "applied one cycle later than it could have been". The
+  positive property it produced (field final) was then escaped once more, at r1, which is the rule's
+  own *a differently typed question is not a closed one*. **REOPEN ON** unchanged (a mechanical lever),
+  and not met.
+- **pr-harden step 1's identical-head guard omits the blocking PR-description fix: 3 records / 0 cost**
+  (+#432:22, r3's body-only fix). The guard fired and the cause was known. :1979's REOPEN ON (an identical
+  head mis-classified, costing or skipping a round) is not met.
+- **Prose the change made false, found by a fresh agent: 13 records** (+#272 harden P2, a test comment
+  false for the as-needed case; +#432 r3, the PR body's "Not done here" made false by r2's fix, blocking,
+  1 round). REOPEN unchanged.
+- **Phase 2 escalating repeatedly on the run's own fixes: 12 records** (+#432, three escalations, each
+  on a substantive escape). REOPEN unchanged.
+- **`git checkout -- <path>` discarding the ORCHESTRATOR's own uncommitted work: increments only**
+  (+#432:10, a production edit lost after a mutation loop, ~3 builds). #432 did not commit first, so
+  the reopen (an incident where "commit before probing" WAS followed) is still unmet.
+
+**Observed, no remedy owed.**
+- `harden-set … --only harden` rejected (#272:15, one retry). `gate-state`'s argparse message, added
+  after #293/#256/#263/#330, fired and named where `--only` is accepted. The shipped remedy worked.
+- `harden`:272-278's exemption rule caught a by-name class exclusion in its home (#432:8/:13, 1 cycle).
+- #272's gate refuted a plan claim that a rounding mutation would redden tests (6 and 8 both divide 24)
+  before any code was written, at 0 cost. The gate working as designed.
