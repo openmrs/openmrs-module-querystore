@@ -4036,3 +4036,28 @@ Both transcripts carry the 0.30.0 / 0.42.0 / 0.20.0 text (`run_in_background: fa
   assumption, the gate accepted it).
 - #438's r2 note (token/preliminary separation unpinned) went unfixed, which is what `pr-harden` :115-118
   prescribes for a blocking-only round's notes — not a defect.
+
+## 2026-09-24 (third window of the day: 2 run records — #408/PR519, #458/PR520) — 1 proposed, 0 applied, 1 parked by the refuter; linter 10 files, 0 findings
+
+**Parked by the refuter.**
+- **resolve-ticket Step 5 assumes a production change, on a non-fix deliverable: 2 records, bar (a) met,
+  0 cost** — #480:23 (measurement; guard red first for the missing file) and #458:19 (test-only; red only
+  under a needle-rename mutation, 4/4 green pre-change per #458:8). Draft P1 added a sentence to Step 5.
+  Refuter: neither record reports a cost (#480:23 "Worked but not described by the skill"), so :3772-3774's
+  "any text is an unchecked claim" applies; the draft's "changing production code reads as producing that
+  deliverable" collides with Step 5's "Never by changing the test… or the test data" (:411), leaves Step 3
+  q4 (:288-290, "would pass on the pre-change code proves nothing") able to block a test-only plan, and
+  "failing against the pre-change base" is false of #458. **REOPEN ON:** a record where Step 5 or Step 3
+  q4 cost something on a non-fix deliverable (a gate blocking a test-only plan on :290, a run bending
+  test/data to reach green, or a run skipping red for "no production change"). If applied, word the green
+  as "the guard passing once the mutation is reverted or the recorded data lands".
+
+**Parked counts advanced.**
+- **Prose the change made false, found by a fresh agent: 4 records** (+#458: harden P2 found the method
+  javadoc "passes against the pre-change code" and SourceScan's "Every lookup fails LOUDLY" false, one
+  Phase 1 re-convergence each). Still no mechanical lever; none reached a merged head. REOPEN unchanged.
+- **Phase 2 escalating repeatedly on the run's own fixes: 4 records** (+#458: Phase 2 three times on a
+  ~15-line test diff, each pass one real falsehood). Record says the rule worked as written; no remedy
+  named. REOPEN unchanged.
+- 1 record each: a ticket's stated mutation not reaching the row it names, refuted by measurement at 0
+  cost (#408); harden's full cycle as a fixed cost on a 2-line change, lenses under a minute each (#408).
