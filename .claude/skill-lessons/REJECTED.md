@@ -4341,3 +4341,37 @@ is logged below as the exemption rule working in its home.
 - `harden`:272-278's exemption rule caught a by-name class exclusion in its home (#432:8/:13, 1 cycle).
 - #272's gate refuted a plan claim that a rounding mutation would redden tests (6 and 8 both divide 24)
   before any code was written, at 0 cost. The gate working as designed.
+
+## 2026-09-24 (eleventh window of the day: 3 run records — #443/PR538, 2 rounds / 2 cycles; #459/PR537, 1 round / 2 cycles; #527/PR535, 2 rounds / 5 cycles plus its pr-harden record; all converged) — 0 proposed, 0 applied, 0 killed; no refutation round (nothing to refute); linter 10 files, 0 findings; **no skill file changed**
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except `…-443.md`,
+`…-459.md` and `…-527.md` (local-only).
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 15 records** (+#443:14, one escalation;
+  +#459:12, one; +#527:30, four, on route enumerations and restatements of the echo rule). #527 names
+  what ended its chain: deleting the claim shape (c3) and pointing at the rule's existing home (c4).
+  Both are already rules, `harden`'s *Don't rewrite prose faster than you verify it* ("Once a second
+  attempt at a claim of some kind has been refuted … stop making a claim of that kind") and *Don't stop
+  correcting a claim at the site you noticed it* ("correct that home and point the others at it").
+  The record says they were applied "about three cycles" late. That is the rule-exists-applied-late
+  shape :4210-4214 killed as prose, so it does not meet the REOPEN ON. Unchanged.
+- **Prose the change made false, found by a fresh agent: 16 records** (+#443:14, the author's
+  corrected "stubbed" javadoc; +#459:12, "Every consumer … is invoked"; +#527:8-11, four false claims
+  in javadoc, ADR and README). None reached a merged head. REOPEN unchanged.
+
+**Parked, 1 record each.**
+- A `run_in_background: false` spawn still answered "Async agent launched" (#527:32, attended, cost
+  ~0; waits recorded as yields). This contradicts the measurement behind the P1 applied at
+  :3922-3935 (#451 in-turn on every `False` call). The prescribed fallback (a bounded foreground wait)
+  covers it. **REOPEN ON:** a second post-0.30.0 record, or one that cost a turn or a Stop refusal.
+- The Stop gate read the shared checkout's entry after the shell cwd reset, needing `EnterWorktree`
+  (#527:31, attended, minutes). **REOPEN ON:** a second record, or a pool-launched one.
+- A set-aside/restore loop not word-split by `zsh` let `git show origin/main:f > f` overwrite
+  uncommitted edits (#443:20, ~2 tool calls, recovered by re-running the edit script). A sibling of
+  the applied mutation-loop zsh rule (:1068-1070) and of the orchestrator-discard park (:4334). **REOPEN
+  ON:** a second record, or one where work was lost.
+
+**Observed, no remedy owed.**
+- pr-harden's base-moved check done as written (#527:54): `main` gained #536, overlap none, not BEHIND,
+  so no merge, push or round.
