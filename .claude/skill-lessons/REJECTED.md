@@ -3910,3 +3910,99 @@ refuter's, and FINISH filed round 1's r1-1. Resolution B's REOPEN ON runs to **:
 first run's (PR #490) under the same name, where both skills say *append*. The first run's record is
 restored from `846a225` at `…-488.md`, and the second's is kept beside it as `…-488-PR501.md`, in the
 store and the repo alike.
+
+## 2026-09-24 (window: 10 run records — #494/PR497, #496/PR499, #498/PR502, #488/PR501, the four mirrored unread by `846a225`/`278d42f`; and #433/PR511, #451/PR510, #469/PR507, #476/PR506, #477/PR509, #505/PR508, the first six under `pr-harden` 0.29.0) — 4 applied after revision, 1 as drafted, 0 killed, parked below; one refutation round; linter 10 files, 0 findings; `pool-test.py` 575 passed / 0 failed, and the two new guards each fail it when removed (571/1 and 574/1)
+
+Proposals and the gate's objections: `proposals/2026-09-24-window-494-505.md`. The gate killed nothing,
+revised P1, P2, P3 and P5, and re-aimed P5 at a root cause it traced. So once again this bar was
+exercised by revision. Launch mode, from `ledger.json`: #433 and #451 were pool-launched (unattended);
+the rest were `launched_by: work`. The draft's transcript line numbers ran one below the JSONL's
+1-indexed lines. The citations below use the gate's corrected numbers.
+
+- **P1 APPLIED after revision (pr-harden 0.30.0, harden 0.42.0, resolve-ticket 0.20.0): spawn
+  delegated agents with `run_in_background: false` where the schema carries it.** Bar (c):
+  `pr-harden`'s *Collecting in the same turn* said the flag did not exist (*"as of 2026-09-20"*).
+  Followed as written, a spawn takes the default, which is BACKGROUND, and the skill's own unattended
+  gate refuses the yield. Measured 2026-09-24: #451 passed `False` on all 9 `Agent` calls. Its four
+  Phase 2 lenses (transcript 294-297) returned at 300-303, 342.5s of `totalDurationMs` in 165s of wall
+  clock, with no Stop block. #433's wave 1 (391-398) omitted the flag, got "Async agent launched" four
+  times, and was blocked at 403/406 and 476/479. Its later waves passed `False` and came back in-turn.
+  The flag by date, over pipeline transcripts: present 09-16/17, absent through 09-14, the string
+  `'true'` on 09-23, `False` on 09-24. So **:3338-3348's prune measured a real absence on 09-20,
+  and the lever came back afterwards.** P1 concerns yields, not polls, so it does not reopen :3350-3361's
+  killed polling proposal. Revised per the gate: conditioned on the schema carrying the flag, with
+  #433's fallback (a bounded foreground wait, after which its notices were delivered). Also scoped, per
+  the gate: `pr-harden`:986's "Every phase here delegates to a background subagent", and harden's
+  await paragraph, which steered #433 into background spawns plus an await. Deleted: "the report
+  arrives by itself in the completion notification's `<result>`", the 2026-09-20 italic sentence, and
+  "What outlived the tool…".
+- **P2 APPLIED after revision (pr-harden 0.30.0): wait on a build, boot or lock with a foreground loop
+  bounded under the tool timeout, with a failure signature. Do not background it and yield.** Bar (a):
+  #479:20, #489:18, #498:20, #505:20, each an attended run blocked mid-flight and each recovered by
+  such a loop. The gate found the same block, unrecorded, in #469, #476 and #477's transcripts. This
+  closes two parks: :3766-3770's (the gate showed the pre-edit `pr-harden`:1084-1087, the ORCHESTRATOR's *"background
+  the wait and let it notify you"*, settles "who the sentence binds", and that sentence is the one
+  rewritten); and :3231-3236's *no contract for a background BUILD as an await* (REOPEN ON "one where the
+  missing contract costs a yield", met by #505:20). It closes the other way: a foreground loop works
+  attended and unattended, while an await only licenses an attended yield. Revised per the gate: the
+  draft's example (#505's loop) could not tell done from timed out, against :568-570. The shipped loop
+  exits on a failure signature and a bound, and was run here against a file that gained `BUILD FAILURE`
+  after 3s (exit at 3s) and one that stayed empty (exit at the bound). **Not edited, reported to the
+  owner:** `~/.claude/CLAUDE.md`'s *Wait on a condition* says "let the completion notification wake
+  you", the yield the gate refuses mid-run.
+- **P3 APPLIED after revision (resolve-ticket 0.20.0): Step 3 carries the refuter's await as `await …
+  --only pr`.** Bar (a): after 0.28.0, #451:19 and #505:21, one failed call each. Before it, #496:18 and
+  #488-PR501:21. Measured in a temp HOME: bare `await` → exit 2 (needs `--run`), `--only pr` → exit 0.
+  Revised per the gate: "No harden entry exists yet" was unchecked, and a stale one can exist, so the
+  text now says "`/harden` has not started yet". Full `~/.claude/pipeline/gate-state --owner $PPID`
+  prefix.
+- **P4 APPLIED as drafted (pr-harden 0.30.0): `clear-await` takes no label.** Bar (a): #480:24, #494:18,
+  distinct runs. Measured: `clear-await refuter --only pr` → exit 2. It replaces the second copy of
+  "Kept apart from the transition write above…".
+- **P5 APPLIED after revision (pool-run, gate-state, pool-test.py): a claim clears the leftover gate
+  entry at its worktree, and `pr-set --phase building` warns on an entry that still names a PR.**
+  Bar (c): `resolve-ticket`:170 says "no `pr` yet", and the script kept #483's `pr` and ledgers into
+  #477's building entry (#477:26; the transcript shows it at 1059 and the clear at 1087). What it would
+  have cost uncleared: `pr-harden` Step 0 refuses a fresh entry claiming another PR, and `pool-run`:2004
+  credits a PR-less death with the entry's `pr`. **The gate traced the cause the draft said was not
+  established.** `logs/pool-20260923T173457Z.md`:6 shows #477's first `--work` session reaped with no
+  release. `claim_slot` recreated the same worktree path without the `clear_gate_state` that the driven
+  path (:3233) and `release_claim` (:1200) both call. The primary fix mirrors that call. The drafted
+  gate-state drop was **not taken**: the gate showed it would null a run's own PR and ledger if Step 1
+  were re-run after Step 8 (compaction, a resume ignoring `RESUME_PROMPT`). It also named fields,
+  which the `adopt()` docstring records as a leak per pass, and `override_reason` was already missed.
+  So the gate-state half only warns and changes nothing. Tests: the reaped-claim case, the warning,
+  its keep and its silence on a `--pr` write. Removing the `claim_slot` call → 571/1. Disabling the
+  warning → 574/1.
+
+**Net:** pr-harden +10, resolve-ticket +7, harden +1. The growth is P2's loop, which replaces a
+one-line instruction that the gate refused on seven runs, and P3's snippet, which replaces a pointer
+that cost a call on four. Deleted: three sentences of P1's paragraph and P4's duplicate.
+
+**0.29.0's REOPEN ON conditions (:3885-3902), read against its first six records.** Rounds: #433 2,
+#451 1, #469 2, #476 1, #477 2, #505 2. Four of six paid the confirming blocking-only round, each
+returning 0 blocking. #451's fixer committed nothing, so no round was owed. The longest run was #477
+at 8594s, and nothing was killed. That cost is what 0.29.0 stated, so it does not reopen. The
+prose-only exception, the cap and fired-twice conditions: no record shows any of them. No pipeline run
+filed an issue: `gh issue create` appears 0 times in each of the six transcripts. The positive controls
+are `f79f9941…` (3; the non-pipeline session that opened #512-#516) and `11df53f2…` (the owner-directed
+pass that opened #505 as a consolidation).
+
+**Parked.**
+- **harden Phase 2 run with fewer than four agents: 4 records** (#479, #488, #491, #476:18). REOPEN ON
+  unchanged: #476's r1 raised nothing.
+- **The orchestrator editing while a delegated agent runs: 2 records** (#485:23, with a read-only
+  refuter; #477:23/:28, where the refuter probed production files). The gate corrected the draft's
+  framing: what the two share is the orchestrator's edit, not a mutating refuter. The rule exists
+  (`pr-harden`:1052). **REOPEN ON:** a record where it cost a commit or a round.
+- **Phase 2 escalating repeatedly on the run's own fixes: bar (b) met, no remedy identified** — #477
+  (5 cycles, labelled override), #433 (3 cycles), #482 (parked :3775). **REOPEN ON:** a proposal that
+  names what would have stopped the chain earlier without losing a real defect each pass found.
+- **chartsearchai's nested `CLAUDE.md` byte budget: bar (a) met, target-repo property** — #433:10,
+  #469:23, #477:29, 1-2 builds each. **REOPEN ON:** a skill-side lever, e.g. a budget check the skills
+  could run before the build.
+- **Usage-limit interruption: 2 records** (#476:16, #505 transcript 413), no convergence lost.
+- `gh issue view` empty at exit 0: 4 pre-0.18.1 records (#494:17, #496:17, #498:18, #488-PR501:20),
+  already addressed by `99594f1` and `669b906`. None of the six 0.29.0 records mention it.
+- 1 record each: an unfilled PLAN_PLACEHOLDER in a refuter brief (#469:21); a refuter's own doc-sweep
+  list incomplete (#433:23); main took the ADR decision number mid-run (#477:30).

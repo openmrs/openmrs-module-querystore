@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.29.0
+version: 0.30.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -983,7 +983,7 @@ suites. What none of it fixes: two runs in one checkout still share one entry an
 wins — this tells one session's entry from another's, it does not give them one each.
 
 **`awaiting` is not optional bookkeeping — without it an unattended run cannot proceed at all.**
-Every phase here delegates to a background subagent, and while one is outstanding the orchestrator
+Every phase here delegates to a subagent, and while a background one is outstanding the orchestrator
 has nothing to do but yield. The gate blocks yields, so a run waiting correctly looks exactly like a
 run that quit. So: **record the await immediately before spawning, and clear it the moment the
 result arrives.** A non-empty, fresh `awaiting` lets the gate allow the yield — not a loophole,
@@ -1009,20 +1009,24 @@ does not make this session unattended — the yield then allows. An INDETERMINAT
 instead, because losing the unattended guard back is the more expensive direction. Whose ENTRY it is
 is a different question about a different file, answered by `owner` above and never by this marker.
 
-**Collecting in the same turn means never polling afterwards.** Several `Agent` calls in ONE
-message run concurrently, so a wave keeps its parallelism while each result is that agent's own
-report, and the report arrives by itself in the completion notification's `<result>`. **A delegated
-agent's output file is its whole JSONL transcript, never its report**: each read injects a window of
-raw agent chatter, the next a different window rather than the rest of the first, and the
-orchestrator re-sends all of it on every later turn — measured 2026-09-01 across three tickets of
-twenty, 49 reads carrying 953,119 bytes no round ever used, against whole reports of 9,352 and 9,956
-bytes from two agents collected in-turn. *This paragraph used to argue a CHOICE between a background
-spawn and a foreground one, naming `TaskOutput` and a `run_in_background` flag as the lever; neither
-exists in the harness as of 2026-09-20 — the `Agent` schema carries no such parameter and
-`TaskOutput` resolves to no tool — and the spawn result now carries the warning itself.* What
-outlived the tool is the transcript file, which is what this rule is about. Where you need to block
-on something that is NOT an agent — a build, a server coming up — that is a background Bash task,
-whose output file is its stdout and is safe to read.
+**Collecting in the same turn means spawning in the foreground, where the harness allows it.** When
+the `Agent` schema carries `run_in_background`, pass `false` on each call: several such calls in ONE
+message still run concurrently, and each agent's report returns as that call's own result, in this
+turn. Measured 2026-09-24 on two unattended runs: #451's four Phase 2 lenses, spawned so in one
+message, took 343s of agent time in 165s of wall clock, all four reports back before its next tool
+call; #433's first wave took the default, which is BACKGROUND, ended the turn with four agents
+outstanding, and was refused by the unattended gate twice. The flag has come and gone between
+harness builds — present 2026-09-16, absent 2026-09-20 (when this paragraph said it did not exist),
+back 2026-09-23 — so where a spawn still answers "Async agent launched", an unattended run keeps the
+turn alive with a bounded foreground wait (#433: a 420-second loop, after which its completion
+notices were delivered). **A delegated agent's output file is its whole JSONL transcript, never its
+report**: each read injects a window of raw agent chatter, the next a different window rather than
+the rest of the first, and the orchestrator re-sends all of it on every later turn — measured
+2026-09-01 across three tickets of twenty, 49 reads carrying 953,119 bytes no round ever used, against
+whole reports of 9,352 and 9,956 bytes from two agents collected in-turn. Where you need to block on
+something that is NOT an agent — a build, a server coming up — that is a background Bash task, whose
+output file is its stdout and is safe to read; wait on it as *this session must not busy-wait
+either* says.
 
 **Snapshot the worktree before every delegation and compare it after — on ANY terminal outcome.**
 `git diff | shasum` before you spawn; the same after the agent returns, fails, stalls or is killed. On a
@@ -1083,8 +1087,14 @@ backstops, not the mechanism.
 
 **And this session must not busy-wait either.** *Wait on a CONDITION, never on a clock* is written into
 the verifier's brief, but the orchestrator is where a blind `sleep` loop costs the most, because its
-context is the largest thing being re-sent per turn. Whatever you are waiting on — a boot, an agent, a
-lock — background the wait and let it notify you.
+context is the largest thing being re-sent per turn. Whatever you are waiting on — a boot, a build, an
+agent, a lock — wait on the CONDITION inside the turn: an agent by spawning it in the foreground
+(*Collecting in the same turn*), anything else by a foreground loop that exits on the condition, on a
+failure signature, or at a bound under the tool's ten-minute timeout — `end=$((SECONDS+540)); until
+grep -qE 'BUILD (SUCCESS|FAILURE)' "$F" || [ $SECONDS -gt $end ]; do sleep 5; done; tail -3 "$F"`.
+Backgrounding the wait and ending the turn for its notification is what the gate refused mid-run on
+#479, #489, #498 and #505, each of which recovered with such a loop, and on #469, #476 and #477 by
+their transcripts.
 
 **And a dead delegated phase needs a contract, because it is neither an abort condition nor a
 finding.** Left undefined, an unattended run ends on the first agent death. The contract: clear the
@@ -1144,8 +1154,8 @@ that a spawn never has to restate the phase:
 ~/.claude/pipeline/gate-state --owner $PPID clear-await --only pr
 ```
 
-Kept apart from the transition write above so that a spawn never has to restate the phase. Drop
-`--only pr` and it writes both gates at once, which is what a nested `/harden` cycle needs.
+`clear-await` takes no label and empties the whole list: clear once, after the last agent of the wave
+has returned or died. Drop `--only pr` and it writes both gates at once, which is what a nested `/harden` cycle needs.
 
 When the run finishes — converged or overridden — the entry must say so (`phase: reviewed` with
 `blocking: 0`, or `override: true`). A stale `blocking > 0` left behind is what the 6-hour expiry exists to clean up

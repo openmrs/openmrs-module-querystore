@@ -1138,6 +1138,12 @@ def claim_slot(cfg: dict, slug: str, ticket: str, repo: Path, base: str,
             lease_path.unlink(missing_ok=True)
             say(f"  x {why}")
             return None
+        # The gate entry goes with the old worktree, as it does on the driver's path. A session
+        # reaped without `--release` leaves its entry at this same path, and the next session's
+        # Step 1 `building` write merges into it rather than replacing it. Measured on #477: that
+        # entry carried PR #483's `pr`, reviewed and verified shas and declined list into PR #509's
+        # run. No live claim holds this ticket (checked above), so what is here is a leftover.
+        clear_gate_state(wt, say)
         with os.fdopen(fd, "w") as fh:
             json.dump({"slot": slot.name, "ticket": ticket.lstrip("#"), "slug": slug,
                        "worktree": str(wt), "repo": str(repo),

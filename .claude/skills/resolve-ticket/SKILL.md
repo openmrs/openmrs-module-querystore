@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.19.0
+version: 0.20.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -256,11 +256,18 @@ run with nothing running. Tell the refuter **not to spawn subagents of its own**
 killed an agent on this skill's first run — and if it dies, retry twice with something changed between
 attempts before taking the labelled deviation (`pr-harden`'s **State** section carries the contract).
 
-The field and its snippet live in `pr-harden`'s **State** section. The gate blocks a yield while the
-run is mid-flight and this agent runs in the background, so without the await recorded the run cannot
-even wait for its own gate.
+The field lives in `pr-harden`'s **State** section. The gate blocks a yield while the run is
+mid-flight and this agent runs in the background, so without the await recorded the run cannot even
+wait for its own gate. `/harden` has not started yet, so this await is the pr gate's alone —
+`--only pr`, after the subcommand; without it the await also reaches harden's entry and needs `--run`:
 
-**When the run is unattended, do not yield at all — collect the agent inside the same turn.** A
+```bash
+~/.claude/pipeline/gate-state --owner $PPID await "refute plan" --only pr
+~/.claude/pipeline/gate-state --owner $PPID clear-await --only pr
+```
+
+**When the run is unattended, do not yield at all — collect the agent inside the same turn**, by
+spawning it with `run_in_background: false` (`pr-harden`'s *Collecting in the same turn*). A
 `claude -p` process exits when its turn ends, so there is no next turn to be re-invoked into, and the
 recorded await then licenses the gate to let the run die quietly. Measured 2026-08-26: that is exactly
 how #297 ended at this step, having dispatched this very refuter, and how #310 ended in `/harden` —

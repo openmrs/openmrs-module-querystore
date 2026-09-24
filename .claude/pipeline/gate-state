@@ -377,6 +377,14 @@ def main() -> int:
     with Held(key, write=args.cmd != "show") as held:
         if args.cmd == "pr-set":
             e = held.entry("pr")
+            if args.phase == "building" and args.pr is None and e.get("pr") is not None:
+                # `building` is `resolve-ticket`'s opening write, which has no PR yet, so an entry
+                # still naming one is a previous run's. Warned, not dropped: a run re-reading its own
+                # Step 1 after opening its PR would lose that PR's ledger. Measured on #477, whose
+                # entry kept PR #483's `pr` and ledgers until someone ran `show` at Step 8.
+                print(f"warning: this entry still names PR {e['pr']}, from a previous run: a `building` "
+                      "entry has no PR yet. If that PR is not this run's, read the entry with "
+                      "`gate-state clear --only pr --json`, then re-run this write.")
             e.update({"round": args.round, "phase": args.phase, "blocking": args.blocking,
                       "override": bool(args.override)})
             if args.pr is not None:

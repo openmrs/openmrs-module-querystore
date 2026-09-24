@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.41.0
+version: 0.42.0
 ---
 
 # Harden
@@ -97,7 +97,7 @@ If you cannot truthfully complete ALL THREE sentences, the slice is NOT ready fo
 
 One polish pass, run after Phase 1 has converged. A second one happens only where the first escalated and Phase 1 re-converged; the gate below says so. The pass:
 
-1. Spawn four parallel review agents (reuse, quality, efficiency, integration) over the current diff. Where a previous Phase 2 ran, brief its agents with the applied and deferred lists from it so they don't re-surface them.
+1. Spawn four parallel review agents (reuse, quality, efficiency, integration) over the current diff, in ONE message, each with `run_in_background: false` where the `Agent` schema carries it — the default is background, and an unattended run's gate refuses the yield that leaves them outstanding (#433; `pr-harden`'s *Collecting in the same turn*). Where a previous Phase 2 ran, brief its agents with the applied and deferred lists from it so they don't re-surface them.
    - **Never pass `model` to any of them.** A per-call override beats both the agent definition's
      frontmatter and settings.json, so it is the strongest of the levers and the only one a running
      pass can pull on its own initiative — the others are set in a file or on the command line,
@@ -337,8 +337,9 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
 Emitting the termination gate is a forcing function, and forcing functions are exactly what got skipped. So also write the verdict where something other than you can read it. At the close of **every** Phase 1 pass, and again when Phase 2 finishes:
 
 **And record an `awaiting` entry whenever a cycle delegates, or the gate will not let the cycle
-wait for its own agents.** Phase 2 spawns subagents, so a cycle is routinely blocked on one with
-nothing to do but yield — and a yield is exactly what the gate refuses. Measured on the run that
+wait for its own agents.** Phase 2 spawns subagents, and one spawned in the background leaves the
+cycle nothing to do but yield — and a yield is exactly what the gate refuses, in an unattended run
+even with the await recorded, which is why step 1 spawns in the foreground. Measured on the run that
 added this: a Phase 2 pass blocked on a background agent tripped the gate on every yield, and the
 only way to stay alive was two ten-minute in-turn wait loops, which is pure waste. `pr-harden` solved
 this first and its **State** section carries the reasoning; the field and the semantics are the same.

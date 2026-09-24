@@ -895,6 +895,19 @@ def test_gate_state_locking(tmp: Path) -> None:
     check("the resolve-ticket handoff keeps its ledger when the PR number arrives",
           [d["id"] for d in entry["declined"]] == ["r1-1"], json.dumps(entry))
 
+    # A `building` write has no PR yet, so landing on an entry that names one is a previous run's
+    # leftover (#477 inherited PR #483's). It warns and changes nothing: the same write from a run
+    # that already opened its PR must not lose that PR's ledger.
+    got = sh([sys.executable, str(helper), "pr-set", "--ticket", "379", "--round", "1",
+              "--phase", "building", "--blocking", "0"], cwd=hand, env=env).stdout
+    entry = json.loads((home / ".claude/pr-harden-state.json").read_text())[str(hand.resolve())]
+    check("a building write over an entry naming a PR says which PR", "PR 382" in got, got.strip())
+    check("and keeps that PR and its ledger", entry["pr"] == 382
+          and [d["id"] for d in entry["declined"]] == ["r1-1"], json.dumps(entry))
+    got = sh([sys.executable, str(helper), "pr-set", "--pr", "382", "--round", "1",
+              "--phase", "init", "--blocking", "0"], cwd=hand, env=env).stdout
+    check("a write that names the PR does not warn", "warning" not in got, got.strip())
+
 
 # ─────────────────────────────────────────────────────────── scheduling ──
 
@@ -1420,6 +1433,24 @@ def test_claim_and_release(tmp: Path) -> None:
         sh(["git", "-C", str(work), "worktree", "prune"])
         check("a lease whose worktree is gone is reclaimed, not held forever",
               pool.claim_slot(cfg, "o/r", "402", work, base, say) is not None)
+
+        # A session reaped without a release leaves its gate entry at the ticket's path, and the next
+        # claim of that ticket recreates the same path. Measured on #477: the next session's Step 1
+        # `building` write merged into PR #483's entry, ledgers and all.
+        pool.release_claim(cfg, "310", say)
+        first = pool.claim_slot(cfg, "o/r", "477", work, base, say)
+        _sp.run([str(HERE / "gate-state"), "--owner", "9", "pr-set", "--pr", "483",
+                 "--round", "1", "--phase", "reviewed", "--blocking", "0"],
+                cwd=str(first["worktree"]), capture_output=True)
+        key = str(first["worktree"].resolve())
+        check("the reaped session's gate entry exists before the next claim",
+              json.loads(pool.PR_STATE.read_text()).get(key, {}).get("pr") == 483, "nothing to clean up")
+        (pool.SLOTS / f"{first['slot'].name}.json").unlink()
+        second = pool.claim_slot(cfg, "o/r", "477", work, base, say)
+        check("a new claim of the same ticket takes the leftover gate entry with the old worktree",
+              second is not None and second["worktree"] == first["worktree"]
+              and key not in json.loads(pool.PR_STATE.read_text()),
+              json.dumps(json.loads(pool.PR_STATE.read_text()).get(key)))
 
 
 def test_work_needs_a_terminal(tmp: Path) -> None:
