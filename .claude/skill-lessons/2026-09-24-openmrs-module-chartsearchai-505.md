@@ -25,3 +25,31 @@ transcript: ~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-op
 
 ## Assumptions review overturned
 - none (Refs #505 and the conditional-equality reading of #503 item 1 both confirmed by r1/r2)
+# resolve-ticket + pr-harden · openmrs-module-chartsearchai · #505 / PR #529 · 2026-09-24
+outcome: converged (pr-harden round 4: 0 blocking); harden ended by labelled override (Phase 2 not re-run after last Phase 1 convergence)
+rounds: 4   cycles: 7 (harden)   verifier: skipped (test code, fixture prose and javadoc only — no runtime behaviour)
+context: no compaction · peak not surfaced
+transcript: ~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-openmrs-openmrs-module-chartsearchai-505/e3da4188-ba15-4f24-b3f0-1ddfca5f75b0.jsonl
+
+## Refuted by measurement
+- Plan: a literal/constant-name source scan finds what a derived-on test loads -> refuted: helper methods (135 uses) were the commonest load path (refutation gate, blocking) · cost: 0 (plan revision)
+- "The mirror-case notes need only metadata.note scans" -> three ddi-fold-* fixtures keep a TOP-LEVEL `note` key; missed by every metadata-based sweep until a Phase 2 agent found it · cost: 1 harden cycle
+- Harden's regex constant parser -> defeated successively by line-wraps, aliasing, nested classes, modifier order, interface constants, multi-declarators; ended by changing the KIND of question (class-file ConstantValue + mention rule) · cost: ~3 harden cycles
+
+## Raised by a fresh agent, missed by the author
+- [gate] helper-method loads invisible to the scan · blocking · cost: 0 rounds
+- [harden P2] method refs / nested qualifiers / witnesses / annotated params / FQN; nested-name false RED; base-class @BeforeEach; nested base + interface default; wildcard-bound false RED; ~30 further "verbatim" homes in javadoc/ADR/production javadoc · cost: harden cycles
+- [r1] subclass of a derived-on test inherits the tier without naming the key · blocking · cost: 1 round
+- [r2] imported nested supertype; alias constant for the GP key; "are not" wording in fold notes · non-blocking (fixed via step-3 exception) · cost: 1 round
+- [r3] fixture name inside a larger literal (@CsvSource row) not counted · blocking · cost: 1 round
+- [r4 notes] helper that sets the GP for callers (documented residue); refusal predicate unpinned; split-literal in method arg — named in PR body, unfixed
+
+## Where a skill blocked or contradicted this run
+- harden:Phase 2 "runs once… escalation re-opens Phase 1" — on a text/shape guard every Phase 2 found one more shape, so the loop escalated 5 times; ended with the labelled override. The KIND-change rule fired late (after ~6 constant shapes) — cost several cycles.
+- pr-harden:Step 0 — maintainerCanModify=false on a same-repo PR; not a blocker since isCrossRepository=false.
+
+## Declined
+- none
+
+## Assumptions review overturned
+- "may only load a listed slice that carries derived_interactions" read strictly (unlisted fixtures refused too) — not overturned.

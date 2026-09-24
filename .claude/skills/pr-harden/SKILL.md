@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.31.0
+version: 0.32.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -561,20 +561,21 @@ query, wait out a slow boot. Do it without asking.
 
 **Wait on a CONDITION, never on a clock.** "Wait out a slow boot" is not licence to sleep blind.
 `verify-frontend-change`'s *"Wait for real readiness by polling HTTP, not by guessing a sleep"* already
-says poll; what it does not say is that a FOREGROUND poll still costs a turn per look, and a turn here
-is the whole conversation re-sent to do nothing. A fixed sleep cannot exit early and cannot fail
-loudly. Use ONE backgrounded loop that exits when the condition is true — `Bash(run_in_background:
-true)` running `until curl -sf -o /dev/null http://localhost:$PORT/openmrs/; do sleep 5; done` — which
-hands the turn back at once and notifies you when it exits. Give it the failure signatures too
-(`ModuleException` in the log, the java pid gone), or a crashed boot is indistinguishable from a slow
-one, and bound it so a hang cannot outlive the round.
+says poll; what it does not say is that a poll is one loop per wait, not one call per look, and that
+the loop runs inside your turn. A fixed sleep cannot exit early and cannot fail loudly. Use ONE
+foreground loop bounded under the tool's ten-minute timeout, as *this session must not busy-wait
+either* gives it — `end=$((SECONDS+540)); until curl -sf -o /dev/null http://localhost:$PORT/openmrs/
+|| [ $SECONDS -gt $end ]; do sleep 5; done` — and if it exits at the bound with the java pid alive,
+run it again, up to the round's bound. Give it the failure signatures too (`ModuleException` in the
+log, the java pid gone), or a crashed boot is indistinguishable from a slow one. The server itself
+stays detached (`nohup … & disown`, as #238 launched it); only the WAIT is in the foreground.
 
-**The harness disagrees with itself here, so read the specific guidance.** `Monitor`'s own description
-routes this case away from itself — *"tell me when the server is ready → use Bash with
-`run_in_background` … You get a single completion notification when it exits"*, and *"Don't use an
-unbounded command for a single notification"*. The `Bash` description's one line pointing the other way
-("use Monitor with an until-loop") is the general steer; Monitor's is the specific one and it wins.
-`Monitor` is for a STREAM of events — every error line in a log, reported as it appears.
+**Do not end your turn to wait on a `Monitor` or a background task.** A delegated agent that ends its
+turn has handed back its report, unfinished. #238's verifier armed a Monitor and returned *"Standing by
+for the startup monitor notification"*. #407's reviewer started two background tasks and returned
+mid-mutation; both tasks' output files read `[killed]` from the second its report came back, so its
+resume waited about ten minutes on a build that was already dead. The harness's own texts route a
+single wait to Monitor or to background Bash; they are written for a session that stays alive.
 
 **Unless `$CLAUDE_PIPELINE_SLOT` is set, in which case it owns ITS SHARE of the environment.** That
 variable is the pool driver telling this run it has co-tenants — other `resolve-ticket` runs working
@@ -1076,6 +1077,10 @@ later agent diffing the commit against its claim, on #263 by the orchestrator gr
 **Tell every agent to restore BEFORE it reports, not after** — a mutation restored late is a mutation
 that ships if the agent dies mid-sentence. On the second run, the eleven agents briefed that way all
 restored cleanly, verified by hash rather than trusted.
+
+**And tell every agent to wait on its own builds inside its turn**, per the verifier's *Do not end your
+turn to wait*: #407's round-1 reviewer, briefed only to restore first, returned mid-build; later briefs
+spelled the in-turn wait out and it did not recur (#407:17).
 
 **Clear the await on ANY terminal outcome — completed, failed, stalled, killed — not on a result arriving.**
 "The moment the result arrives" says nothing about a result that never will, and agents die: on this

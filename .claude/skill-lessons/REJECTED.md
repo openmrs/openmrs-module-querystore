@@ -4183,3 +4183,50 @@ it left (`phase=building`) is what `claim_slot`'s clear from the fifth window (P
 - A run killed by an API no-response timeout (#515). It is infrastructure, and so is the
   usage-limit park (2 records), but the mechanism differs. #369:66's per-agent 429/529 deaths are a
   third shape. **REOPEN ON:** a skill-side lever, e.g. a resume that the driver could offer.
+
+## 2026-09-24 (seventh window of the day: 2 run records — #407/PR526, #505/PR529, the latter appended under #505/PR508's record, which the first window counted) — 1 applied after revision, 0 killed, 1 parked by the refuter; one refutation round; linter 10 files, 0 findings
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except
+`…-407.md` (local-only) and `…-505.md` (PR529's record appended). Proposals and the gate's objections:
+`proposals/2026-09-24-window-407-505PR529.md`.
+
+- **P1 APPLIED after revision (pr-harden 0.32.0): a delegated agent waits inside its turn.** Bar (c):
+  the verifier brief's *Wait on a CONDITION* prescribed `Bash(run_in_background: true)` "which hands
+  the turn back at once and notifies you", while *And this session must not busy-wait either* (0.30.0's
+  P2, :3946-3952, which rewrote only the orchestrator's sentence) refuses exactly that. Bar (a): #238:29
+  (verifier armed a Monitor, returned "Standing by…", subagent `a36255013146dae6f` :28/:50) and
+  #407:17 (reviewer, `a19d1965d75bd2978`, two background tasks, returned at :94). **The gate found what
+  neither record states, re-measured here:** #407's `bkizeigcv.output` reads `[killed]` with mtime
+  14:58:21+0300, the second the report returned, so the resumed reviewer waited ~9m42s on a dead build.
+  Revised per the gate: the "a FOREGROUND poll still costs a turn per look" sentence reworded rather
+  than left arguing against the fix (BLOCKING); *The harness disagrees with itself here* replaced, not
+  just deleted, by a paragraph naming Monitor and background tasks, since every harness text steers
+  there (BLOCKING); `[killed]` stated as #407's measurement; re-run at the bound for a long boot; the
+  server launch stays detached; #407's "~20 min" not carried (transcript ~12.5 min); the brief clause
+  is its own sentence, not under the restore paragraph's eleven-agent evidence. The loop was run here
+  against :8081 (exit 0s) and a dead :8099 (exit at the 6s bound). Net +6 lines.
+
+**Parked by the refuter.**
+- **harden's KIND-of-question rule triggered at the second escape: 2 records** (#482:21, #505/PR529:37
+  and :48 — one event, the same constant parser, not two). Killed as prose on :3775-3776's reason (rule
+  exists, not applied; #505:48 says it "fired late") and on :2029, where tightening a trigger measured
+  at the third sweep to the second was killed; neither record measures that a change at the second
+  escape closes the loop cheaper. **REOPEN ON:** a mechanical lever, e.g. harden state counting
+  successive escapes against one guard.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 9 records** (+#505/PR529: five escalations,
+  labelled override). REOPEN unchanged.
+- **Prose the change made false, found by a fresh agent: 10 records** (+#407 harden P2 and r2, a seam
+  between commits fixed at FINISH; +#505/PR529 ~30 "verbatim" homes, and the top-level `note` key every
+  metadata sweep missed). None reached a merged head. REOPEN unchanged.
+- **pr-harden rounds whose blocking finding the previous round's fix introduced: 1 record** — #505/PR529's
+  r1/r3 were scan gaps the fixes did not introduce, so they do not count. REOPEN unchanged.
+
+**Parked, 1 record each.**
+- A Phase 2 lens's mutation probe overwrote the surefire report the fixer's green rested on (#407:19,
+  one root re-build). `harden` Phase 2's *Only ONE of them may mutate the worktree* covers the shape.
+  **REOPEN ON:** a second record, or one that cost a cycle.
+- Refuter's scope narrowing ("one case pins it") overturned by a reviewer's per-conjunct measurement
+  (#407:8/:18, 1 fixer pass inside r1's non-blocking exception). **REOPEN ON:** a second record.
+- `maintainerCanModify=false` on a same-repo PR (#505/PR529:49), no cost.
