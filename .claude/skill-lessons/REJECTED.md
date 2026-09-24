@@ -4096,3 +4096,54 @@ Both transcripts carry the 0.30.0 / 0.42.0 / 0.20.0 text (`run_in_background: fa
   the run and involves building. **REOPEN ON:** a record where code before the re-gate cost something.
 - #513's driver capture ("left its gate entry unfinished: phase=building … override=True") is the
   abort having recorded its override as :82-83 requires, not a defect.
+
+## 2026-09-24 (fifth window of the day: 2 run records — #514/PR524, #477/PR523) — 1 applied after revision (three edits, one driver change), 0 killed, parked below; one refutation round; linter 10 files, 0 findings
+
+Proposals and the gate's objections: `proposals/2026-09-24-window-514-477PR523.md`.
+
+**A record the store lost, again.** The #477/PR523 run did `cat > …-477.md` (`608ffbd8…`:785) over the
+#477/PR509 record pushed at `dcafb6c`. Found at Step 6's pre-read comparison. PR509's record restored
+from `origin/main` at `…-477.md`, and PR523's kept beside it as `…-477-PR523.md`, as with #488 (:3909).
+
+- **P1 APPLIED after revision (resolve-ticket 0.21.0, pr-harden 0.31.0, skill-retro 0.2.10, pool-run):
+  a run record is appended with `>>`, and the driver reads the LAST record's outcome.** Bar (a): three
+  separate overwrites, all `cat >` on a date+ticket name — #305 (2026-09-07, one run's pr-harden record
+  over its own resolve-ticket record, `28d5f7ec`:2166 then :3523; the resolve-ticket record is lost for
+  good, `5871bcf` already had only the pr-harden header; found by the gate), #488 (`39ed9650`:769,
+  `d52a1da1`:531) and #477. The name is kept because `pool-run` `record_written` attributes by
+  `[-_]<num>(-driver)?$` at the stem end. Revised per the gate:
+  - edit 1's reason names the same-run case (#305) alongside the second-run case;
+  - edit 2, BLOCKING as drafted: an append bumps the older file's mtime, so `un_retroed()` (mtime vs
+    `LAST`) and Step 1's "since the last retro" re-read runs an earlier window counted — measured by the
+    gate running the real `un_retroed()` on this store, which returned the restored `…-477.md`. Step 1
+    now says to count only records whose header's PR the ledger does not already name;
+  - edit 3: the anchor is the last `# ` line immediately followed by `outcome:`, not the last `# `
+    chunk, because a fenced shell comment is also a `# ` line. Falls back to the old first-12-lines read.
+    Over the 121 store records the new reader agrees with the old one (0 differences, 3 aborted). The
+    new `pool-test.py` cases against `origin/main`'s reader: 2 of 5 FAIL (converged-then-aborted, and
+    aborted-then-converged), 5 of 5 pass with the new one. The converged fixture is padded past 12
+    lines, since the short one passed the old reader by accident.
+  Prunes nothing: it makes "Append" concrete where three runs read it as "write". Net: +5 lines each
+  in resolve-ticket and pr-harden, +3 in skill-retro, +10 in pool-run, +20 in pool-test.py.
+
+**Gate's observation, not proposable (0 records):** `capture_record` writes `-driver.md` with
+`write_text` under a date+ticket name, so two record-less deaths on one ticket and UTC date would
+overwrite. The three `-driver.md` files each hold one capture. **REOPEN ON:** a lost driver capture.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 7 records** (+#514: six Phase 2 rounds, five
+  escalated; +#477-PR523: one). No remedy named that keeps each pass's real defect. REOPEN unchanged.
+- **pr-harden rounds whose blocking finding the previous round's fix introduced: 1 record, bar (b) met,
+  no remedy** — #514:21-22, r2->r3->r4 on a free-prose recogniser widened per finding, ending at the
+  round cap with the PR left draft, which is the cap working. Same family as the escalation park.
+  **REOPEN ON:** a second record, or a proposal naming what the fixer could have done differently.
+- **Prose the change made false, found by a fresh agent: 7 records** (+#514, +#477-PR523:16). REOPEN
+  unchanged.
+- **chartsearchai's nested `CLAUDE.md` byte budget: 6 records** (+#477-PR523:26, 7 bytes left, a
+  pointer declined). REOPEN unchanged.
+- **main moving under a run: 3 records** (+#514:12, ADR 116 taken by #523, renumbered at rebase, 0 cost).
+  REOPEN unchanged.
+- #514:11's "these N legs are unpinned" residue list (2 harden cycles, stopped at deletion) is
+  `harden`:489 followed late, not a new lesson.
+- 1 record: `gate-state` has no remove subcommand; an entry written with placeholder values was removed
+  by hand under the lock (#514:27, no harm).

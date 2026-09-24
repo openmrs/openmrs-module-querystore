@@ -3105,10 +3105,20 @@ def record_says_aborted(record: Path | None) -> bool:
     deliberate hand-back from a crash, since both leave no PR. And it can only make the driver do
     LESS: the ticket waits for a human instead of being retried. A crashed run that mislabelled itself
     therefore costs an attempt nobody spends, never a wrong PR.
+
+    A file can hold several runs' records, since a later run on the same ticket and date appends to
+    it, so the outcome read is the LAST record's: the last `# ` header immediately followed by an
+    `outcome:` line. Reading the first would retry a second run that aborted after a first converged.
+    A header alone is not enough to anchor on, because a fenced shell comment is one too.
     """
     if not record:
         return False
-    for line in record.read_text().splitlines()[:12]:
+    lines = record.read_text().splitlines()
+    outcomes = [nxt for line, nxt in zip(lines, lines[1:])
+                if line.startswith("# ") and nxt.lower().startswith("outcome:")]
+    if outcomes:
+        return "abort" in outcomes[-1].lower()
+    for line in lines[:12]:
         if line.lower().startswith("outcome:") and "abort" in line.lower():
             return True
     return False

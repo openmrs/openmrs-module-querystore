@@ -1043,6 +1043,25 @@ def test_record_attribution(tmp: Path) -> None:
         check("with no siblings the unnumbered fallback still finds a record", got is not None)
 
 
+def test_record_says_aborted(tmp: Path) -> None:
+    print("\nreading a run's abort from a record file that may hold several runs")
+    # Longer than the 12 lines the pre-append reader scanned, as every real record is.
+    converged = ("# resolve-ticket · repo · #1 · 2026-01-01\noutcome: converged\n"
+                 + "".join(f"\n## Section {i}\n- an entry\n" for i in range(5)))
+    aborted = "# resolve-ticket · repo · #1 · 2026-01-01\noutcome: aborted (condition 3)\n\n## Declined\n"
+    capture = f"\n{pool.DRIVER_HEADER}\noutcome as the driver measured it: no-pr\n- nothing\n"
+    fence = "\n## Where a skill blocked or contradicted this run\n```\n# re-run the probe\nmvn test\n```\n"
+    cases = [("a second run that aborted after a first converged is an abort", converged + aborted, True),
+             ("a second run that converged after a first aborted is not", aborted + converged, False),
+             ("a driver capture appended after an aborted record does not hide it", aborted + capture, True),
+             ("a fenced `# ` comment inside an aborted record does not hide it", aborted + fence, True),
+             ("a single converged record is not an abort", converged, False)]
+    for i, (name, text, want) in enumerate(cases):
+        path = tmp / f"abort-{i}.md"
+        path.write_text(text)
+        check(name, pool.record_says_aborted(path) is want, text)
+
+
 def test_crash_does_not_clobber(tmp: Path) -> None:
     print("\na worker that raises after recording its outcome")
     # EVERYTHING here runs inside `isolated`. `crash_entry` writes LEDGER unconditionally, and these
@@ -4275,7 +4294,8 @@ def main() -> int:
                          ("worktrees", test_worktrees), ("slots", test_slots),
                          ("gate-state", test_gate_state_locking), ("waves", test_waves),
                          ("parallel run", test_parallel_run), ("say", test_say_is_thread_safe),
-                         ("records", test_record_attribution), ("crash", test_crash_does_not_clobber),
+                         ("records", test_record_attribution), ("aborted", test_record_says_aborted),
+                         ("crash", test_crash_does_not_clobber),
                          ("nothing ran", test_nothing_ran), ("maven tail", test_shared_maven_repo), ("db ports", test_db_port_hosts),
                          ("skill commands", test_skills_commands_run),
                          ("driver gate-state", test_pool_gate_state_via_helper),

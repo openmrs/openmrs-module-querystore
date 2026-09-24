@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.2.9
+version: 0.2.10
 ---
 
 # Skill retro — evidence in, governance change out
@@ -29,7 +29,10 @@ So: capture is automatic and belongs to the pipeline skills. Derivation and comm
 
 ## Step 1 — Read the evidence
 
-Records live in `~/.claude/skill-lessons/*.md`, one per finished run, written by the skill that ran
+Records live in `~/.claude/skill-lessons/*.md`, one per finished run, or several where a later run on
+the same ticket and date appended to it, each opening with its own `# ` header — a file newer than
+`LAST` can carry records an earlier window already counted, so count only the records whose header's
+PR the ledger does not already name. Each is written by the skill that ran
 — or, for a run that ended without writing one, by the `ticket-pool` driver, which marks its own file
 as driver capture and says which sections nobody observed. Read those as evidence that a run ended
 that way, and corroborate nothing else from them. **The store also holds measurement notes, defect

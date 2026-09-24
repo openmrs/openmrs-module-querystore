@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.30.0
+version: 0.31.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -1198,6 +1198,11 @@ directory if needed). This is **capture, not derivation**: it records what happe
 rule. `skill-retro` turns accumulated records into skill edits, because a lesson needs corroboration
 across runs and an adversarial pass before it changes how every future run behaves — neither of which
 this run can supply about itself.
+
+**Append means `>>`, never `>` or the Write tool.** The name is keyed on date and ticket, so a second
+record for one ticket and day (a second run, or this run's pr-harden record after its resolve-ticket
+one) lands on the first: `cat >` replaced it on #305 (2026-09-07, same run), #488 (2026-09-23) and
+#477 (2026-09-24). Keep the name — it is how `pool-run` finds your record.
 
 It costs no agent and nothing you do not already hold. Write it even when the run was clean; a record
 saying "the gate objected to nothing and no fresh agent found anything the author had missed" is

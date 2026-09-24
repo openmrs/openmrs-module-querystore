@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.20.0
+version: 0.21.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -602,6 +602,11 @@ directory if needed). This is **capture, not derivation**: it records what happe
 rule. `skill-retro` turns accumulated records into skill edits, because a lesson needs corroboration
 across runs and an adversarial pass before it changes how every future run behaves — neither of which
 this run can supply about itself.
+
+**Append means `>>`, never `>` or the Write tool.** The name is keyed on date and ticket, so a second
+record for one ticket and day (a second run, or this run's pr-harden record after its resolve-ticket
+one) lands on the first: `cat >` replaced it on #305 (2026-09-07, same run), #488 (2026-09-23) and
+#477 (2026-09-24). Keep the name — it is how `pool-run` finds your record.
 
 It costs no agent and nothing you do not already hold. Write it even when the run was clean; a record
 saying "the gate objected to nothing and no fresh agent found anything the author had missed" is
