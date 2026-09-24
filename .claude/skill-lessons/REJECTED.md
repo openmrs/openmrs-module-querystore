@@ -4230,3 +4230,35 @@ Step 6's pre-read comparison: `origin/main` and this store agreed on every file 
 - Refuter's scope narrowing ("one case pins it") overturned by a reviewer's per-conjunct measurement
   (#407:8/:18, 1 fixer pass inside r1's non-blocking exception). **REOPEN ON:** a second record.
 - `maintainerCanModify=false` on a same-repo PR (#505/PR529:49), no cost.
+
+## 2026-09-24 (eighth window of the day: 2 run records — #394/PR531, #429/PR530, both 1 round, converged) — 1 proposed, 0 applied, 1 parked by the refuter; one refutation round; linter 10 files, 0 findings
+
+Proposals and the gate's reply: `proposals/2026-09-24-window-394-429.md`.
+
+**Parked by the refuter.**
+- **resolve-ticket Step 1: a ticket's measurement taken on another sha must be re-measured on HEAD:
+  1 record** (#394:11, gate-blocking, one extra api-suite run). Drafted as bar (a) with #408, extending
+  Step 1's "a measurement in a comment outranks a claim in the body" (:165-167). Refuter: #408:9 is a
+  different class. That ticket's mutation missed its row "on today's selftest, and on the base", so it
+  was never stale, just wrong. This ledger already logs it as its own 1-record item (:4062-4063). The
+  draft's "no longer reached" was unsupported. Both measurements sat in the ticket BODY, with no
+  comments, so the anchor was the wrong sentence. The costs (one suite run, and 0) repeat :3772-3774's
+  "no cost measured, so any text is an unchecked claim", and Step 3 q6 plus #408's author measurement
+  already caught both. **REOPEN ON:** a record where a ticket or comment measurement from an older sha
+  was carried into a plan or PR and cost at least one round, or reached a merged head. Anchor on the
+  ticket as a whole, and cite only #394 for staleness.
+
+**Parked counts advanced.**
+- **resolve-ticket Step 5 assumes a production change, on a non-fix deliverable: 3 records, 0 cost**
+  (+#429:17, a doc-only ticket, "Mutation probes stood in as the evidence"). None of the three reports
+  a cost. REOPEN condition at :4049-4052 unchanged, and not met.
+- **Orchestrator yield on a background build/Monitor refused by the Stop gate, AFTER pr-harden 0.30.0's
+  foreground-loop rule: 1 record** (#429:18, one refused yield, recovered with a foreground until-loop,
+  as the rule prescribes). The rule exists and was not applied. The owner-level `~/.claude/CLAUDE.md`
+  *Wait on a condition* still says "start long work with `run_in_background` … and let the completion
+  notification wake you", the steer :3951-3952 reported and left unedited. **REOPEN ON:** a second
+  post-0.30.0 record, or one that cost more than a turn.
+
+**Parked, 1 record each.**
+- A harden P2 lens finding a new parenthetical restated what moved rather than why (#394:12, one polish
+  commit). No cost beyond polish.
