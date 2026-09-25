@@ -4610,3 +4610,89 @@ capture's placeholder. Proposals and the gate's reply: `proposals/2026-09-25-own
 
 **Observed, no remedy owed.** Resumed sessions move their scratchpad (#305): one session in the store,
 and the filesystem check found one. The uuid glob resolves it correctly.
+
+## 2026-09-25 (fourth pass of the day, owner-directed: items 3-5 of the third pass's list — no new run record) — 3 applied (the owner's wait rule after revision; a 25-deletion pr-harden prune; two gate comments and one `pr-set` correction), 2 parked by bars registered before measuring (a stale-prose lister, a size-budget pre-check), 0 killed; one refutation round over the staged diff; linter 10 files, 0 findings; `gate-test.sh` pr-harden 36/0 and harden 47/0 on both copies
+
+Proposals, measurements and the gate's reply: `proposals/2026-09-25-owner-directed-prose-prune-wait.md`.
+The prune's candidate table: `artifacts/2026-09-25-pr-harden-prune-candidates.json`. The stale-prose
+lister, its ground truth and the harness: `artifacts/2026-09-25-false-prose-ground-truth/`.
+
+- **APPLIED after revision · the owner's `~/.claude/CLAUDE.md`: *Wait on a condition* gets a pipeline
+  exception.** Bar (a): the Stop gate refused a mid-run yield on a background build or a `Monitor` on
+  #479, #489, #498 and #505, and on #429 and #273 after pr-harden 0.30.0. It had been reported to the
+  owner unedited at :3951 and :4278; the owner directed it now.
+  - The gate killed the draft's second half, "an unattended `claude -p` run ends with its turn".
+    #310's single `-p` process has 8 `system init` records, each re-init following a notification after
+    a turn end, and its `.err` reads "Background tasks still running after 600s; terminating". Both
+    re-measured here.
+  - Shipped: the gate's text, which keeps the gate half and points at `pr-harden`:1071 (*this session
+    must not busy-wait either*).
+- **APPLIED · pr-harden 0.33.2: a prune, 1315 → 1250 lines.** Drafted by a fresh agent, 25 deletions
+  with verbatim surviving-home quotes (its checker calibrated on a one-word-changed and a one-line-off
+  quote, 29 passages rejected with reasons). Applied by script, with every in-file surviving quote
+  re-checked afterwards.
+  - The gate verified every `preserved` quote in its target, found no sibling pointing at a deleted
+    passage by name, and applied all 25.
+  - Five of the deletions removed claims already false: the fail-open universal "it cannot wedge a
+    session", "nothing has ever compared them", "skips every remaining ticket in the pool", "since no
+    session can advance a run whose writer is gone", and the Anti-patterns bullet P16's "Only the
+    declined ledger crosses rounds".
+  - Eleven are Anti-patterns bullets restating body rules, three of which had drifted from the body.
+    This ledger holds no ruling on Anti-patterns sections.
+  - Measured rules moved nowhere; their measurements survive at the quoted homes. The one pointer
+    names `resolve-ticket`'s *Step 5 — Test first, then the fix*.
+- **APPLIED · two gate comments, and `pr-set`'s drop list.** "Nobody here can advance its run", which
+  both gates' headers retract, is deleted from `pr-harden-gate.sh`:218 and `harden-cycle-gate.sh`:187,
+  in all copies (harden 0.42.1). pr-harden:82-83 now lists `verified_shas` among what `pr-set` drops
+  (`gate-state`:400-409), stale since `ea574f9`.
+- **Re-pointed, per the gate:** :3695's park ("A confirming reviewer briefed that zero findings is the
+  expected outcome") named *Don't brief the reviewer with what was fixed* as its nearest rule. That
+  bullet is deleted; the rule is at pr-harden:251-255, the declined-ledger bullet: "do **not**
+  reassure it that any area is closed".
+
+**PARKED by its own bar · a stale-prose lister (item 4a): 31% recall against 50%.**
+- The bar and the metric were fixed before anything was measured: recall ≥ 50% and median output ≤ 60
+  lines, over the park's reconstructable in-tree instances.
+- The lister was built test first. Its list B was narrowed to a change's SUBJECTS on output size
+  (#524: 1119 → 138) before any ground-truth run.
+- The ground truth came from a fresh agent: 102 instances, 59 of them the park's own (`source:
+  record`), over 14 PRs. 46 candidates were unreconstructable, 23 because they had been squashed into
+  the change's first commit.
+- **Primary:** 18/59 caught. That is ADDED 18/35 (A, universals in added prose) and OLD 0/24 (B, unchanged
+  prose naming a subject). Median output was 49 lines.
+- **Calibration:** 0.06% of prose lines are listed, and the lines ±40 from each false line are listed
+  2 times in 58.
+- **Secondary:** all 102 instances, 32%; excluding borderline and already-false instances, 42%.
+- **Exploratory:** at ±2 lines, 23/59 (ADDED 22/35); the broad B, every identifier on a changed line,
+  catches OLD 0/24 at a median of 87 lines.
+- So the park "Prose the change made false" (17 records) has now had its mechanical lever tried.
+  Universals catch about half of what a change ADDED. What a change made false in OLD prose is not
+  reachable by identifier mention, which is `harden`:497's *names the claim's key nowhere*, measured.
+- **REOPEN ON:** a universals-only lister under a fresh bar, registered before it is measured on new
+  records' ADDED instances.
+
+**PARKED by its own bar · a size-budget pre-check (item 4b): the expected saving is negative.**
+- The guard alone took 39 s cold and 20 s warm, against ~105 s for a root build. 80 of 134 PRs merged
+  from 08-20 to 09-25 touched a `CLAUDE.md`.
+- A pre-check on each would cost ≥ 27-52 min, while the park's 7 records × 1-2 builds are ≤ 12-25 min.
+- **REOPEN ON:** a guard that runs without compiling the module, or an overflow that cost a round.
+
+**Recorded for a later pass: the stated mechanism of the unattended-yield rule is wrong in thirteen
+homes.**
+- "`claude -p` exits when its turn ends, so nothing re-invokes it / the yield IS the death" appears in:
+  - `pr-harden`:973-974 and `resolve-ticket`:273;
+  - `pr-harden-gate.sh`:42-43, :229, :277, :285 and `harden-cycle-gate.sh`:36-37, :196, :238, :245,
+    two copies each;
+  - `ticket-pool`:390 and `pool-run`:3328, :3397.
+- #310's own log refutes it. A `-p` run waits on background work up to a ceiling, 600 s in #310, and
+  is re-invoked. It dies when the work outlasts that ceiling, as a subagent often does and a ~105 s
+  build does not.
+- The gates' blocking behaviour stays right; only the reason they state is wrong.
+- **REOPEN ON:** a pass that measures the current harness's ceiling (`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS`)
+  and then corrects every home.
+
+**Observed, no remedy owed.**
+- The owner's "a foreground `sleep` is refused" is not universal: the gate ran `sleep 3`, `sleep 12`
+  and until-loops. It is the owner's sentence, so it is noted, not edited.
+- Three of this session's five read-only agents wrote something, each disclosed and each scratch: two
+  helper scripts, a candidates file and verifier, and one `FETCH_HEAD`.

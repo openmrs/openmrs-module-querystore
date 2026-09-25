@@ -1,0 +1,632 @@
+[
+ {
+  "id": "P1",
+  "lines": [
+   861,
+   867
+  ],
+  "whole": true,
+  "anchor": "**The condition is a property of the ARTIFACT, and it used to be a past event.**",
+  "delete": "**The condition is a property of the ARTIFACT, and it used to be a past event.** *\"A review round reported zero blocking findings\"* was true of the sha that round read, and stayed true once FINISH applied its non-blocking findings and pushed a different one — so the run handed over a head no reviewer had ever seen, on any run whose terminating round raised a non-blocking finding at all. The verifier half is the same hole from the other side. `reviewed_shas` had been recorded here since this skill was written, and step 1 compares it against the INCOMING head at the start of a round; what nothing compared it against was the head being handed over.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "THE CONDITION IS A PROPERTY OF THE ARTIFACT, NOT A PAST EVENT, and it used to be the latter.",
+    "line": 14
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "So this gate released a handover whose head no reviewer had ever seen — every run on which the terminating round raised any non-blocking finding at all, which is the normal case.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "The verifier half is the same hole from the other side — FINISH runs one on the merging head and its finding has no round left to reach.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "`reviewed_shas` has been recorded in this file since the skill was written, and the skill's step 1 compares it against the INCOMING head at the start of a round (two rounds reviewing one sha is a round wasted); what nothing compared it against was the head being HANDED OVER, which is the comparison below.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "It graded the FINDINGS, which the reviewer saw, and not the FIXES, which did not exist when it looked.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**A `/pr-harden` run is complete when the SHA IT IS HANDING OVER has been reviewed with zero blocking findings — and, where any verifier ran, verified on that same sha.**",
+    "line": 848
+   }
+  ]
+ },
+ {
+  "id": "P2",
+  "lines": [
+   972,
+   975
+  ],
+  "whole": true,
+  "anchor": "`reviewed_shas` is not only a record, and it is now read at both ends:",
+  "delete": "`reviewed_shas` is not only a record, and it is now read at both ends: step 1 compares the incoming head against its last entry, because two rounds reviewing one sha is a round spent on bytes already reviewed, and the Stop gate compares the head being handed over against it, because a clean count about an earlier sha says nothing about this one.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**Compare that sha against the last entry of `reviewed_shas` before you spawn anything.**",
+    "line": 176
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "the loop is about to spend a round re-reviewing bytes it has already reviewed",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "`pr-harden-gate.sh` refuses the stop when the head is not the last reviewed sha, or not the last verified one.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "The two sha lists were the orchestrator's ledger too until the gate began reading their last entries against the head",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P3",
+  "lines": [
+   176,
+   178
+  ],
+  "anchor": "The state file has recorded these since the skill was written and nothing",
+  "delete": "The state file has recorded these since the skill was written and nothing has ever compared them, so the cheapest check in the loop was sitting unused.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "The two sha lists were the orchestrator's ledger too until the gate began reading their last entries against the head",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "`pr-harden-gate.sh` refuses the stop when the head is not the last reviewed sha, or not the last verified one.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "LAST_REVIEWED=$(jq -r '(.reviewed_shas // []) | last // empty' <<<\"$ENTRY\" 2>/dev/null) || allow",
+    "line": 357
+   }
+  ]
+ },
+ {
+  "id": "P4",
+  "lines": [
+   540,
+   543
+  ],
+  "whole": true,
+  "anchor": "**\"Whichever one you need\" means the one you were given.**",
+  "delete": "**\"Whichever one you need\" means the one you were given.** That phrase used to be unqualified, and unqualified it is a licence to stop a server another run is mid-query against — which became reachable the moment the pool could work two tickets at once. The instance is yours; every other one on the machine is somebody's.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**When `$OPENMRS_STANDALONE_HOME` is set it is not a hint, it is the assignment.**",
+    "line": 505
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "a run that \"helpfully\" takes a quieter one takes a sibling's.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "stop the one you resolved in step 1, running or not, without confirmation.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "Repair what you were given; report the rest as an environment finding and say a co-tenant may own it.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/verify-frontend-change/SKILL.md",
+    "quote": "restart whichever one you need whether or not something is already on its port.",
+    "line": 47
+   }
+  ]
+ },
+ {
+  "id": "P5",
+  "lines": [
+   923,
+   924
+  ],
+  "anchor": "**Do not raise a cap the caller set:** `--max-rounds N` is their budget,",
+  "delete": ", which leaves the checkout dirty and skips every remaining ticket in the pool",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/ticket-pool/SKILL.md",
+    "quote": "**A `worktree-blocked` costs one ticket and no others.**",
+    "line": 411
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/ticket-pool/SKILL.md",
+    "quote": "*This section used to say that a dirty checkout stalled the whole pool*, and that a single uncommitted file in the operator's own tree skipped every remaining ticket. It is no longer true",
+    "line": 415
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/pipeline/pool-run",
+    "quote": "That removed the pool's own worst case — one dirty checkout skipping every remaining ticket.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P6",
+  "lines": [
+   886,
+   888
+  ],
+  "anchor": "It fails open on every ambiguity (no file, malformed JSON, no `jq`, unrecognised",
+  "delete": "It fails open on every ambiguity (no file, malformed JSON, no `jq`, unrecognised phase, stale entry, non-numeric count), so it can only ever add a round you owed; it cannot wedge a session.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "FAIL OPEN, ALWAYS. A gate that wedges every future turn in every repo is far worse than one that occasionally lets an early stop through, so every ambiguous case allows the stop: no state file, unreadable or malformed JSON, no jq, no entry for this directory, a missing or unparseable blocking count, an unrecognised phase, or an entry older than STALE_AFTER",
+    "line": 69
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "so a FINISHED run's leftover entry in a worktree that has since moved on now blocks, where before it allowed, until the six-hour expiry.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/harden/SKILL.md",
+    "quote": "It CAN hold a session, though",
+    "line": 446
+   }
+  ]
+ },
+ {
+  "id": "P7",
+  "lines": [
+   716,
+   718
+  ],
+  "anchor": "This passage used to enumerate the refs instead; they are gone from the checkout",
+  "delete": "This passage used to enumerate the refs instead; they are gone from the checkout it measured, which is why it names the method now.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skill-lessons/REJECTED.md",
+    "quote": "**Pruned:** the eleven-ref enumeration at `pr-harden`:425. Retired by measurement — in the checkout those runs happened in, `git branch --list 'pr-*'` now returns `pr-286` alone.",
+    "line": 490
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "The check is `git branch --list 'pr-*'` in a repo this loop has worked, read for the `pr-<n>-r<round>` shape.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P8",
+  "lines": [
+   1156,
+   1162
+  ],
+  "anchor": "**Why a helper rather than the inline `python3` this used to be.** The read,",
+  "delete": "**Why a helper rather than the inline `python3` this used to be.** The read, the change and the write are one critical section, and they were not: every writer read the whole file, changed its own entry and wrote the whole file back, unlocked. With one run on the machine that is fragile; with several it is lossy, and lossy in the direction that kills a run — the entry that disappears is somebody's `awaiting`, and their gate then sees a run that quit with agents outstanding. Measured with 20 concurrent writers to 20 different working trees: the inline form kept **3 of the 20**, valid JSON throughout, nothing raised.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/harden/SKILL.md",
+    "quote": "**Why a helper rather than the inline `python3` this used to be.** The read, the change and the write are one critical section, and they were not",
+    "line": 437
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/harden/SKILL.md",
+    "quote": "Measured with 20 concurrent writers to 20 different working trees: the inline form kept **3 of the 20** entries, valid JSON throughout, nothing raised.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/resolve-ticket/SKILL.md",
+    "quote": "measured with 20 concurrent writers, the inline form kept 3 of 20 entries and raised nothing.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/pipeline/gate-state",
+    "quote": "WHY THIS EXISTS AND WHY IT IS NOT A CONVENIENCE.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/pipeline/gate-state",
+    "quote": "with several it is lossy, and lossy in the direction that kills a run",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P9",
+  "lines": [
+   671,
+   675
+  ],
+  "anchor": "Measured on the fourth run of the pipeline that calls this skill: an agent",
+  "delete": "Measured on the fourth run of the pipeline that calls this skill: an agent left the worktree on `main`, four orchestrator edits landed there, and it surfaced only because the test count dropped by exactly the size of the PR's new test file — a `git branch --show-current` before the first edit would have caught it immediately, and a commit in between would have put the work on `main`.",
+  "replace": "`resolve-ticket`'s *Step 5 — Test first, then the fix* carries the measurement.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/resolve-ticket/SKILL.md",
+    "quote": "## Step 5 — Test first, then the fix",
+    "line": 406
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/resolve-ticket/SKILL.md",
+    "quote": "**Check `git branch --show-current` before you edit, not only before you commit.**",
+    "line": 416
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/resolve-ticket/SKILL.md",
+    "quote": "On this skill's fourth run an agent left the worktree on `main` and four edits landed there; it surfaced only because the test count dropped by exactly the size of the new test file",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "So: `git branch --show-current` must equal the PR's head ref before `git commit`",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P10",
+  "lines": [
+   856,
+   859
+  ],
+  "anchor": "That is where the two skills' contracts differ, and `/harden` no longer uses edits either:",
+  "delete": "That is where the two skills' contracts differ, and `/harden` no longer uses edits either: it ends when its Phase 1 passes stop finding substantive issues AND the one Phase 2 pass after that has run, for the same reason — an edit count cannot tell a polish edit from a substantive one, so it answers the wrong question in both loops.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/harden/SKILL.md",
+    "quote": "**`/harden` is complete when Phase 1 has converged and the single Phase 2 pass that follows it has run without escalating.**",
+    "line": 207
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/harden/SKILL.md",
+    "quote": "**Report the edit count. It no longer gates.**",
+    "line": 228
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "Edit counts are irrelevant here, and as of harden 0.34.0 they are irrelevant THERE too, so this is no longer a contrast between the two skills.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P11",
+  "lines": [
+   50,
+   52
+  ],
+  "anchor": "It refuses the per-call parameter and nothing else, and two other things outrank",
+  "delete": "It refuses the per-call parameter and nothing else, and two other things outrank the session model without producing a call for it to see.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "`PreToolUse` hook (`~/.claude/hooks/no-subagent-model-override.sh`) refuses such a call, so this is enforced rather than asked",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/hooks/no-subagent-model-override.sh",
+    "quote": "It keeps a subagent on the model of the session that spawned it. It does NOT establish which model that session is on, and it does not reach three other levers:",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/hooks/no-subagent-model-override.sh",
+    "quote": "An agent definition's `model:` frontmatter and a configured default subagent model both outrank the session model and produce no call for this to refuse.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P12",
+  "lines": [
+   993,
+   995
+  ],
+  "anchor": "What none of it fixes: two runs in one checkout still share one entry",
+  "delete": "What none of it fixes: two runs in one checkout still share one entry and the later writer wins — this tells one session's entry from another's, it does not give them one each.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "only two sessions sharing ONE directory still share one entry, and `owner` is what tells those apart.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "What is NOT fixed is two sessions in the SAME directory, which is the interactive case: they key alike and the later writer wins, the loser's stamp simply overwritten. `owner` tells one session's entry from another's there; it does not give them one entry each.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/ticket-pool/SKILL.md",
+    "quote": "Measured: two sessions in one directory share ONE gate entry, and the first ticket's is silently gone — the later writer wins.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P13",
+  "lines": [
+   478,
+   481
+  ],
+  "anchor": "Met on `openmrs-module-chartsearchai` PR #465 (2026-09-21), where the orchestrator reasoned",
+  "delete": "Met on `openmrs-module-chartsearchai` PR #465 (2026-09-21), where the orchestrator reasoned its way to a skip with no rule to lean on; a less careful run either skips silently or spends rounds deploying an omod that cannot reach the changed code.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skill-lessons/2026-09-21-chartsearchai-PR465.md",
+    "quote": "This change lives in the Docker ENTRYPOINT, which a standalone never executes, so the prescribed verifier was structurally incapable of observing it. The skill has no path for \"runtime-visible but not standalone-observable\"; the orchestrator had to reason to a skip.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "On #465 the substitute was the repo's own harness",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P14",
+  "lines": [
+   984,
+   985
+  ],
+  "anchor": "since no session can advance a run whose writer is gone",
+  "delete": ", since no session can advance a run whose writer is gone",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "A DEAD owner allows, and the reason first written here was wrong twice over, so it is stated properly: it is NOT that nobody can advance that run (`claude --resume` is a new pid on the same conversation, and a fresh `/harden` in the same directory simply overwrites the entry)",
+    "line": 188
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/pr-harden-gate.sh",
+    "quote": "It allows because a pid that no longer exists is not evidence that anything is in flight",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P15",
+  "lines": [
+   1272,
+   1274
+  ],
+  "whole": true,
+  "anchor": "- **Don't let the fixer own the blocking count.** It is the exit condition; the agent bein",
+  "delete": "- **Don't let the fixer own the blocking count.** It is the exit condition; the agent being reviewed does not get to set it. A disagreement is a decline, and a declined blocker ends the run as *did not converge*.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "The orchestrator writes the blocking count to state **from the reviewer's JSON**. Not from the fixer's reading of it, not from your own judgement of which findings are serious. The exit condition belongs to the agent whose work is not being judged.",
+    "line": 298
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "Declining a blocking one means the exit condition was never met, so the run ends visibly as *did not converge* — never as success.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P16",
+  "lines": [
+   1279,
+   1280
+  ],
+  "whole": true,
+  "anchor": "- **Don't brief the reviewer with what was fixed.** Only the declined ledger crosses round",
+  "delete": "- **Don't brief the reviewer with what was fixed.** Only the declined ledger crosses rounds. Telling it an area is settled suppresses exactly the re-examination that finds accretion bugs.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "Do **not** tell it what was implemented, and do **not** reassure it that any area is closed — that suppression is the thing harden's \"re-derive the merged result from scratch\" warns about",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**the last verifier report**, if one exists, as fact it may use and need not own",
+    "line": 257
+   }
+  ]
+ },
+ {
+  "id": "P17",
+  "lines": [
+   1281,
+   1282
+  ],
+  "whole": true,
+  "anchor": "- **Don't record an environmental failure as a blocking finding.** The loop will grind rou",
+  "delete": "- **Don't record an environmental failure as a blocking finding.** The loop will grind rounds against a broken standalone until the cap and call it review.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "Neither is ever recorded as a blocking finding by the orchestrator: **an environmental failure is not a review finding**, and if the loop is allowed to treat one as blocking it will grind rounds against a broken standalone until the cap.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P18",
+  "lines": [
+   1283,
+   1284
+  ],
+  "whole": true,
+  "anchor": "- **Don't repair the artifact to get a green verifier run.** Reverting the round, redeploy",
+  "delete": "- **Don't repair the artifact to get a green verifier run.** Reverting the round, redeploying the last working omod, or flipping a GP to route around the failure is a green report on a broken build.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**A repair may only touch the environment, never the artifact under test.** No redeploying the previous omod, no reverting the round's commit, no flipping a global property to route around the failing path, no disabling the feature being verified.",
+    "line": 602
+   }
+  ]
+ },
+ {
+  "id": "P19",
+  "lines": [
+   1285,
+   1286
+  ],
+  "whole": true,
+  "anchor": "- **Don't mark a PR ready on an unverified head.** The exit path skips step 6, so \"no bloc",
+  "delete": "- **Don't mark a PR ready on an unverified head.** The exit path skips step 6, so \"no blocking findings\" is not \"somebody ran it\".",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "Step 6 sits on the fix path, so without this a PR whose round 1 found nothing blocking would reach `gh pr ready` with the standalone never started.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**A PR that could not be verified is not marked ready**",
+    "line": 738
+   }
+  ]
+ },
+ {
+  "id": "P20",
+  "lines": [
+   1287,
+   1289
+  ],
+  "whole": true,
+  "anchor": "- **Don't hand over a sha nobody reviewed.** A clean blocking count is about the sha the r",
+  "delete": "- **Don't hand over a sha nobody reviewed.** A clean blocking count is about the sha the reviewer read, not about the branch, and it stays true after you push over it. If FINISH edited, one blocking-only round is owed — see Termination.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**A `/pr-harden` run is complete when the SHA IT IS HANDING OVER has been reviewed with zero blocking findings — and, where any verifier ran, verified on that same sha.**",
+    "line": 848
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "It graded the FINDINGS, which the reviewer saw, and not the FIXES, which did not exist when it looked.",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**Where an edit here really is owed, it costs one more round rather than none.**",
+    "line": 779
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**That confirming round is BLOCKING-ONLY, and this is what makes the rule terminate.**",
+    "line": 783
+   }
+  ]
+ },
+ {
+  "id": "P21",
+  "lines": [
+   1290,
+   1292
+  ],
+  "whole": true,
+  "anchor": "- **Don't mark a PR ready before the last push.** Ready is a trigger, not a label — the Gi",
+  "delete": "- **Don't mark a PR ready before the last push.** Ready is a trigger, not a label — the GitHub App reviews every push to a non-draft PR — so a run that marks ready and then merges `main` or runs another round pays for a review per push. See FINISH.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**Marking ready is the LAST action of the run, after the last push — never before one.** It is not a status update, it is a trigger: the Claude Code GitHub App reviews every push to a NON-draft PR and skips drafts entirely, so a run that marks ready and then keeps pushing buys one automatic review per push.",
+    "line": 763
+   }
+  ]
+ },
+ {
+  "id": "P22",
+  "lines": [
+   1293,
+   1294
+  ],
+  "whole": true,
+  "anchor": "- **Don't skip the verifier on a streaming or timing change** because the tests are green.",
+  "delete": "- **Don't skip the verifier on a streaming or timing change** because the tests are green. Those are the changes tests structurally cannot answer.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "where tests structurally cannot answer the question (streaming, SSE timing, wire serialisation, prompt or latency behaviour) the verifier is not optional: skip it there and the loop converges on code nobody ran.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P23",
+  "lines": [
+   1295,
+   1297
+  ],
+  "whole": true,
+  "anchor": "- **Don't spawn a subagent without recording the await,** and don't leave one recorded aft",
+  "delete": "- **Don't spawn a subagent without recording the await,** and don't leave one recorded after its result arrives. The first blocks the run's own next yield; the second holds the gate open for a run that has actually stopped.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**record the await immediately before spawning, and clear it the moment the result arrives.**",
+    "line": null
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**Clear the await on ANY terminal outcome — completed, failed, stalled, killed — not on a result arriving.**",
+    "line": 1096
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "The gate blocks yields, so a run waiting correctly looks exactly like a run that quit.",
+    "line": null
+   }
+  ]
+ },
+ {
+  "id": "P24",
+  "lines": [
+   1298,
+   1299
+  ],
+  "whole": true,
+  "anchor": "- **Don't amend or force-push a round.** The chain of rounds is the artifact; a rewritten ",
+  "delete": "- **Don't amend or force-push a round.** The chain of rounds is the artifact; a rewritten sha is a round reviewing code that no longer exists.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "**Append only — never amend, never force-push.** A reviewer must be able to see the chain of rounds, and rewriting history under one that is mid-flight is how a round reviews a sha that no longer exists.",
+    "line": 689
+   }
+  ]
+ },
+ {
+  "id": "P25",
+  "lines": [
+   1300,
+   1301
+  ],
+  "whole": true,
+  "anchor": "- **Don't implement a finding `CLAUDE.md` has measured and rejected.** A clean reviewer wi",
+  "delete": "- **Don't implement a finding `CLAUDE.md` has measured and rejected.** A clean reviewer will propose some of them. Decline with the measurement cited.",
+  "preserved": [
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "`CLAUDE.md` outranks a reviewer.",
+    "line": 423
+   },
+   {
+    "file": "/Users/danielkayiwa/.claude/skills/pr-harden/SKILL.md",
+    "quote": "these are declines with the measurement cited, not implementations. That is exactly why the ledger exists: a clean reviewer will propose some of them, because they look obviously right",
+    "line": null
+   }
+  ]
+ }
+]

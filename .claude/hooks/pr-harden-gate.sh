@@ -215,7 +215,7 @@ case "$OWNER_PID" in
         1) allow ;;   # a LIVE session that is not this one owns this entry
       esac            # 0 = ours, 2 = cannot tell: fall through and hold us to the contract
     else
-      allow           # the owning session is gone; nobody here can advance its run
+      allow           # the owning session is gone
     fi
     ;;
 esac

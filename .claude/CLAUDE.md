@@ -43,7 +43,10 @@
 - **Wait on a condition, never on a clock.** A foreground `sleep` is refused by the harness: it costs
   a turn, and takes any real work in the same call down with it. Poll with `Monitor` and an
   until-loop, start long work with `run_in_background`, or do adjacent work and let the completion
-  notification wake you.
+  notification wake you. **Except inside a pipeline skill's run** (`resolve-ticket`, `pr-harden`,
+  `harden`): its Stop gate refuses a mid-run yield on a background build or a `Monitor`. There, wait
+  inside the turn with one foreground until-loop bounded under the tool's timeout, as `pr-harden`'s
+  *this session must not busy-wait either* gives it.
 - Read an issue with `gh issue view <n> --json title,body,comments`, never `--comments`: off a
   terminal that prints the comments and not the body, so an issue without comments reads as empty and
   one with comments reads as its comments alone (gh 2.87.3, measured 2026-09-23).
