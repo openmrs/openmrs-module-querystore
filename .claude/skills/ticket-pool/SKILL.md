@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.24.2
+version: 0.24.3
 ---
 
 # Ticket pool — the loop that learns
@@ -48,7 +48,7 @@ spent its attempt budget. Unlabel an issue to remove it.
 
 An issue with an open PR is **not** this pipeline's work — it is `pr-harden`'s entry point, which is
 what `resolve-ticket` says to do with one. That is also what happens to a ticket whose run ended as a
-`draft`: the next invocation finds the draft PR and hands it to `pr-harden` rather than starting again.
+`draft`: the next invocation finds the draft PR and skips it as `has-open-pr` rather than starting again.
 The PR is recognised from the **ledger's memory of the number** before any matching on titles or
 branches is attempted, because a run that wrote `Refs` on a branch carrying no number leaves a PR that
 no matching can see — and a second run on that ticket would open a second PR for one issue.

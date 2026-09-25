@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.32.0
+version: 0.33.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -84,8 +84,18 @@ Refuse the run, with the reason, if any of these fails:
   dropped. That print is a backstop, not this step's report — when you take over or clear an entry
   naming another PR, read it with `gate-state clear --only pr --json`, which prints the whole entry it removed,
   and say in the report which PR's it was and what it said.
+- **A PR with rounds from an earlier run can arrive with no entry to adopt.** `pool-run` clears the
+  entry when it makes a worktree, so a PR worked again in a worktree it has just made starts with
+  none, as #514/PR524's second and third runs did under `pool-run --claim`. Count its earlier rounds,
+  from its description and the run records whose header names this PR, toward *1 — REVIEW*'s round
+  4; the cap stays this run's budget. PR524's second run restarted at a full round 1, and its round 2,
+  the PR's sixth, sent non-blocking r2-2 to a fixer whose fix introduced blocking r3-1. Counted, that
+  round was blocking-only: r2-1 and r2-3, real holes that fixer implemented in part, would have been
+  notes, and on round 2's recorded count of 0 the run would have ended there, before its rounds 4 and
+  5 found r4-1 and r5-1, false reports round 2's reviewer had not raised.
 
-Then write the opening state entry (`phase: "init"`, `round: 1`) — see **State**. From this point the
+Then write the opening state entry (`phase: "init"`, and `round: 1` unless you adopted an entry, whose
+`round` you keep) — see **State**. From this point the
 Stop gate will not let the turn end until the head being handed over has been reviewed with zero
 blocking findings — and verified, where any verifier ran — or the override is taken.
 
@@ -93,7 +103,7 @@ blocking findings — and verified, where any verifier ran — or the override i
 
 ```
 1  REVIEW    fresh subagent · pushed head · declined ledger · last verifier report
-             BLOCKING-ONLY from round 4, and after a clean full round
+             BLOCKING-ONLY from the PR's round 4, and after a clean full round
 2  RECORD    the reviewer's blocking count → state          {phase: "reviewed"}
 3  exit?     blocking == 0 → step 7 · a clean FULL round's non-blocking
              findings go to step 4 first, and every round after is BLOCKING-ONLY
@@ -109,10 +119,11 @@ blocking findings — and verified, where any verifier ran — or the override i
 
 ### 1 — REVIEW
 
-**From round 4 on, the round is BLOCKING-ONLY** — and so is every round after a full round that
-found nothing blocking (step 3). Otherwise rounds 1 to 3 are full rounds: the reviewer reports
-everything and the fixer implements the non-blocking findings too, which is how polish happens. A
-blocking-only reviewer's findings are its blockers; anything else it notices it returns as `notes`,
+**From the PR's round 4 on, counting rounds earlier runs made (Step 0), the round is BLOCKING-ONLY**
+— and so is every round after a full round that found nothing blocking (step 3). Otherwise the PR's
+rounds 1 to 3 are full rounds: the reviewer reports everything and the fixer implements the
+non-blocking findings too, which is how polish happens.
+A blocking-only reviewer's findings are its blockers; anything else it notices it returns as `notes`,
 which the orchestrator copies into the run record's *Raised by a fresh agent*, marked unfixed, and
 FINISH names in the PR description — never to a fixer, never to an issue. A finding the
 orchestrator downgrades in such a round is a note too.

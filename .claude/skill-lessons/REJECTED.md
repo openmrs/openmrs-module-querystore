@@ -4437,3 +4437,122 @@ r1-3.
   took the override (:904-913 as written, #514-2:43).
 - #515's driver capture: the run began on a gate entry the aborted #515 run left (`phase=building`),
   the case the fifth window's `claim_slot` clear exists for. No cost recorded.
+
+## 2026-09-25 (second window of the day: 1 run record — #514/PR524's THIRD `pr-harden` loop, `…09-25-…-514.md`:1, converged at round 5) — 3 applied after revision (P1 as a correction, P2(a), and a `ticket-pool` correction the gate found), 0 killed, P2(b) parked; two refutation rounds, the second over the staged diff; linter 10 files, 0 findings; `pool-test.py` 580 passed / 0 failed on the final tree
+
+Step 6's pre-read comparison: `origin/main` (`2423c91`) and this store agreed on every file except
+`…09-25-…-514.md` (local-only). One record since `LAST`, so this is a one-record window. #514-1
+(`…09-24-…-514.md`:1) and #514-2 (:42), counted at :4100 and :4379, were read beside it for the adoption
+question only. Proposals and both gates' replies: `proposals/2026-09-25-window-514PR524-loop3.md`.
+Transcripts below: T2 = `31e8eac3-…` (#514-2), T3 = `7b912efd-…` (#514-3), times UTC.
+
+**A record defect, corrected in the store.** #514-3's `transcript:` names T2, the SECOND loop's session.
+The third loop ran in T3 (02:25Z to 07:30Z), whose :285 appends the record. The lookup was `ls
+<dir>/*.jsonl -t | head -1` (T3:281-282). BSD `ls` read `-t` as a file operand and listed
+alphabetically, so the earlier uuid came first. The note is appended to the record, per :3679-3681's #409
+precedent.
+
+- **P1 APPLIED as a correction (skill-retro 0.2.11): Step 1 counts the records `REJECTED.md` does not
+  already name.** The "header's PR" key (added at :4116-4119, measured on a different-PR append) drops a
+  later run on the same PR. :4379 counted #514-2 despite it, and this window's only record is the third
+  loop on PR524. Round 1 killed the bar-(c) claim: :41 governs reading and :34-35 governs counting, so
+  this is a gap (:330-333, :1103, :1972-1975). It also killed the drafted replacement, "name each by its
+  file and header line rather than its PR". That would re-count #514-1, which :4100 names only as
+  "#514/PR524", and replacement text needs a calibrated measurement (:3646-3648). What shipped is a
+  deletion (:2454-2455), plus round 2's "`REJECTED.md`" in place of an undefined "the ledger", a word
+  `ticket-pool` uses for `ledger.json`. Net 0. **So this block names its record as the THIRD loop.**
+- **P2(a) APPLIED after revision (pr-harden 0.33.0): a PR worked again in a worktree `pool-run` has just
+  made counts its earlier rounds toward round 4.** Bar (a): two records on ONE PR, #514-2 and #514-3,
+  separate runs per :4416-4417.
+  - The mechanism: Step 0 carries a same-PR entry's `round` forward (:71-73), but `pool-run` clears the
+    entry when it makes a worktree (`claim_slot` :1146, the driven path :3243). Both later loops were
+    launched by an operator chain after `pool-run --claim 514` (`d2089475…`:1701, :1761, :2106). Both
+    read `null` (T2:22-23, T3:22-23) and wrote round 1 (T2:32, T3:32).
+  - #514-2 then ran full rounds 1 and 2 (T2:134, :195) as the PR's rounds 5 and 6. Round 2's findings
+    were all non-blocking (T2:196), and they went to a fixer under step 3's exception (T2:202-208). One
+    of them, r2-2, introduced blocking r3-1 (#514-2:51, :59).
+  - #514-3 stated the gap (#514-3:24) and ran blocking-only from round 1 by judgment.
+  - This answers :4414-4420's REOPEN ON ("such a proposal"). What the run could have done differently
+    is count the PR's rounds.
+  - Round 1's revisions:
+    - The trigger ("a PR the pool hands back", "routed here by `ticket-pool`") was false. The driver
+      skips an open-PR ticket as `has-open-pr` (`pool-run`:2117-2125), and only `--claim` prints
+      `/pr-harden` (:4055).
+    - :112-113's "Otherwise rounds 1 to 3 are full rounds" and :96's diagram would have stood as
+      universals the rule falsifies (:3821-3827). Both now say "the PR's".
+  - Round 2's revisions:
+    - The counter-case, per :3649-3651. Counted, round 2 was blocking-only, so r2-1 and r2-3 become
+      notes. They were real holes, implemented in part (T2:208). On round 2's count of 0 (T2:203), the
+      run ends before rounds 4 and 5 found r4-1 and r5-1 (T2:314, :369), false reports already in round
+      2's head (:4392-4393, :4415-4416).
+    - The universals narrowed to "when it makes a worktree".
+    - Step 0's next paragraph wrote `round: 1` even over an adopted entry; it now keeps that entry's
+      `round`.
+  - The cap stays this run's budget (`pr-harden`:911-913). No gate reads `round` against a cap
+    (`pr-harden-gate.sh`:293).
+  - **It widens the round-4 rule, which :3687-3691 records as owing its own Step 5.** That REOPEN ON is
+    not met, since #514-2 offers counterfactuals only.
+  - Net +11: a Step 0 bullet on the only path where its carry-forward could fail.
+- **APPLIED as a correction, found by the gate (ticket-pool 0.24.3): a draft PR is skipped as
+  `has-open-pr`, not "handed to `pr-harden`".** Bar (c): :51 against :46, :394 and the driver. Round 2
+  drove the real `consider` (`pool-run`:2117-2123). P2's draft trigger rested on this sentence. Round 2
+  also cut round 1's suggested `--claim` clause. `cmd_claim` calls `pr_for_ticket` without `since` (:4019)
+  and reads no ledger, so a PR on a numberless branch with `Refs` only gets `/resolve-ticket` (:4057).
+  Net 0.
+
+**Parked by the gate · P2(b), the records' `## Declined` sections as the declined ledger: 1 record, 0
+cost.** #514-1 declined nothing (#514-1:30), so #514-2 had nothing to carry. T3's fifth carried item came
+from the PR body (T3:33), not from a `## Declined` section. #514-2's record omits the round-5 note it
+came from (T2:369, :437). So the description, which FINISH makes the home of everything unimplemented
+(`pr-harden`:715-717), is the fuller source. **REOPEN ON:** a run adopting an entry-less PR that
+re-raises, or is re-given, an earlier decline or note at a round's cost; or a second hand rebuild. If
+readmitted, source it from the PR description, cross-checked against the records.
+
+**Parked by the gate, no edit.** These are the widened rule's per-run neighbours: step 3's exception, "at
+most once per run" (pr-harden:302); "every round after a clean full round" (:121); and "From round 2 on
+… re-derive" (:256). Also the new bullet's sources missing or disagreeing: a driver capture's `rounds:
+unknown` (`…-349-driver.md`:3), and T3:33's description, which names only the second loop's six rounds.
+Only three or more earlier rounds change behaviour, so the larger count is the safe read. **REOPEN ON:**
+a record where either cost a round.
+
+**Parked, 1 record each.**
+- **An adopted PR's round 1 ran before the ticket's newer comments were read** (#514-3).
+  - The owner's decision on #514 (2026-09-24T23:58:35Z) predates the loop (02:25Z). The orchestrator
+    first read it at T3:96, after round 1 (T3:90, :101).
+  - It briefed declined item 1 ("PR says Refs, not Closes", T3:87) as settled, although the decision's
+    point 5 said `Fixes #514`.
+  - r1-1 was #514-2's open r6-1, which round 1 would have raised anyway.
+  - The sixth window's #512 park (:4175) is a different mechanism with a different home.
+  - **REOPEN ON:** a second record where an adopted PR's round is spent on a head that a ticket comment
+    had already decided, or where a carried decline that a comment had reversed suppressed a finding.
+- **A `transcript:` line naming another real session** (#514-3, corrected above).
+  - Measured over the store by `artifacts/2026-09-25-transcript-check.py`. It tests whether a record's
+    transcript MENTIONS the record's own file. The gate re-ran a test for an actual write; it also flags
+    #377 and #471, both real writes by hand.
+  - Of 124 headers carrying a transcript line, #514-3's is the only wrong uuid.
+  - 11 headers (10 records, #527 twice) name the right uuid under the wrong project folder; #409's was
+    corrected at :3679-3681. 4 driver captures carry a literal `<cwd-slug>` (`pool-run`:3179, beside
+    `project_dir_name` at :1208), the latest being 09-24's `…-515-driver.md`. 3 headers (#337 and #338
+    of 09-04) name a uuid found nowhere.
+  - Each of those fails loudly. #514-3's alone resolves to a plausible wrong run.
+  - **REOPEN ON:** a second wrong-uuid record, or a retro or gate conclusion drawn from one.
+
+**Parked counts advanced.**
+- **main moving under a run: 6 records** (+#514-3:10: #540 with 8 conflicting files and an ADR 119
+  collision, merged by a fresh agent before round 1, 0 rounds). Two of the six are before-round-1 merges
+  on an adopted PR (#514-2:48, #514-3:10). #514-3:25's "no phase for merging before round 1" is half
+  right: Step 1's base check (:193-230) compares against "the one the previous round saw", so round 1
+  has nothing to compare against. REOPEN unchanged (:4029).
+- Checked, not advanced: the fix-introduced blocker stays at 2, since T3's reviewer reports attribute no
+  blocker to a previous fix. Prose made false stays at 17, since the r5 note (#514-3:21) is an omission
+  that the PR body names (T3:273).
+
+**Observed, no remedy owed.**
+- The cap was raised on #308's signal (#514-3:9, 4→6 after four different defects) and converged at round
+  5. That is `pr-harden`:904-913 as written, the counterpart of #514-2's raise-then-override (:4436).
+- The owner narrowing what blocks ("only a false report blocks") ended a non-convergence that the
+  did-not-converge → draft path had handed back (#514-3:7).
+- Both of this pass's gate spawns passed `run_in_background: false` and answered "Async agent launched"
+  in this attended session. Every T2 and T3 spawn returned in-turn: each file's only occurrence of the
+  string is the skill text at its line 4. That is #527:32's attended shape. This session is not a run
+  record.
