@@ -965,6 +965,9 @@ def test_parallel_run(tmp: Path) -> None:
 
     with isolated(tmp):
         results = pool.run_wave(jobs, slots, cfg, {}, say, {str(work): base})
+        # Where `claude` files each session: the folder `silence_since` already reads.
+        folders = {j["ticket"]: pool.project_dir_name(pool.worktree_path("o/r", j["ticket"]))
+                   for j in jobs}
 
     check("both tickets ran", len(results) == 2, str(results))
     lines = [l for l in marker.read_text().splitlines() if l.strip()]
@@ -988,6 +991,15 @@ def test_parallel_run(tmp: Path) -> None:
     check("the driver capture landed in the suite's own tree",
           list((tmp / "state/skill-lessons").glob("*.md")) != [],
           "no record was written anywhere the suite can see")
+    # A capture's `transcript:` is where a retro opens a run that died, so it must be a path and not
+    # the record template's `<cwd-slug>` placeholder, which every capture carried until 2026-09-25.
+    for ticket, folder in folders.items():
+        caps = list((tmp / "state/skill-lessons").glob(f"*-{ticket}-driver.md"))
+        text = caps[0].read_text() if len(caps) == 1 else ""
+        line = next((l for l in text.splitlines() if l.startswith("transcript:")), "")
+        sid = next((l.split()[1] for l in text.splitlines() if l.startswith("session: ")), "?")
+        check(f"#{ticket}'s driver capture names its own session's transcript, in the folder silence_since reads",
+              line == f"transcript: ~/.claude/projects/{folder}/{sid}.jsonl", line or str(caps))
     check("the operator's real skill-lessons gained nothing",
           real_lessons_before == {p.name for p in REAL_LESSONS.glob("*.md")},
           str({p.name for p in REAL_LESSONS.glob("*.md")} - real_lessons_before))

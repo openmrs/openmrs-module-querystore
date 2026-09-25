@@ -53,3 +53,10 @@ transcript: ~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-op
 
 ## Assumptions review overturned
 - "may only load a listed slice that carries derived_interactions" read strictly (unlisted fixtures refused too) — not overturned.
+
+**Corrected by the 2026-09-25 retro (third pass):** the #505/PR #529 record's `transcript:` line (the
+second header in this file) names `e3da4188-…`, the session that wrote the FIRST record (PR #508), and
+that transcript never mentions PR #529. The PR #529 record was written by
+`~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-openmrs-openmrs-module-chartsearchai-505/2463cfcc-5579-4630-9cef-6790a536dcf1.jsonl`
+(its :1138), a headless run. It had taken the uuid from `ls <dir>/*.jsonl 2>/dev/null | tail -1` at its
+:1129, which lists alphabetically.

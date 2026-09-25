@@ -4556,3 +4556,57 @@ a record where either cost a round.
   in this attended session. Every T2 and T3 spawn returned in-turn: each file's only occurrence of the
   string is the skill text at its line 4. That is #527:32's attended shape. This session is not a run
   record.
+
+## 2026-09-25 (third pass of the day, owner-directed: run records name their transcript by a real path — no new run record) — 2 applied after revision (P3 in pr-harden and resolve-ticket, P4 in `pool-run` with a `pool-test.py` case), 0 killed; one refutation round over the staged diff, whose one precondition (a headless check) was run and passed; linter 10 files, 0 findings; `pool-test.py` 582 passed / 0 failed
+
+The owner took two items from the second window's list: the record sections' `<cwd-slug>` and the driver
+capture's placeholder. Proposals and the gate's reply: `proposals/2026-09-25-owner-directed-transcript-paths.md`.
+
+- **P3 APPLIED after revision (pr-harden 0.33.1, resolve-ticket 0.21.2): the uuid is
+  `$CLAUDE_CODE_SESSION_ID`, and the transcript is the one file `ls ~/.claude/projects/*/"$CLAUDE_CODE_SESSION_ID".jsonl`
+  prints.** Bar (a), both halves.
+  - The folder half: 11 headers across 10 records name the right uuid under the wrong folder. All ten
+    writers were interactive: #266, #234, #297, #238, #229, #340, #355, #357 and #409 named the main
+    checkout from a pool worktree, and #527 named the worktree it had moved into.
+  - The uuid half: 2 records, both headless and both from a directory listing: #514-3 (T3:281-282) and
+    #505/PR529 (`2463cfcc`:1129-1138).
+  - The draft said "take both from the scratchpad path", and the gate blocked it twice.
+    - A headless `claude -p` run has no scratchpad: 0 of 46 headless temp roots have one, and 0 of
+      688 `sdk-cli` transcripts mention one. So the draft could not have prevented either wrong uuid it
+      cited, and it forbade the cwd that headless runs had used correctly (27 writes, 0 wrong folders).
+    - A session resumed from another directory keeps its transcript's folder but moves its scratchpad:
+      #305, resumed from `~`, has its scratchpad there 193 times. The draft reproduces #305's own wrong
+      L2166 header.
+    - The draft's "T3's scratchpad (36 mentions)" was false: they were `tasks/` paths, and T3's temp
+      root has only `tasks/`.
+  - Shipped: the gate's Replacement A, verbatim, on the condition it set. Run here: a headless session
+    with the driver's flags (`pool-run`:2668-2673) and a chosen `--session-id` printed that id from
+    `$CLAUDE_CODE_SESSION_ID`, and the glob printed exactly its transcript. This interactive session's
+    shell has `db22ea60-…`, which resolves the same way.
+  - Net +4 lines per skill, one clause per measured failure. It replaces the uuid sentence in place.
+- **P4 APPLIED (`pool-run`, `pool-test.py`): a driver capture's `transcript:` is
+  `~/.claude/projects/{project_dir_name(worktree)}/{session}.jsonl`.** Bar (a), all 4 captures carried
+  the literal `<cwd-slug>` (`pool-run`:3179), while the driver computes the folder for `silence_since`
+  (:1208, :1243).
+  - `capture_record` takes a keyword-only `worktree`, and its one caller passes `wt`, which is the launch
+    cwd on the fresh and the resumed path.
+  - The gate measured the folder rule on real transcripts: `project_dir_name` of each transcript's first
+    `cwd` reproduces its folder for 1170 of 1170.
+  - The test was written first, in `test_parallel_run`, over the real `run_wave`. It is red on the
+    pre-fix driver (580 / 2), green after (582 / 0), and red again on a wrong folder and on a wrong
+    session id (580 / 2 each).
+  - The gate's two wording fixes were applied. The check pins "the folder `silence_since` reads", not
+    "the folder claude uses". The comment's "the only pointer" is gone.
+  - The gate also noted `pool-run`:98 pointing at a `session_transcript` that does not exist; it is now
+    `project_dir_name`.
+
+**Corrections to this ledger.**
+- :4532 "#514-3's is the only wrong uuid" is false. #505/PR529's header names `e3da4188`, while its
+  writer was `2463cfcc`. The mention-based detector passed it because `e3da4188` wrote that file's first
+  record. A note is appended to `…-505.md`, per the #409 precedent.
+- :4538's REOPEN ON ("a second wrong-uuid record") is therefore met, and P3's uuid half closes that park.
+- :4535-4536's "#337 and #338 … name a uuid found nowhere" is false. Their session directories exist
+  (`subagents/`, `tool-results/`); only the parent `.jsonl` files are gone, so those headers were right.
+
+**Observed, no remedy owed.** Resumed sessions move their scratchpad (#305): one session in the store,
+and the filesystem check found one. The uuid glob resolves it correctly.

@@ -95,7 +95,7 @@ PAUSED = PIPELINE / "paused.json"      # what a paused driver left behind; see `
 SHARED_M2 = HOME / ".m2/repository"
 LESSONS = CLAUDE / "skill-lessons"
 LAST = LESSONS / "LAST"
-PROJECTS = CLAUDE / "projects"         # where `claude` writes a session's transcript; see `session_transcript`
+PROJECTS = CLAUDE / "projects"         # where `claude` writes a session's transcript; see `project_dir_name`
 SESSIONS = CLAUDE / "sessions"         # `claude`'s OWN registry of live sessions; see `live_session`
 PR_STATE = CLAUDE / "pr-harden-state.json"
 HARDEN_STATE = CLAUDE / "harden-state.json"
@@ -3125,7 +3125,7 @@ def record_says_aborted(record: Path | None) -> bool:
 
 
 def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, cleared: list[str],
-                   own: Path | None, say) -> Path | None:
+                   own: Path | None, say, *, worktree: Path) -> Path | None:
     """Write, or append to, the run record — but only with what the driver itself observed.
 
     A run that dies cannot write its own record, and the death is exactly the kind of evidence a
@@ -3176,7 +3176,7 @@ def capture_record(slug: str, ticket: str, outcome: str, run: dict, gate: dict, 
         f"outcome: {outcome}\n"
         f"rounds: unknown   cycles: unknown   verifier: unknown\n"
         f"context: not surfaced\n"
-        f"transcript: ~/.claude/projects/<cwd-slug>/{run.get('session_id')}.jsonl\n\n"
+        f"transcript: ~/.claude/projects/{project_dir_name(worktree)}/{run.get('session_id')}.jsonl\n\n"
         "**This record was written by the pool driver, not by the run.** The run ended without "
         "writing one, so the four sections a retro reads for signal — refuted by measurement, raised "
         "by a fresh agent, where a skill blocked the run, declined — are ABSENT rather than empty: "
@@ -3336,7 +3336,8 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
     if status == "ready" and gate.get("override"):
         flags.append("the run took the labelled override — read its reason in the state entry")
 
-    record = capture_record(job["slug"], ticket, status, run, gate, cleared, own_record, say)
+    record = capture_record(job["slug"], ticket, status, run, gate, cleared, own_record, say,
+                            worktree=wt)
     for f in flags:
         say(f"! {f}")
 
