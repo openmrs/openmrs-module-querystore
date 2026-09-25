@@ -3325,7 +3325,8 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
     if status in ("no-pr", "error") and record_says_aborted(own_record):
         status = "aborted"
     # Ended with an agent still outstanding. Distinct from no-pr because the cause is known and is
-    # not the run's judgement: it yielded, and an unattended run has no next turn to yield into.
+    # not the run's judgement: it yielded, and a `claude -p` process stops an agent still running
+    # 600 s after the turn ends, then exits.
     if status == "no-pr" and (gate.get("awaiting") or []):
         status = "died-yielding"
 
@@ -3393,8 +3394,9 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
                "unknown": ("outcome UNKNOWN — GitHub could not be asked whether a PR exists, so "
                            "nothing here says whether the run delivered. Read the stream and set "
                            "the ledger row by hand"),
-               "died-yielding": ("ended while still awaiting a background agent — it yielded, and an "
-                                 "unattended run has no next turn; see the gate entry's awaiting list"),
+               "died-yielding": ("ended while still awaiting a background agent — it yielded, and a "
+                                 "headless run stops an agent still running 600 s after the turn "
+                                 "ends; see the gate entry's awaiting list"),
                "aborted": "the run aborted and handed back — it will not be retried"}[status]
     say(f"{status}: {verdict}  ({hms(run['seconds'])}, {run['turns']} turns"
         + (f", ${run['cost_usd']:.2f}" if run.get("cost_usd") else "") + ")")

@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.24.3
+version: 0.24.4
 ---
 
 # Ticket pool — the loop that learns
@@ -387,7 +387,7 @@ a deliberate hand-back from a crash, since both leave no PR, and it can only mak
 | `timeout` | the driver killed the session. The record says which bound it hit |
 | `no-pr` / `error` | it died before opening a PR, and its record did not report an abort. GitHub was asked and so was the PR number the run wrote into its own gate entry, so a PR MERGED before the check is no longer invisible here — on 2026-09-13/14 eight delivered tickets were recorded `no-pr` because it was |
 | `unknown` | GitHub could not be asked at all, so nothing here says whether the run delivered. Not retried, and for a different reason from `aborted`: it may have delivered, and a second attempt risks a SECOND PR for one issue. Read the stream and set the row by hand |
-| `died-yielding` | it ended with a background agent still outstanding. Not its judgement: it yielded, and an unattended run has no next turn to yield into. Both gates refuse this now, so a fresh sighting means EITHER the marker never reached the gate (check `pipeline/unattended/` for a file whose pid was live) or the run stopped despite being told not to — a block is persuasion, not a lock, and the two have different fixes |
+| `died-yielding` | it ended with a background agent still outstanding. Not its judgement: it yielded, and a `claude -p` process stops an agent still running 600 s after the turn ends, then exits. Both gates refuse this now, so a fresh sighting means EITHER the marker never reached the gate (check `pipeline/unattended/` for a file whose pid was live) or the run stopped despite being told not to — a block is persuasion, not a lock, and the two have different fixes |
 | `worktree-blocked` | a previous run left uncommitted work in this ticket's worktree; nothing was touched. Read it, then `git worktree remove --force` that path |
 | `checkout-blocked` | the repository could not be fetched, or its default branch does not resolve on origin, so nothing was touched. Fix the remote or the clone |
 | `dirty-skip` | only in ledger entries written before worktrees: the shared checkout had uncommitted work. It can no longer happen — the driver does not touch your checkout |

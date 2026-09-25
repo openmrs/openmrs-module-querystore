@@ -58,3 +58,12 @@ Verified end-to-end twice: hook invoked directly, and a real `claude -p` session
   touched only their own entry, verified by diff. Structurally it is how a co-located session could
   delete an entry that is not its own.
 - The ticket run shares one checkout per repo, so pool-vs-human collision is unguarded.
+
+**Corrected by the 2026-09-25 retro (fifth pass):** the mechanism at lines 13-14 is not what the
+harness does. On Claude Code 2.1.282 a `claude -p` process kills a `run_in_background` Bash command within
+seconds of its turn's end, when nothing else is outstanding. It waits up to 600 s for a background agent, and is re-invoked if the agent finishes
+inside that. Past 600 s it stops the agent and exits. #310's own log shows the same: 8 `system init`
+records in one process, and `.err` "Background tasks still running after 600s; terminating". So #310's
+yield killed it because its agents outlasted the ceiling. #297's stream does not survive, and its
+death at the same yield is consistent with the same cause. The gate's refusal of the yield
+stays right. See `artifacts/2026-09-25-headless-background-wait/summary.md`.

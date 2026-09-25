@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.33.2
+version: 0.33.3
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -969,13 +969,20 @@ result arrives.** A non-empty, fresh `awaiting` lets the gate allow the yield �
 because the harness re-invokes the orchestrator when the agent completes, so yielding mid-await is
 how the run proceeds rather than how it ends.
 
-**That last clause holds only for an ATTENDED session, and taking it as universal killed two
-unattended runs.** A `claude -p` process exits when its turn ends, so nothing re-invokes it: there
-the yield IS the death, and the gate's own allow made it silent (allowing is `exit 0`). Measured
-2026-08-26 — #297 recorded `awaiting=[{agent: "refute plan #297 pass 1"}]`, narrated *"dispatched the
-refutation gate. Here is where things stand"*, and ended at 51 turns with no PR and its plan and
-reproduction discarded; #310 died with the same signature in `/harden` pass 3, at 1365 turns and
-$76.72. So **an unattended run never ends a turn with an agent outstanding — collect it in the same
+**That last clause holds in full only for an ATTENDED session, and taking it as universal killed
+two unattended runs.** When a `claude -p` turn ends, the process kills a `run_in_background` Bash
+command within seconds if nothing else is outstanding, and stops a background agent still running
+600 s later (the default of `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS`); either way it then exits
+without re-invoking the orchestrator, and the gate's own allow made that silent (allowing is
+`exit 0`). An agent that finishes inside the 600 s is waited for and does re-invoke it — measured
+2026-09-25 on Claude Code 2.1.282 (`~/.claude/skill-lessons/artifacts/2026-09-25-headless-background-wait/`).
+Which case a yield is in is not known when the turn ends: #310's one process (2.1.246) was
+re-invoked after seven such yields and died on the eighth, its three pass-3 reviewers stopped at
+that ceiling. Measured 2026-08-26 — #297 recorded `awaiting=[{agent: "refute plan #297 pass 1"}]`,
+narrated *"dispatched the refutation gate. Here is where things stand"*, and ended at 51 turns with
+no PR and its plan and reproduction discarded; #310 died with the same signature in `/harden` pass 3,
+at 1365 turns and $76.72. So **an unattended run never ends a turn with an agent outstanding —
+collect it in the same
 turn.** The gate enforces it now, scoping the allow to attended sessions off a pid-stamped marker the
 driver holds for the life of the run; the rule is stated here as well because a gate can only refuse
 a stop after the decision to stop has been made, and that decision is what costs the run. And do not

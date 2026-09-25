@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.21.2
+version: 0.21.3
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -270,10 +270,11 @@ wait for its own gate. `/harden` has not started yet, so this await is the pr ga
 
 **When the run is unattended, do not yield at all — collect the agent inside the same turn**, by
 spawning it with `run_in_background: false` (`pr-harden`'s *Collecting in the same turn*). A
-`claude -p` process exits when its turn ends, so there is no next turn to be re-invoked into, and the
-recorded await then licenses the gate to let the run die quietly. Measured 2026-08-26: that is exactly
-how #297 ended at this step, having dispatched this very refuter, and how #310 ended in `/harden` —
-both with committed work and no PR. `pr-harden`'s **State** section carries the measurement.
+`claude -p` process stops a background agent still running 600 s after its turn ends and then exits,
+and until the 2026-08-26 fix the recorded await let the gate allow that quietly. That day #297 ended
+at this step with this very refuter outstanding, and #310 ended in `/harden` with its reviewers
+stopped at that ceiling — both with committed work and no PR. `pr-harden`'s **State** section
+carries the measurement.
 
 Spawn it as a new subagent — **never `subagent_type: "fork"`**, which would inherit the reasoning that
 produced the plan and defeat the point. Give it the ticket as read (with its comments), the plan

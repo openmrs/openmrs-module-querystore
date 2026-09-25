@@ -54,7 +54,7 @@ run_case "building, no awaiting -> block" block \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[]}"
 run_case "awaiting fresh, attended -> allow (yield)" allow \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"refute\",\"since\":$NOW}]}"
-run_case "awaiting fresh, UNATTENDED -> block (no next turn)" block \
+run_case "awaiting fresh, UNATTENDED -> block (a yield can end the run)" block \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"refute\",\"since\":$NOW}]}"
 run_case "awaiting STALE, unattended -> block" block \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]}"

@@ -4696,3 +4696,47 @@ homes.**
   and until-loops. It is the owner's sentence, so it is noted, not edited.
 - Three of this session's five read-only agents wrote something, each disclosed and each scratch: two
   helper scripts, a candidates file and verifier, and one `FETCH_HEAD`.
+
+## 2026-09-25 (fifth pass of the day, owner-directed: what a headless run does with background work, measured — no new run record) — 1 applied after revision (the stated mechanism, corrected in its homes), 0 killed; one refutation round over the staged diff; linter 10 files, 0 findings; `gate-test.sh` pr-harden 36/0 and harden 47/0 on every copy; `pool-test.py` 582/0
+
+This closes the fourth pass's REOPEN ON ("a pass that measures the current harness's ceiling and then
+corrects every home"). Proposal and the gate's reply:
+`proposals/2026-09-25-owner-directed-headless-wait-mechanism.md`. Measurement, with its streams
+redacted of the account's connector list: `artifacts/2026-09-25-headless-background-wait/`.
+
+**The measurement.** Seven headless sessions ran on Claude Code 2.1.282 with the driver's flags.
+- A `run_in_background` Bash command was killed ~5 s after the turn ended, when nothing else was
+  outstanding. The run exited without being re-invoked; true of 60 s and 900 s tasks, and with
+  `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`.
+- A background agent was waited for. It re-invoked the run when it finished inside 600 s (10 s and
+  180 s agents), and was stopped at 600 s otherwise ("Background tasks still running after 600s;
+  terminating").
+- With the variable at 0, a 720 s agent was waited for, and it re-invoked the run.
+- #310 (2.1.246) matches: one process, 7 re-invocations, 3 agents stopped at the ceiling.
+
+**APPLIED after revision · pr-harden 0.33.3, resolve-ticket 0.21.3, ticket-pool 0.24.4, harden 0.42.2,
+both gates, `pool-run`: the mechanism behind the unattended-yield rule, corrected.**
+- The one full statement of it is pr-harden's **State** paragraph. Every other home says only that the
+  process stops an agent still running 600 s after the turn ends, and then exits.
+- The gate killed the first draft's paragraph for contradicting its own bold lead ("holds only for an
+  ATTENDED session") and for an over-broad Bash claim. It also found that nothing linked the
+  short-agent case to the "never" rule. The shipped text gives the link: a yield cannot tell which case
+  it is in, since #310 was re-invoked after seven yields and died on the eighth.
+- Both gates' unattended comment still ended on "it is how the run dies"; it now says "whenever the
+  agent outlasts that".
+- The rule, the gates' decisions and "the death this marker exists to prevent" are unchanged.
+- The harden gate's header had its attended-session block inserted mid-sentence since `207a8e3`. It is
+  now whole.
+- The first staging broke both gates, 13 and 30 failures: an apostrophe inside the single-quoted `jq`
+  program. Their own suites caught it before install.
+
+**Corrections to the store.** The 2026-08-26 record gets an appended note, per the #409 precedent.
+#297's cause is stated as "consistent with the same cause", because its stream does not survive.
+
+**Not proposed, the owner's decision:** set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` on driven sessions.
+It makes an agent yield survivable and not a Bash yield. The gates already refuse the agent yield, so
+it would be a second barrier rather than a fix.
+
+**Recorded for a later pass:** pr-harden:964 ("without it an unattended run cannot proceed at all") and
+`pr-harden-gate.sh`:33 contradict the unattended block after them, since `207a8e3`.
+**REOPEN ON:** a pass over the attended/unattended framing of `awaiting` as a whole.

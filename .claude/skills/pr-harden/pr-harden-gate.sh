@@ -38,9 +38,10 @@
 # `awaiting` allows the yield. That is not a concession — the harness re-invokes the orchestrator when
 # the agent completes, so yielding mid-await does not end the run, it is how the run proceeds.
 #
-# THAT PREMISE HOLDS ONLY FOR AN ATTENDED SESSION, and taking it as universal is what let two
-# unattended runs die here. Measured 2026-08-26: a `claude -p` process exits when its turn ends, so
-# nothing re-invokes it and the yield IS the death. Issue #297 wrote
+# THAT PREMISE HOLDS IN FULL ONLY FOR AN ATTENDED SESSION, and taking it as universal is what let two
+# unattended runs die here. When a `claude -p` turn ends, the process stops a background agent still
+# running 600 s later and exits without re-invoking anyone (the skill's State section carries the
+# measurement). Measured 2026-08-26: issue #297 wrote
 # `awaiting=[{agent: "refute plan #297 pass 1"}]`, narrated "dispatched the refutation gate. Here is
 # where things stand", and ended — 51 turns, no PR, its plan and reproduction discarded; the gate
 # allowed it, silently, because allowing is exit 0. Issue #310 died with the same signature in
@@ -226,9 +227,9 @@ esac
 # blocking > 0). Fail open on anything unparseable, like every other check here.
 AWAITING=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | length' <<<"$ENTRY" 2>/dev/null) || allow
 case "$AWAITING" in ''|*[!0-9]*) AWAITING=0 ;; esac
-# An UNATTENDED run has no next turn. `claude -p` exits when the turn ends, so for it a yield
-# mid-await is not how the run proceeds — it is how the run dies, silently and with its work
-# unpublished. Absent or unparseable, this is false, so an attended session keeps exactly the
+# An UNATTENDED run's process stops a background agent still running 600 s after the turn ends,
+# then exits, so for it a yield mid-await is how the run dies whenever the agent outlasts that,
+# silently and with its work unpublished. Absent or unparseable, this is false, so an attended session keeps exactly the
 # behaviour documented above.
 UNATTENDED=$(jq -r 'if .unattended == true then "true" else "false" end' <<<"$ENTRY" 2>/dev/null) || allow
 case "$UNATTENDED" in true|false) ;; *) UNATTENDED=false ;; esac
@@ -274,15 +275,16 @@ if [ "$AWAITING" -gt 0 ]; then
     jq -n --arg a "$AGENTS" '{
       decision: "block",
       reason: ("This run is UNATTENDED and you ended your turn with a background agent outstanding: "
-        + $a + ". An unattended run has no next turn — the process exits when the turn ends, so "
-        + "yielding mid-await does not continue the run, it ends it, with the work unpublished. "
+        + $a + ". In an unattended run the process stops an agent still running 600 s after the "
+        + "turn ends and then exits, so yielding mid-await ends the run whenever the agent outlasts "
+        + "that, with the work unpublished, and nothing at the yield says which case this is. "
         + "Collect that agent IN THIS TURN, clear the awaiting entry in "
         + "~/.claude/pr-harden-state.json, and carry on with the phases the skill defines. Do NOT "
         + "hand back to the user, do NOT report progress as if finished, and do NOT ask whether to "
         + "continue; if you are aborting, take one of the labelled abort conditions and set "
         + "override:true with its reason so the deviation is on the record."),
       systemMessage: ("unattended run yielded with agents outstanding (" + $a
-        + ") — there is no next turn; collect them in-turn")
+        + ") — past 600 s the run exits with them; collect them in-turn")
     }'
     exit 0
   fi

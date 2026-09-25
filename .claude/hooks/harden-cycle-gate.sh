@@ -32,14 +32,15 @@
 # yield, making a cycle waiting correctly indistinguishable from one that quit. Measured: a Phase 2
 # pass blocked on a background agent tripped this hook on every yield and had to burn in-turn sleep
 # loops to stay alive. A non-empty, fresh `awaiting` therefore allows the stop; the harness re-invokes
-#
-# THAT HOLDS ONLY FOR AN ATTENDED SESSION. A `claude -p` process exits when its turn ends, so nothing
-# re-invokes it and the yield IS the death — measured 2026-08-26 on issue #310, which ended in Phase 2
-# pass 3 at 1365 turns and $76.72 with committed work, no PR and ten orphaned worktrees. The allow is
-# therefore scoped to attended sessions; see the marker check below.
 # the session when the agent completes, so yielding mid-await is how the cycle proceeds, not how it
 # ends. The obligation is to CLEAR the field on any terminal outcome, so the allow is bounded by
 # AWAIT_TTL and an agent that has not returned inside it counts as dead rather than outstanding.
+#
+# THAT HOLDS IN FULL ONLY FOR AN ATTENDED SESSION. When a `claude -p` turn ends, the process stops a
+# background agent still running 600 s later and exits without re-invoking anyone (pr-harden's State
+# section carries the measurement). Issue #310 ended so on 2026-08-26, in Phase 2 pass 3 at 1365
+# turns and $76.72 with committed work, no PR and ten orphaned worktrees. The allow is therefore
+# scoped to attended sessions; see the marker check below.
 # Same field, same semantics as pr-harden-gate.sh, which solved this first.
 #
 # run stamped, no phase1 -> a run is in flight and has stated no verdict. Block.
@@ -193,8 +194,9 @@ esac
 # Fail open on anything unparseable, like every other check here.
 AWAITING=$(jq -r '[(.awaiting // [])[] | (.since // 0)] | length' <<<"$ENTRY" 2>/dev/null) || allow
 case "$AWAITING" in ''|*[!0-9]*) AWAITING=0 ;; esac
-# An UNATTENDED run has no next turn: `claude -p` exits when the turn ends, so for it a yield
-# mid-await is not how the cycle proceeds but how the run dies, silently. The authoritative signal is
+# An UNATTENDED run's process stops a background agent still running 600 s after the turn ends,
+# then exits, so for it a yield mid-await is how the run dies whenever the agent outlasts that,
+# silently. The authoritative signal is
 # a pid-stamped marker the pool driver holds for the life of the run — not a field in this entry,
 # which the skill rewrites and would silently drop. A stale marker whose owner is gone must not make
 # an interactive session unattended, so the pid is checked for liveness. Absent or unparseable, this
@@ -235,14 +237,15 @@ if [ "$AWAITING" -gt 0 ]; then
     jq -n --arg a "$AGENTS" '{
       decision: "block",
       reason: ("This run is UNATTENDED and you ended your turn with a background agent outstanding: "
-        + $a + ". An unattended run has no next turn — the process exits when the turn ends, so "
-        + "yielding mid-await does not continue the cycle, it ends the run with the work unfinished. "
+        + $a + ". In an unattended run the process stops an agent still running 600 s after the "
+        + "turn ends and then exits, so yielding mid-await ends the run whenever the agent outlasts "
+        + "that, with the work unfinished, and nothing at the yield says which case this is. "
         + "Collect that agent IN THIS TURN, clear the awaiting entry in "
         + "~/.claude/harden-state.json, and finish the cycle. Do NOT hand back to the user, do NOT "
         + "report progress as if finished, and do NOT ask whether to continue; if you are stopping "
         + "deliberately, take the labelled override so the deviation is on the record."),
       systemMessage: ("unattended harden cycle yielded with agents outstanding (" + $a
-        + ") — there is no next turn; collect them in-turn")
+        + ") — past 600 s the run exits with them; collect them in-turn")
     }'
     exit 0
   fi
