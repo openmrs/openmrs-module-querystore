@@ -38,3 +38,36 @@ transcript: ~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-op
 outcome as the driver measured it: draft
 session: 8b0eb230-7971-41bc-afc8-73c4c763ef24 · 3h52m · 1352 assistant turns · stream: /Users/danielkayiwa/.claude/pipeline/logs/20260924T061420Z-openmrs_openmrs-module-chartsearchai-514.jsonl
 - the run left its gate entry unfinished: phase=reviewed blocking=1 round=4 override=True
+
+# pr-harden 0.32.0 · openmrs-module-chartsearchai · #514 / PR #524 · 2026-09-24
+outcome: did-not-converge (round 6 blocking r6-1 re-raised round 5's defect in general form; cap raised 4→5→6, then override)
+rounds: 6   cycles: 0   verifier: ran 5× (works at runtime each time, no repairs)
+context: no compaction · peak not surfaced
+transcript: ~/.claude/projects/-Users-danielkayiwa--claude-pipeline-worktrees-openmrs-openmrs-module-chartsearchai-514/31e8eac3-5c4a-4817-96a5-ffff58262588.jsonl
+
+Second loop on this PR (first loop: 4 rounds, did not converge). Before round 1: main had moved 12 commits; the ADR conflicted on Decision 117 (main took 117 and 118), so this branch's decision was renumbered 117→119 in 6 homes plus one citation split across a line break ("Decision\n117", ChartSearchService). #525 had changed the LlmProvider signature, which turned a test stub red at compile time. Found only by the root build; the text merge had been clean.
+
+## Refuted by measurement
+- round-2 fixer: "the next claim's subject starts where the previous run-less partner began" (r2-2, a non-blocking widening) -> round 3 showed it falsely accuses "X interacts with active order A and active order B [b]"; withdrawn · cost: 1 round
+- round-5 fix "trim the sentence terminator off the partner" treated as the fix -> round 6 showed the cause is whole-span containment (severity suffix " — Moderate" breaks it the same way) · cost: 1 round, run ended
+
+## Raised by a fresh agent, missed by the author
+- [r1-1] a negated claim was judged as asserting the pair · blocking · cost: 1
+- [r1-2] a drug opening the next and-clause was read as a partner · blocking · cost: 1
+- [r1-3] PR does not resolve #514 case 1 · blocking · declined
+- [r2-1..3] a run-on list, a marker-less predecessor, and a colon/dash lead each silenced a swap · non-blocking · implemented (r2-2 later withdrawn)
+- [r3-1] r2-2 accused the faithful repeated-noun form · blocking · introduced by a NON-blocking fix (the #465 pattern again)
+- [r4-1] an order named by its chart display was accused when the finding prints the KB label · blocking
+- [r5-1] a sentence-final "." stayed in the partner span · blocking
+- [r6-1] a severity suffix stayed in the partner span (same root cause as r5-1) · blocking · open
+
+## Where a skill blocked or contradicted this run
+- pr-harden:Termination: a declined BLOCKING finding (r1-3) "ends the run as did not converge", yet the run kept going to get the round-1 fixes reviewed. Nothing in the skill says whether to continue after a blocking decline; I continued.
+- The round-3 fixer ended its turn "Waiting for the build notification" even though its brief said never to end a turn with a build running; resumed with SendMessage. The orchestrator then had no in-turn way to wait for the resumed agent except polling for mvn processes.
+
+## Declined
+- r1-3 (case 1 of #514) — the first reported answer still reads judged 0 beside an unraised Amlodipine × Didanosine interaction, so #514 cannot close on this PR.
+- r2-1 (part), r2-3 (part), r2-2 (withdrawn) — each leaves a swap unjudged (a smaller judged count), not a false report.
+
+## Assumptions review overturned
+- "Refuse-only rules can't make a false report" -> every widening round (r2-2, the order-display names in r4) was one reading away from accusing a faithful answer; partner-span containment (r4, r5, r6) is where false reports kept surfacing.

@@ -4375,3 +4375,65 @@ Step 6's pre-read comparison: `origin/main` and this store agreed on every file 
 **Observed, no remedy owed.**
 - pr-harden's base-moved check done as written (#527:54): `main` gained #536, overlap none, not BEHIND,
   so no merge, push or round.
+
+## 2026-09-25 (window: 2 run records — #514/PR524's second `pr-harden` loop, appended under the record the fifth window counted, and #515/PR540, converged) — 1 proposed, 0 applied, 1 killed (both options); one refutation round; linter 10 files, 0 findings; **no skill file changed**
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except `…-515.md`
+(local-only) and `…-514.md` (the PR524 second-loop record appended at its line 42). Proposal and the
+gate's reply: `proposals/2026-09-25-window-514PR524-515.md`.
+
+**KILLED · P1, pr-harden: a declined BLOCKING finding ends the run, made mechanical.** Drafted as bar
+(b) on #514-2:57/:65, where r1-3 was declined in round 1 and five more rounds ran. (a) was prose at
+:436, and (b) had `gate-state pr-set` refuse a later round after a blocking decline. The record's
+"Nothing in the skill says whether to continue" is false against `pr-harden`:889-898 and :1258. This
+is a rule that exists and was skipped, killed as prose on :1885 and :4211-4214. The record never cites
+:436. (b) is harmful: `pr-set` rewrites `override` on every call (`gate-state`:388-389), and
+`override: true` allows any stop (`pr-harden-gate.sh`:99-100). So it forces either dropping r4-1 and
+r5-1 unfixed or disarming the Stop gate for every later round. The bar is not met either. Round 2
+reviewed round 1's fixes with 0 blocking, and r4-1 and r5-1 were real blockers fixed with the verifier
+reporting works. **Parked, 1 record:** continuing past a declined blocker. **REOPEN ON:** a record where
+the rounds after the decline delivered no fix, or where a declined-blocker run exited as converged or
+ready. The open question it leaves: whether Termination should let a run review its own fixes after a
+blocking decline. Untested. The run's override line (transcript :453) named only the round cap, not
+r1-3.
+
+**Parked, 1 record each.**
+- **`closingIssuesReferences` read green right after the edit, red later** (#515:21, 1 round). The
+  check `resolve-ticket`:520 prescribes ran 5s after `gh pr edit` and returned `[515]` (transcript
+  `1d4126e7-…` :1109, 01:18:44Z). The r2 reviewer's GraphQL read 11 minutes later returned `[513, 515]`
+  (:1113) from a body whose only #513 keyword was "does not close #513". Cause not established. PR540
+  merged with `[515]`, and #513 is open (both read 2026-09-25). **REOPEN ON:** a second record of the
+  field changing after a green post-edit read. Candidate guard, cause-independent: re-read the field at
+  FINISH.
+- **A fixer ended its turn waiting on a build under pr-harden 0.32.0, its brief carrying the in-turn
+  rule** (#514-2:66, one SendMessage resume). The orchestrator then had no in-turn wait on the resumed
+  agent except polling for `mvn`. Sibling of the #527 `run_in_background: false` park. **REOPEN ON:** a
+  second post-0.32.0 record, or one that cost a round or a Stop refusal.
+
+**Parked counts advanced.**
+- **pr-harden rounds whose blocking finding the previous round's fix introduced: 2 records** (+#514-2:59,
+  r2-2's non-blocking widening → r3-1). The draft's r5 → r6 does not count: r5-1 was pre-existing
+  (transcript :375) and r6-1 is its incomplete fix, the exclusion :4223-4224 applied to #505. The
+  second loop is a separate run with separate round events, so the REOPEN ON's first limb is met.
+  Nothing is proposable, though. r3-1 is the cost `pr-harden`:123-127 already documents from #465 for
+  rounds 1-3's full-round rule, and neither record names what the fixer could have done differently.
+  **REOPEN ON:** such a proposal.
+- **Phase 2 escalating repeatedly on the run's own fixes: 16 records** (+#515:26, two escalations).
+  REOPEN unchanged.
+- **harden Phase 2 run as 1-2 agents over the four lenses: 4 records** (+#515:26, one agent, deviation
+  stated). The REOPEN ON (:3774) is a merged-lens pass missing what a later fresh agent found in that
+  lens. Not established here: r3's blocker (the duplicate-therapy finding bypassing `EndedOrders.stamp`)
+  was not attributed to a lens. Unchanged.
+- **Prose the change made false, found by a fresh agent: 17 records** (+#515:14, "five docs said
+  none"). REOPEN unchanged.
+- **chartsearchai's nested `CLAUDE.md` byte budget: 7 records** (+#515:10/:32, bullet dropped, one
+  build). REOPEN unchanged.
+- **main moving under a run: 5 records** (+#514-2:48: Decision 117 → 119 in 6 homes plus a line-broken
+  citation, and #525's `LlmProvider` signature change reddened a stub, found only by the root build,
+  0 rounds). REOPEN unchanged.
+
+**Observed, no remedy owed.**
+- `pr-harden`'s cap raise read its signal and stopped. Round 6 re-raised round 5's defect, and the run
+  took the override (:904-913 as written, #514-2:43).
+- #515's driver capture: the run began on a gate entry the aborted #515 run left (`phase=building`),
+  the case the fifth window's `claim_slot` clear exists for. No cost recorded.
