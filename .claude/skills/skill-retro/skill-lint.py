@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Mechanical self-contradiction checks over skill files.
+"""Mechanical checks over skill files: the self-contradictions a script can decide, and a size
+budget.
 
 Only the classes a script can decide. A skill contradicting itself in SUBSTANCE — "spawn four
 parallel agents" beside "each agent must mutate the worktree" — is not one of them, and pretending
 otherwise would report a coverage this does not have. That class is what skill-retro's refutation
 pass is for; this catches the ones that are facts about the document.
 
-Exit 1 if anything is reported, so a hook or a CI step can act on it.
+Exit 1 if anything is reported, so a hook or a CI step can act on it, and 2 if no skill file was
+found to check, because a check that ran on nothing must not read as green.
 """
 import json, pathlib, re, sys
 
@@ -103,17 +105,71 @@ def frontmatter(text, path):
         out.append((1, "no `name:` in frontmatter"))
     return out
 
+# Beside this script, not beside the skills it checks, so a run over any root reads one table.
+BUDGETS = pathlib.Path(__file__).resolve().parent / "skill-budgets.json"
+
+def words(text):
+    """What a size budget counts: words of the whole file, frontmatter included, split on ASCII
+    whitespace only, which is exactly what `LC_ALL=C wc -w` counts, so a finding can be checked
+    without this script. `str.split()` would also split on Unicode spaces, and a bare `wc -w` under
+    a UTF-8 locale splits some emoji into extra words. Words and not lines, because some of these
+    files hold a paragraph per line, and a line count says nothing about their length."""
+    return len(text.encode().split())
+
+def load_budgets():
+    """The table, or why there is none. A missing or unreadable table becomes a finding on every
+    skill instead of a traceback, so the other checks still run."""
+    try:
+        table = json.loads(BUDGETS.read_text())["words"]
+        if not all(type(v) is int for v in table.values()):
+            raise TypeError("every budget must be an integer word count")
+        return table, None
+    except FileNotFoundError:
+        return None, f"no {BUDGETS.name} beside this script"
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+        return None, f"unreadable {BUDGETS.name} ({type(e).__name__}: {e})"
+
+def size_budget(skill, text, budgets, why_none):
+    """A SKILL.md whose size differs from its budget, or that has no budget at all.
+
+    Its body is loaded into every run of its skill and its description into every session, and
+    skill-retro Step 4 asks what every addition prunes, and a sentence for net growth; this is the
+    half of that a script can decide. A budget is the skill's size, written down. Growth needs a
+    raise, made in the commit that needs it with Step 4's sentence, and a prune lowers it in the
+    same commit, so no room is left over for a later pass to grow into without writing anything
+    down."""
+    n = words(text)
+    if budgets is None:
+        return [(0, f"{why_none}, so no size is checked ({n} words)")]
+    if skill not in budgets:
+        return [(0, f"no size budget for {skill!r} (its directory name) in {BUDGETS.name}: "
+                    f"add one at its {n} words")]
+    cap = budgets[skill]
+    if n > cap:
+        return [(0, f"{n} words, over its budget of {cap} in {BUDGETS.name}: prune {n - cap}, "
+                    f"or raise the budget and say why (skill-retro Step 4)")]
+    if n < cap:
+        return [(0, f"{n} words, under its budget of {cap} in {BUDGETS.name}: lower it to {n} "
+                    f"in the same commit")]
+    return []
+
 def main(argv):
     roots = [pathlib.Path(a) for a in argv[1:]] or [pathlib.Path.home() / ".claude/skills"]
     findings, checked = {}, 0
+    budgets, why_none = load_budgets()
     for root in roots:
-        for md in sorted(root.glob("*/SKILL.md")) or ([root] if root.name == "SKILL.md" else []):
+        single = [root] if root.name == "SKILL.md" and root.is_file() else []
+        for md in sorted(root.glob("*/SKILL.md")) or single:
             checked += 1
             text = md.read_text()
             got = (frontmatter(text, md) + stated_counts(text)
-                   + state_fields_vs_gate(md.parent, text))
+                   + state_fields_vs_gate(md.parent, text)
+                   + size_budget(md.resolve().parent.name, text, budgets, why_none))
             if got:
                 findings[str(md)] = got
+    if not checked:
+        print(f"no SKILL.md found under {', '.join(map(str, roots))}: nothing was checked")
+        return 2
     for f, items in findings.items():
         print(f"\n{f}")
         for line, msg in sorted(items):
