@@ -76,6 +76,20 @@ equivalent, because the sibling omod module carries the same package path.
   produce no call for it to see, so do not read the hook as a guarantee that every subagent runs on
   the session model. That scope is stated once, in the hook's own header beside the code.
 
+*Cut down in 0.43.1, H5-01 — the rule it supports:* “refuses the call, so this is enforced rather than asked”
+
+- **Never pass `model` to any of them.** A per-call override beats both the agent definition's
+  frontmatter and settings.json, so it is the strongest of the levers and the only one a running
+  pass can pull on its own initiative — the others are set in a file or on the command line,
+  outside any session. It is how a pass ends up reviewed by a weaker agent than the one that
+  wrote the code — and the temptation is strongest on the lenses that keep returning clean, which
+  is exactly where a missed finding is invisible. A `PreToolUse` hook
+  (`~/.claude/hooks/no-subagent-model-override.sh`) refuses the call, so this is enforced rather
+  than asked. What it refuses is the per-call parameter and nothing else — an agent definition's
+  `model:` frontmatter and a configured default subagent model both outrank the session model and
+  produce no call for it to see, so do not read the hook as a guarantee that every subagent runs
+  on the session model. That scope is stated once, in the hook's own header beside the code.
+
 *Cut down, H1-05 — the rule it supports:* “Only ONE of them may mutate the worktree, or give each its own.”
 
 - **Only ONE of them may mutate the worktree, or give each its own.** This is the one place the skill

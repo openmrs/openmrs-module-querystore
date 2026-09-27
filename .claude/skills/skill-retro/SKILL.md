@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.4.0
+version: 0.4.1
 ---
 
 # Skill retro — evidence in, governance change out
@@ -101,7 +101,7 @@ budget lowered in the same commit. And:
   are full of rules whose whole value is the measurement behind them; a rule deleted silently is a
   measurement thrown away, and the next run re-learns it the expensive way.
 - **A skill with an `evidence.md` keeps what its rules rest on there, not in SKILL.md.** A new rule
-  goes into SKILL.md, or into the role file of the subagent that acts on it, as a run needs it; its incidents, dates and measurements go into evidence.md
+  goes into SKILL.md, or into the role file of the agent that acts on it, as a run needs it; its incidents, dates and measurements go into evidence.md
   under the same heading, quoting the rule and naming the version that added the entry, and so does
   the measurement that retires one. A passage
   moved there stays on the record, so moving it is not a deletion under *Never delete a measured

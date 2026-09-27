@@ -130,7 +130,7 @@ def load_budgets():
         return None, f"unreadable {BUDGETS.name} ({type(e).__name__}: {e})"
 
 def size_budget(skill, text, budgets, why_none, named="its directory name"):
-    """A SKILL.md whose size differs from its budget, or that has no budget at all.
+    """A SKILL.md, or a file beside it, whose size differs from its budget, or that has no budget at all.
 
     Its body is loaded into every run of its skill and its description into every session, and
     skill-retro Step 4 asks what every addition prunes, and a sentence for net growth; this is the
@@ -154,8 +154,8 @@ def size_budget(skill, text, budgets, why_none, named="its directory name"):
     return []
 
 def role_files(skill_dir):
-    """The other instruction files a skill's subagents read: every top-level `*.md` beside SKILL.md
-    but `evidence.md`, which no run loads. Budgeted like SKILL.md, keyed `<skill>/<file>`, because a
+    """The other instruction files beside SKILL.md, a subagent's role file or a reference a session
+    reads when a step sends it there: every top-level `*.md` but `evidence.md`, which no run loads. Budgeted like SKILL.md, keyed `<skill>/<file>`, because a
     rule moved into one leaves SKILL.md's budget without leaving the skill, and an unbudgeted file is
     where the next addition would go unmeasured. A file in a subdirectory is not one of these."""
     return sorted(p for p in skill_dir.glob("*.md") if p.name not in ("SKILL.md", "evidence.md"))

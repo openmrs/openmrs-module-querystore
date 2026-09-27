@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.43.0
+version: 0.43.1
 ---
 
 # Harden
@@ -93,17 +93,10 @@ One polish pass, run after Phase 1 has converged. A second one happens only wher
    the default is background, and an unattended run's gate refuses the yield that leaves them
    outstanding (`pr-harden`'s *Collecting in the same turn*). Where a previous Phase 2 ran, brief
    its agents with the applied and deferred lists from it so they don't re-surface them.
-   - **Never pass `model` to any of them.** A per-call override beats both the agent definition's
-     frontmatter and settings.json, so it is the strongest of the levers and the only one a running
-     pass can pull on its own initiative — the others are set in a file or on the command line,
-     outside any session. It is how a pass ends up reviewed by a weaker agent than the one that
-     wrote the code — and the temptation is strongest on the lenses that keep returning clean, which
-     is exactly where a missed finding is invisible. A `PreToolUse` hook
+   - **Never pass `model` to any of them.** A `PreToolUse` hook
      (`~/.claude/hooks/no-subagent-model-override.sh`) refuses the call, so this is enforced rather
-     than asked. What it refuses is the per-call parameter and nothing else — an agent definition's
-     `model:` frontmatter and a configured default subagent model both outrank the session model and
-     produce no call for it to see, so do not read the hook as a guarantee that every subagent runs
-     on the session model. That scope is stated once, in the hook's own header beside the code.
+     than asked. Do not read the hook as a guarantee that every subagent runs on the session model.
+     That scope is stated once, in the hook's own header beside the code.
    - **Only ONE of them may mutate the worktree, or give each its own.** Phase 2 mandates four
      *parallel* agents and every brief tells them to mutate-and-restore for evidence, so the four
      are the same hazard to each other that the orchestrator is to them. Pick one: pass

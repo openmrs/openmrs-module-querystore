@@ -11,6 +11,19 @@ here.
 A run does not need this file. Read an entry before changing or deleting the rule it supports: a
 measured rule is not deleted without the measurement that retires it (`skill-retro`, Step 4).
 
+## Roles — and the one rule that makes them roles
+
+*Cut down in 0.36.1, R5-01 — the rule it supports:* “refuses such a call, so this is enforced rather than asked”
+
+> **And never pass `model`.** A per-call override beats both the agent definition's frontmatter and
+> settings.json, so it is the strongest of the levers and the only one a running round can pull on
+> its own initiative — the others are set outside any session. It is how one of these agents ends up
+> weaker than the run that spawned it — and the round whose verdict it returns is the round that
+> decides whether the loop exits. A
+> `PreToolUse` hook (`~/.claude/hooks/no-subagent-model-override.sh`) refuses such a call, so this is
+> enforced rather than asked; if a different model is genuinely wanted, that is the user's call, not a
+> lever to reach for mid-round.
+
 ## Step 0 — Guards, before any round
 
 *Cut down, R1-01 — the rule it supports:* “A reused worktree inherits the previous PR's ledger”

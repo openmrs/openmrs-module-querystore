@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.36.0
+version: 0.36.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -43,14 +43,9 @@ that round**.
 > `CLAUDE.md` and the repo's skills — that is intended; what it must not have is the transcript of
 > the code being argued for.
 
-> **And never pass `model`.** A per-call override beats both the agent definition's frontmatter and
-> settings.json, so it is the strongest of the levers and the only one a running round can pull on
-> its own initiative — the others are set outside any session. It is how one of these agents ends up
-> weaker than the run that spawned it — and the round whose verdict it returns is the round that
-> decides whether the loop exits. A
-> `PreToolUse` hook (`~/.claude/hooks/no-subagent-model-override.sh`) refuses such a call, so this is
-> enforced rather than asked; if a different model is genuinely wanted, that is the user's call, not a
-> lever to reach for mid-round.
+> **And never pass `model`.** A `PreToolUse` hook (`~/.claude/hooks/no-subagent-model-override.sh`)
+> refuses such a call, so this is enforced rather than asked; if a different model is genuinely
+> wanted, that is the user's call, not a lever to reach for mid-round.
 >
 > **What that hook does NOT establish is that every subagent runs on the session model.** The scope
 > lives once, in the hook's own header beside the code — read it there before trusting the property,
