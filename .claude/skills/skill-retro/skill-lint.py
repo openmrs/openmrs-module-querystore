@@ -129,7 +129,7 @@ def load_budgets():
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         return None, f"unreadable {BUDGETS.name} ({type(e).__name__}: {e})"
 
-def size_budget(skill, text, budgets, why_none):
+def size_budget(skill, text, budgets, why_none, named="its directory name"):
     """A SKILL.md whose size differs from its budget, or that has no budget at all.
 
     Its body is loaded into every run of its skill and its description into every session, and
@@ -142,7 +142,7 @@ def size_budget(skill, text, budgets, why_none):
     if budgets is None:
         return [(0, f"{why_none}, so no size is checked ({n} words)")]
     if skill not in budgets:
-        return [(0, f"no size budget for {skill!r} (its directory name) in {BUDGETS.name}: "
+        return [(0, f"no size budget for {skill!r} ({named}) in {BUDGETS.name}: "
                     f"add one at its {n} words")]
     cap = budgets[skill]
     if n > cap:
@@ -152,6 +152,13 @@ def size_budget(skill, text, budgets, why_none):
         return [(0, f"{n} words, under its budget of {cap} in {BUDGETS.name}: lower it to {n} "
                     f"in the same commit")]
     return []
+
+def role_files(skill_dir):
+    """The other instruction files a skill's subagents read: every top-level `*.md` beside SKILL.md
+    but `evidence.md`, which no run loads. Budgeted like SKILL.md, keyed `<skill>/<file>`, because a
+    rule moved into one leaves SKILL.md's budget without leaving the skill, and an unbudgeted file is
+    where the next addition would go unmeasured. A file in a subdirectory is not one of these."""
+    return sorted(p for p in skill_dir.glob("*.md") if p.name not in ("SKILL.md", "evidence.md"))
 
 def main(argv):
     roots = [pathlib.Path(a) for a in argv[1:]] or [pathlib.Path.home() / ".claude/skills"]
@@ -167,6 +174,14 @@ def main(argv):
                    + size_budget(md.resolve().parent.name, text, budgets, why_none))
             if got:
                 findings[str(md)] = got
+            for role in role_files(md.parent):
+                checked += 1
+                text = role.read_text()
+                got = stated_counts(text) + size_budget(
+                    f"{md.resolve().parent.name}/{role.name}", text, budgets, why_none,
+                    named="its skill's directory name, a slash, and its file name")
+                if got:
+                    findings[str(role)] = got
     if not checked:
         print(f"no SKILL.md found under {', '.join(map(str, roots))}: nothing was checked")
         return 2

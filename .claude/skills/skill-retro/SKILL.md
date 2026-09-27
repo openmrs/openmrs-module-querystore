@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -57,7 +57,8 @@ declined and why; and the rounds or cycles each cost.
 
 `python3 <this dir>/skill-lint.py [roots…]` — defaults to `~/.claude/skills`. It checks only what a
 script can decide: a count stated over a list of a different length, a state field documented but read
-by no gate script, missing frontmatter, and a SKILL.md whose word count differs from its budget in
+by no gate script, missing frontmatter, and a SKILL.md, or a role file beside one (any other top-level
+`*.md` but `evidence.md`), whose word count differs from its budget in
 `<this dir>/skill-budgets.json`, or that has none. Exit 1 if it reports anything, 2 if it found no
 skill to check.
 
@@ -91,16 +92,16 @@ case arose — say that, rather than inventing the mechanism the reader expects.
 ## Step 4 — Prune as much as you add
 
 For every proposed addition, answer in the report: **which existing rule does this subsume, retire or
-render stale?** Net growth needs a sentence justifying it, and Step 2's linter holds each SKILL.md to
+render stale?** Net growth needs a sentence justifying it, and Step 2's linter holds each SKILL.md and role file to
 its word count in `skill-budgets.json`: pay for growth with a prune in the same pass, or raise that
-skill's budget in the same commit and put the sentence in the report; a skill you prune has its
+file's budget in the same commit and put the sentence in the report; a file you prune has its
 budget lowered in the same commit. And:
 
 - **Never delete a measured rule without recording the measurement that retires it.** These skills
   are full of rules whose whole value is the measurement behind them; a rule deleted silently is a
   measurement thrown away, and the next run re-learns it the expensive way.
 - **A skill with an `evidence.md` keeps what its rules rest on there, not in SKILL.md.** A new rule
-  goes into SKILL.md as a run needs it; its incidents, dates and measurements go into evidence.md
+  goes into SKILL.md, or into the role file of the subagent that acts on it, as a run needs it; its incidents, dates and measurements go into evidence.md
   under the same heading, quoting the rule and naming the version that added the entry, and so does
   the measurement that retires one. A passage
   moved there stays on the record, so moving it is not a deletion under *Never delete a measured
@@ -115,7 +116,7 @@ budget lowered in the same commit. And:
 
 One subagent, read-only, **never `subagent_type: "fork"`** — a fork inherits the reasoning that
 produced the proposals, which is the one thing this step is for. Give it the proposals, the run
-records they rest on, and the current skill text, with its evidence.md where it has one. Do not give
+records they rest on, and the current skill text, with its role files and evidence.md where it has them. Do not give
 it your argument for why they are right.
 
 It answers, per proposal: does the record actually say this? Is the corroboration bar really met, or
@@ -137,8 +138,8 @@ Apply the surviving proposals. Then, per skill touched:
 - re-run the linter and leave it at zero for the files you touched;
 - copy the skill into any clean checkout of `openmrs/openmrs-module-querystore` — which checkout does
   not matter, since every commit is pushed — and verify with `cmp`, AFTER the push below, that the
-  live copy and the PUSHED copy are byte-identical, **including any `*gate*.sh` and any
-  `evidence.md`**, and so is this skill's `skill-budgets.json`, whether or not a budget changed. Read
+  live copy and the PUSHED copy are byte-identical, **including any `*gate*.sh`, any
+  `evidence.md` and any role file**, and so is this skill's `skill-budgets.json`, whether or not a budget changed. Read
   the pushed
   copy as `git show origin/main:<path>` after a `git fetch`, never off a working tree: a checkout
   behind `origin/main` reports drift that does not exist, and which checkout is the stale one does

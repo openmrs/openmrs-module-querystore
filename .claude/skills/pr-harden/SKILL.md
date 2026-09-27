@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.35.0
+version: 0.36.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -76,7 +76,7 @@ Refuse the run, with the reason, if any of these fails:
   matches the PR being hardened, or when it has no `pr` yet — that is the handoff `resolve-ticket`
   writes, and you adopt it and carry its `round`, `declined` and `reviewed_shas` forward. An entry
   naming a *different* PR is a stale run: report it and ask before clearing it — **but an unattended
-  run has nobody to ask**, which is settled for the verifier at step 6 and settles the same way here.
+  run has nobody to ask**, which is settled for the verifier at step 6, in `verifier.md`, and settles the same way here.
   The gate already draws the line the ask stood in for: past `STALE_AFTER` (6h) it treats a run as
   abandoned rather than in flight. So take over an entry past that bound, or one whose run recorded a
   terminus (`phase: reviewed` with `blocking: 0`, or `override: true`), and say in the report which
@@ -279,88 +279,15 @@ Record the await before spawning, clear it on the result — see **State**. Snap
 first, and tell the fixer to restore any measurement mutation **before** it reports; a fixer's intended
 edits stay, its measurement scaffolding does not.
 
-Spawn a fresh fixer. It implements **every finding it agrees with**, and declines the rest on the
-record. **Filing an issue is neither.** A finding that asks for a follow-up or tracking issue is
-implemented — the thing it would track — or declined. Its brief carries harden's Phase 1 discipline:
-
-- **Trace outward** one level on each thread: trigger paths, optional dependencies absent at runtime,
-  lifecycle order, state propagation across module boundaries, invalidated invariants in *unchanged*
-  neighbours (a javadoc or comment your edit just made false is a finding), and re-deriving the
-  merged result from scratch.
-- **Name the test** for every behaviour change — one that fails on the pre-change code and passes
-  after, verifying the runtime effect rather than a proxy for it. Where a path is genuinely blocked,
-  split the blocked sub-path from the runnable one and sketch the contract for what stays blocked.
-- **And when you NAME a guard, mutate the thing and read which case actually reddens.** An
-  attribution is as falsifiable as an assertion and fails the same way. "Guarded by X" is a claim;
-  check it.
-- **If you ADD a guard, prove which case reddens — deleted, its arms swapped, its comparison
-  loosened, or rewritten in a semantically equivalent way.** `harden`'s Termination carries this
-  same obligation at cycle close; this is it at the moment the guard is written.
-  **For a guard over TEXT or SHAPE,** one gap is between the property it means and the string it
-  matches, and that gap is invisible from the assertion's own side. Assert the SHAPE the code must
-  have rather than that it mentions the right identifier. State in the guard's javadoc which shapes
-  each channel really catches, and never write that a shape is "caught behaviourally" without
-  running it.
-  **And a mutation result measures the arms it moved, not the mechanism**.
-- **A guard that is supposed to stay GREEN is not covered by *If you ADD a guard*** — a negative
-  assertion passes whether or not its subject could ever arise, so build the case it exists for and
-  watch it fail. **And a control measures the HARNESS it ran in, not the property** — ask which
-  logger and level it captures, how it RENDERS what it captured, and whether a sibling test's
-  residue changes either; a liveness precondition is not the answer. **And an exemption you write
-  into a guard is that same hole from the inside** — an allow-listed method, a by-name exempt file —
-  so build the case the exemption ADMITS and watch it pass.
-- **Ask which case hands the guard's SUBJECT its other value. That is the general form of the
-  *supposed to stay GREEN* rule, and the question is not about the guard.** For each guard you add:
-  what is the cheapest edit that satisfies its assertion and still breaks the property, and is the
-  OTHER value of this boolean observed anywhere? A negative assertion is the instance where one of
-  the two values goes unbuilt; a boolean, an arm of a split and the order of a published pair are
-  others, and `harden`'s Termination asks the same question of a TEXT guard's forbidden string and
-  of the value under an asserted key.
-- **Don't rewrite prose faster than you verify it.** When a finding is about text an earlier round
-  wrote, delete the unsupported clause rather than replacing it with a better-sounding one.
-- **Don't write a tally a later round will have to re-measure; write the method.** Each recurrence
-  cost a round because the next reviewer re-measures what a comment asserts. The recurrence stopped
-  only when the enumeration was deleted in favour of *"mutate the line and read the failures"* — so
-  prefer that form, and treat an exhaustive list as worse than none, since it invites the next reader
-  to treat the extra failure as a regression they caused. If a count really is load-bearing, name the
-  head it was measured on.
-
-  **And the rule is not about tallies — it is about claims you cannot check.** A universal or an
-  exhaustive characterization is the same defect in different grammar, and it slips past a reader
-  watching for digits: *any*, *only*, *exactly*, *all*, *never*, *the whole*, *cannot*. So before
-  writing one about code you just wrote, spend one attempt trying to falsify it; prefer stating what
-  the thing DOES over what it excludes; and name the residue rather than claiming there is none.
-- **Fix every home of a corrected claim, not the one the reviewer named** — see *Correcting a claim
-  means finding every home of it*. And edit by script under the rules in *Editing by script*: assert
-  before replacing, count neighbours after, verify by reading back.
+Spawn a fresh fixer. What it implements and what it declines, harden's Phase 1 discipline and the JSON it
+returns are in `fixer.md` in this skill's directory. Brief it with that file's absolute path and tell
+it to read the whole file before it edits anything; the brief itself hands it the findings verbatim,
+the build step 5 names and the commit rules in COMMIT. The rules its declines must meet are that
+file's *Declining is governed by harden's deferral rules*.
 
 **And do not ask either agent to re-derive evidence its brief already carries** — hand it the
 measurement and point its budget at the claims it DOUBTS. This binds Step 1's brief as much as this
 one.
-
-**Declining is governed by harden's deferral rules, in full.** A declined finding needs the
-failure-mode sentence — *"if we ship without this, X breaks because Y"* — and without that sentence it
-is not a decline, it is an unanalysed item, so implement it. The anti-tell phrases are not reasons:
-"below noise floor", "stylistic preference", "matches the existing pattern", "borderline", "low risk"
-without naming the risk. Silent-failure findings get their severity raised, not lowered. And the
-**conflation check** matters most here, because the loop gives the fixer a standing incentive to
-shrink findings: am I declining the reviewer's recommendation, or a maximalist version I constructed
-from it? The narrow version is the one on the table.
-
-`CLAUDE.md` outranks a reviewer. A finding that asks for a test's expected value to be changed, for a
-uniform ATC veto, for re-ranking by longest alias, for identity keyed on `rxcui` — these are declines
-with the measurement cited, not implementations. That is exactly why the ledger exists: a clean
-reviewer will propose some of them, because they look obviously right, and `CLAUDE.md` records that
-they were measured and rejected.
-
-It returns JSON:
-
-```json
-{ "round": 2, "implemented": ["r2-1", "r2-3"],
-  "declined": [ { "id": "r2-2", "finding": "…", "reason": "…",
-                  "failure_mode_of_declining": "…" } ],
-  "runtime_visible": true, "green": "…", "commit": "<sha>" }
-```
 
 **A finding may name the PR DESCRIPTION rather than a file, and it can be blocking.** The fixer
 cannot edit the description, so the orchestrator applies that one and says which it applied; it
@@ -394,7 +321,7 @@ observable at runtime does — and where tests structurally cannot answer the qu
 SSE timing, wire serialisation, prompt or latency behaviour) the verifier is not optional: skip it
 there and the loop converges on code nobody ran.
 
-**A third case: runtime-visible, but not observable by THIS instrument.** The procedure below
+**A third case: runtime-visible, but not observable by THIS instrument.** The procedure in `verifier.md`
 deploys an `.omod` and restarts `openmrs-standalone.jar`. A change to the published Docker image's
 ENTRYPOINT — `backend-init.sh`, the model-fetch library it sources, the container's own startup
 wiring — is runtime behaviour a standalone never executes, so deploying and restarting cannot see it
@@ -412,139 +339,10 @@ reason: a reviewer that deploys is grading its own deploy, so when it hits the s
 orphaned server, that surfaces as a *finding about the code* — and a wrong blocking finding is what
 the loop cannot escape.
 
-Its procedure, and each step is where a specific mistake gets made:
-
-1. **Resolve the target.** Module `id` and `version` from `omod/src/main/resources/config.xml`.
-   Standalone home from `$OPENMRS_STANDALONE_HOME`, else the directory holding
-   `openmrs-standalone.jar` — never a hardcoded path, since more than one standalone usually exists.
-   Port from `<standalone>/openmrs-runtime.properties` (`tomcatport`), which is **not always 8080**.
-   State all three before doing anything.
-
-   **When `$OPENMRS_STANDALONE_HOME` is set it is not a hint, it is the assignment.** Do not search,
-   do not compare it against what is running, do not pick a different one because this one looks
-   busy. The pool driver sets it per run precisely so that concurrent runs each have an instance of
-   their own, and a run that "helpfully" takes a quieter one takes a sibling's.
-2. **Build.** The round's root `mvn -o clean install` already produced
-   `omod/target/<id>-<version>.omod`; note its timestamp. Build under the JDK the pom targets — read
-   `maven.compiler.target` (or `<java.version>`) and resolve THAT version. The version in a command
-   here is an example, not the value. A module on Java 1.8 fails its test gate under a newer default
-   JDK, and the signature is a wall of `MockitoException: cannot mock this class … Java: 21` across
-   unrelated tests. Read from the other end the mismatch has its own signatures:
-   `invalid target release: 11` is a Java-11 pom built under JDK 8, and
-   `No compiler is provided in this environment` means the home you resolved is a JRE rather than a
-   JDK (where `java_home -v 1.8` resolved this box's applet-plugin JRE). Each of these is an
-   environment problem. Never "fix" one by skipping tests — that is repairing the artifact, which is
-   forbidden below.
-3. **Deploy.** Copy the `.omod` into `<standalone>/appdata/modules/`, overwriting the same name, and
-   **remove any other `.omod` of the same module** — the loader reads every `*.omod` and two versions
-   of one module is a startup failure, not a warning. `*.omod.bak-*` files are not loaded and are
-   harmless clutter, so deleting one never fixes a startup failure; find the rogue `.omod` instead.
-
-   **Then delete `<standalone>/appdata/.openmrs-lib-cache/<id>/`, because replacing the `.omod` does
-   not reliably replace what runs.** OpenMRS expands a module into that directory and a redeploy
-   under the same name does not always re-expand it, while the omod timestamp, the module status
-   endpoint and the cache's own marker file all read current. It is a cache, so there is nothing to
-   preserve.
-4. **Restart, and just take YOUR standalone.** Modules load at startup, so a running instance picks
-   up nothing until restarted. **These are throwaway demo instances**: stop the one you resolved in
-   step 1, running or not, without confirmation. Do not enumerate candidates hunting for an idle
-   port, do not stop to attribute pids, and never report `unrepairable` because it was in use —
-   "in use" is not a blocker here. Launch from the standalone directory, backgrounded, teeing to a
-   log you can tail: `java -jar openmrs-standalone.jar -commandline`.
-
-   If you are ever in an environment where a standalone is NOT disposable, that is a fact the owner
-   has to state, not one to infer from a port being busy.
-5. **Confirm you are testing this build — the timestamp proves the FILE, and the file is not what
-   runs.** The deployed `.omod`'s timestamp must match the build from step 2; that is necessary and, per
-   step 3's lib-cache paragraph, not sufficient. Where the change is one you can name in a class, prove
-   the bytes: hash the loaded class under `.openmrs-lib-cache/<id>/` against the same entry in the built
-   omod. The three signals step 3 names all read current over stale bytes, so none of them is the proof.
-6. **Drive the actual behaviour** — the REST call, the query, the page — and capture what came back,
-   not that it "looked right". Where the change touches saved data, read the value back out (REST or
-   SQL against the bundled DB, creds in `openmrs-runtime.properties`) rather than trusting the
-   on-screen state. Prefer the module's own preview/dev endpoints and existing demo data over
-   standing up fixtures.
-
-Where the repo ships a per-module playbook for driving its UI, follow it — but the procedure above is
-the contract, and a missing playbook is not a reason to skip the step.
-
-**Restore before reporting, like every other agent here** — a verifier mutates less often than a
-reviewer but it writes to the standalone, and the same snapshot-and-compare applies to the repo it
-built from.
-
-**It owns the environment and repairs it.** Kill the orphaned `llama-server` holding the port, delete
-the stale omod and redeploy from the root install, set `log.level`, allow for cold load on the first
-query, wait out a slow boot. Do it without asking.
-
-**Wait on a CONDITION, never on a clock.** "Wait out a slow boot" is not licence to sleep blind.
-`verify-frontend-change`'s *"Wait for real readiness by polling HTTP, not by guessing a sleep"* already
-says poll; what it does not say is that a poll is one loop per wait, not one call per look, and that
-the loop runs inside your turn. A fixed sleep cannot exit early and cannot fail loudly. Use ONE
-foreground loop bounded under the tool's ten-minute timeout, as *this session must not busy-wait
-either* gives it — `end=$((SECONDS+540)); until curl -sf -o /dev/null http://localhost:$PORT/openmrs/
-|| [ $SECONDS -gt $end ]; do sleep 5; done` — and if it exits at the bound with the java pid alive,
-run it again, up to the round's bound. Give it the failure signatures too (`ModuleException` in the
-log, the java pid gone), or a crashed boot is indistinguishable from a slow one. The server itself
-stays detached (`nohup … & disown`); only the WAIT is in the foreground.
-
-**Do not end your turn to wait on a `Monitor` or a background task.** A delegated agent that ends
-its turn has handed back its report, unfinished. The harness's own texts route a single wait to
-Monitor or to background Bash; they are written for a session that stays alive.
-
-**Unless `$CLAUDE_PIPELINE_SLOT` is set, in which case it owns ITS SHARE of the environment.** That
-variable is the pool driver telling this run it has co-tenants — other `resolve-ticket` runs working
-other tickets on this machine, right now. What stays yours: the standalone at
-`$OPENMRS_STANDALONE_HOME`, your own worktree, and the maven repository `$MAVEN_ARGS` points at. What
-stops being yours is everything the repairs above reach for by *symptom* rather than by name — a
-process holding a port you did not resolve, a `java` you cannot attribute, and above all the shared
-inference server, which every co-tenant is mid-query against and which nothing here restarts. Repair
-what you were given; report the rest as an environment finding and say a co-tenant may own it. The
-un-scoped version of this paragraph is correct alone and destructive beside a sibling, and the
-difference is not visible from inside a run — only the variable says which world you are in.
-
-**A repair may only touch the environment, never the artifact under test.** No redeploying the
-previous omod, no reverting the round's commit, no flipping a global property to route around the
-failing path, no disabling the feature being verified. If what must change to get a green run is the
-module's code or its configuration, that is not a repair — it is the finding, and it goes to the
-reviewer as one. This line exists because the failure it prevents is silent and fail-open: a module
-that throws on startup looks exactly like a broken environment from outside, and a verifier allowed
-to put the last working omod back reports green on a build that does not boot.
-
-**Irreversibility is not a constraint on a standalone.** A schema migration, a platform bump that
-runs core liquibase, a destructive DB statement — all fair if they unblock the run. The instances
-and their data are disposable, so there is nothing to put back. **The environment/artifact line
-above still binds** — irreversibility is fine, repairing the ARTIFACT under test never is.
-
-**Do NO data housekeeping, in either direction.** Do not back up or snapshot a standalone's data,
-do not work carefully to avoid losing it, and — the half that actually costs time — **do not delete
-demo data you created in order to restore the original state**. Extra test data is useful; cleaning
-it up is pure waste.
-
-**The one thing that IS restored: global properties.** Any `global_property` a run changes goes back
-to the value it had when the run started — as-found, not the `config.xml` default, which is often
-different. They are configuration, not data: a left-behind override silently changes what every later
-step measures, which is how an A/B ends up comparing the wrong two things.
-
-Bounds: **two attempts per distinct named cause**, then the run aborts and hands back. Kill whatever
-you need to (`java -jar openmrs-standalone`, `llama-server`, whatever holds the port).
-
-**Repairs PERSIST, so say which of your observations rest on someone else's.** A repair made in
-round 1 is still there in round 3, and a verifier that measures a property the repaired environment
-has — rather than the one a stock install has — reports it in good faith and is wrong. Hence
-`inherited_environment`: name the observations that depend on an earlier round's repairs, separately
-from your own.
-
-It returns JSON, and every repair is in it even when it worked, because a repair can itself be
-evidence — an orphaned server on the port is what confounds a latency comparison:
-
-```json
-{ "round": 2, "omod": "<path, sha>",
-  "repairs": [ { "cause": "port 8081 held by orphaned standalone (pid 4127)",
-                 "action": "killed, restarted", "attempts": 1 } ],
-  "classification": "repaired | not-the-environment | unrepairable",
-  "inherited_environment": "which observations depend on repairs an EARLIER round made, not this one",
-  "observed": "…", "verdict": "works at runtime | does not | could not determine" }
-```
+Its procedure, and the JSON it returns, are in `verifier.md` in this skill's directory. Brief it
+with that file's absolute path and tell it to read the whole file before it does anything; the
+brief itself names the round, the head it covers, the behaviour to drive and the repairs earlier
+verifiers in this run reported.
 
 **A verifier's observations can falsify a claim the PR makes in prose, and that is a finding rather
 than a footnote.** It is running the code, so it sees the units the documentation guessed at. Read
@@ -625,7 +423,7 @@ byte-identity FALSE — a split comment line shifted a `LineNumberTable` — whi
 the exact class the verifier ran proved equivalence; a comment renumbering was proved neutral by
 compiling both variants against the resolved classpath and diffing the emitted class files, rather
 than by arguing that comments cannot change bytecode. This does not touch the verifier's own
-deploy-identity hash, in *Confirm you are testing this build*: that one asks whether the class that
+deploy-identity hash, in `verifier.md`'s *Confirm you are testing this build*: that one asks whether the class that
 LOADED is the one you built, which is an identity question a hash answers and a disassembly does
 not.
 
@@ -881,7 +679,7 @@ file is there. It reaches only the agent whose call triggered it.
 that ships if the agent dies mid-sentence.
 
 **And tell every agent to wait on its own builds inside its turn**, per the verifier's *Do not end your
-turn to wait*.
+turn to wait*, in `verifier.md`.
 
 **Clear the await on ANY terminal outcome — completed, failed, stalled, killed — not on a result arriving.**
 "The moment the result arrives" says nothing about a result that never will, and agents die. The
@@ -889,7 +687,7 @@ harness reports the death, so there is no excuse for waiting out a timeout. The 
 the no-`since`-reads-as-dead rule are backstops, not the mechanism.
 
 **And this session must not busy-wait either.** *Wait on a CONDITION, never on a clock* is written into
-the verifier's brief, but the orchestrator is where a blind `sleep` loop costs the most, because its
+`verifier.md`, but the orchestrator is where a blind `sleep` loop costs the most, because its
 context is the largest thing being re-sent per turn. Whatever you are waiting on — a boot, a build, an
 agent, a lock — wait on the CONDITION inside the turn: an agent by spawning it in the foreground
 (*Collecting in the same turn*), anything else by a foreground loop that exits on the condition, on a
@@ -954,7 +752,7 @@ passes run in the context that wrote the code, which is what this loop is built 
 Phase 2 polish rewrites lines the next fresh reviewer then reads for the first time — new unreviewed
 surface, so it can *raise* the round count.
 
-So harden's Phase 1 discipline is borrowed as instructions (steps 1 and 4 above) and the skill runs
+So harden's Phase 1 discipline is borrowed as instructions (steps 1 and 4 above; step 4's is in `fixer.md`) and the skill runs
 at the two ends instead:
 
 - **before the loop** — harden the slice while you still have the writing context, then open or

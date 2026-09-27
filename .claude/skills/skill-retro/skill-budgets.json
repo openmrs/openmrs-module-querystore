@@ -1,14 +1,16 @@
 {
-  "unit": "words of the whole SKILL.md, frontmatter included, as `LC_ALL=C wc -w` counts them",
+  "unit": "words of the whole file, as `LC_ALL=C wc -w` counts them: a SKILL.md keyed by its skill's directory, frontmatter included, and a role file beside it keyed `<skill>/<file>`",
   "raise": "only in the commit that needs it, with the sentence skill-retro Step 4 asks for",
   "words": {
     "harden": 7528,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 12255,
+    "pr-harden": 9755,
+    "pr-harden/fixer.md": 1101,
+    "pr-harden/verifier.md": 1736,
     "pr-review": 9474,
     "resolve-ticket": 8974,
-    "skill-retro": 2429,
+    "skill-retro": 2462,
     "ticket-pool": 8332,
     "verify": 658,
     "verify-frontend-change": 1844

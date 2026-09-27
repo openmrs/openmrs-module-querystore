@@ -1852,6 +1852,11 @@ def parity_problems(cfg: dict) -> list[str]:
                     problems.append(f"{skill}/{f.relative_to(live)} is not in the source repo")
                 elif m.read_bytes() != f.read_bytes():
                     problems.append(f"{skill}/{f.relative_to(live)} differs from the source repo")
+        # And the other direction. Walking only the live tree cannot see a file the repo added and
+        # nobody installed, and a role file a skill's brief points its subagents at is that shape.
+        for m in sorted(mirror.rglob("*")):
+            if m.is_file() and not (live / m.relative_to(mirror)).is_file():
+                problems.append(f"{skill}/{m.relative_to(mirror)} is in the source repo but not installed")
     return problems
 
 

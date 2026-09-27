@@ -1302,6 +1302,42 @@ def test_skills_commands_run(tmp: Path) -> None:
 
 
 
+def test_parity_names_a_file_on_either_side(tmp: Path) -> None:
+    """`parity_problems` walked only the LIVE skill tree, so a file the repo added and nobody
+    installed was never named, and the retro's "live copies and the mirror identical" read green over
+    a skill whose role file did not exist where every run reads it. Both directions, and the control
+    that identical trees report nothing."""
+    names = ("CLAUDE", "PIPELINE", "GATE_PAIRS", "MIRRORED_SKILLS")
+    saved = {n: getattr(pool, n) for n in names}
+    live, src = tmp / "home", tmp / "repo"
+    try:
+        pool.CLAUDE, pool.PIPELINE = live, live / "pipeline"
+        pool.GATE_PAIRS, pool.MIRRORED_SKILLS = [], ["s"]
+        for d in (live / "pipeline", src / ".claude/pipeline"):
+            d.mkdir(parents=True)
+            for script in ("pool-run", "pool-watch", "gate-state"):
+                (d / script).write_text("same\n")
+        for d in (live / "skills/s", src / ".claude/skills/s"):
+            d.mkdir(parents=True)
+            (d / "SKILL.md").write_text("same\n")
+        cfg = {"source_repo": str(src)}
+        got = pool.parity_problems(cfg)
+        check("parity: identical trees report nothing", got == [], str(got))
+        (src / ".claude/skills/s/role.md").write_text("new\n")
+        got = pool.parity_problems(cfg)
+        check("parity: a file only the repo has is named", any("s/role.md" in p for p in got), str(got))
+        (live / "skills/s/role.md").write_text("new\n")
+        got = pool.parity_problems(cfg)
+        check("parity: and is not named once it is installed", got == [], str(got))
+        (live / "skills/s/extra.md").write_text("x\n")
+        got = pool.parity_problems(cfg)
+        check("parity: a file only the live copy has is still named",
+              any("s/extra.md" in p for p in got), str(got))
+    finally:
+        for n, v in saved.items():
+            setattr(pool, n, v)
+
+
 def test_pool_gate_state_via_helper(tmp: Path) -> None:
     """The driver must not read-modify-write the gate files itself.
 
@@ -4343,6 +4379,7 @@ def main() -> int:
                          ("crash", test_crash_does_not_clobber),
                          ("nothing ran", test_nothing_ran), ("maven tail", test_shared_maven_repo), ("db ports", test_db_port_hosts),
                          ("skill commands", test_skills_commands_run),
+                         ("parity both ways", test_parity_names_a_file_on_either_side),
                          ("driver gate-state", test_pool_gate_state_via_helper),
                          ("save_json temp", test_save_json_temp_is_private),
                          ("ledger cross-process", test_ledger_cross_process),
