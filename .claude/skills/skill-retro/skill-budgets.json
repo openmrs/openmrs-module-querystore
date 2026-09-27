@@ -2,7 +2,7 @@
   "unit": "words of the whole SKILL.md, frontmatter included, as `LC_ALL=C wc -w` counts them",
   "raise": "only in the commit that needs it, with the sentence skill-retro Step 4 asks for",
   "words": {
-    "harden": 10429,
+    "harden": 7528,
     "measure-first": 892,
     "openmrs-module-review": 1534,
     "pr-harden": 12255,
