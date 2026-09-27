@@ -6,14 +6,24 @@
       "from": 2462,
       "to": 2532,
       "why": "Steps 2, 4 and 6 now name the `raises` entry, the `--against` run that holds it, and that a new file's budget rises from 0, which the linter and pool-run both check"
+    },
+    "pr-harden": {
+      "from": 9677,
+      "to": 9678,
+      "why": "the fixer is told to read fixer.md before it does anything else, as the verifier already was, so a compliant read is one role-file-check decides mechanically (owner's decision, 2026-09-27)"
+    },
+    "pr-harden/fixer.md": {
+      "from": 1101,
+      "to": 1102,
+      "why": "the fixer is told to read fixer.md before it does anything else, as the verifier already was, so a compliant read is one role-file-check decides mechanically (owner's decision, 2026-09-27)"
     }
   },
   "words": {
     "harden": 7403,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 9677,
-    "pr-harden/fixer.md": 1101,
+    "pr-harden": 9678,
+    "pr-harden/fixer.md": 1102,
     "pr-harden/verifier.md": 1736,
     "pr-review": 7775,
     "pr-review/posting.md": 1804,

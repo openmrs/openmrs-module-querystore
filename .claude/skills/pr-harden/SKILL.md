@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.36.1
+version: 0.36.2
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -276,7 +276,7 @@ edits stay, its measurement scaffolding does not.
 
 Spawn a fresh fixer. What it implements and what it declines, harden's Phase 1 discipline and the JSON it
 returns are in `fixer.md` in this skill's directory. Brief it with that file's absolute path and tell
-it to read the whole file before it edits anything; the brief itself hands it the findings verbatim,
+it to read the whole file before it does anything else; the brief itself hands it the findings verbatim,
 the build step 5 names and the commit rules in COMMIT. The rules its declines must meet are that
 file's *Declining is governed by harden's deferral rules*.
 

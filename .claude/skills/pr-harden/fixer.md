@@ -1,7 +1,7 @@
 # pr-harden — the fixer's brief
 
-You are the fixer in a `pr-harden` round ("it", below). Read this whole file before you edit
-anything: your brief hands you the round's findings verbatim, the build that `green` reports on and
+You are the fixer in a `pr-harden` round ("it", below). Read this whole file before you do
+anything else: your brief hands you the round's findings verbatim, the build that `green` reports on and
 the commit rules `commit` answers to, and what follows is how you treat the findings. Where this file
 names a section it does not contain — *Editing by script*, *Correcting a claim means finding every
 home of it* — that section is in `SKILL.md`, beside this file. What these rules rest on is in

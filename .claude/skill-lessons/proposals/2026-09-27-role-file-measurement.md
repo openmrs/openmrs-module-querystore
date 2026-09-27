@@ -31,7 +31,9 @@ orchestrator `Agent` call to its subagent through `subagents/agent-*.meta.json`'
     relative after a `cd`.
   - **A fixer acts** at its first edit: an `Edit`/`Write`, or a Bash command that writes outside the
     temp directory, including running a scratch script that writes. Its brief says to read the file
-    "before it edits anything".
+    "before it does anything else", as the verifier's does (pr-harden 0.36.2; "before it edits anything"
+    until then, see the sixth revision). Since the fifth revision, this act only feeds the hand-check
+    advice.
   - **A verifier acts** at its first Bash command that is not a read of the file, or at its first
     edit. Its brief says "before it does anything".
   - **Calls sent together in one message** run before any of their results is seen. So a read that
@@ -233,10 +235,9 @@ It raised 1 blocking finding and some notes. Each change quotes its trigger.
 - **Expected, and stated so a FAIL is read correctly:** all 109 pre-0.36 verifiers acted at their
   very first call, an orientation command such as `git rev-parse` or a `grep` of `config.xml`.
   - The pointer says to read `verifier.md` "before it does anything". So a 0.36 verifier that
-    orients first is a MISS, and that is the likeliest reason for a FAIL. The FAIL line names the
-    spawn, so its transcript is read before the pointer is changed.
-  - Whether to relax the wording to "before it builds, deploys or restarts anything" is the owner's
-    call, and it is not made here.
+    orients first reads late. Under the fifth revision's bar that makes it a hand check, not a
+    FAIL, and it is the likeliest reason for one.
+  - The owner's decision on the wording is recorded in the sixth revision.
 - **Kept as known limits:**
   - an awk program with an action (`NR>=A && NR<=B {printf …}`);
   - `NR` across several files;
@@ -285,3 +286,15 @@ scratch writes, quoted and `cd`-relative targets, `bash -n`, `python3 - "$F" <<`
   - a whole read after a `git status` goes to a hand check and does not PASS;
   - a read cut to 20 lines FAILs.
 - **The known-negative is still 0 of 305.**
+
+## Revised a sixth time 2026-09-27, before any treated session: the owner's decision on the wording
+
+The owner kept the verifier's "before it does anything", and aligned the fixer's pointer and the
+`fixer.md` header to "before it does anything else" in pr-harden 0.36.2.
+
+Under the fifth revision's bar, only a read that comes before every other call is decided
+mechanically. So a fixer following the old "before it edits anything" could run `git status`, read
+its file, and still land in a hand check although it did what it was told. With the change, a
+compliant fixer's read is clean, as a compliant verifier's is, and "read this first" is also the
+simplest instruction for an agent to follow. Both files grew by one word, and the two rises are
+recorded in `skill-budgets.json`'s `raises`, the ratchet's first use on pr-harden.
