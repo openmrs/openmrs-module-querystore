@@ -4806,3 +4806,50 @@ same outage. Count: 1 verified. **REOPEN ON:** a second verified session death t
 
 **Not a lesson:** the rest of #402's record is chartsearchai domain evidence (A/B arms, referent
 wording), and so is PR543's r1/r2.
+
+## 2026-09-28 (window: 3 run records — #463/PR545, converged 2 rounds / 2 cycles; #246/PR547, converged 3 rounds / 2 cycles, Refs; #528/PR546, converged 3 rounds / 4 cycles, verifier ran) — 1 proposed, 0 applied, 1 killed; one refutation round; linter 15 files, 0 findings; **no skill file changed**
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except the three
+records, which were local-only. Proposals and the gate's reply are in `proposals/2026-09-28-window-463-246-528.md`.
+
+**KILLED · resolve-ticket: before the Step 8 push, check the ADR decision number against every open
+PR's diff.**
+- Why it was proposed: the park *main moving under a run* reached 7 (+#528:21). Its REOPEN ON ("one that
+  cost a round", :4029) was met, because merging #547's Decision 121 cost #528 a blocking-only round
+  and a second verifier run.
+- Measured this pass: three pipeline PRs allocated Decision 121. They were PR544 (#402, draft, opened
+  2026-09-26T19:47Z, **still open and still claiming 121**), PR546 (#528, written 09-27T19:02Z) and
+  PR547 (#246, opened 19:57Z, merged 22:23Z). `for m in $(gh pr list --state open --json number --jq
+  '.[].number'); do gh pr diff $m | grep -E '^\+## Decision [0-9]+'; done` was calibrated: merged
+  PR547 gives `Decision 121`, and PR545, which has no entry, gives 0 lines.
+- Killed on the gate's citation, re-read: #528 transcript :778/:788. The conflict was textual, with
+  the TOC line after Decision 120 and the body at end of file being the same insertion points on both
+  branches. The merge, the confirming round and the verifier run were owed whatever the number. The
+  lever saves a renumber, which is the 0-cost shape.
+- **REOPEN ON:** a lever that avoids two branches meeting at the ADR's shared insertion points. That is
+  a target-repo layout property, like the nested-CLAUDE.md budget park. Or a record where a collision
+  that git merged SILENTLY (no textual conflict) reached a merged head.
+
+**Parked counts advanced.**
+- **main moving under a run: 7 records** (+#528:21, one blocking-only round and one verifier run,
+  which is FINISH's *costs one more round* as written). The cost-bearer is the shared insertion point,
+  not the number (above).
+- **Phase 2 escalating repeatedly on the run's own fixes: 19 records** (+#463:13, one; +#246:3/:16, one;
+  +#528:14-15/:20, three, ending on the labelled override). No remedy named. REOPEN unchanged (:3998).
+- **Prose the change made false, found by a fresh agent: 20 records** (+#463:15 stale code-table
+  paragraph; +#528:15 a javadoc crediting #528 with #74's failure; +#246:18 "every refusal" true only
+  on ABSTAIN cells). REOPEN unchanged.
+
+**Observed, no remedy owed.**
+- pr-harden 0.34.0's interrupted-agent rule fired as written (#246:21). The round-2 reviewer returned
+  `[Request interrupted by user for tool use]` under `CLAUDE_PIPELINE_SESSION=1`, was treated as agent
+  death, and a single retry succeeded. That is the second sighting of the string and the first under
+  the rule.
+- #528:9, an uncalibrated bytecode comparison (177/189 classes differed), was discarded by the run
+  itself in favour of a verifier re-run. That is the CLAUDE.md calibration rule applied in-run.
+- #528's refutation gate caught two plan omissions of prior measured art: #66's inline-date baseline,
+  and the committed `temporal_probe_rc2.py`. #463's gate refuted the ticket's 3b premise by
+  measurement. Both are the gate working, at 0 rounds.
+
+**Not a lesson:** #246's A/B arms and greedy-decode noise-floor finding are chartsearchai domain
+evidence.
