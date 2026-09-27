@@ -1338,6 +1338,69 @@ def test_parity_names_a_file_on_either_side(tmp: Path) -> None:
             setattr(pool, n, v)
 
 
+def test_a_retro_that_raises_a_budget_unrecorded_is_a_problem(tmp: Path) -> None:
+    """`skill-retro/skill-budgets.json` holds each skill file to an exact word count, and skill-retro
+    Step 4 lets a budget rise only with a stated reason. That reason was prose, and prose is what let
+    the skills grow all month under a "prune as much as you add" rule. So `skill-lint.py --against <ref>`
+    fails a budget that rose since <ref> with no matching `raises` entry, and the driver runs it after
+    every retro against the head that retro started from. The fixture is a real repository and the
+    linter is the repo's own."""
+    src = tmp / "src"
+    lint_dir, skill = src / ".claude/skills/skill-retro", src / ".claude/skills/s"
+    lint_dir.mkdir(parents=True)
+    skill.mkdir(parents=True)
+    shutil.copy(HERE.parent / "skills/skill-retro/skill-lint.py", lint_dir / "skill-lint.py")
+    body = "---\nname: s\nversion: 1\n---\nsome words here\n"
+    (skill / "SKILL.md").write_text(body)
+    n = len(body.encode().split())
+    budgets = lint_dir / "skill-budgets.json"
+    budgets.write_text(json.dumps({"words": {"s": n}, "raises": {}}))
+    for args in (["git", "init", "-q", "."], ["git", "config", "user.email", "t@t"],
+                 ["git", "config", "user.name", "t"], ["git", "add", "-A"], ["git", "commit", "-qm", "seed"]):
+        sh(args, cwd=src)
+    before = sh(["git", "rev-parse", "HEAD"], cwd=src).stdout.strip()
+    got = pool.lint_problems(src, before)
+    check("lint ratchet: an unchanged tree has nothing to say", got == [], str(got))
+    (skill / "SKILL.md").write_text(body + "three more words\n")
+    budgets.write_text(json.dumps({"words": {"s": n + 3}, "raises": {}}))
+    got = pool.lint_problems(src, before)
+    check("lint ratchet: a budget raised with no recorded raise is a problem",
+          any("rose from" in q for q in got), str(got))
+    budgets.write_text(json.dumps({"words": {"s": n + 3},
+                                   "raises": {"s": {"from": n, "to": n + 3, "why": "a new rule"}}}))
+    got = pool.lint_problems(src, before)
+    check("lint ratchet: and is not one once the raise is recorded", got == [], str(got))
+    budgets.write_text(json.dumps({"words": {"s": n + 3},
+                                   "raises": {"s": {"from": n, "to": n + 2, "why": "for other numbers"}}}))
+    got = pool.lint_problems(src, before)
+    check("lint ratchet: a raise recorded for other numbers does not cover this one",
+          any("rose from" in q for q in got), str(got))
+    (skill / "SKILL.md").write_text("---\nname: s\nversion: 1\n---\nwords\n")
+    budgets.write_text(json.dumps({"words": {"s": n - 2}, "raises": {}}))
+    got = pool.lint_problems(src, before)
+    check("lint ratchet: a lowered budget needs no entry", got == [], str(got))
+    (skill / "SKILL.md").write_text(body + "an unbudgeted growth\n")
+    budgets.write_text(json.dumps({"words": {"s": n}, "raises": {}}))
+    got = pool.lint_problems(src, before)
+    check("lint ratchet: a SKILL.md over its budget still fails, as it did before",
+          any("over its budget" in q for q in got), str(got))
+    live = tmp / "live"
+    (live / "skill-retro").mkdir(parents=True)
+    (live / "s").mkdir()
+    shutil.copy(HERE.parent / "skills/skill-retro/skill-lint.py", live / "skill-retro/skill-lint.py")
+    (live / "s/SKILL.md").write_text(body + "five more words here now\n")
+    (live / "skill-retro/skill-budgets.json").write_text(json.dumps({"words": {"s": n + 5}, "raises": {}}))
+    for form in (["--against", before], [f"--against={before}"]):
+        r = sh([sys.executable, str(live / "skill-retro/skill-lint.py"), str(live)] + form, cwd=src)
+        check(f"lint ratchet: the live copy, in no checkout, reads the table at <ref> through the repo it runs in ({form[0][:10]})",
+              r.returncode == 1 and "rose from" in r.stdout, r.stdout[-300:] + r.stderr[-200:])
+    r = sh([sys.executable, str(live / "skill-retro/skill-lint.py"), str(live), "--agains", before], cwd=src)
+    check("lint ratchet: an unknown option is refused, not taken for a root", r.returncode == 2, r.stdout[-200:])
+    (lint_dir / "skill-lint.py").unlink()
+    got = pool.lint_problems(src, before)
+    check("lint ratchet: a missing linter is said, not read as clean", any("missing" in q for q in got), str(got))
+
+
 def test_pool_gate_state_via_helper(tmp: Path) -> None:
     """The driver must not read-modify-write the gate files itself.
 
@@ -4380,6 +4443,7 @@ def main() -> int:
                          ("nothing ran", test_nothing_ran), ("maven tail", test_shared_maven_repo), ("db ports", test_db_port_hosts),
                          ("skill commands", test_skills_commands_run),
                          ("parity both ways", test_parity_names_a_file_on_either_side),
+                         ("lint ratchet", test_a_retro_that_raises_a_budget_unrecorded_is_a_problem),
                          ("driver gate-state", test_pool_gate_state_via_helper),
                          ("save_json temp", test_save_json_temp_is_private),
                          ("ledger cross-process", test_ledger_cross_process),

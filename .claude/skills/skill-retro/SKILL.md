@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.4.1
+version: 0.5.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -60,7 +60,9 @@ script can decide: a count stated over a list of a different length, a state fie
 by no gate script, missing frontmatter, and a SKILL.md, or a role file beside one (any other top-level
 `*.md` but `evidence.md`), whose word count differs from its budget in
 `<this dir>/skill-budgets.json`, or that has none. Exit 1 if it reports anything, 2 if it found no
-skill to check.
+skill to check. With `--against <ref>`, run from the source repo, it also fails a budget that rose since
+`<ref>` with no matching entry in that table's `raises` — `{"from", "to", "why"}` — and `pool-run`
+runs it that way after every retro, against the head the retro started from.
 
 **What it does not check is the interesting half, and do not let its green fool you.** A skill
 contradicting itself in SUBSTANCE — `harden` Phase 2 mandating four *parallel* agents while every
@@ -94,7 +96,8 @@ case arose — say that, rather than inventing the mechanism the reader expects.
 For every proposed addition, answer in the report: **which existing rule does this subsume, retire or
 render stale?** Net growth needs a sentence justifying it, and Step 2's linter holds each SKILL.md and role file to
 its word count in `skill-budgets.json`: pay for growth with a prune in the same pass, or raise that
-file's budget in the same commit and put the sentence in the report; a file you prune has its
+file's budget in the same commit, with the sentence as the `why` of a `raises` entry naming the
+exact rise (a new file's budget rises from 0), and put it in the report too; a file you prune has its
 budget lowered in the same commit. And:
 
 - **Never delete a measured rule without recording the measurement that retires it.** These skills
@@ -135,7 +138,7 @@ added late.
 Apply the surviving proposals. Then, per skill touched:
 
 - bump `version:` in the frontmatter — minor for a new rule, patch for a correction;
-- re-run the linter and leave it at zero for the files you touched;
+- re-run the linter with `--against origin/main` and leave it at zero for the files you touched;
 - copy the skill into any clean checkout of `openmrs/openmrs-module-querystore` — which checkout does
   not matter, since every commit is pushed — and verify with `cmp`, AFTER the push below, that the
   live copy and the PUSHED copy are byte-identical, **including any `*gate*.sh`, any

@@ -1,6 +1,13 @@
 {
   "unit": "words of the whole file, as `LC_ALL=C wc -w` counts them: a SKILL.md keyed by its skill's directory, frontmatter included, and a role file beside it keyed `<skill>/<file>`",
-  "raise": "only in the commit that needs it, with the sentence skill-retro Step 4 asks for",
+  "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
+  "raises": {
+    "skill-retro": {
+      "from": 2462,
+      "to": 2532,
+      "why": "Steps 2, 4 and 6 now name the `raises` entry, the `--against` run that holds it, and that a new file's budget rises from 0, which the linter and pool-run both check"
+    }
+  },
   "words": {
     "harden": 7403,
     "measure-first": 892,
@@ -11,7 +18,7 @@
     "pr-review": 7775,
     "pr-review/posting.md": 1804,
     "resolve-ticket": 7169,
-    "skill-retro": 2462,
+    "skill-retro": 2532,
     "ticket-pool": 5084,
     "ticket-pool/by-hand.md": 1859,
     "ticket-pool/pausing.md": 1612,

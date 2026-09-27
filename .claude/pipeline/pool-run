@@ -1860,6 +1860,31 @@ def parity_problems(cfg: dict) -> list[str]:
     return problems
 
 
+def lint_problems(src: Path, before: str) -> list[str]:
+    """What the source repo's own skill linter says after a retro, run against the head it started from.
+
+    The retro runs the linter itself (skill-retro Step 2), and a budget it raised is meant to carry a
+    recorded reason (Step 4). Both were instructions to the session being checked. This runs the linter
+    the retro left in the source repo, from the driver and with `--against` the pre-retro head, so a
+    SKILL.md off its budget or a budget raised with no `raises` entry is a problem the driver reports,
+    not a sentence the retro may or may not have written. Its limit: the code that runs is the retro's
+    own copy, so a retro that edits the linter is checked by what it edited. A linter that is missing
+    or will not run is said as such: silence here would read as a clean result."""
+    lint = src / ".claude/skills/skill-retro/skill-lint.py"
+    if not lint.is_file():
+        return [f"{lint} is missing, so no budget was checked"]
+    r = sh([sys.executable, str(lint), str(src / ".claude/skills"), "--against", before], timeout=120)
+    if r.returncode == 0:
+        return []
+    found, where = [], ""
+    for line in r.stdout.splitlines():
+        if line and not line.startswith(" ") and not line[0].isdigit() and "checked" not in line:
+            where = line.strip()
+        elif line.strip().startswith(("file", "line")):
+            found.append(f"skill-lint: {Path(where).parent.name}/{Path(where).name}: {line.strip()}")
+    return found or [f"skill-lint exited {r.returncode}: {(r.stdout + r.stderr).strip()[-300:]}"]
+
+
 def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True) -> list[str]:
     """Returns a list of fatal problems. Non-fatal ones are said and carried.
 
@@ -3733,6 +3758,7 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
     if ahead and "ahead" in ahead[0]:
         problems.append(f"the commit was not pushed ({ahead[0].strip()})")
     problems += parity_problems(cfg)
+    problems += lint_problems(src, before_head)
 
     say(f"    retro finished in {hms(run['seconds'])}, {run['turns']} turns"
         + (f", ${run['cost_usd']:.2f}" if run.get("cost_usd") else ""))
@@ -3741,7 +3767,8 @@ def run_retro(cfg: dict, say: Say, force: bool) -> dict | None:
     for p in problems:
         say(f"    ! {p}")
     if not problems:
-        say("    verified: committed, pushed, LAST advanced, live copies and the mirror identical.")
+        say("    verified: committed, pushed, LAST advanced, live copies and the mirror identical, "
+            "and every skill file on its budget with each raise recorded.")
     # Set by this retro and no earlier one — an invocation whose retros were already off returned
     # above. The rest of the pool is now being worked without learning, which is the failure this
     # whole pipeline is arranged to prevent, and it is not a line to find afterwards in a log.

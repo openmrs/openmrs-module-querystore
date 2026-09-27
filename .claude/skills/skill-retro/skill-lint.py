@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Mechanical checks over skill files: the self-contradictions a script can decide, and a size
-budget.
+budget. With `--against <ref>`, run inside the source repo, also that no budget rose since <ref>
+without a matching entry in the budget file's `raises`.
 
 Only the classes a script can decide. A skill contradicting itself in SUBSTANCE — "spawn four
 parallel agents" beside "each agent must mutate the worktree" — is not one of them, and pretending
@@ -10,7 +11,7 @@ pass is for; this catches the ones that are facts about the document.
 Exit 1 if anything is reported, so a hook or a CI step can act on it, and 2 if no skill file was
 found to check, because a check that ran on nothing must not read as green.
 """
-import json, pathlib, re, sys
+import json, pathlib, re, subprocess, sys
 
 WORDS = {"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10}
 NOUNS = ("questions","things","rules","legs","conditions","shapes","items","steps","reasons",
@@ -135,9 +136,9 @@ def size_budget(skill, text, budgets, why_none, named="its directory name"):
     Its body is loaded into every run of its skill and its description into every session, and
     skill-retro Step 4 asks what every addition prunes, and a sentence for net growth; this is the
     half of that a script can decide. A budget is the skill's size, written down. Growth needs a
-    raise, made in the commit that needs it with Step 4's sentence, and a prune lowers it in the
-    same commit, so no room is left over for a later pass to grow into without writing anything
-    down."""
+    raise, made in the commit that needs it with Step 4's sentence recorded in `raises` (checked by
+    `budget_ratchet` under `--against`), and a prune lowers it in the same commit, so no room is left
+    over for a later pass to grow into without writing anything down."""
     n = words(text)
     if budgets is None:
         return [(0, f"{why_none}, so no size is checked ({n} words)")]
@@ -160,8 +161,75 @@ def role_files(skill_dir):
     where the next addition would go unmeasured. A file in a subdirectory is not one of these."""
     return sorted(p for p in skill_dir.glob("*.md") if p.name not in ("SKILL.md", "evidence.md"))
 
+def budget_ratchet(ref):
+    """A budget that rose since `ref` without a matching `raises` entry.
+
+    skill-retro Step 4 lets a budget rise only with a sentence saying why, and a sentence in a report
+    is what a later reader never sees; the entry puts it beside the number it justifies. It must name
+    the exact rise — `{"from": <budget at ref>, "to": <budget now>, "why": "…"}` — so it covers that
+    rise and no other. What it cannot see: a budget pruned and later restored to the same two numbers
+    is covered by the same entry again, and a second rise of one key replaces the first entry, whose
+    reason then lives only in git history. A key new since `ref` rises from 0; entries that match no
+    rise are ignored. The table at `ref` comes from git — see `budgets_at` — and a ref it cannot read
+    is a finding, never a pass."""
+    try:
+        cur = json.loads(BUDGETS.read_text())
+    except (OSError, ValueError) as e:
+        return [(0, f"unreadable {BUDGETS.name} ({type(e).__name__}), so no rise since {ref} is checked")]
+    committed, why = budgets_at(ref)
+    if committed is None:
+        return [(0, f"cannot read {BUDGETS.name} at {ref}: {why}")]
+    try:
+        was_table = json.loads(committed)["words"]
+    except (ValueError, KeyError, TypeError):
+        return [(0, f"{BUDGETS.name} at {ref} has no readable `words` table")]
+    raises = cur.get("raises") or {}
+    out = []
+    for key, n in sorted((cur.get("words") or {}).items()):
+        was = was_table.get(key, 0)
+        if type(n) is not int or n <= was:
+            continue
+        e = raises.get(key) if isinstance(raises.get(key), dict) else {}
+        if e.get("from") == was and e.get("to") == n and str(e.get("why", "")).strip():
+            continue
+        out.append((0, f"{key}: budget rose from {was} to {n} since {ref} with no matching entry in "
+                       f'`raises` ({{"from": {was}, "to": {n}, "why": "…"}}), which skill-retro Step 4 asks for'))
+    return out
+
+def budgets_at(ref):
+    """The table as committed at `ref`: through the checkout holding this script when it is one (the
+    source repo's own copy), else through the checkout the command runs in, at the table's path there.
+    The second is the retro's case — it runs the live copy under ~/.claude, which is in no checkout,
+    from the source repo — and without it `--against` could only ever report that git failed."""
+    tries = [["git", "-C", str(BUDGETS.parent), "show", f"{ref}:./{BUDGETS.name}"],
+             ["git", "show", f"{ref}:.claude/skills/skill-retro/{BUDGETS.name}"]]
+    errs = []
+    for cmd in tries:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout, None
+        errs.append(r.stderr.strip())
+    return None, "; ".join(e for e in errs if e) or "git failed"
+
 def main(argv):
-    roots = [pathlib.Path(a) for a in argv[1:]] or [pathlib.Path.home() / ".claude/skills"]
+    args, against, it = [], None, iter(argv[1:])
+    for a in it:
+        if a == "--against":
+            against = next(it, None)
+            if not against:
+                print("--against needs a git ref")
+                return 2
+        elif a.startswith("--against="):
+            against = a.split("=", 1)[1]
+            if not against:
+                print("--against needs a git ref")
+                return 2
+        elif a.startswith("-"):
+            print(f"unknown option {a}: the arguments are skill roots and `--against <ref>`")
+            return 2
+        else:
+            args.append(a)
+    roots = [pathlib.Path(a) for a in args] or [pathlib.Path.home() / ".claude/skills"]
     findings, checked = {}, 0
     budgets, why_none = load_budgets()
     for root in roots:
@@ -185,6 +253,10 @@ def main(argv):
     if not checked:
         print(f"no SKILL.md found under {', '.join(map(str, roots))}: nothing was checked")
         return 2
+    if against:
+        got = budget_ratchet(against)
+        if got:
+            findings[str(BUDGETS)] = got
     for f, items in findings.items():
         print(f"\n{f}")
         for line, msg in sorted(items):
