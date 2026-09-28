@@ -50,3 +50,7 @@
 - Read an issue with `gh issue view <n> --json title,body,comments`, never `--comments`: off a
   terminal that prints the comments and not the body, so an issue without comments reads as empty and
   one with comments reads as its comments alone (gh 2.87.3, measured 2026-09-23).
+- Quote a separator made of `=`: `echo '====='`, or use `echo ---`. The Bash tool's zsh expands a bare
+  word that starts with `=` into a command's path, so `echo ======` fails with "===== not found", the
+  call is flagged as an error, and whatever is chained after it never runs (zsh 5.9, measured
+  2026-09-28; two wave-2 reviewers lost the calls after theirs).
