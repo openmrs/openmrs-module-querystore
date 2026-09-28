@@ -41,9 +41,17 @@ Sessions are ordered by their first timestamp, never by path.
     role-file-check.py [SESSION.jsonl ...]     # default: every session under ~/.claude/projects
     role-file-check.py --json [SESSION.jsonl ...]
     role-file-check.py --baseline [--before YYYY-MM-DD | --after YYYY-MM-DD] [--records DIR]
+    role-file-check.py --second-move [--json] [SESSION.jsonl ...]
+    role-file-check.py --second-move --baseline [--before YYYY-MM-DD | --after YYYY-MM-DD]
     role-file-check.py --selftest
+
+`--second-move` applies the same checks to the second move — pr-harden 0.37.0's `reviewer.md` and
+resolve-ticket 0.23.0's `refuter.md` — against its own bar, pre-registered in
+`.claude/skill-lessons/proposals/2026-09-28-reviewer-refuter-measurement.md`, and leaves the first
+move's report as it was. A reviewer is looked for after pr-harden loads, a refuter in Step 3's window:
+after resolve-ticket loads and before harden or pr-harden does.
 """
-import argparse, contextlib, io, json, re, shlex, sys, tempfile
+import argparse, contextlib, io, json, os, re, shlex, sys, tempfile
 from pathlib import Path
 
 PROJECTS = Path.home() / ".claude/projects"
@@ -53,6 +61,14 @@ POINTERS = ("`fixer.md` in this skill's directory", "`verifier.md` in this skill
 EDITS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 ROLE_FILE = {"fixer": "fixer.md", "verifier": "verifier.md"}
 ROLE_WORD = re.compile(r"(?<!-)\b(verifier|fixer|reviewer)\b(?!-|['’]s\b|\.md\b)", re.I | re.A)
+HARDEN_WORDS = r"(?<!pr-)\bharden\b|\bcycle\b|\bphase\b"
+REFUT = r"\brefut(?!er\.md\b)"
+# A JIRA key, "O3-1234" or "TRUNK-6429", and not "UTF-8".
+JIRA = r"\b(?!UTF-)[A-Z][A-Z0-9]+-\d+\b"
+# The second move, one entry per role: the skill that loads its file, the file, and the pointer text
+# whose presence in that skill's loaded text makes a session treated for the role.
+MOVE2 = {"reviewer": ("pr-harden", "reviewer.md", "`reviewer.md` in this skill's directory"),
+         "refuter": ("resolve-ticket", "refuter.md", "`refuter.md` in this skill's directory")}
 HOME = str(Path.home())
 TMP = re.compile(r"^(?:/tmp/|/private/tmp/|/private/var/folders/|/var/folders/|\$TMPDIR|\$\{TMPDIR|/dev/null)")
 # A Bash command writes a file when it does one of these. Redirections are judged by their target, so
@@ -133,7 +149,7 @@ def role_of(desc, prompt):
     a clause naming the reviewer is unplaced too, as wave 1's "PR 546 blocking-only round 3" was."""
     if re.search(r"\breview|\brefut|\bconfirm", desc, re.I):
         return "reviewer"
-    if re.search(r"(?<!pr-)\bharden\b|\bcycle\b|\bphase\b", desc, re.I):
+    if re.search(HARDEN_WORDS, desc, re.I):
         return "harden"
     if re.search(r"verif", desc, re.I):
         return "verifier"
@@ -530,10 +546,16 @@ def read_check(agent_jsonl, role_path, role):
                 if name == "Write" and target.endswith(".py"):
                     scripts[target] = bool(PY_WRITES.search(str(inp.get("content", ""))))
                 acting = not TMP.match(target)
-            if act is None and acting:
-                act, act_turn = n, turn
             pure_read = name in ("Read", "Grep", "Glob", "LS") or (
                 name == "Bash" and got is not None and not does_more_than_read(cmd, role_path, e.get("cwd")))
+            if role in ("reviewer", "refuter"):
+                # Both headers say to read the file before anything else, and the reviewer's names loading
+                # `pr-review`: so for them only a read of that file is pure, and any other call, a Read of
+                # another file included, is the act.
+                pure_read = got is not None and (name != "Bash" or not does_more_than_read(cmd, role_path, e.get("cwd")))
+                acting = acting or not pure_read
+            if act is None and acting:
+                act, act_turn = n, turn
             if first_other_turn is None and not pure_read:
                 first_other_turn = turn
             if got is not None:
@@ -580,6 +602,16 @@ def items(role, prompt, earlier_verifier):
     return got
 
 
+def named_as(prompt, role_path, name):
+    """How a brief names its role file: by the absolute path the session printed, by a `~` path, by its
+    bare name, or not at all."""
+    if role_path in prompt:
+        return "absolute"
+    if re.search(r"~/\S*" + re.escape(name), prompt):
+        return "tilde"
+    return "bare" if name in prompt else "missing"
+
+
 def check_session(path):
     base, treated, spawns, started = scan_session(path)
     if base is None:
@@ -595,14 +627,7 @@ def check_session(path):
         if role not in ROLE_FILE:
             continue
         role_path = f"{base}/{ROLE_FILE[role]}"
-        if role_path in prompt:
-            path_kind = "absolute"
-        elif re.search(r"~/\S*" + re.escape(ROLE_FILE[role]), prompt):
-            path_kind = "tilde"
-        elif ROLE_FILE[role] in prompt:
-            path_kind = "bare"
-        else:
-            path_kind = "missing"
+        path_kind = named_as(prompt, role_path, ROLE_FILE[role])
         how, at, act, _, ever_at, clean = read_check(subs.get(c.get("id")), role_path, role)
         in_time = how == "full"
         rows.append({"role": role, "description": desc, "path": path_kind, "read": how,
@@ -656,32 +681,39 @@ def report(results, as_json):
     odd = [d for r in treated for d in r["unclassified"]]
     print(f"treated spawns that are neither a reviewer nor recognisably a fixer or verifier: {len(odd)}"
           + (" — read these by hand: " + "; ".join(odd[:8]) if odd else ""))
-    # The bar decides only what the transcript settles. FAIL: the brief did not name the file, or the
-    # file was never read whole. PASS: every read was CLEAN — whole before the subagent's first call
-    # that is not a pure read, so nothing can have acted first and no act detection is needed. A whole
-    # read that came after other calls is LATE: it is listed with the act detector's verdict as advice,
-    # and read by hand, because five reviews of that detector kept finding shell shapes it misjudged.
+    call_bar(treated, odd)
+    return 0
+
+
+def call_bar(treated, odd, prefix="bar"):
+    """The pre-registered bar over the treated sessions' spawn rows, printed under `prefix`.
+
+    It decides only what the transcript settles. FAIL: the brief did not name the file, or the file was
+    never read whole. PASS: every read was CLEAN — whole before the subagent's first call that is not a
+    pure read, so nothing can have acted first and no act detection is needed. A whole read that came
+    after other calls is LATE: it is listed with the act detector's verdict as advice, and read by
+    hand, because five reviews of that detector kept finding shell shapes it misjudged."""
+    with_spawns = [r for r in treated if r["spawns"]]
     failed = [(r["session"], s) for r in treated for s in r["spawns"] if not s["meets_a"] or not s["read_full_ever"]]
     late = [(r["session"], s) for r in treated for s in r["spawns"]
             if s["meets_a"] and s["read_full_ever"] and not s["read_clean"]]
     if failed:
         sess, sp = failed[0]
         why = "its brief does not name the file" if not sp["meets_a"] else "it never read the whole file"
-        print(f"bar: FAIL — {len(failed)} treated spawn(s) missed; the first, {sp['description']!r} in {sess}: {why}")
+        print(f"{prefix}: FAIL — {len(failed)} treated spawn(s) missed; the first, {sp['description']!r} in {sess}: {why}")
     elif late:
-        print(f"bar: needs a hand check — {len(late)} treated spawn(s) did not read the whole file before the "
+        print(f"{prefix}: needs a hand check — {len(late)} treated spawn(s) did not read the whole file before the "
               "message holding their first call that is not a pure read:")
         for sess, sp in late:
             verdict = "before" if sp["meets_b"] else "after"
             print(f"    {sp['description']!r}: whole read at call {sp['whole_read_at']}; the act detector says it came "
                   f"{verdict} the first act (call {sp['first_act_at']}) — read {sess} to decide")
     elif odd:
-        print(f"bar: not decidable yet — {len(odd)} treated spawn(s) are unclassified and must be read by hand first")
+        print(f"{prefix}: not decidable yet — {len(odd)} treated spawn(s) are unclassified and must be read by hand first")
     elif len(with_spawns) < 3:
-        print(f"bar: not decidable yet — {len(with_spawns)} of the 3 treated sessions with a spawn exist, no miss so far")
+        print(f"{prefix}: not decidable yet — {len(with_spawns)} of the 3 treated sessions with a spawn exist, no miss so far")
     else:
-        print(f"bar: PASS — {len(with_spawns)} treated sessions with a spawn, every read clean and every brief naming the file")
-    return 0
+        print(f"{prefix}: PASS — {len(with_spawns)} treated sessions with a spawn, every read clean and every brief naming the file")
 
 
 # Records name the sections as `pr-harden:VERIFY`, `pr-harden:"### 6 — VERIFY"`, `pr-harden §6` or
@@ -714,6 +746,227 @@ def baseline(records, before, after):
     window = f"before {before}" if before else f"from {after}" if after else "all dates"
     print(f"records {window} with the section: {n} (in {files} files); naming pr-harden VERIFY/FIX, the verifier or "
           f"the fixer: {hit} ({(100 * hit / n) if n else 0:.0f}%)")
+    return 0
+
+
+# The second move's slower comparison: records naming pr-harden's REVIEW, resolve-ticket's Step 3, the
+# reviewer or the refuter, in the spellings FRICTION takes for VERIFY and FIX. Calibrated in --selftest.
+FRICTION2 = re.compile(r"pr-harden\s*[:§]?\s*[\"'(]*(?:#+\s*)?(?:(?:1|step\s*1)\s*—?\s*)?REVIEW\b"
+                       r"|pr-harden\s*(?:§\s*|:\s*step\s*|\s+step\s+)1\b"
+                       r"|resolve-ticket\s*[:§]?\s*[\"'(]*(?:#+\s*)?(?:§\s*3|step\s*3)\b"
+                       r"|\breviewer\b|\brefuter\b|\brefutation\b", re.I)
+
+
+# The date pr-harden 0.37.0 and resolve-ticket 0.23.0 shipped. A record whose session transcript is gone
+# counts as before the move if it is dated earlier, since every session then ran the versions before it,
+# and cannot be placed if it is dated that day or later.
+MOVE2_SHIPPED = "2026-09-28"
+TRANSCRIPT = re.compile(r"transcript:\s*`?([^\s`]+\.jsonl)")
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def baseline2(records, before, after):
+    """The second move's slower comparison. A record is after the move when the session it names was
+    treated for either file, which `scan2` decides. A date cannot: #528's record is dated the day the
+    move shipped and its session ran the versions before it. A record whose session transcript is gone
+    is before the move if it is dated before MOVE2_SHIPPED, and unknown otherwise."""
+    groups = {"before": [0, 0], "after": [0, 0], "unknown": [0, 0]}
+    for f in sorted(records.glob("20??-??-??-*.md")):
+        day = f.name[:10]
+        if (before and day >= before) or (after and day < after):
+            continue
+        for rec in re.split(r"(?m)^(?=# [^\n]*·)", f.read_text(errors="replace")):
+            if SECTION not in rec:
+                continue
+            sec = rec.split(SECTION, 1)[1].split("\n## ", 1)[0].split("\n# ", 1)[0]
+            named = TRANSCRIPT.search(rec)
+            named = Path(named.group(1)).expanduser() if named else None
+            paths = [named] if named and named.is_file() else \
+                [p for u in UUID.findall(rec) for p in PROJECTS.glob(f"*/{u}.jsonl")]
+            if paths:
+                treated = scan2(paths[0])[1]
+                group = "after" if treated["reviewer"] or treated["refuter"] else "before"
+            else:
+                group = "before" if day < MOVE2_SHIPPED else "unknown"
+            groups[group][0] += 1
+            groups[group][1] += bool(FRICTION2.search(sec))
+    label = {"before": "before the second move", "after": "after the second move", "unknown": "that cannot be placed"}
+    for group, (n, hit) in groups.items():
+        print(f"records {label[group]} with the section: {n}; naming pr-harden REVIEW, resolve-ticket Step 3, "
+              f"the reviewer or the refuter: {hit} ({(100 * hit / n) if n else 0:.0f}%)")
+    return 0
+
+
+def scan2(path):
+    """What --second-move needs from one session: each skill's base directory, whether each role is
+    treated (its skill's loaded text carries the role's pointer), the spawns in each role's window, and
+    the first timestamp. A reviewer's window opens when pr-harden loads. A refuter's is Step 3's: it
+    opens at each resolve-ticket load, so a second ticket in one session has one too, and closes when
+    harden or pr-harden loads. A spawn in an open Step 3 is in that window only."""
+    base = {"pr-harden": None, "resolve-ticket": None}
+    treated = {"reviewer": False, "refuter": False}
+    opened = {"reviewer": False, "refuter": False}
+    closed, windows, started, refused = False, {"reviewer": [], "refuter": []}, None, set()
+    for e in events(path):
+        if started is None and e.get("timestamp"):
+            started = str(e["timestamp"])
+        for c in blocks(e):
+            text = c.get("text") if c.get("type") == "text" else None
+            if isinstance(text, str) and BASE in text:
+                d = text.split(BASE, 1)[1].split()[0].rstrip("/")
+                flat = " ".join(text.split())
+                for role, (skill, _, pointer) in MOVE2.items():
+                    if d.endswith("/" + skill):
+                        base[skill] = d
+                        opened[role] = True
+                        treated[role] = treated[role] or pointer in flat
+                if d.endswith("/resolve-ticket"):
+                    closed = False
+                elif opened["refuter"] and (d.endswith("/harden") or d.endswith("/pr-harden")):
+                    closed = True
+            if c.get("type") == "tool_use" and c.get("name") in ("Agent", "Task"):
+                if opened["refuter"] and not closed:
+                    windows["refuter"].append(c)
+                elif opened["reviewer"]:
+                    windows["reviewer"].append(c)
+            if c.get("type") == "tool_result" and c.get("is_error"):
+                refused.add(c.get("tool_use_id"))
+    ran = set(subagent_files(path))
+    for role in windows:
+        windows[role] = [c for c in windows[role] if c.get("id") not in refused or c.get("id") in ran]
+    return base, treated, windows, started
+
+
+def ran_review(agent_jsonl):
+    """Whether the subagent loaded `pr-review`, by the Skill tool or by showing its SKILL.md."""
+    if not agent_jsonl or not agent_jsonl.exists():
+        return False
+    for e in events(agent_jsonl):
+        for c in blocks(e):
+            if c.get("type") != "tool_use":
+                continue
+            inp = c.get("input") or {}
+            if c.get("name") == "Skill" and re.fullmatch(r"(?:[\w-]+:)?pr-review", str(inp.get("skill", ""))):
+                return True
+            if c.get("name") in ("Read", "Bash") and "skills/pr-review/SKILL.md" in json.dumps(inp):
+                return True
+    return False
+
+
+def role2_of(window, desc, prompt, ran=lambda: False):
+    """The second move's roles: "reviewer" or "refuter", which it measures; another role, which it leaves
+    to the first move; None for a spawn it cannot place, which holds that role's PASS.
+
+    In pr-harden's window the first move's `role_of` decides, with two exceptions, both unplaced. A
+    review whose description also names a harden cycle or phase is harden's own agent: "Phase 2
+    quality review", four of which follow a pr-harden load on disk. And a spawn placed as a fixer, a
+    verifier or harden's agent that ran `pr-review` (`ran()`) behaved as a reviewer: a reviewer
+    described as a "blocking-only verification round" would otherwise leave reviewer.md's count
+    unseen. In Step 3's window a refuter names refutation, at a word's start, in its description or
+    its brief's first 400 characters — "Refute plan for issue 528", or "Gate pass 2 on revised plan
+    309", whose brief says "refutation gate" — and anything else there is unplaced. The name
+    `refuter.md` is not refutation: as in the first move, a brief never places a spawn by naming its
+    role file, since a brief that fails to name the file is the case being looked for."""
+    if window == "reviewer":
+        role = role_of(desc, prompt)
+        if role == "reviewer":
+            return None if re.search(HARDEN_WORDS, desc, re.I) else role
+        return None if role in ("fixer", "verifier", "harden") and ran() else role
+    return "refuter" if re.search(REFUT, desc, re.I) or re.search(REFUT, prompt[:400], re.I) else None
+
+
+def items2(role, prompt):
+    """What the pointer says the brief carries, reported and never gating. For a reviewer: the round, the
+    head, the base, whether the run started from a ticket, and the ticket, named as an issue or a JIRA
+    key, since a bare "#N" is as often the PR. For a refuter: the ticket, the plan and the repo."""
+    if role == "reviewer":
+        return {"round": bool(re.search(r"\bround\b|\br\d+\b", prompt, re.I)),
+                "head": bool(re.search(r"\b[0-9a-f]{7,40}\b", prompt)),
+                "base": bool(re.search(r"origin/|\bbase\b|baseRefName", prompt, re.I)),
+                "ticket origin": bool(re.search(r"\bstarted from\b|\bfrom (?:a |the )?ticket\b|\bresolve-ticket\b"
+                                                r"|\bexisting PR\b", prompt, re.I)),
+                "ticket": bool(re.search(r"gh issue view|\bissue\s*#?\d+|/issues/\d+", prompt, re.I)
+                               or re.search(JIRA, prompt))}
+    ticket = bool(re.search(r"#\d+", prompt) or re.search(r"\b(?:issue|ticket)\b", prompt, re.I)
+                  or re.search(JIRA, prompt))
+    return {"ticket": ticket, "plan": bool(re.search(r"\bplan\b", prompt, re.I)),
+            "repo": bool(re.search(r"/worktrees/|\brepo(?:sitory)?\b", prompt, re.I))}
+
+
+def check_session2(path):
+    base, treated, windows, started = scan2(path)
+    if base["pr-harden"] is None and base["resolve-ticket"] is None:
+        return None
+    subs, rows, unclassified = subagent_files(path), [], {"reviewer": [], "refuter": []}
+    for window, spawns in windows.items():
+        for c in spawns:
+            inp = c.get("input") or {}
+            desc, prompt = str(inp.get("description", "")), str(inp.get("prompt", ""))
+            role = role2_of(window, desc, prompt, lambda: ran_review(subs.get(c.get("id"))))
+            if role is None:
+                unclassified[window].append(desc)
+                continue
+            if role != window:
+                continue
+            skill, name, _ = MOVE2[role]
+            role_path = f"{base[skill]}/{name}"
+            path_kind = named_as(prompt, role_path, name)
+            how, at, act, _, ever_at, clean = read_check(subs.get(c.get("id")), role_path, role)
+            rows.append({"role": role, "treated": treated[role], "description": desc, "path": path_kind,
+                         "read": how, "read_at": at, "first_act_at": act, "read_before_acting": how == "full",
+                         "meets_a": path_kind == "absolute", "meets_b": how == "full",
+                         "read_full_ever": ever_at is not None, "whole_read_at": ever_at, "read_clean": clean,
+                         "items": items2(role, prompt)})
+    return {"session": str(path), "started": started, "base": base, "treated": treated, "spawns": rows,
+            "unclassified": unclassified}
+
+
+def sessions2(args):
+    if args:
+        return [Path(a) for a in args]
+    out = []
+    for p in sorted(PROJECTS.glob("*/*.jsonl")):
+        try:
+            blob = p.read_bytes()
+        except OSError:
+            continue
+        if BASE.encode() in blob and (b"/pr-harden" in blob or b"/resolve-ticket" in blob):
+            out.append(p)
+    return out
+
+
+def report2(results, as_json):
+    results = sorted((r for r in results if r), key=lambda r: r.get("started") or "")
+    if as_json:
+        print(json.dumps(results, indent=1))
+        return 0
+    for r in results:
+        if not r["spawns"]:
+            continue
+        tag = " ".join(f"TREATED:{MOVE2[k][1]}" for k in MOVE2 if r["treated"][k]) or "untreated"
+        print(f"\n{tag}  {r['session']}")
+        for s in r["spawns"]:
+            ok = "ok  " if s["meets_a"] and s["meets_b"] else "MISS"
+            miss_items = [k for k, v in s["items"].items() if not v]
+            print(f"  {ok} {s['role']:8} {'treated' if s['treated'] else 'pre    '} path={s['path']:8} "
+                  f"read={s['read']:13} read@{s['read_at']} act@{s['first_act_at']}  {s['description'][:50]}"
+                  + (f"  items missing: {', '.join(miss_items)}" if miss_items else ""))
+    for role, (skill, name, _) in MOVE2.items():
+        loaded = [r for r in results if r["base"][skill]]
+        treated = [{"session": r["session"], "spawns": [s for s in r["spawns"] if s["role"] == role]}
+                   for r in loaded if r["treated"][role]]
+        spawns = [s for r in treated for s in r["spawns"]]
+        untreated = [s for r in loaded if not r["treated"][role] for s in r["spawns"] if s["role"] == role]
+        leaks = [s for s in untreated if s["meets_a"] or s["read"] in ("full", "partial")]
+        odd = [d for r in loaded if r["treated"][role] for d in r["unclassified"][role]]
+        print(f"\n{name}: {len(loaded)} session(s) that loaded {skill}; {len(treated)} treated, "
+              f"{sum(1 for r in treated if r['spawns'])} of them with a {role} spawn; "
+              f"{sum(s['meets_a'] and s['meets_b'] for s in spawns)} of {len(spawns)} treated spawns meet (a) and (b).")
+        print(f"known-negative: {len(untreated)} untreated {role} spawn(s), {len(leaks)} meeting (a) or reading {name}"
+              + (" — the detector is wrong" if leaks else ""))
+        print(f"treated spawns in the {role}'s window that it cannot place: {len(odd)}"
+              + (" — read these by hand: " + "; ".join(odd[:8]) if odd else ""))
+        call_bar(treated, odd, prefix=f"bar ({name})")
     return 0
 
 
@@ -1119,6 +1372,274 @@ def selftest(_):
     ok = st == "partial" and total is None
     print(("PASS" if ok else "FAIL"), f"a limited read of a file whose length is unknown is not full (read={st})")
     fails += not ok
+    # ---- the second move: reviewer.md under pr-harden, refuter.md under resolve-ticket --------------
+    rt_base, hd_base = tmp / "skills/resolve-ticket", tmp / "skills/harden"
+    rt_base.mkdir(parents=True)
+    hd_base.mkdir(parents=True)
+    (base / "reviewer.md").write_text("x\n" * 44)
+    (rt_base / "refuter.md").write_text("x\n" * 52)
+    rv, rf = str(base / "reviewer.md"), str(rt_base / "refuter.md")
+    rv_pointer = "are in `reviewer.md`\nin this skill's directory"   # re-wrapped, as SKILL.md carries it
+    rf_pointer = "are in `refuter.md`\nin this skill's directory"
+
+    def session2(name, steps, started="2026-09-28T12:00:00Z"):
+        """A planted session: ("load", skill, pointer or None) prints that skill's base directory, and
+        ("spawn", description, brief, calls) spawns a subagent that makes those calls, in order."""
+        path, sub, lines, k = tmp / f"m2-{name}.jsonl", tmp / f"m2-{name}" / "subagents", [], 0
+        sub.mkdir(parents=True)
+        for st in steps:
+            if st[0] == "load":
+                d = {"pr-harden": base, "resolve-ticket": rt_base, "harden": hd_base}[st[1]]
+                lines.append({"type": "user", "timestamp": started, "message": {"content": [{"type": "text",
+                              "text": f"{BASE}{d}\n\n# {st[1]} ... {st[2] or 'no pointer in this version'} ..."}]}})
+                continue
+            _, desc, prompt, calls = st
+            tid = f"toolu_m2_{name}_{k}"
+            lines.append({"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": tid, "name": "Agent", "input": {"description": desc, "prompt": prompt}}]}})
+            (sub / f"agent-{k}.meta.json").write_text(json.dumps({"toolUseId": tid, "description": desc}))
+            write_agent(sub / f"agent-{k}.jsonl", calls)
+            k += 1
+        with open(path, "w") as fh:
+            for l in lines:
+                fh.write(json.dumps(l) + "\n")
+        return path
+
+    rv_brief = f"Read {rv} first, then run pr-review. Round 1, head 3085ff02, base origin/main, ticket #9."
+    rf_brief = f"Read {rf} first. Ticket #9 with its comments, the plan below, repo /x/worktrees/openmrs-9."
+    t_rt, u_rt = ("load", "resolve-ticket", rf_pointer), ("load", "resolve-ticket", None)
+    t_ph, u_ph = ("load", "pr-harden", POINTERS[0] + " " + rv_pointer), ("load", "pr-harden", POINTERS[0])
+    hd = ("load", "harden", None)
+    grep, review = ("Bash", {"command": "grep -n x api"}), ("Skill", {"skill": "pr-review", "args": "9"})
+    for label, steps, want in [
+            ("a refuter's clean read", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief,
+             [("Read", {"file_path": rf}), grep]), hd], ("refuter", True, True, True, True)),
+            ("a refuter whose brief lacks the path", [t_rt, ("spawn", "Refute plan for issue 9",
+             "Ticket #9, the plan, the repo.", [("Read", {"file_path": rf})]), hd], ("refuter", True, False, True, True)),
+            ("a refuter that greps before it reads", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief,
+             [grep, ("Read", {"file_path": rf})]), hd], ("refuter", True, True, False, False)),
+            ("a refuter's truncated read", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief,
+             [("Read", {"file_path": rf, "limit": 20})]), hd], ("refuter", True, True, False, False)),
+            ("a refuter named only by its brief's 'refutation gate'", [t_rt, ("spawn", "Gate pass 2 on revised plan 9",
+             "You are a REFUTATION GATE, pass 2. " + rf_brief, [("Read", {"file_path": rf})]), hd],
+             ("refuter", True, True, True, True)),
+            ("a pathless 'refutation gate' brief is still a refuter's", [t_rt, ("spawn", "Gate pass 2 on revised plan 9",
+             "You are a REFUTATION GATE, pass 2. Ticket #9, the plan.", [("Read", {"file_path": rf})]), hd],
+             ("refuter", True, False, True, True)),
+            ("a reviewer's clean read before pr-review", [u_rt, hd, t_ph, ("spawn", "PR 9 review round 1", rv_brief,
+             [("Read", {"file_path": rv}), review])], ("reviewer", True, True, True, True)),
+            ("a reviewer that loads pr-review before it reads", [t_ph, ("spawn", "PR 9 review round 1", rv_brief,
+             [review, ("Read", {"file_path": rv})])], ("reviewer", True, True, False, False)),
+            ("a pre-0.37 reviewer", [u_ph, ("spawn", "PR 9 review round 1", "Run pr-review on PR 9.", [review])],
+             ("reviewer", False, False, False, False))]:
+        r = check_session2(session2(re.sub(r"\W+", "-", label), steps))
+        got = [(s["role"], s["treated"], s["meets_a"], s["meets_b"], s["read_clean"]) for s in r["spawns"]]
+        ok = got == [want]
+        print(("PASS" if ok else "FAIL"), f"second move, {label}: {got}")
+        fails += not ok
+    for label, steps, window, want_odd in [
+            ("a harden-named review after pr-harden loads is unplaced", [t_ph, ("spawn", "Phase 2 quality review",
+             "Review the diff for quality.", [])], "reviewer", ["Phase 2 quality review"]),
+            ("a brief-stated reviewer is unplaced", [t_ph, ("spawn", "PR 9 blocking-only round 3",
+             "You are the round-3 reviewer of PR 9. " + rv_brief, [])], "reviewer", ["PR 9 blocking-only round 3"]),
+            ("a brief that names refuter.md and no refutation is unplaced", [t_rt, ("spawn", "Plan gate pass 2",
+             f"Read {rf} first. Ticket #9, the plan.", [("Read", {"file_path": rf})]), hd], "refuter", ["Plan gate pass 2"]),
+            ("a Step 3 search agent is unplaced", [t_rt, ("spawn", "Find composed answer path",
+             "Grep the repo for where ChartAnswer is built.", []), hd], "refuter", ["Find composed answer path"]),
+            ("a refuter spawned after harden loads is outside Step 3's window", [t_rt, hd, ("spawn",
+             "Refute plan for issue 9", rf_brief, [("Read", {"file_path": rf})])], "refuter", []),
+            ("a fixer in pr-harden's window is the first move's", [t_ph, ("spawn", "PR 9 fix round 1", brief_f,
+             [])], "reviewer", [])]:
+        r = check_session2(session2(re.sub(r"\W+", "-", label), steps))
+        ok = r["spawns"] == [] and r["unclassified"][window] == want_odd
+        print(("PASS" if ok else "FAIL"), f"second move, {label}")
+        fails += not ok
+    mixed = check_session2(session2("mixed", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief,
+        [("Read", {"file_path": rf})]), hd, u_ph, ("spawn", "PR 9 review round 1", "Run pr-review on PR 9.", [review])]))
+    ok = [(s["role"], s["treated"]) for s in mixed["spawns"]] == [("reviewer", False), ("refuter", True)] \
+        or [(s["role"], s["treated"]) for s in mixed["spawns"]] == [("refuter", True), ("reviewer", False)]
+    print(("PASS" if ok else "FAIL"), "second move, a session treated for the refuter and not the reviewer is both")
+    fails += not ok
+    it = check_session2(session2("items", [t_ph, ("spawn", "PR 9 review round 1", f"Read {rv} first.",
+        [("Read", {"file_path": rv})])]))["spawns"][0]["items"]
+    ok = it == {"round": False, "head": False, "base": False, "ticket origin": False, "ticket": False}
+    print(("PASS" if ok else "FAIL"), f"second move, a reviewer brief carrying only the path misses every item: {it}")
+    fails += not ok
+    it = check_session2(session2("items-full", [t_ph, ("spawn", "PR 9 review round 1", rv_brief +
+        " The run started from ticket #9: gh issue view 9 --json title,body,comments.",
+        [("Read", {"file_path": rv})])]))["spawns"][0]["items"]
+    ok = it == {"round": True, "head": True, "base": True, "ticket origin": True, "ticket": True}
+    print(("PASS" if ok else "FAIL"), f"second move, a reviewer brief carrying every item has them all: {it}")
+    fails += not ok
+    it = check_session2(session2("items-pr-number", [t_ph, ("spawn", "PR 9 review round 1",
+        f"Read {rv} first. Review PR #9, round 1, head 3085ff02, base origin/main.", [("Read", {"file_path": rv})])]))
+    it = it["spawns"][0]["items"]
+    ok = not it["ticket"] and not it["ticket origin"]
+    print(("PASS" if ok else "FAIL"), f"second move, a PR number is not the ticket, nor its origin: {it}")
+    fails += not ok
+    for text, want in [("Resolves O3-1234.", True), ("Resolves TRUNK-6429.", True), ("Write it as UTF-8.", False)]:
+        got = items2("reviewer", text)["ticket"]
+        ok = got == want
+        print(("PASS" if ok else "FAIL"), f"second move, {text!r} names a JIRA ticket: {got}")
+        fails += not ok
+    # s1: a spawn the first move places as a fixer, a verifier or harden's that ran pr-review is held.
+    cat_review = ("Bash", {"command": "cat ~/.claude/skills/pr-review/SKILL.md"})
+    for label, desc, brief, calls, want_odd in [
+            ("a 'verification round' that ran pr-review is held", "PR 9 blocking-only verification round",
+             "You are running a BLOCKING-ONLY verification round. Run pr-review on PR 9.", [review], True),
+            ("a 'cycle' pass that ran pr-review is held", "PR 9 cycle 3 blocking-only pass",
+             "Run pr-review on PR 9.", [review], True),
+            ("a 'fix' check that showed pr-review's SKILL.md is held", "Check the fix for PR 9 round 2",
+             "Review what the fixer did.", [cat_review], True),
+            ("a brief-placed fixer that ran pr-review is held", "PR 9 round 3",
+             "You are the second agent after the fixer; run pr-review on PR 9.", [review], True),
+            ("a verifier that never ran pr-review is the first move's", "Verify PR 9 round 1", brief_v,
+             [("Bash", {"command": "curl -s localhost:8081"})], False)]:
+        r = check_session2(session2("s1-" + re.sub(r"\W+", "-", label), [t_ph, ("spawn", desc, brief, calls)]))
+        ok = r["spawns"] == [] and r["unclassified"]["reviewer"] == ([desc] if want_odd else [])
+        print(("PASS" if ok else "FAIL"), f"second move, {label}")
+        fails += not ok
+    # s6: for a reviewer, a Read of another file first is an act, so the read of its own file is not clean.
+    r = check_session2(session2("s6-read-other-first", [t_ph, ("spawn", "PR 9 review round 1", rv_brief,
+        [("Read", {"file_path": "/x/.claude/skills/pr-review/SKILL.md"}), ("Read", {"file_path": rv})])]))
+    got = [(s["meets_b"], s["read_clean"], s["read_full_ever"]) for s in r["spawns"]]
+    ok = got == [(False, False, True)]
+    print(("PASS" if ok else "FAIL"), f"second move, a reviewer that reads another file first is not clean: {got}")
+    fails += not ok
+    # s4: a second resolve-ticket load in one session opens a second Step 3, which is the refuter's alone.
+    r = check_session2(session2("s4-two-tickets", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief,
+        [("Read", {"file_path": rf})]), hd, t_ph, ("spawn", "PR 9 review round 1", rv_brief,
+        [("Read", {"file_path": rv}), review]), t_rt, ("spawn", "Refute plan for issue 10", "Ticket #10, the plan.",
+        [("Read", {"file_path": rf})])]))
+    got = sorted((s["role"], s["description"], s["meets_a"]) for s in r["spawns"])
+    ok = got == [("refuter", "Refute plan for issue 10", False), ("refuter", "Refute plan for issue 9", True),
+                 ("reviewer", "PR 9 review round 1", True)]
+    print(("PASS" if ok else "FAIL"), f"second move, a second ticket's refuter is measured as a refuter: {got}")
+    fails += not ok
+    # s3: pr-harden closes Step 3's window too, when harden never loads.
+    r = check_session2(session2("s3-pr-harden-closes", [t_rt, t_ph, ("spawn", "Refute plan for issue 9", rf_brief,
+        [("Read", {"file_path": rf})])]))
+    ok = [s["role"] for s in r["spawns"] if s["role"] == "refuter"] == [] and r["unclassified"]["refuter"] == []
+    print(("PASS" if ok else "FAIL"), "second move, pr-harden loading closes Step 3's window as harden does")
+    fails += not ok
+
+    def bar2(paths, want):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            report2([check_session2(p) for p in paths], False)
+        return want in buf.getvalue(), buf.getvalue()
+
+    def rt_run(name, calls, brief=rf_brief, desc="Refute plan for issue 9", started="2026-09-28T12:00:00Z"):
+        return session2(name, [t_rt, ("spawn", desc, brief, calls), hd], started)
+
+    clean_rt = [rt_run(f"rt-clean-{i}", [("Read", {"file_path": rf}), grep], started=f"2026-09-28T12:0{i}:00Z")
+                for i in range(3)]
+    pre_rt = session2("rt-pre", [u_rt, ("spawn", "Refute plan for issue 8", "Break the plan.", [grep]), hd])
+    for label, extra, want in [
+            ("three clean refuter sessions PASS refuter.md", [], "bar (refuter.md): PASS"),
+            ("a refuter that greps first sends refuter.md to a hand check",
+             [rt_run("rt-late", [grep, ("Read", {"file_path": rf})])], "bar (refuter.md): needs a hand check"),
+            ("a refuter brief without the path FAILs refuter.md",
+             [rt_run("rt-nopath", [("Read", {"file_path": rf})], brief="Ticket #9, the plan, the repo.")],
+             "bar (refuter.md): FAIL"),
+            ("an unplaced spawn in a treated Step 3 holds refuter.md",
+             [session2("rt-odd", [t_rt, ("spawn", "Blind adjudicator 1", "Adjudicate the items.", []), hd])],
+             "bar (refuter.md): not decidable yet — 1 treated spawn(s) are unclassified"),
+            ("refuter.md is called apart from reviewer.md", [], "bar (reviewer.md): not decidable yet — 0 of the 3"),
+            ("the pre-0.23 refuter is the known-negative, and reads nothing", [pre_rt],
+             "known-negative: 1 untreated refuter spawn(s), 0 meeting (a) or reading refuter.md")]:
+        ok, out = bar2(clean_rt + extra, want)
+        print(("PASS" if ok else "FAIL"), f"second move, {label}")
+        fails += not ok
+    clean_rv = [session2(f"rv-clean-{i}", [t_ph, ("spawn", "PR 9 review round 1", rv_brief,
+                [("Read", {"file_path": rv}), review])], started=f"2026-09-28T13:0{i}:00Z") for i in range(3)]
+    ok, out = bar2(clean_rv, "bar (reviewer.md): PASS")
+    print(("PASS" if ok else "FAIL"), "second move, three clean reviewer sessions PASS reviewer.md")
+    fails += not ok
+    ok, out = bar2(clean_rv + [session2("rv-late", [t_ph, ("spawn", "PR 9 review round 2", rv_brief,
+                   [review, ("Read", {"file_path": rv})])])], "bar (reviewer.md): needs a hand check")
+    print(("PASS" if ok else "FAIL"), "second move, a reviewer that loads pr-review first sends reviewer.md to a hand check")
+    fails += not ok
+    for line, want in [
+            ("- pr-harden:REVIEW — the brief named no base", True),
+            ('- pr-harden §1 ("re-derive the merged result") vs harden', True),
+            ("- resolve-ticket Step 3 — question 6 asked for no count", True),
+            ("- the reviewer re-raised a settled finding", True),
+            ("- the refuter cited no line of code", True),
+            ("- the refutation gate spawned a subagent of its own", True),
+            ("- pr-harden:FINISH — never deletes its own `pr-<n>-r<round>` refs", False),
+            ("- resolve-ticket:Step 8 — the draft PR body named the wrong ticket", False)]:
+        ok = bool(FRICTION2.search(line)) == want
+        print(("PASS" if ok else "FAIL"), f"FRICTION2 on {line[:60]!r} is {want}")
+        fails += not ok
+    # s2: the two files' bars are called apart, over the right sessions.
+    both = [session2(f"s2-both-{i}", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief, [("Read", {"file_path": rf}),
+            grep]), hd, t_ph], started=f"2026-09-28T14:0{i}:00Z") for i in range(3)]
+    ok, out = bar2(both, "bar (refuter.md): PASS")
+    ok = ok and "bar (reviewer.md): not decidable yet — 0 of the 3" in out \
+        and "reviewer.md: 3 session(s) that loaded pr-harden; 3 treated, 0 of them with a reviewer spawn" in out
+    print(("PASS" if ok else "FAIL"), "second move, three refuter sessions that load pr-harden do not count for reviewer.md")
+    fails += not ok
+    pre_rv = [session2(f"s2-pre-rv-{i}", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief,
+              [("Read", {"file_path": rf})]), hd, u_ph, ("spawn", "PR 9 review round 1", "Run pr-review on PR 9.",
+              [review])], started=f"2026-09-28T15:0{i}:00Z") for i in range(3)]
+    ok, out = bar2(pre_rv, "reviewer.md: 3 session(s) that loaded pr-harden; 0 treated")
+    ok = ok and "bar (reviewer.md): not decidable yet — 0 of the 3" in out and "bar (refuter.md): PASS" in out
+    print(("PASS" if ok else "FAIL"), "second move, a session treated for refuter.md is not treated for reviewer.md")
+    fails += not ok
+    only_rt = [session2(f"s2-only-rt-{i}", [t_rt, ("spawn", "Refute plan for issue 9", rf_brief,
+               [("Read", {"file_path": rf})]), hd], started=f"2026-09-28T16:0{i}:00Z") for i in range(2)]
+    ok, out = bar2(only_rt + clean_rv, "reviewer.md: 3 session(s) that loaded pr-harden; 3 treated")
+    print(("PASS" if ok else "FAIL"), "second move, a session that never loads pr-harden is not one of reviewer.md's")
+    fails += not ok
+    # s3's other gaps: a leak is reported, and an untreated session's unplaced spawn does not hold PASS.
+    leak = session2("s3-leak", [u_rt, ("spawn", "Refute plan for issue 8", rf_brief, [("Read", {"file_path": rf})]), hd])
+    ok, out = bar2(clean_rt + [leak], "known-negative: 1 untreated refuter spawn(s), 1 meeting (a) or reading "
+                                     "refuter.md — the detector is wrong")
+    print(("PASS" if ok else "FAIL"), "second move, an untreated refuter that names and reads refuter.md is a leak")
+    fails += not ok
+    odd_pre = session2("s3-odd-pre", [u_rt, ("spawn", "Blind adjudicator 1", "Adjudicate the items.", []), hd])
+    ok, out = bar2(clean_rt + [odd_pre], "bar (refuter.md): PASS")
+    print(("PASS" if ok else "FAIL"), "second move, an untreated session's unplaced spawn does not hold refuter.md")
+    fails += not ok
+    # s5: the slower comparison splits each record by its own session, not by its date.
+    recs = tmp / "m2-records"
+    recs.mkdir()
+    t_sess, u_sess = clean_rt[0], pre_rt
+    (recs / "2026-09-28-a.md").write_text(f"# resolve-ticket · o/r · #1 · 2026-09-28\n\ntranscript: {t_sess}\n\n"
+                                          f"{SECTION}\n- the refuter cited no line of code\n")
+    (recs / "2026-09-28-b.md").write_text(f"# resolve-ticket · o/r · #2 · 2026-09-28\n\ntranscript: {u_sess}\n\n"
+                                          f"{SECTION}\n- none\n")
+    (recs / "2026-09-20-c.md").write_text(f"# resolve-ticket · o/r · #3 · 2026-09-20\n\n{SECTION}\n- none\n")
+    (recs / "2026-09-29-d.md").write_text(f"# resolve-ticket · o/r · #4 · 2026-09-29\n\n{SECTION}\n- none\n")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        baseline2(recs, None, None)
+    out = buf.getvalue()
+    ok = ("records before the second move with the section: 2; naming" in out
+          and "records after the second move with the section: 1; naming pr-harden REVIEW, resolve-ticket Step 3, "
+              "the reviewer or the refuter: 1 (100%)" in out
+          and "records that cannot be placed with the section: 1;" in out)
+    print(("PASS" if ok else "FAIL"), "second move, a record is before or after by its own session, and dated "
+          "after the move with no transcript it is unknown")
+    fails += not ok
+    recs_tilde = tmp / "m2-records-tilde"
+    recs_tilde.mkdir()
+    (recs_tilde / "2026-09-28-e.md").write_text(f"# resolve-ticket · o/r · #5 · 2026-09-28\n\n"
+                                                f"transcript: ~/{clean_rt[1].name}\n\n{SECTION}\n- none\n")
+    real_home, buf = os.environ.get("HOME"), io.StringIO()
+    os.environ["HOME"] = str(tmp)   # the record spells its transcript with ~, as 125 of the 133 on disk do
+    try:
+        with contextlib.redirect_stdout(buf):
+            baseline2(recs_tilde, None, None)
+    finally:
+        if real_home is None:
+            del os.environ["HOME"]
+        else:
+            os.environ["HOME"] = real_home
+    ok = "records after the second move with the section: 1;" in buf.getvalue()
+    print(("PASS" if ok else "FAIL"), "second move, a record's ~-spelled transcript is found")
+    fails += not ok
     print("selftest:", "OK" if not fails else f"{fails} FAILURE(S)")
     return 1 if fails else 0
 
@@ -1132,11 +1653,17 @@ def main():
     ap.add_argument("--before")
     ap.add_argument("--after")
     ap.add_argument("--records", default=str(RECORDS))
+    ap.add_argument("--second-move", action="store_true",
+                    help="measure pr-harden 0.37.0's reviewer.md and resolve-ticket 0.23.0's refuter.md instead")
     a = ap.parse_args()
     if a.selftest:
         return selftest(a)
     if a.baseline:
+        if a.second_move:
+            return baseline2(Path(a.records), a.before, a.after)
         return baseline(Path(a.records), a.before, a.after)
+    if a.second_move:
+        return report2([check_session2(p) for p in sessions2(a.sessions)], a.json)
     return report([check_session(p) for p in sessions(a.sessions)], a.json)
 
 
