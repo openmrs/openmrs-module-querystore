@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.37.0
+version: 0.38.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -541,6 +541,13 @@ run it.
 resolved, which is what both hooks key on and what `gate-state` writes. Resolved on both sides or the
 two disagree wherever a path component is a symlink (`/tmp` on macOS, a symlinked home), and
 "no entry" is the gate's fail-OPEN case: a run with findings outstanding stops and nothing says why.
+
+**And the gate runs in the SESSION's cwd, which a shell `cd` does not move.** An entry written from
+another checkout lands under the worktree's path, and the gate looks under the session's, where there
+is none — the same fail-OPEN, anticipated from `KEY="$(pwd -P)"` and not yet observed. So start the
+session in the worktree; if it is already running elsewhere, `EnterWorktree` into it before the
+opening entry. Its isolation guard then refuses a compound command that runs git, and `$PPID` on a
+`gate-state` line: split the git commands, run `echo $PPID` alone, and pass that pid to `--owner`.
 
 **Under `$HOME`, never in the repo** — an in-repo file would show up in the `git status --porcelain`
 the round measures, and would be swept into the round's own commit.

@@ -4904,3 +4904,68 @@ Step 6's pre-read comparison: `origin/main` and this store agreed on every file 
 
 **Not a lesson:** #240's cohort and GP-restore details and #455's `newSentence` skip predicate are
 chartsearchai domain evidence.
+
+## 2026-09-28 (third window of the day: 2 run records — #402/PR544, attended pr-harden 0.37.0, converged 4 rounds / 0 cycles; #462/PR551, resolve-ticket + pr-harden, converged 1 round / 5 harden cycles) — 1 proposed (4 parts), 3 parts applied revised, 1 part killed; one refutation round; linter 17 files, 0 findings; **pr-harden 0.38.0, resolve-ticket 0.24.0**
+
+Step 6's pre-read comparison: `origin/main` (`7be82d8`) and this store agreed on every file except
+`2026-09-28-…-402.md` and `…-462.md` (local-only). Each holds one record. The 2026-09-26 #402 record
+was counted by an earlier window, and this is a new run on the same ticket.
+
+**Applied (revised by the refuter): the Stop gate keys on the session's cwd.** Bar (a): two records,
+#527:31 (2026-09-24, resolve-ticket Step 1) and #402:20 (pr-harden Step 0). Two sessions and two tickets,
+so not one event counted twice. That meets the 2026-09-24 park's *REOPEN ON: a second record*. What
+the refuter established from the transcripts: in NEITHER run did the gate fail open. #527
+(`ebc78818…:86-107`) wrote its entry from a `cd`, read the hook, and moved before any Stop. #402
+(`c3fd0664…:1343-1356`) anticipated it and moved first. #402:20's "the gate could not see it until
+EnterWorktree" is therefore the record's inference, not an observation. The rule says so ("anticipated
+from `KEY="$(pwd -P)"` and not yet observed"), per Step 3's *write the guard, not the diagnosis*. The
+guard (start in the worktree, or enter it before the first write) is right whatever the harness's hook
+cwd turns out to be. Narrowed on the refuter's citations: "refuses compound commands" became "a
+compound command that runs git" (`:1372`), and `$PPID` refused on a `gate-state` line (`:1376-1377`) now
+comes with the remedy `echo $PPID` alone, which ran (`:1385`). Also added: a pointer in resolve-ticket
+Step 1, because #527 hit it there, ~480 lines before pr-harden's **State**. Evidence entry:
+pr-harden/evidence.md *State*, "Added 0.38.0". Pruned: nothing. Budgets raised
+(pr-harden 9403→9503, resolve-ticket 6749→6778) with the `why` in `raises`.
+
+**Killed: prune (b), pr-harden's "`--owner $PPID` is this session's own claude process, which is how
+both gates tell your entry from one a co-located session left in the same directory."** Offered as a
+restatement of the `owner` paragraph earlier in **State**. Died: that paragraph says "the gate". This
+sentence says "**both** gates", and `harden-cycle-gate.sh` also reads `owner`. The prune would drop that
+fact. **REOPEN ON:** the earlier paragraph gaining "both gates", at which point the sentence is a
+genuine duplicate.
+
+**Parked, new, 1 record each.**
+- **Effort inheritance is invisible to a retro** (#402:21-26). The session ran at `/effort max`, and
+  all 10 agents inherited it: reviewers 34-41 min against 5-14 on #528, and 18-64M tokens per agent
+  against 0.7-4.2M. The record format has no effort field. Cost: wall time and tokens, not rounds.
+  **REOPEN ON:** a second record where effort explains an anomaly a retro would otherwise have
+  attributed to the pipeline.
+- **Target-repo context load** (#402:27). The 76k-char `reference/CLAUDE.md` accounts for 23% of Read
+  content, and one 13,563-line file for 26%. This is a target-repo property, a sibling of the nested
+  `CLAUDE.md` byte-budget park. **REOPEN ON:** a skill-side lever.
+- **A renumbering sweep searched the phrase, not the number** (#402:11). "Decisions 72, 44, 110, 112,
+  121" and a line-wrapped reference were missed, found in r1, at 0 rounds.
+
+**Parked counts advanced.**
+- **main moving under a run: 8 records** (+#402:6/:11, main merged and 121 → 123 before round 1, five
+  missed references fixed in r1). No silent merge reached a merged head, so the :4817 REOPEN ON is
+  unmet. Unchanged.
+- **Phase 2 escalating repeatedly on the run's own fixes: 22 records** (+#462:21, four successive
+  defeats of a source-text guard, 5 cycles for a ~150-line test change). It ended when the defeats were
+  of kinds already named as residue, which is `harden`'s *name the residue* (harden:245, :399) applied.
+  That is not a lever that stops the chain earlier. REOPEN unchanged.
+- **Prose the change made false, found by a fresh agent: 24 records** (+#462:9/:10/:14, the guard
+  javadoc and the stamp comment, each measured false at 1 cycle; +#402:17, stale wording, non-blocking
+  and named in the PR). REOPEN unchanged.
+
+**Observed, no remedy owed.**
+- #462's refuter caught a call regex copied from the #512 sibling that could not match today's call,
+  before any code was written, at 0 rounds.
+- #462 skipped the verifier on a CALIBRATED bytecode comparison: `javap -c -p` identical between base
+  and head, with a positive control that differs. #528:9's uncalibrated one was discarded. This is the
+  CLAUDE.md calibration rule followed.
+- #402's declined r1-6 (a tracking issue) matches the no-follow-up-issue rule. #402's r2 and r3
+  measurements refuting the direction's formula are the review loop working.
+
+**Not a lesson:** #402's substance-resolution legs and #462's readiness-stamp design are chartsearchai
+domain evidence.

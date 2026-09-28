@@ -670,6 +670,19 @@ two disagree wherever a path component is a symlink (`/tmp` on macOS, a symlinke
 Measured — the hook suites reported 4 of 12 and 3 of 11 cases silently inverted before both sides
 resolved.
 
+*Added 0.38.0 — the rule it supports:* “And the gate runs in the SESSION's cwd, which a shell `cd` does not move”
+
+Two attended sessions launched from the shared checkout worked a PR in a worktree, and each moved
+into it with `EnterWorktree` before any Stop fired, so neither observed the fail-OPEN — it is read
+off the gate's `KEY="$(pwd -P)"`, which ignores the hook input's `cwd`. #527 (2026-09-24, resolve-ticket
+Step 1, transcript `ebc78818…:86-107`) wrote its entry via `cd <worktree> && gate-state …` while the
+session's cwd was the shared checkout, read the hook, then moved. #402 (2026-09-28, pr-harden Step 0,
+`c3fd0664…:1343-1356`) found no entry, reasoned the gate was keyed to the main checkout, and moved
+first. Measured after the move, in #402: a compound command naming git was refused (`:1372`), a plain
+`gate-state --owner $PPID pr-set …` was refused (`:1376-1377`), and `echo $PPID` alone ran (`:1385`).
+Its subagents hit 12 refusals across about 1,000 tool calls, which starting in the worktree avoids.
+Parked at one record 2026-09-24 (`REJECTED.md`, REOPEN ON a second record); reopened by #402.
+
 *Cut down, R4-02 — the rule it supports:* “A missing `reviewed-sha` or `verified-sha` call is the difference between a checked handover”
 
 `phase` is `"init"` before the first review, `"reviewed"` once a reviewer's count is recorded,
