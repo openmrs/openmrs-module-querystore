@@ -428,3 +428,16 @@ recognise a reviewer from its brief as well.
 
   A mutation of each rule, made on a scratch copy, reddens at least one of them. A control copy stays
   green.
+
+## Revised 2026-09-28, after both verdicts: an errored result is no longer void
+
+The third revision above voided a read whose result "was persisted as a preview, or was an error".
+The second move's wave-2 run showed that an error result can carry the whole file. Two reviewers'
+`cat reviewer.md; echo ======` printed the file before zsh failed on the separator. The detector
+this move shares now treats such a result as unsettled:
+- it keeps a spawn from FAIL and from PASS, and sends it to a hand check;
+- a preview is still no read;
+- a result saying "No such file or directory" counts as errored too.
+
+On this move's sessions the report is byte-identical before and after. The change is recorded in
+full in `2026-09-28-reviewer-refuter-measurement.md`.

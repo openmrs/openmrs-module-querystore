@@ -503,18 +503,30 @@ def read_check(agent_jsonl, role_path, role):
     """How the subagent read its role file: (state, index of the call that completed a full read,
     index of its first act, the file's length as the transcript recorded it). A command that only
     shows the role file is reading it, not acting. Calls sent in one message share a turn, and a
-    read only counts if its turn comes before the act's."""
+    read only counts if its turn comes before the act's.
+
+    A preview of output too large to show is no read: the file was not shown. A result flagged as an
+    error is not settled either way. It may have shown the file, as `cat reviewer.md; echo ======`
+    did in wave 2 before zsh's `=`-expansion failed on the separator, or not, as a `cat` of a missing
+    file does. So an errored result counts toward a whole read at some point, which keeps the spawn
+    from a FAIL, and never toward a CLEAN one, which keeps it from a PASS. So does a result saying "No
+    such file or directory" that is not flagged, because `cat role.md; ls` exits 0. Such a spawn's state
+    is "errored", and it goes to a hand check, if its brief names the file; if not, it FAILs on that."""
     if not agent_jsonl or not agent_jsonl.exists():
         return "no-transcript", None, None, None, None, False
     reads, total, act, act_turn, n, turn, last_msg, mentioned, scripts = [], None, None, None, 0, 0, object(), False, {}
-    void = set()  # reads whose result was an error, or a preview of output too large to show
+    void = set()     # previews of output too large to show: the file was not shown
+    errored = set()  # results flagged as errors: whether the file was shown is for a hand check
     first_other_turn = None  # the turn of the first call that is not a pure read
     for seq, e in enumerate(events(agent_jsonl)):
         for c in blocks(e):
             if c.get("type") == "tool_result":
                 body = json.dumps(c.get("content"))
-                if c.get("is_error") or "persisted-output" in body or "Output too large" in body:
+                if "persisted-output" in body or "Output too large" in body:
                     void.add(c.get("tool_use_id"))
+                elif c.get("is_error") or "No such file or directory" in body:
+                    # `cat role.md; ls` of a missing role file exits 0, so the flag alone misses it
+                    errored.add(c.get("tool_use_id"))
         tur = e.get("toolUseResult")
         if isinstance(tur, dict) and isinstance(tur.get("file"), dict) \
                 and str(tur["file"].get("filePath", "")) == role_path and tur["file"].get("totalLines"):
@@ -570,23 +582,29 @@ def read_check(agent_jsonl, role_path, role):
     for k, t, got, tid in reads:
         if act_turn is not None and t >= act_turn:
             break
-        if tid in void:
+        if tid in void or tid in errored:
             continue
         so_far += got
         if covered(so_far, total):
             full_at = k
             break
-    ever_at, ever_turn, so_far = None, None, []   # a full read at any point, and how early it came
-    for k, t, got, tid in reads:
-        if tid in void:
-            continue
-        so_far += got
-        if covered(so_far, total):
-            ever_at, ever_turn = k, t
-            break
+
+    def first_whole(skip):
+        """The call, and turn, at which reads not in `skip` first cover the file."""
+        so_far = []
+        for k, t, got, tid in reads:
+            if tid in skip:
+                continue
+            so_far += got
+            if covered(so_far, total):
+                return k, t
+        return None, None
+    ever_at, ever_turn = first_whole(void | errored)   # a whole read, every result of it shown
+    loose_at, _ = first_whole(void)                     # or one that needs a result flagged as an error
     clean = ever_turn is not None and (first_other_turn is None or ever_turn < first_other_turn)
-    state = "full" if full_at is not None else "partial" if mentioned else "none"
-    return state, full_at, act, total, ever_at, clean
+    state = "full" if full_at is not None else "errored" if ever_at is None and loose_at is not None \
+        else "partial" if mentioned else "none"
+    return state, full_at, act, total, ever_at if ever_at is not None else loose_at, clean
 
 
 def items(role, prompt, earlier_verifier):
@@ -675,7 +693,7 @@ def report(results, as_json):
           f"{len(with_spawns)} of them with a fixer or verifier spawn; "
           f"{sum(s['meets_a'] and s['meets_b'] for s in spawns)} of {len(spawns)} treated spawns meet (a) and (b).")
     untreated = [s for r in results if not r["treated"] for s in r["spawns"]]
-    leaks = [s for s in untreated if s["meets_a"] or s["read"] in ("full", "partial")]
+    leaks = [s for s in untreated if s["meets_a"] or s["read"] in ("full", "partial", "errored")]
     print(f"known-negative: {len(untreated)} pre-0.36 spawn(s), {len(leaks)} meeting (a) or reading a role file"
           + (" — the detector is wrong" if leaks else ""))
     odd = [d for r in treated for d in r["unclassified"]]
@@ -706,8 +724,10 @@ def call_bar(treated, odd, prefix="bar"):
               "message holding their first call that is not a pure read:")
         for sess, sp in late:
             verdict = "before" if sp["meets_b"] else "after"
+            flagged = "; its result was flagged as an error, so read whether the file was shown" \
+                if sp["read"] == "errored" else ""
             print(f"    {sp['description']!r}: whole read at call {sp['whole_read_at']}; the act detector says it came "
-                  f"{verdict} the first act (call {sp['first_act_at']}) — read {sess} to decide")
+                  f"{verdict} the first act (call {sp['first_act_at']}){flagged} — read {sess} to decide")
     elif odd:
         print(f"{prefix}: not decidable yet — {len(odd)} treated spawn(s) are unclassified and must be read by hand first")
     elif len(with_spawns) < 3:
@@ -957,7 +977,7 @@ def report2(results, as_json):
                    for r in loaded if r["treated"][role]]
         spawns = [s for r in treated for s in r["spawns"]]
         untreated = [s for r in loaded if not r["treated"][role] for s in r["spawns"] if s["role"] == role]
-        leaks = [s for s in untreated if s["meets_a"] or s["read"] in ("full", "partial")]
+        leaks = [s for s in untreated if s["meets_a"] or s["read"] in ("full", "partial", "errored")]
         odd = [d for r in loaded if r["treated"][role] for d in r["unclassified"][role]]
         print(f"\n{name}: {len(loaded)} session(s) that loaded {skill}; {len(treated)} treated, "
               f"{sum(1 for r in treated if r['spawns'])} of them with a {role} spawn; "
@@ -1122,6 +1142,59 @@ def selftest(_):
         report(goods + [never], False)
     ok = "bar: FAIL" in buf.getvalue() and "never read the whole file" in buf.getvalue()
     print(("PASS" if ok else "FAIL"), "a role file never read whole fails the bar without the act detector")
+    fails += not ok
+    # A result flagged as an error settles nothing: wave 2's `cat reviewer.md; echo ======` showed the whole
+    # file before zsh failed on the separator. It keeps a spawn from FAIL and from PASS.
+    flagged = session("a-flagged", True, [("PR 9 fix round 2", brief_f, [("Bash", {"command": f"cat {fx}; echo ======"}),
+        ("__raw_result__", {"is_error": True, "content": "Exit code 1\n" + "x\n" * 87 + "(eval):1: ===== not found"}),
+        ("Edit", {"file_path": "a.java"})])], started="2026-09-28T09:30:00Z", where=later)
+    s_ = flagged["spawns"][0]
+    ok = (s_["read"], s_["read_full_ever"], s_["read_clean"], s_["meets_b"]) == ("errored", True, False, False)
+    print(("PASS" if ok else "FAIL"), f"a whole read whose result was flagged as an error is 'errored' and not clean: "
+          f"{(s_['read'], s_['read_full_ever'], s_['read_clean'], s_['meets_b'])}")
+    fails += not ok
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        report(goods + [flagged], False)
+    out = buf.getvalue()
+    ok = "bar: needs a hand check" in out and "flagged as an error" in out and "bar: FAIL" not in out
+    print(("PASS" if ok else "FAIL"), "an errored whole read sends the bar to a hand check, not to FAIL")
+    fails += not ok
+    recovered = session("a-recovered", True, [("Verify PR 9 round 1", brief_v, [("Bash", {"command": f"cat {vf}"}),
+        ("__raw_result__", {"is_error": True, "content": "cat: no such file"}), ("Read", {"file_path": vf}),
+        ("Bash", {"command": "mvn -q"})])], where=later)
+    s_ = recovered["spawns"][0]
+    ok = (s_["read"], s_["read_clean"]) == ("full", True)
+    print(("PASS" if ok else "FAIL"), f"an errored read followed by a clean one before any act is clean: "
+          f"{(s_['read'], s_['read_clean'])}")
+    fails += not ok
+    pre_err = session("a-pre-errored", False, [("PR 9 fix round 1", "Findings r1-1. mvn. commit.",
+        [("Bash", {"command": f"cat {fx}"}), ("__raw_result__", {"is_error": True, "content": "x"})])], where=later)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        report(goods + [pre_err], False)
+    ok = "known-negative: 1 pre-0.36 spawn(s), 1 meeting (a) or reading a role file" in buf.getvalue()
+    print(("PASS" if ok else "FAIL"), "an untreated spawn's errored read of a role file is still a leak")
+    fails += not ok
+    # A preview of output too large to show is no read, at any point: three sessions reading only a preview FAIL.
+    preview = ("__raw_result__", {"content": "<persisted-output>\nOutput too large (57.6KB). Full output saved to: /x"
+                                            "\n\nPreview (first 2KB):\n…"})
+    previewed = [session(f"a-preview-{k}", True, [("PR 9 fix round 1", brief_f, [("Bash", {"command": f"cat {fx}"}),
+                 preview])], started=f"2026-09-28T1{k}:00:00Z", where=later) for k in range(3)]
+    s_ = previewed[0]["spawns"][0]
+    ok = (s_["read_full_ever"], s_["read_clean"]) == (False, False)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        report(previewed, False)
+    ok = ok and "bar: FAIL" in buf.getvalue() and "never read the whole file" in buf.getvalue()
+    print(("PASS" if ok else "FAIL"), "a role file shown only as a preview is never read whole, so three such sessions FAIL")
+    fails += not ok
+    missing = session("a-missing", True, [("PR 9 fix round 1", brief_f, [("Bash", {"command": f"cat {fx}; true"}),
+        ("__raw_result__", {"content": f"cat: {fx}: No such file or directory"})])], where=later)
+    s_ = missing["spawns"][0]
+    ok = (s_["read"], s_["read_clean"]) == ("errored", False)
+    print(("PASS" if ok else "FAIL"), f"a cat of a missing role file that a chained no-op hid from the flag is errored, "
+          f"not clean: {(s_['read'], s_['read_clean'])}")
     fails += not ok
     r = session("round-2-verifier-without-repairs", True,
                 [("Verify PR 9 round 1", brief_v + " Repairs: none.", [("Read", {"file_path": vf})]),
@@ -1296,7 +1369,7 @@ def selftest(_):
             [("Bash", {"command": f"cat {vf}"}),
              ("__raw_result__", {"content": "<persisted-output>\nOutput too large (57.6KB). Full output saved to: /x\n\nPreview (first 2KB):\n…"}),
              ("Bash", {"command": "mvn -q"})])], (True, False)),
-        ("a Read that errored is not a read", [("Verify PR 9 round 1", brief_v,
+        ("a Read that errored is not a read before acting", [("Verify PR 9 round 1", brief_v,
             [("Read", {"file_path": vf}), ("__raw_result__", {"is_error": True, "content": "File does not exist."}),
              ("Bash", {"command": "mvn -q"})])], (True, False)),
     ]
@@ -1382,6 +1455,18 @@ def selftest(_):
     rv_pointer = "are in `reviewer.md`\nin this skill's directory"   # re-wrapped, as SKILL.md carries it
     rf_pointer = "are in `refuter.md`\nin this skill's directory"
 
+    def write_calls(path, calls):
+        """As write_agent, with a distinct id per call, and ("__raw_result__", {...}) planting a raw result for
+        the call before it."""
+        with open(path, "w") as fh:
+            for q, (name_, inp) in enumerate(calls):
+                if name_ == "__raw_result__":
+                    fh.write(json.dumps({"type": "user", "message": {"content": [dict(
+                        {"type": "tool_result", "tool_use_id": f"c{q - 1}"}, **inp)]}}) + "\n")
+                    continue
+                fh.write(json.dumps({"type": "assistant", "message": {"content": [
+                    {"type": "tool_use", "id": f"c{q}", "name": name_, "input": inp}]}}) + "\n")
+
     def session2(name, steps, started="2026-09-28T12:00:00Z"):
         """A planted session: ("load", skill, pointer or None) prints that skill's base directory, and
         ("spawn", description, brief, calls) spawns a subagent that makes those calls, in order."""
@@ -1398,7 +1483,7 @@ def selftest(_):
             lines.append({"type": "assistant", "message": {"content": [
                 {"type": "tool_use", "id": tid, "name": "Agent", "input": {"description": desc, "prompt": prompt}}]}})
             (sub / f"agent-{k}.meta.json").write_text(json.dumps({"toolUseId": tid, "description": desc}))
-            write_agent(sub / f"agent-{k}.jsonl", calls)
+            write_calls(sub / f"agent-{k}.jsonl", calls)
             k += 1
         with open(path, "w") as fh:
             for l in lines:
@@ -1559,6 +1644,29 @@ def selftest(_):
     ok, out = bar2(clean_rv + [session2("rv-late", [t_ph, ("spawn", "PR 9 review round 2", rv_brief,
                    [review, ("Read", {"file_path": rv})])])], "bar (reviewer.md): needs a hand check")
     print(("PASS" if ok else "FAIL"), "second move, a reviewer that loads pr-review first sends reviewer.md to a hand check")
+    fails += not ok
+    rv_flagged = session2("rv-flagged", [t_ph, ("spawn", "PR 9 review round 2", rv_brief, [
+        ("Bash", {"command": f"cat {rv}; echo ======; ls /x/pr-review/"}),
+        ("__raw_result__", {"is_error": True, "content": "Exit code 1\n" + "x\n" * 44 + "(eval):1: ===== not found"}),
+        review])], started="2026-09-28T13:30:00Z")
+    s_ = check_session2(rv_flagged)["spawns"][0]
+    ok, out = bar2(clean_rv + [rv_flagged], "bar (reviewer.md): needs a hand check")
+    ok = ok and (s_["read"], s_["read_full_ever"], s_["read_clean"]) == ("errored", True, False) \
+        and "bar (reviewer.md): FAIL" not in out and "flagged as an error" in out
+    print(("PASS" if ok else "FAIL"), "second move, wave 2's zsh-flagged whole read sends reviewer.md to a hand check, "
+          "not to FAIL")
+    fails += not ok
+    pre_rt_err = session2("rt-pre-errored", [u_rt, ("spawn", "Refute plan for issue 8", "Break the plan.",
+        [("Bash", {"command": f"cat {rf}"}), ("__raw_result__", {"is_error": True, "content": "x"})]), hd])
+    ok, out = bar2(clean_rt + [pre_rt_err], "known-negative: 1 untreated refuter spawn(s), 1 meeting (a) or reading "
+                                            "refuter.md — the detector is wrong")
+    print(("PASS" if ok else "FAIL"), "second move, an untreated refuter's errored read of refuter.md is still a leak")
+    fails += not ok
+    rv_previewed = [session2(f"rv-preview-{k}", [t_ph, ("spawn", "PR 9 review round 1", rv_brief, [("Bash", {"command": f"cat {rv}"}),
+                    ("__raw_result__", {"content": "<persisted-output>\nOutput too large (57.6KB). Full output saved to: /x"}),
+                    review])], started=f"2026-09-28T17:0{k}:00Z") for k in range(3)]
+    ok, out = bar2(rv_previewed, "bar (reviewer.md): FAIL")
+    print(("PASS" if ok else "FAIL"), "second move, three reviewers shown reviewer.md only as a preview FAIL it")
     fails += not ok
     for line, want in [
             ("- pr-harden:REVIEW — the brief named no base", True),

@@ -230,3 +230,74 @@ The same review's wording notes are applied above:
 - `MOVE2_SHIPPED`'s comment now describes the code;
 - `baseline`'s unused parameters are gone;
 - a refuter spawned after pr-harden loads FAILs reviewer.md loudly, rather than going unseen.
+
+## Result, wave 2 (#240, #455, #462), read 2026-09-28: refuter.md PASS, reviewer.md PASS on hand checks
+
+Wave 2 was the first pool run on pr-harden 0.37.0 and resolve-ticket 0.23.0. It produced PRs #549,
+#550 and #551. The pool ran #240 and #455 first, then its first retro, then #462, then its second
+retro.
+- The first retro, `7be82d8`, changed no skill file, only two run records and `REJECTED.md`. So #462
+  ran on the same versions.
+- The second, `fede115`, shipped pr-harden 0.38.0 and resolve-ticket 0.24.0. Both pointers survive in
+  them, so later sessions stay treated.
+
+- **refuter.md: PASS, mechanically.** Three treated sessions each have one refuter. Each brief named
+  the file's absolute path, and each refuter read the file whole at call 1, before its first other
+  call.
+- **reviewer.md: PASS, with three hand checks.** Three treated sessions have six reviewers. All six
+  briefs named the file's absolute path, and all six reviewers read the whole file in their first
+  call. Three reads were clean mechanically. The other three went to a hand check. Each is clean in
+  substance, because the whole file was shown before anything else ran, `pr-review` loading included:
+  - 'Review PR 549 round 1' ran `cat reviewer.md; ls …/pr-review/`: a whole read, and a listing of
+    pr-review's directory in the same call.
+  - 'Review PR 549 round 3' and 'Round 1 PR review #551' ran `cat reviewer.md; echo ======; …`. Their
+    output shows the whole file, then "(eval):1: ===== not found". zsh's `=`-expansion failed on the
+    separator, the harness flagged the call as an error, and nothing after the separator ran.
+  - What ran after it was an `ls` for 549's round 3. For #551's round 1 it was a `cat` of pr-review's
+    SKILL.md, which is loading pr-review in the same call. The header forbids that, and only the zsh
+    error stopped it. That reviewer then read pr-review in a later call.
+  - The tool as committed voided both reads and printed FAIL. The revision below is why it now sends
+    them to this hand check.
+- **Items:** no item is missing in any of the nine treated briefs.
+- **The first move over both waves:** 15 of 15 treated fixer and verifier spawns meet (a) and (b),
+  over 6 sessions. One of those sessions is the hand-launched PR 544 session on 0.36.2.
+  - Three new hand checks are in #240's and #455's sessions: 'Fix PR 549 round 1', 'Fix PR 549 round 2'
+    and 'PR 550 round 1 fixer'. Each read `cat fixer.md; cd … && git branch --show-current && git
+    status` at call 1, and each is clean in substance.
+  - The report lists a second unclassified treated spawn, 'Implement esm#31 ended-order fields', in the
+    PR 544 session. Read by hand, it is an implementation agent for openmrs-esm-chartsearchai#31, not a
+    pr-harden role, so it is outside the bar.
+- **A hazard the run showed:** in the Bash tool's zsh, `echo ======` fails and aborts the rest of the
+  command line. It cost two reviewers the calls chained after their separator.
+
+## Revised after the verdict, 2026-09-28: a result flagged as an error goes to a hand check
+
+**"bar (reviewer.md): FAIL — 2 treated spawn(s) missed; the first, 'Review PR 549 round 3' … it never
+read the whole file"** The tool voided every result flagged as an error. These two results carried the
+whole file before zsh's error, so the verdict contradicted the transcript.
+
+- An error result does not settle whether the file was shown. It may have been shown, as here, or
+  not, as with a `cat` of a missing file.
+- So a preview of output too large to show is still no read. An errored result now counts toward a
+  whole read at some point, which keeps the spawn from a FAIL, and never toward a clean one, which
+  keeps it from a PASS.
+- Such a spawn's state is "errored", and its hand-check line says the result was flagged.
+- It moves a spawn from FAIL to a hand check and never to PASS. A mutation that lets an errored read
+  be clean reddens the selftest.
+- On the sessions on disk, it changes only wave 2's verdict for reviewer.md, from FAIL to the hand
+  check above. The first move's report is byte-identical before and after, in every mode.
+- `--selftest` has 187 cases, all passing. Each of eight mutations of the fix reddens at least one of
+  them, and a control copy stays green.
+
+**Its confirming review found three errors, all fixed:**
+- *"'Both of the wave's retros ran after these sessions.' is false"*: the run order above is corrected.
+- *"that attribution is false"*: the three new first-move hand checks are in #240's and #455's
+  sessions, not in the PR 544 session.
+- *"No selftest case pins [a preview being no read]"*: one token in `read_check` would have made a
+  preview-only read clean, and so a PASS, with the selftest green. That gap was already in `0b858a9`.
+  Cases now pin it at the read and at the bar, for both moves.
+
+The same review found a gap that was also older: `cat role.md; ls` of a missing role file exits 0,
+so the result is never flagged, and the detector counted a clean whole read. A result saying "No
+such file or directory" is now errored too. That moves the spawn only toward a hand check. The
+selftest now has 190 cases.
