@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.36.2
+version: 0.37.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -210,41 +210,14 @@ What the reviewer is given, and nothing more:
   suppression is the thing harden's "re-derive the merged result from scratch" warns about, and an
   insufficient fix must be free to be re-raised on the reviewer's own initiative.
 - **the last verifier report**, if one exists, as fact it may use and need not own
-- from round 2 on, harden's Phase 1 rule **re-derive the merged result from scratch**. By round 3 the
-  code is an accretion of rounds of individually-approved fixes, each judged against the state at the
-  time it landed; the bug lives in the seam between two separately-correct mechanisms.
-- **how to attack a guard whose subject is TEXT or SHAPE** — a source scan, a class-file scan, an
-  architecture guard, a build-time assertion. Deleting the thing it guards is the weak mutation and the
-  one its author already tried; the strong one is a form that is **semantically the defect but textually
-  not the obvious edit**. A guard asserted that the gate's right-hand side *contained* the flag's name,
-  so `order != null || namesADrug ? order : null` passed it — that names the flag and means
-  `namingOrder = order` for every non-null order, i.e. the pre-fix state restored. Deleting the gate
-  was caught; the equivalent rewrite was not. Ask of any such guard: what is the cheapest edit that
-  satisfies its assertion and still breaks the property? A plausible slip is worth more than a
-  contrived one — that one is an `&&`/`||` typo in a defensive null check.
 
-It returns JSON as its final text, and nothing else:
-
-```json
-{ "pr": 93, "round": 2, "head": "<sha reviewed>",
-  "findings": [
-    { "id": "r2-1", "blocking": true,
-      "file": "api/src/main/java/.../DrugSafetyValidator.java", "line": 412,
-      "finding": "…", "failure_mode": "…", "evidence": "…" } ],
-  "notes": [ "a blocking-only round only: anything else it noticed" ] }
-```
-
-**"Does not resolve the ticket" is a blocking finding, and it is the first one to look for.**
-When the run started from a ticket rather than from an existing PR, `pr-review` Step 2 stops being a
-preliminary and becomes the primary axis: a PR that is internally clean but does not resolve the
-thing it claims to is exactly what a polish loop will happily converge on. Judge it against the
-ticket's own words and its comments, never against the PR description, which was written by the same
-agent that wrote the code.
-
-**`blocking: true` requires a non-empty `failure_mode` and `evidence`.** A finding with either
-missing is non-blocking by construction — the orchestrator downgrades it and records that it did.
-This is what stops "this feels hacky" from holding the loop open forever, and it is also what gives
-the fixer something specific enough to decline honestly.
+Its two standing rules — re-deriving the merged result from round 2 on, and attacking a guard whose
+subject is TEXT or SHAPE — the JSON it returns and what makes a finding blocking are in `reviewer.md`
+in this skill's directory. Brief it with that file's absolute path and tell it to read the whole file
+before it does anything else; the brief itself names the round, the head and the base to diff
+against, says whether the round is BLOCKING-ONLY and whether the run started from a ticket, and
+hands it what the list above names. Step 2 downgrades a finding that fails that file's
+*`blocking: true` requires a non-empty `failure_mode` and `evidence`*, and records that it did.
 
 ### 2 — RECORD
 
@@ -747,7 +720,7 @@ passes run in the context that wrote the code, which is what this loop is built 
 Phase 2 polish rewrites lines the next fresh reviewer then reads for the first time — new unreviewed
 surface, so it can *raise* the round count.
 
-So harden's Phase 1 discipline is borrowed as instructions (steps 1 and 4 above; step 4's is in `fixer.md`) and the skill runs
+So harden's Phase 1 discipline is borrowed as instructions (steps 1 and 4 above; step 1's is in `reviewer.md` and step 4's in `fixer.md`) and the skill runs
 at the two ends instead:
 
 - **before the loop** — harden the slice while you still have the writing context, then open or

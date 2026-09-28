@@ -4,7 +4,8 @@
 measurements and history that `SKILL.md` carried until 0.22.0, moved here verbatim so that a run no
 longer loads them and no measurement is lost. Headings match `SKILL.md`'s. Each entry quotes the rule
 it supports as `SKILL.md` states it, then the passage as it stood in 0.21.3, so an entry can repeat the
-words of its rule.
+words of its rule. From 0.23.0 the rules B-09 to B-11 quote are in `refuter.md`; their entries stay
+under *Step 3 — Refute the plan, before any code* here.
 
 A run does not need this file. Read an entry before changing or deleting the rule it supports: a
 measured rule is not deleted without the measurement that retires it (`skill-retro`, Step 4).

@@ -6,7 +6,8 @@ longer loads them and no measurement is lost. Headings match `SKILL.md`'s. Each 
 it supports as `SKILL.md` states it, then the passage as it stood in 0.34.0, so an entry can repeat the
 words of its rule. From 0.36.0 the rules R2-01 to R2-08 quote are in `fixer.md`, and those R2-14 to
 R2-20 and R2-22 quote are in `verifier.md`; their entries stay under *4 — FIX* and *6 — VERIFY*
-here.
+here. From 0.37.0 the rules R1-12 and R1-13 quote are in `reviewer.md`, and their entries stay
+under *1 — REVIEW* here.
 
 A run does not need this file. Read an entry before changing or deleting the rule it supports: a
 measured rule is not deleted without the measurement that retires it (`skill-retro`, Step 4).

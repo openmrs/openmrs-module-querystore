@@ -298,3 +298,133 @@ its file, and still land in a hand check although it did what it was told. With 
 compliant fixer's read is clean, as a compliant verifier's is, and "read this first" is also the
 simplest instruction for an agent to follow. Both files grew by one word, and the two rises are
 recorded in `skill-budgets.json`'s `raises`, the ratchet's first use on pr-harden.
+
+## Result, wave 1 (#246, #463, #528), read 2026-09-28: PASS
+
+- **The bar is met.** Wave 1 was pr-harden 0.36.2's first pool run. Three treated sessions spawned a
+  fixer or a verifier: 4 fixers and 2 verifiers, both verifiers in #528. All 6 briefs named the role
+  file's absolute path. All 6 spawns read the whole file in their first call: three fixers with
+  `cat`, and the fourth fixer and both verifiers with an unranged Read. No output was a preview.
+- **One hand check.** Five reads were clean mechanically. The tool sent 'PR 545 round 1 fixer' to a
+  hand check, because its first call was `cat fixer.md; grep -n "^## \|^### " SKILL.md`, and a Bash
+  call that also reads another file is not a pure read. Read by hand it is clean: the second segment
+  reads SKILL.md's headings, nothing in the call writes, and no call came before it.
+- **One unclassified spawn.** 'PR 546 blocking-only round 3' was round 3's reviewer: its brief opens
+  "You are the round-3 reviewer of pull request #546", and its first call loads `pr-review`. The
+  seventh revision below records why the tool still holds it for a hand check.
+- **Items.** `round` was missing from both #528 verifier briefs. Verifiers ran in one session only,
+  so the 2-of-3 rule cannot be applied to that item yet.
+- **The likeliest cause of a hand check did not occur.** Neither verifier oriented before reading.
+- **The known-negative is 0 of 295, not the 305 above, because four pre-0.36 sessions left the
+  disk.** A report written at 2026-09-27T14:11Z, which read 305, lists #234, #236, #296 and #297,
+  which ran on 27–28 August, with 10 spawns between them. Their transcripts and project directories are
+  gone. None of the 108 sessions in both reports changed its spawn count, so 305 − 10 = 295.
+  - What deleted them is a lead. `cleanupPeriodDays` is unset, so Claude Code's default 30-day
+    transcript retention applies, which goes by when a transcript was last written. The oldest
+    pipeline transcript left was last written on 2026-08-30 local time; sessions that began on 28
+    August and were written later remain. The count first read 295 after the pool's sessions
+    started.
+  - If retention is the cause, it deletes wave 1's transcripts from about 2026-10-28.
+- **What the PASS released:** pr-harden 0.37.0's `reviewer.md` and resolve-ticket 0.23.0's
+  `refuter.md`. This tool does not measure those two files yet.
+
+## Revised a seventh time 2026-09-28, after the verdict: wave 1's verdict is unchanged, later ones can differ
+
+**"treated spawns that are neither a reviewer nor recognisably a fixer or verifier: 1 — read these by
+hand: PR 546 blocking-only round 3"** The tool recognised a reviewer by its description alone,
+`review|refut|confirm`, and this description names none of them. The owner agreed to let the tool
+recognise a reviewer from its brief as well.
+
+- **It does not, and that is this revision's result.** Fresh-agent reviews of four versions each
+  found brief wording by which a fixer or a verifier would leave the count as a reviewer, which is
+  the direction the bar exists to block.
+  - The first version took the first role word: *"'You are the reviewer's fixer …' … the spawn is
+    classified as a reviewer and dropped without being listed anywhere."*
+  - The second excluded possessives: *"leaves the count just because its brief mentions the reviewer:
+    'implementing the reviewer findings', 'what the reviewer found', 'the reviewer ran first'."*
+  - The third also required the subagent to have run `pr-review`: *"It does this even when the same
+    clause says the spawn is the fixer or the verifier."*
+  - The fourth required the clause to name the reviewer alone: *"A spawn whose description names no
+    role can say later in its brief that it is the fixer or the verifier … If the first window names
+    only the reviewer and the transcript has a pr-review Skill call, the spawn silently leaves the
+    count as a reviewer."*
+
+  Like the act detector in the fifth revision, this did not converge, and a spawn's own `pr-review`
+  call does not settle it either. So a brief never makes a spawn a reviewer. PR 546 round 3 stays a
+  hand check, as at 83008d9.
+- **What the revision keeps.** `role_of` now says what a spawn is:
+  - `fixer` or `verifier`, which the bar measures;
+  - `reviewer` or `harden`, which it does not;
+  - None, which is unclassified.
+
+  The rules are these:
+  - **A description decides first.** Its reviewer words now match only at the start of a word, so
+    "preview", "unconfirmed" and "irrefutable" no longer make a spawn a reviewer.
+  - **A silent description falls back to the brief.** The brief's first "you are the", "you are a"
+    or "you are an" clause that names a role decides, where the role starts within 40 characters and
+    before a full stop. These are not roles: a possessive, a role joined to a hyphen on either side,
+    and a role file's name (`fixer.md`). Case is ignored for ASCII letters only, so a dotless-i
+    "fıxer" is not a role either, and is held rather than dropped. The clause places a fixer or a
+    verifier only when that is the one role it names. A clause naming the reviewer, or naming two
+    roles, is unclassified.
+  - **Nothing it cannot place is dropped unlisted.** `check_session` no longer repeats the
+    description regex. So a description that only contains "review" and states no role is listed,
+    where 83008d9 dropped it.
+  - **The hand-check message.** It now says "did not read the whole file before the message holding
+    their first call that is not a pure read", which is the CLEAN definition. The bar's HAND wording,
+    "only after other calls", is read as "not CLEAN", as the tool always decided it. The old message
+    missed a read made in the same call or message as something else, as PR 545's was.
+- **What it changes for later runs, against 83008d9.** For a spawn whose description names no role:
+  - "you are an" now states a role, where "You are an independent fixer" was unplaced;
+  - the first clause that names a role decides. 83008d9 took a verifier from any clause before a
+    fixer, so "You are the fixer for round 2. You are the one the verifier waits on." read as a
+    verifier;
+  - a clause naming two roles, or the reviewer, is held. 83008d9 read "You are the fixer; the
+    verifier ran in round 1" as a verifier, and "You are the fixer for round 2 of PR 546; the
+    reviewer found two blockers" as a fixer;
+  - a possessive no longer counts, where "You are the verifier's fixer" read as a verifier;
+  - a role joined to a hyphen no longer counts, where "the fixer-reviewer" read as a fixer;
+  - a role file's name no longer counts, where "you are the agent for fixer.md" read as a fixer.
+
+  For any spawn, a description's reviewer words match only at the start of a word. So "Verify the
+  preview endpoint" is a verifier where it was a reviewer, and "Rereview PR 9 after the fix" a fixer.
+  Items follow the roles: a spawn now held is no longer an earlier verifier for the next one's
+  `repairs` item. Items never gate.
+
+  Within classification, a spawn leaves the count only as a `reviewer` or as `harden`, and both now
+  come from the description alone. `harden`'s words are unchanged, and the reviewer's match a subset
+  of what they matched at 83008d9. So no change takes a spawn out of the count. Each change does one
+  of three things:
+  - it holds a spawn;
+  - it counts one that 83008d9 held or skipped;
+  - it changes which role file a counted spawn is checked against. That can turn a FAIL into a PASS
+    where 83008d9 checked the wrong file.
+- **Kept as a known limit:** a description is still decided by its words alone, as at 83008d9. So a
+  fixer described "Fix review findings round 2" is a reviewer's, and it leaves the count.
+  - Among the spawns the tool classifies, those made after pr-harden loaded, on the sessions on disk
+    on 2026-09-28, no description classified as a reviewer names a fixer or a verifier.
+  - Seven classified as harden do. All seven are named by harden's cycles or phases, such as
+    "Harden cycle 2 fixer" and "Cycle 4 verification pass".
+  - The shape does occur outside that population: "Fix PR 392 review threads" is a fixer, briefed to
+    "Address the four outstanding review threads on PR #392 … push the fixes", in a session that
+    never loaded pr-harden.
+- **Re-run on every session against 83008d9:** the `--json` report is byte-identical, and the text
+  report differs only in that message.
+- **`--selftest`: 128 cases, all pass.** The new cases cover:
+  - wave 1's reviewer held although it ran `pr-review`;
+  - briefs that name the reviewer, in the first role-naming clause or beside a fixer;
+  - "an … fixer";
+  - the possessive, with either apostrophe and either role first, and a role in single quotes,
+    straight or curly, which still counts;
+  - hyphens on either side;
+  - a capitalised role, and a dotless-i "fıxer", which is not one;
+  - two-role clauses;
+  - the 40-character window at its boundary, and the full stop;
+  - the first clause against a later one, and a role-less clause passing the decision on;
+  - the 400-character head;
+  - a role file's name;
+  - description words that only contain "review", "refut" or "confirm", including one that states
+    no role.
+
+  A mutation of each rule, made on a scratch copy, reddens at least one of them. A control copy stays
+  green.

@@ -16,18 +16,30 @@
       "from": 1101,
       "to": 1102,
       "why": "the fixer is told to read fixer.md before it does anything else, as the verifier already was, so a compliant read is one role-file-check decides mechanically (owner's decision, 2026-09-27)"
+    },
+    "pr-harden/reviewer.md": {
+      "from": 0,
+      "to": 510,
+      "why": "the reviewer's two standing rules, the JSON it returns and what makes a finding blocking move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, as pr-harden 0.36.0 moved the fixer's and the verifier's, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so pr-harden grows by both, for a reviewer that reads these rules as written instead of the orchestrator's paraphrase of them, which is what wave 1's briefs carried"
+    },
+    "resolve-ticket/refuter.md": {
+      "from": 0,
+      "to": 601,
+      "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     }
   },
   "words": {
     "harden": 7403,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 9678,
+    "pr-harden": 9403,
     "pr-harden/fixer.md": 1102,
+    "pr-harden/reviewer.md": 510,
     "pr-harden/verifier.md": 1736,
     "pr-review": 7775,
     "pr-review/posting.md": 1804,
-    "resolve-ticket": 7169,
+    "resolve-ticket": 6749,
+    "resolve-ticket/refuter.md": 601,
     "skill-retro": 2532,
     "ticket-pool": 5084,
     "ticket-pool/by-hand.md": 1859,

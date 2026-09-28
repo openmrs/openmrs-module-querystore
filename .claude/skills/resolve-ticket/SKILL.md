@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.22.0
+version: 0.23.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -209,7 +209,7 @@ Either way the judgement stays here. Then write down:
   inputs, and the composed method rather than a hand-chained pipeline.
 - **If any part of the plan exists ONLY so the change can be tested, say so and label it a TRADE.**
   This is where a plan quietly gets worse while looking more rigorous. State the trade explicitly,
-  and rule out "test it differently" before taking it — question 7 below is that check.
+  and rule out "test it differently" before taking it — question 7, in `refuter.md`, is that check.
 - **Which API-surface rules in `CLAUDE.md` this touches.** That file is a list of entry points that
   must not be bypassed and of changes that were measured and rejected. If the plan reinvents one of
   them, the plan is wrong.
@@ -259,49 +259,11 @@ produced the plan and defeat the point. Give it the ticket as read (with its com
 verbatim, and the repo. Do **not** give it your argument for why the plan is right: advocacy primes it
 to agree, and agreement is the one thing this agent is not for.
 
-Seven questions, and it must say which it actually checked:
-
-1. **Does the plan bypass or reimplement a documented entry point?** `CLAUDE.md`'s API-surface rules
-   name the only correct callers for their operations. Name the method and the rule.
-2. **Does it re-propose something recorded as measured and rejected?** Quote the measurement.
-3. **Does the root-cause claim hold,** or is this a symptom patch with the real cause one layer down?
-   Is there a cheaper or deeper locus for the same fix?
-4. **Does the planned test pin the behaviour?** Real production path, real data, composed method
-   rather than hand-chained steps — and would it fail *today* for the predicted reason? A test that
-   would pass on the pre-change code proves nothing.
-5. **Does the scope match the ticket** — neither wider (an adjacent defect smuggled in) nor narrower
-   (part of the ask quietly dropped)?
-6. **Does the plan rest on a claim about the DATA that nobody has measured?** Name the claim, and name
-   what would measure it. This is the question the others cannot reach: they test the plan against
-   the repo's recorded decisions, and a premise about the *dataset* can be unrecorded and still false.
-   The tell is a plan that says "X names Y" or "X and Y are the same substance" and cites a method
-   rather than a count: ask for the count.
-
-7. **If the plan says something CANNOT be tested, has this repo pinned an untestable rule before, and
-   how?** Ask it whenever the plan reaches for a production change to create observability, or says a
-   behaviour is unobservable, or calls a rule "conventional" / "enforced by javadoc only". The answer
-   is very often yes and the plan has not looked: a repo that has met this problem already has a
-   *structural* pin somewhere — a test that reads its own source or compiled class files, an
-   architecture guard, a build-time assertion — and finding it is strictly better than bending the
-   design to become behaviourally observable. The tell is a plan whose justification for touching
-   production is "otherwise we cannot test it": grep the test tree for a guard that reads source or
-   `.class` files before believing it.
-
-It returns JSON:
-
-```json
-{ "checked": [1, 2, 3, 4, 5, 6, 7],
-  "objections": [
-    { "question": 2, "blocking": true, "objection": "…",
-      "citation": "CLAUDE.md, the ATC-subgroup bullet: a uniform veto loses real signal 2.4x faster than it removes false claims" } ] }
-```
-
-**An objection without a citation is not an objection.** It must point at a `CLAUDE.md` rule, a
-specific line of code, or a recorded measurement — same discipline as the reviewer's failure-mode
-sentence, and for the same reason: an agent told to find problems will manufacture them, and a
-manufactured objection at plan time sends the run down a worse path than the one it replaced. A plan
-it cannot fault gets an explicit empty `objections` list, and the `checked` array is what stops
-silence being mistaken for coverage.
+Its seven questions, the JSON it returns and the rule every objection must meet are in `refuter.md`
+in this skill's directory. Brief it with that file's absolute path and tell it to read the whole file
+before it does anything else; the brief itself hands it the ticket, the plan and the repo, as above.
+The gate below acts only on objections that meet that file's *An objection without a citation is not
+an objection*.
 
 **This is a gate, not a loop.** A blocking objection whose citation settles it: revise the plan and
 re-run the gate **once**. `CLAUDE.md` and a recorded measurement outrank the plan, so that is a
@@ -611,7 +573,7 @@ can settle it about itself.
 - **Don't change production to create observability without ruling out a structural pin first.** A
   plan that says "this is behaviour-neutral, so I must change X to make it testable" is one move
   away from making the code worse in the name of rigour — and the move it skipped is a grep of the
-  test tree for a guard that reads source or compiled class files. Step 3's question 7 exists for
+  test tree for a guard that reads source or compiled class files. Step 3's question 7, in `refuter.md`, exists for
   this; if you take the trade anyway, label it as one in the plan and in the PR body.
 - **Don't spawn a subagent without recording the await.** Every phase of this skill and of the loop
   delegates, and the gate cannot tell a run waiting on an agent from a run that quit unless the

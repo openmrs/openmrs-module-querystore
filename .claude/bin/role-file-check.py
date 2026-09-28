@@ -20,9 +20,11 @@ session transcripts and reports, for every fixer and verifier spawned after pr-h
   items  what the pointer says the brief carries; reported, never gating
 
 Each orchestrator `Agent` call is joined to its subagent's transcript through
-`<session>/subagents/agent-*.meta.json`'s `toolUseId`. A spawn is a fixer or a verifier by its
-description, and failing that by a role its brief states — never by the role file's mention, because
-a brief that fails to name the file is the case being looked for. A spawn it cannot place is listed.
+`<session>/subagents/agent-*.meta.json`'s `toolUseId`. A spawn is a fixer, a verifier, a reviewer or
+harden's own agent by its description, and failing that a fixer or a verifier by the one role its
+brief states — never a reviewer by its brief, and never by the role file's mention, because a brief
+that fails to name the file is the case being looked for. A spawn it cannot place is listed, among
+them a brief naming the reviewer or naming two roles.
 
 Only TREATED sessions — whose loaded pr-harden text carries the 0.36 pointer — count toward the bar,
 which `.claude/skill-lessons/proposals/2026-09-27-role-file-measurement.md` fixed before any treated
@@ -30,9 +32,10 @@ session existed. The bar decides only what a transcript settles:
   FAIL   a treated brief does not name the file, or the file is never read whole
   PASS   3 treated sessions with a spawn, every read CLEAN — whole before the subagent's first call
          that is not a pure read, so nothing can have acted first
-  HAND   a whole read that came only after other calls; the act detector's verdict is shown as
-         advice, because deciding from shell text whether an agent had already edited proved open-
-         ended over five reviews
+  HAND   a whole read that was not CLEAN — not before the message holding the first call that is not
+         a pure read, as in `cat fixer.md; grep … SKILL.md`, whose second segment reads another
+         file; the act detector's verdict is shown as advice, because deciding from shell text
+         whether an agent had already edited proved open-ended over five reviews
 Sessions are ordered by their first timestamp, never by path.
 
     role-file-check.py [SESSION.jsonl ...]     # default: every session under ~/.claude/projects
@@ -49,6 +52,7 @@ BASE = "Base directory for this skill: "
 POINTERS = ("`fixer.md` in this skill's directory", "`verifier.md` in this skill's directory")
 EDITS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 ROLE_FILE = {"fixer": "fixer.md", "verifier": "verifier.md"}
+ROLE_WORD = re.compile(r"(?<!-)\b(verifier|fixer|reviewer)\b(?!-|['’]s\b|\.md\b)", re.I | re.A)
 HOME = str(Path.home())
 TMP = re.compile(r"^(?:/tmp/|/private/tmp/|/private/var/folders/|/var/folders/|\$TMPDIR|\$\{TMPDIR|/dev/null)")
 # A Bash command writes a file when it does one of these. Redirections are judged by their target, so
@@ -110,22 +114,40 @@ def scan_session(path):
 
 
 def role_of(desc, prompt):
-    """A description naming review, refutation or confirmation is a reviewer's, whatever its brief
+    """What a spawn is: "fixer" or "verifier", which the bar measures; "reviewer" or "harden", which it
+    does not; None for one it cannot place. A description naming review, refutation or confirmation
+    at the start of a word, so not "preview" or "unconfirmed", is a reviewer's, whatever its brief
     says: a reviewer's brief names the fixer, the verifier and the standalone too, which is how a
     looser version counted reviewers as fixers. One naming a harden cycle or phase is harden's own
-    agent, which pr-harden never briefed ("Harden cycle 2 fixer", "Cycle 4 verification pass"). The
-    brief is read only when the description is silent, and then only for a role it states."""
-    if re.search(r"review|refut|confirm", desc, re.I) or re.search(r"(?<!pr-)\bharden\b|\bcycle\b|\bphase\b", desc, re.I):
-        return None
+    agent, which pr-harden never briefed ("Harden cycle 2 fixer", "Cycle 4 verification pass"). Both
+    are decided by the description's words alone, so "Fix review findings round 2" is a reviewer's
+    too: a known limit, measured in the proposal's seventh revision.
+
+    The brief is read only when the description is silent, and then only for the role it states: the
+    first "you are the/a/an" clause naming a role within 40 characters, before a full stop, decides.
+    A possessive, a role joined to a hyphen on either side, or a role file's name is not a role. The
+    clause places a fixer or a verifier only when that is the one role it names, so "You are the
+    fixer; the verifier ran in round 1" is unplaced, for a hand check. It never places a reviewer: a
+    reviewer takes a spawn out of the count, and four reviews each found brief wording that would take
+    a fixer out with it, the last of them even with the subagent's own `pr-review` call required. So
+    a clause naming the reviewer is unplaced too, as wave 1's "PR 546 blocking-only round 3" was."""
+    if re.search(r"\breview|\brefut|\bconfirm", desc, re.I):
+        return "reviewer"
+    if re.search(r"(?<!pr-)\bharden\b|\bcycle\b|\bphase\b", desc, re.I):
+        return "harden"
     if re.search(r"verif", desc, re.I):
         return "verifier"
     if re.search(r"\bfix", desc, re.I):
         return "fixer"
     head = prompt[:400]
-    if re.search(r"\byou are (?:the|a)\b[^.]{0,40}\bverifier\b", head, re.I):
-        return "verifier"
-    if re.search(r"\byou are (?:the|a)\b[^.]{0,40}\bfixer\b", head, re.I):
-        return "fixer"
+    for stated in re.finditer(r"\byou are (?:the|an?)\b", head, re.I):
+        start = stated.end()
+        stop = head.find(".", start)
+        stop = len(head) if stop < 0 else stop
+        roles = {m.group(1).lower() for m in ROLE_WORD.finditer(head, start)
+                 if m.start() < stop and m.start() - start <= 40}
+        if roles:
+            return roles.pop() if len(roles) == 1 and "reviewer" not in roles else None
     return None
 
 
@@ -568,8 +590,9 @@ def check_session(path):
         desc, prompt = str(inp.get("description", "")), str(inp.get("prompt", ""))
         role = role_of(desc, prompt)
         if role is None:
-            if not re.search(r"review|refut|confirm|(?<!pr-)\bharden\b|\bcycle\b|\bphase\b", desc, re.I):
-                unclassified.append(desc)
+            unclassified.append(desc)
+            continue
+        if role not in ROLE_FILE:
             continue
         role_path = f"{base}/{ROLE_FILE[role]}"
         if role_path in prompt:
@@ -646,7 +669,8 @@ def report(results, as_json):
         why = "its brief does not name the file" if not sp["meets_a"] else "it never read the whole file"
         print(f"bar: FAIL — {len(failed)} treated spawn(s) missed; the first, {sp['description']!r} in {sess}: {why}")
     elif late:
-        print(f"bar: needs a hand check — {len(late)} treated spawn(s) read the whole file only after other calls:")
+        print(f"bar: needs a hand check — {len(late)} treated spawn(s) did not read the whole file before the "
+              "message holding their first call that is not a pure read:")
         for sess, sp in late:
             verdict = "before" if sp["meets_b"] else "after"
             print(f"    {sp['description']!r}: whole read at call {sp['whole_read_at']}; the act detector says it came "
@@ -861,12 +885,83 @@ def selftest(_):
     for desc in ("PR 9 review round 2", "pr-harden round 3 review", "blocking-only confirm of merged head",
                  "PR 9 confirming round"):
         r = session("rev-" + re.sub(r"\W+", "-", desc), True, [(desc, reviewer_brief, [])])
-        ok = r["spawns"] == []
+        ok = r["spawns"] == [] and r["unclassified"] == []
         print(("PASS" if ok else "FAIL"), f"a reviewer ({desc!r}) is neither a fixer nor a verifier")
         fails += not ok
     r = session("silent-description", True, [("round 2 agent", "You are the fixer for round 2. " + brief_f, [])])
     ok = [s["role"] for s in r["spawns"]] == ["fixer"]
     print(("PASS" if ok else "FAIL"), "a silent description falls back to the brief's stated role")
+    fails += not ok
+    held = ["round 2 agent"]
+    ran_review = [("Read", {"file_path": "/x/pr-harden/reviewer.md"}), ("Skill", {"skill": "pr-review", "args": "9"})]
+    for desc, brief, calls, want, want_held, label in [
+            ("PR 546 blocking-only round 3",
+             "You are the round-3 reviewer of pull request #546 in openmrs/openmrs-module-chartsearchai. "
+             "This round is BLOCKING-ONLY. " + reviewer_brief, ran_review, [], ["PR 546 blocking-only round 3"],
+             "wave 1's reviewer, named only in its brief, is held although it ran pr-review"),
+            ("round 2 agent", "You are a fresh agent acting on what the reviewer found in round 2. You are the "
+             "fixer: implement r2-1.", ran_review, [], held,
+             "a brief whose first role-naming clause names the reviewer is held, whatever comes after"),
+            ("round 2 agent", "You are the reviewer for round 2 — a fresh fixer will implement what you find. "
+             + reviewer_brief, ran_review, [], held, "a clause naming the reviewer and the fixer is held"),
+            ("round 2 agent", "You are the fixer for round 2 of PR 546; the reviewer found two blockers. " + brief_f,
+             ran_review, [], held, "a fixer's clause naming the reviewer is held"),
+            ("round 2 agent", "You are a fresh agent implementing the reviewer findings for PR 9, round 2. " + brief_f,
+             [], [], held, "a fixer whose brief names the reviewer is held"),
+            ("round 2 agent", "You are the second agent in round 2; the reviewer ran first. " + brief_f, [], [], held,
+             "'the reviewer ran first' does not make the spawn a reviewer"),
+            ("round 2 agent", "You are an independent fixer for round 2. " + brief_f, [], ["fixer"], [],
+             "'an ... fixer' is a fixer"),
+            ("round 2 agent", "You are the reviewer's fixer for round 2. " + brief_f, [], ["fixer"], [],
+             "'the reviewer's fixer' is a fixer"),
+            ("round 2 agent", "You are the verifier's fixer for round 2. " + brief_f, [], ["fixer"], [],
+             "'the verifier's fixer' is a fixer, where 83008d9 read a verifier"),
+            ("round 2 agent", "You are the reviewer’s fixer for round 2. " + brief_f, [], ["fixer"], [],
+             "a curly apostrophe is a possessive too"),
+            ("round 2 agent", "You are the 'fixer' for round 2. " + brief_f, [], ["fixer"], [],
+             "a role in straight single quotes is still a role"),
+            ("round 2 agent", "You are the ‘fixer’ for round 2. " + brief_f, [], ["fixer"], [],
+             "a role in curly single quotes is still a role"),
+            ("round 2 agent", "You are the reviewer-appointed fixer for round 2. " + brief_f, [], ["fixer"], [],
+             "a role before a hyphen is not a role"),
+            ("round 2 agent", "You are the fixer-reviewer for round 2. " + brief_f, [], [], held,
+             "'the fixer-reviewer' is held, where 83008d9 counted it as a fixer"),
+            ("round 2 agent", "You are the verifier-fixer for round 2. " + brief_f, [], [], held,
+             "a role after a hyphen is not a role either"),
+            ("round 2 agent", "You are the FIXER for round 2. " + brief_f, [], ["fixer"], [],
+             "a capitalised role is the same role"),
+            ("round 2 agent", "You are the fıxer for round 2. " + brief_f, [], [], held,
+             "a dotless-i 'fıxer' is not a role, so it is held rather than dropped"),
+            ("round 2 agent", "You are the " + "a" * 38 + " fixer for round 2. " + brief_f, [], ["fixer"], [],
+             "a role starting 40 characters in is stated"),
+            ("round 2 agent", "You are the " + "a" * 39 + " fixer for round 2. " + brief_f, [], [], held,
+             "a role starting 41 characters in is not"),
+            ("round 2 agent", "You are the fixer for round 2; the verifier ran in round 1. " + brief_f, [], [], held,
+             "a clause naming the fixer and the verifier is held for a hand check"),
+            ("round 2 agent", "You are a fresh agent implementing the reviewer's findings as the fixer. " + brief_f,
+             [], [], held, "a role past 40 characters is not stated, so the spawn is held"),
+            ("round 2 agent", "You are the agent for fixer.md in round 2. Findings r2-1.", [], [], held,
+             "a role file's name is not a role"),
+            ("round 2 agent", "You are the agent for round 2. The fixer part: findings r2-1.", [], [], held,
+             "a role after the clause's full stop is not stated"),
+            ("round 2 agent", "You are the agent for round 2. You are the fixer. " + brief_f, [], ["fixer"], [],
+             "a clause naming no role passes the decision to the next"),
+            ("round 2 agent", "You are the fixer for round 2. You are the one the verifier waits on. " + brief_f,
+             [], ["fixer"], [], "the first clause naming a role decides, not every clause"),
+            ("round 2 agent", "x" * 400 + " You are the fixer for round 2.", [], [], held,
+             "a role stated past the first 400 characters is not read")]:
+        r = session("stated-" + re.sub(r"\W+", "-", label), True, [(desc, brief, calls)])
+        ok = [s["role"] for s in r["spawns"]] == want and r["unclassified"] == want_held
+        print(("PASS" if ok else "FAIL"), f"a brief's stated role: {label}")
+        fails += not ok
+    for desc in ("Verify the preview endpoint for PR 9", "Fix unconfirmed dose parsing", "Irrefutable fix for PR 9"):
+        r = session("desc-" + re.sub(r"\W+", "-", desc), True, [(desc, brief_f, [])])
+        ok = len(r["spawns"]) == 1 and r["unclassified"] == []
+        print(("PASS" if ok else "FAIL"), f"a word that only contains 'review', 'refut' or 'confirm' is not one: {desc!r}")
+        fails += not ok
+    r = session("desc-preview-unplaced", True, [("Preview endpoint round 2", "Check the endpoint and report.", [])])
+    ok = r["spawns"] == [] and r["unclassified"] == ["Preview endpoint round 2"]
+    print(("PASS" if ok else "FAIL"), "a description that only contains 'review' and states no role is listed, not dropped")
     fails += not ok
     r = session("unrecognised", True, [("rebase PR 9 onto main", "Rebase the branch and push.", [])])
     ok = r["spawns"] == [] and r["unclassified"] == ["rebase PR 9 onto main"]
