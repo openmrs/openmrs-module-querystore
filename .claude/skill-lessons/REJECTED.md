@@ -4853,3 +4853,54 @@ PR's diff.**
 
 **Not a lesson:** #246's A/B arms and greedy-decode noise-floor finding are chartsearchai domain
 evidence.
+
+## 2026-09-28 (second window of the day: 2 run records — #240/PR549, converged 3 rounds / 2 cycles; #455/PR550, converged 2 rounds / 3 cycles) — 0 proposed, 0 applied, 0 killed; no refutation round (nothing to refute); linter 17 files, 0 findings; **no skill file changed**
+
+Step 6's pre-read comparison: `origin/main` and this store agreed on every file except `…-240.md` and
+`…-455.md` (local-only) and a `.DS_Store` (not mirrored).
+
+**Parked, new, 1 record.**
+- **A run record written through an UNQUOTED heredoc executes the record's own backticks.** #240's
+  record line 21 reads "mutate-and-restore with Your branch is up to date with 'origin/fix/240-…'." The
+  transcript (`65754a09-…jsonl`, line 402) shows `cat >> …-240.md <<EOF`, left unquoted so that `$T`
+  (the transcript path) would expand, around the text `` `git checkout --` ``. The shell RAN that
+  substitution. With no path it only printed status; a record naming `` `git checkout -- <real
+  path>` `` would have discarded work at the run's last step, silently. Measured over
+  `~/.claude/projects/*/*.jsonl`: 67 record-writing heredocs, 62 quoted, and 1 unquoted body with a
+  backtick or `$(`, which is this one. The detector was calibrated: it finds #240's known-bad call, and
+  the 62 quoted ones are the known-good class. Cost 0. **REOPEN ON:** a second record, or one where a
+  substitution changed a file or ran a command other than a status print.
+- **`--run` placed after the subcommand, in an `&&` chain.** In #455:18, `clear-await --run X` exited
+  non-zero and the chain skipped the commit that followed. Every skill example puts `--run` first
+  (harden:265, resolve-ticket:367), and the refusal names the right order, so the text is not at
+  fault. Cost: one re-issued command. **REOPEN ON:** a second record, or one where a skipped step went
+  unnoticed.
+- **A narrowly scoped Step 2 plan, with the refuter agreeing, widened by a round-1 reviewer** (#455:26,
+  the fixer implemented a two-token tightening under the target repo's ADR). Cost: 1 round. **REOPEN
+  ON:** a second record.
+
+**Parked counts advanced.**
+- **A mutation surviving because the only covering case sits in a degenerate state: 2 records**
+  (:836, #266; +#240:17, a stub baseline equal to an arm value let a hardcoded `set_gp(GP,"false")`
+  pass, 1 confirming round). The bar is met. But `harden`:52-53 ("check whether the stub standing in
+  for it can even produce the counterexample") already states the rule, so this is the
+  rule-exists-applied-late shape that :4210-4214 killed as prose. No proposal.
+- **Phase 2 escalating repeatedly on the run's own fixes: 21 records** (+#240, one substantive P2
+  escape; +#455, escalations over 3 cycles, which the run ended by deleting the enumeration claim shape
+  and stating the helper's predicate. That is `harden`'s *Don't rewrite prose faster than you verify
+  it*, applied). REOPEN unchanged.
+- **Prose the change made false, found by a fresh agent: 22 records** (+#240:18, the usage text's "the
+  defaults"; +#455:13, a residue citing issue #455 for a measurement the issue contradicts; +#455:9,
+  two falsified enumeration claims). REOPEN unchanged.
+- **`git checkout -- <path>` discarding the ORCHESTRATOR's own uncommitted work: increments only**
+  (+#240:21, cycle-2 edits recovered from a /tmp copy). The record itself says commit-before-probe was
+  not followed, so the reopen is still unmet.
+
+**Observed, no remedy owed.**
+- #240's refutation gate refuted two ticket premises by SQL and by reading the code, at 0 rounds. #455's
+  Step 2 probe caught the ticket's quoted "measured FAIL" as green on the named sha, also at 0 rounds.
+- Both runs skipped the verifier because there was no runtime surface. #240 substituted live GET-only
+  harness runs on :8081.
+
+**Not a lesson:** #240's cohort and GP-restore details and #455's `newSentence` skip predicate are
+chartsearchai domain evidence.
