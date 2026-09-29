@@ -4969,3 +4969,66 @@ genuine duplicate.
 
 **Not a lesson:** #402's substance-resolution legs and #462's readiness-stamp design are chartsearchai
 domain evidence.
+
+## 2026-09-29 (window: 5 run records — #467/PR558, converged 4 rounds / 3 cycles; #548/PR554, did-not-converge at the round-4 cap, draft, plus its driver capture; #552/PR557, converged 3 rounds / 3 cycles; #553/PR559, converged 5 rounds (cap raised) / 3 cycles; #555/PR556, converged 4 rounds / 3 cycles) — 0 proposed, 0 applied, 0 killed; no refutation round (nothing to refute); linter 17 files, 0 findings; **no skill file changed**
+
+Step 6's pre-read comparison: `origin/main` (`b09c13d`) and this store agreed on every file except the
+five `2026-09-29-…` records (local-only), one record each. `proposals/2026-09-2{7,8}-*.md` are newer
+than `LAST` and byte-identical to `origin/main`.
+
+**No lesson cleared the bar with a lever.** Two parks met their count long ago and gained records
+here. Neither REOPEN ON condition is met, so the rest below is counts.
+
+**Parked, new, 1 record each.**
+- **A BLOCKING finding naming only the PR description, at the cap** (#548: r4's one blocker was
+  `Fixes #548` → `Refs`, applied to the body, head unmoved, no round left; ended on override as draft).
+  pr-harden step 3 routes a NON-blocking body-only finding to FINISH with no round owed ("they named
+  only the PR description — no round is owed"). For a blocking one no text names a path, so it is a
+  gap and not a contradiction. Cost: the outcome, not a round. **REOPEN ON:** a second record, or one
+  where a body-only blocker before the cap spent a confirming round on an unmoved sha.
+- **Plan-refuter passes contradicting each other** (#553: pass 1's obj1 and pass 2's obj2 were
+  opposite; the run treated pass 2 as settling, and harden Phase 2 measured pass 1 right. Cost: 1
+  escalation cycle). This is a sibling of the :4088 park, a re-run after a settling objection.
+  **REOPEN ON:** a second record where a re-run's objection reverses a settled pass-1 objection.
+- **Verifier repairing a stale omod on :8081 before every run** (#548, ×3, 0 rounds). The deploying
+  party was not recorded. **REOPEN ON:** a run where the stale omod produced a wrong verdict.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 27 records** (+#467, two escalations;
+  +#548, one; +#552, two; +#553, two; +#555, Phase 2 three times for doc-only findings). Every record
+  says each escalation found a real defect, so no proposal names what would have stopped the chain
+  earlier without losing one (:3999-4000). Unchanged.
+- **Prose the change made false, found by a fresh agent: 28 records** (+#548 r3, ADR said the opposite;
+  +#552 harden P2, namedPartners javadoc/README/controller; +#553 harden P2b, README contract; +#555
+  harden P2 ×2 cycles and r2 comparable() javadoc). #467's stale class javadocs were author-found and
+  are not counted. None reached a merged head, and no mechanical lever is proposed (:4025-4026).
+  Unchanged.
+- **chartsearchai's nested `CLAUDE.md` byte budget: 10 records** (+#548, 6 bytes, raised in its own
+  commit; +#552, caught by the plan refuter before code, 1 gate re-run; +#553, words trimmed to fit).
+  #552 is the "budget check before the build" (:4002) happening unprompted at the refutation gate.
+  It is not a skill-side lever, because no rule told it to. Unchanged.
+- **harden Phase 2 run as 1-2 agents over the four lenses: 5 records** (+#553 passes 2b/2c, two agents,
+  deviation stated; transcript :1254-1255, :1287-1288). The REOPEN ON (:3774) is unmet. The merged
+  passes reviewed the incremental diffs. r1-r4's blockers were not attributed to a lens the merged
+  pass covered, and the four-lens pass 1 (:1091-1094) also missed r1's. Unchanged.
+- **`pr-harden`'s round cap raised past its default: 5 records** (+#553, 4 → 5, converged at 5). No
+  count was advanced after :2523, so instances between may be uncounted.
+- **Orphaned javadoc from an insertion** (killed P3', :2792-2804): +#548 (harden P2, cycle 1) and +#552
+  (harden P2, "6th time"). Neither transcript runs harden's awk check before Phase 2 found the orphan.
+  #548 runs it first at transcript :900, after the fix at :850. #552 sweeps at :521, after the fix at
+  :480. Neither shipped one. The REOPEN ON (ran the check or read the neighbours and STILL shipped) is
+  unmet. These are instances of the rule being skipped.
+
+**Observed, no remedy owed.**
+- `gate-state harden-set --only` rejected (#467, one retry). It is the second record after #272:15
+  (:4339). The argparse message named the accepted subcommands. harden's `harden-set` examples
+  (harden:285-291) carry no `--only`, so this is no skill-vs-gate contradiction.
+- #555 left a co-tenant run's `pr-559-r*` refs alone. That is FINISH's "Delete the run's own"
+  scoping (pr-harden:357) holding.
+- #467 calibrated its race harness with a positive control after the first one read 0/3000 on the
+  known-bad version. That is the CLAUDE.md calibration rule followed.
+- #552 and #555 re-ran the plan refuter after a settling objection, and the re-run caught a real
+  second blocker or a redesign. That is the re-run doing its job (:4089-4091, read the other way).
+
+**Not a lesson:** #467's dash-vs-bash `: >` defect and the publisher race are target-repo domain.
+Referent and wording findings in #548/#552/#553/#555 are chartsearchai domain evidence.
