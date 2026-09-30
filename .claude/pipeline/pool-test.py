@@ -3634,6 +3634,130 @@ def test_a_reset_that_has_already_passed_did_not_stop_this_run(tmp: Path) -> Non
     check("and it is spent, like any other error", entry.get("attempts") == 1, str(entry))
 
 
+# ────────────────────────────────────────────────────────────── api outage ──
+
+
+# The CLI's result text for each case, copied from the kept streams rather than written for this
+# suite: #402's first attempt (20260925T152447Z), #515's (20260924T102400Z), and a safeguard refusal.
+OUTAGE_DNS = "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)"
+OUTAGE_SILENT = ("API Error: No response from API (waited 4m, then 10m on the retry). If a proxy or "
+                 "gateway on your network holds responses until they complete, raise API_TIMEOUT_MS")
+SAFEGUARD = ("API Error: Opus 5 (1M context)'s safeguards flagged this message "
+             "(https://www.anthropic.com/legal/aup). This sometimes happens with safe, normal "
+             "conversations. ")
+
+
+def failing_then_serving_stub(path: Path, argv_log: Path, counter: Path, failures: int,
+                              result: str) -> Path:
+    """A `claude` whose first `failures` runs end on `result` as an error, and which then finishes."""
+    record = json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": result,
+                         "total_cost_usd": 1.0})
+    path.write_text(
+        "#!/bin/bash\n"
+        f'echo "$@" >> {argv_log}\n'
+        f'n=$(cat {counter} 2>/dev/null || echo 0); echo $((n+1)) > {counter}\n'
+        "echo '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\","
+        "\"text\":\"working\"}]}}'\n"
+        f'if [ "$n" -lt "{failures}" ]; then\n'
+        f"  cat <<'EOF'\n{record}\nEOF\n"
+        "  exit 1\n"
+        "fi\n"
+        "echo '{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"done\",\"total_cost_usd\":2.0}'\n")
+    path.chmod(0o755)
+    return path
+
+
+def outage_run(tmp: Path, failures: int, result: str, resumes: int = 3,
+               pause_during_wait: bool = False) -> tuple[list, dict, list[str]]:
+    """One ticket through `run_wave` over that stub: its results, its ledger row, and each argv."""
+    work, cfg, job = limit_fixture(tmp)
+    argv_log = tmp / "argv.txt"
+    stub = failing_then_serving_stub(tmp / "claude-stub", argv_log, tmp / "n", failures, result)
+    cfg = pool.merge(cfg, {"claude": {"binary": str(stub)},
+                           "ticket": {"outage_resumes": resumes,
+                                      "outage_wait_seconds": 6 if pause_during_wait else 0}})
+    say = pool.Say(tmp / "run.md")
+    base = pool.remote_head(work)
+    with isolated(tmp):
+        slots = pool.build_slots(cfg, 1, tmp / "m2")
+        if pause_during_wait:
+            # Asked once the first leg has ended and the driver is waiting — not before it starts,
+            # where the watchdog would take it and no outage would ever be seen.
+            def ask() -> None:
+                while not (tmp / "n").exists():
+                    time.sleep(0.2)
+                time.sleep(2)
+                pool.save_json(pool.PAUSE, {"asked": True})
+            threading.Thread(target=ask, daemon=True).start()
+        results = pool.run_wave([job], slots, cfg, {}, say, {str(work): base})
+        entry = pool.load_json(pool.LEDGER, {}).get("o/r#266", {})
+    argvs = argv_log.read_text().splitlines() if argv_log.exists() else []
+    return results, entry, argvs
+
+
+def resumed_id(argv: str) -> str | None:
+    m = re.search(r"--resume (\S+)", argv)
+    return m and m.group(1)
+
+
+def test_an_api_outage_resumes_the_same_session_instead_of_spending_an_attempt(tmp: Path) -> None:
+    """The whole feature: #402 and #515 each lost a first attempt to the API being unreachable.
+
+    Both were re-worked from zero by a fresh attempt, and #515 left 14 uncommitted changes behind in
+    the tree it abandoned. What must happen instead is that the SAME session continues, in the same
+    tree, inside the same attempt.
+    """
+    print("\nan API outage resumes the same session instead of spending an attempt")
+    for label, text in (("unreachable", OUTAGE_DNS), ("no response", OUTAGE_SILENT)):
+        sub = tmp / label.replace(" ", "-")
+        sub.mkdir()
+        results, entry, argvs = outage_run(sub, failures=1, result=text)
+        check(f"{label}: the session is started twice", len(argvs) == 2, str(argvs))
+        first = re.search(r"--session-id (\S+)", argvs[0]) if argvs else None
+        check(f"{label}: the second run RESUMES the first one's session id",
+              bool(first) and len(argvs) == 2 and resumed_id(argvs[1]) == first.group(1),
+              str(argvs))
+        check(f"{label}: and is told it was an outage, not an operator pause",
+              len(argvs) == 2 and "never reached the API" in argvs[1], str(argvs[-1:]))
+        check(f"{label}: the ticket does not end as an error",
+              results and results[0][1] != "error", str(results))
+        check(f"{label}: exactly one attempt is spent", entry.get("attempts") == 1, str(entry))
+        check(f"{label}: the row counts the resume", entry.get("outage_resumes") == 1, str(entry))
+        check(f"{label}: cost is the attempt's, not its last leg's",
+              entry.get("cost_usd") == 3.0, str(entry.get("cost_usd")))
+
+
+def test_a_safeguard_refusal_is_not_an_outage(tmp: Path) -> None:
+    """The negative control. A refusal also reads "API Error:", and resuming it asks the same thing."""
+    print("\na safeguard refusal is not re-entered as an outage")
+    results, entry, argvs = outage_run(tmp, failures=1, result=SAFEGUARD)
+    check("the session is started once", len(argvs) == 1, str(argvs))
+    check("and it ends as the error it is", results == [("o/r#266", "error")], str(results))
+    check("with no resume counted", entry.get("outage_resumes") == 0, str(entry))
+
+
+def test_an_outage_that_outlasts_every_resume_is_an_error(tmp: Path) -> None:
+    """Bounded: a network that never comes back ends the attempt, as it always did."""
+    print("\nan outage that outlasts every resume is still an error")
+    results, entry, argvs = outage_run(tmp, failures=9, result=OUTAGE_DNS, resumes=2)
+    check("one run plus the two resumes allowed, and no more", len(argvs) == 3, str(argvs))
+    check("then it ends as an error", results == [("o/r#266", "error")], str(results))
+    check("spending one attempt", entry.get("attempts") == 1, str(entry))
+    off, _, off_argvs = outage_run(tmp / "off", failures=1, result=OUTAGE_DNS, resumes=0)
+    check("`outage_resumes: 0` turns it off", len(off_argvs) == 1 and off == [("o/r#266", "error")],
+          f"{off} {off_argvs}")
+
+
+def test_a_pause_asked_during_the_outage_wait_is_a_pause(tmp: Path) -> None:
+    """The wait is not a place where the operator's pause goes unheard or ends the attempt."""
+    print("\na pause asked for during the outage wait suspends the ticket")
+    results, entry, argvs = outage_run(tmp, failures=1, result=OUTAGE_DNS, pause_during_wait=True)
+    check("the session is not re-entered", len(argvs) == 1, str(argvs))
+    check("the ticket reports itself paused", results == [("o/r#266", "paused")], str(results))
+    check("no attempt is spent", entry.get("attempts", 0) == 0, str(entry))
+    check("the session id is kept for `--resume`", bool(entry.get("session_id")), str(entry))
+
+
 def test_a_rejection_covered_by_overage_is_not_a_pause(tmp: Path) -> None:
     """Paid overflow is not a window that resets, so there is nothing to wait for.
 
@@ -4490,6 +4614,10 @@ def main() -> int:
                          ("limit recovered", test_a_limit_the_session_got_past_is_not_a_pause),
                          ("limit stale reset", test_a_reset_that_has_already_passed_did_not_stop_this_run),
                          ("limit overage", test_a_rejection_covered_by_overage_is_not_a_pause),
+                         ("outage resumes", test_an_api_outage_resumes_the_same_session_instead_of_spending_an_attempt),
+                         ("outage safeguard", test_a_safeguard_refusal_is_not_an_outage),
+                         ("outage cap", test_an_outage_that_outlasts_every_resume_is_an_error),
+                         ("outage pause", test_a_pause_asked_during_the_outage_wait_is_a_pause),
                          ("limit quiet watchdog", test_a_session_silent_under_a_limit_is_suspended_not_killed),
                          ("limit vs the retro", test_a_session_nothing_can_resume_is_ended_by_a_limit_not_suspended),
                          ("limit waits and resumes", test_the_driver_waits_for_the_reset_and_re_enters_the_session),

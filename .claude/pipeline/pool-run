@@ -119,9 +119,13 @@ DEFAULTS = {
     # the driver will sleep for that window to reset before handing the pause back to a human
     # (0 never waits, which is what it did before), and the margin it adds past the reset it was
     # told. Both are read in `wait_for_limit_reset`, which is where the reasoning lives.
+    # `outage_resumes` is how many times one attempt re-enters its own session after the API could
+    # not be reached, and `outage_wait_seconds` the first wait before doing so (doubled each time);
+    # see `api_outage`, which is where the reasoning lives. 0 resumes restores a fresh attempt.
     "ticket": {"timeout_seconds": 28800, "max_attempts": 2, "quiet_seconds": 5400,
                "limit_wait_max_seconds": 21600, "limit_wait_jitter_seconds": 90,
-               "limit_continue_work": True, "limit_probe_seconds": 120},
+               "limit_continue_work": True, "limit_probe_seconds": 120,
+               "outage_resumes": 3, "outage_wait_seconds": 300},
     # `remote_control` applies to `--work` only: it is a flag on an INTERACTIVE session, so it means
     # nothing to the headless driver. The name is per ticket rather than per host, because the point
     # of monitoring two sessions from a phone is being able to tell which is which.
@@ -2836,6 +2840,34 @@ RESUME_PROMPT = (
     "confirm where that was."
 )
 
+# What a session is told when the driver re-enters it after the API could not be reached. The
+# session did not choose to stop, so it says what happened and rules out the wrong reading: that the
+# work was judged, or that anything on disk moved while it was away.
+OUTAGE_PROMPT = (
+    "Your previous request never reached the API (a network or API outage), so the pool driver has "
+    "resumed this session. Nothing was cancelled and nothing has changed underneath you: this is the "
+    "same session, the same working tree and the same branch. Continue the /resolve-ticket run for "
+    "{url} exactly where you stopped. Do not start the skill again and do not repeat work you have "
+    "already done — pick up from your last step, re-reading state from disk if you need to confirm "
+    "where that was."
+)
+
+# The CLI's own wording for a request that never got an answer, as it ends a `-p` run. Only these:
+# they are the two every kept stream shows (#402 at 32 min, #515 at 44 min, 2026-09-24/25), and each
+# cost a fresh attempt from zero. A safeguard refusal also reads "API Error:", and must NOT match —
+# re-entering it asks the same flagged question again — which is why this is not "API Error" alone.
+API_OUTAGE = re.compile(r"API Error: (?:Can't reach the API server|No response from API)")
+
+
+def api_outage(run: dict) -> bool:
+    """Whether the session ended because the API could not be reached, and nothing else ended it.
+
+    A kill or a pause already decided what this run is; an outage is only the reading of a run that
+    ENDED on its own with an error, and whose last words are the CLI's outage message.
+    """
+    return (not run.get("killed_for") and not run.get("paused_for") and bool(run.get("is_error"))
+            and bool(API_OUTAGE.search(run.get("summary") or "")))
+
 
 # What a `--work` session is told when the window it was stopped by reopens. Addressed to a
 # conversation that was never killed — it has been sitting at the limit notice with everything
@@ -3120,7 +3152,7 @@ def write_ledger(ledger: dict, key: str, entry: dict) -> None:
 # in the list: the ledger's memory of a previous attempt's PR is what stops a second run opening a
 # second PR for one issue.
 RUN_FIELDS = ("duration_s", "turns", "cost_usd", "session_id", "stream", "killed_for",
-              "paused_for", "resume_at",
+              "paused_for", "resume_at", "outage_resumes",
               "slot", "standalone", "worktree", "worktree_release", "record")
 
 
@@ -3330,6 +3362,36 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
         run = Session(prompt, wt, cfg, stem,
                       cfg["ticket"]["timeout_seconds"], cfg["ticket"]["quiet_seconds"], say,
                       env=slot.env(), resume=resume.get("session_id")).run()
+        # An outage is the middle of an attempt, like a pause, but one nobody has to come back for:
+        # the session is re-entered here, in the same tree, under the same id. Every resume shares
+        # the one ticket timeout, and the run below is the sum of them, so the ledger reads the
+        # attempt and not its last leg.
+        outages, total = 0, dict(run)
+        while (api_outage(run) and outages < cfg["ticket"].get("outage_resumes", 0)
+               and (left := cfg["ticket"]["timeout_seconds"] - total["seconds"]) > 60):
+            outages += 1
+            wait = cfg["ticket"].get("outage_wait_seconds", 0) * 2 ** (outages - 1)
+            say(f"! the API could not be reached ({run['summary'].strip()[:120]}). Re-entering "
+                f"session {run['session_id']} in {hms(wait)} — outage resume {outages} of "
+                f"{cfg['ticket']['outage_resumes']}, no attempt spent")
+            until = now() + wait
+            # A pause asked for during the wait takes the pause's route: the session is exactly as
+            # resumable as it would have been had the watchdog stopped it.
+            while now() < until and not pause_requested():
+                time.sleep(min(5, max(0, until - now())))
+            if pause_requested():
+                total["paused_for"] = "the operator asked for a pause"
+                break
+            stem = LOGS / safe_component(
+                f"{utc_stamp()}-{key.replace('/', '_').replace('#', '-')}")
+            run = Session(OUTAGE_PROMPT.format(url=job["url"]), wt, cfg, stem, left,
+                          cfg["ticket"]["quiet_seconds"], say, env=slot.env(),
+                          resume=run["session_id"]).run()
+            costs = [c for c in (total.get("cost_usd"), run.get("cost_usd")) if c is not None]
+            total = {**run, "seconds": total["seconds"] + run["seconds"],
+                     "turns": total["turns"] + run["turns"],
+                     "cost_usd": sum(costs) if costs else None, "outage_resumes": outages}
+        run = total
 
     # A pause is the middle of an attempt, so nothing that closes one out runs: no `gh pr list`, no
     # record (a record counts towards the retro threshold, and this run has not finished to be
@@ -3445,6 +3507,9 @@ def work_ticket(job: dict, slot: Slot, cfg: dict, ledger: dict, say_all: Say,
         "worktree_release": released,
         "flags": flags,
         "killed_for": run.get("killed_for"),
+        # How many API outages this attempt rode out in place; 0 when none. `stream` above is the
+        # last leg's, and each earlier leg's .jsonl sits beside it in the logs under the same key.
+        "outage_resumes": run.get("outage_resumes", 0),
     })
 
     verdict = {"ready": f"PR #{pr['number'] if pr else '?'} marked ready for review",

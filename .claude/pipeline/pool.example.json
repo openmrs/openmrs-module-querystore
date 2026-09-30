@@ -16,7 +16,9 @@
     "limit_wait_max_seconds": 21600,
     "limit_wait_jitter_seconds": 90,
     "limit_continue_work": true,
-    "limit_probe_seconds": 120
+    "limit_probe_seconds": 120,
+    "outage_resumes": 3,
+    "outage_wait_seconds": 300
   },
   "claude": {
     "model": null,
