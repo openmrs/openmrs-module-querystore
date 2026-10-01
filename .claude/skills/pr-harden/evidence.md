@@ -449,6 +449,13 @@ prescription" is really one per `orderCarrying` pick, because two orders sharing
 collapse onto one partner — visible in a live chip and in no test. Read the `observed` field for what it
 contradicts as well as for what it confirms.
 
+*Added 0.38.1 — the rule it supports:* “Inside a round, neither is recorded as a blocking finding by the orchestrator”
+
+Until 0.38.1 this read "Neither is ever recorded as a blocking finding by the orchestrator", while
+FINISH, since R3-07, records "a `not-the-environment` finding on the merging head" as a blocking
+finding. R3-07 added the FINISH rule and left this sentence unscoped. The 2026-10-02 retro's refuter
+found the contradiction in the text; no run record cites it.
+
 ### COMMIT
 
 *Cut down, R3-01 — the rule it supports:* “Check the branch before you EDIT, and again before you commit.”
@@ -682,6 +689,35 @@ first. Measured after the move, in #402: a compound command naming git was refus
 `gate-state --owner $PPID pr-set …` was refused (`:1376-1377`), and `echo $PPID` alone ran (`:1385`).
 Its subagents hit 12 refusals across about 1,000 tool calls, which starting in the worktree avoids.
 Parked at one record 2026-09-24 (`REJECTED.md`, REOPEN ON a second record); reopened by #402.
+
+*Added 0.38.1 — the rule it supports:* “Its isolation guard then refuses what it cannot verify, git or not”
+
+0.38.0 said the guard "refuses a compound command that runs git", and that was wrong both ways.
+Measured 2026-10-02 over every Bash call inside the five `EnterWorktree` windows in the store: #562
+(`111381c1…` from L944), #564's session (`12e2feb4…` L295-1682, its L1657 exit having failed, and
+L3255-4152, a later #567 run), #402
+(`c3fd0664…` from L1356) and #527 (`ebc78818…` from L119). Compound commands that ran git passed 118
+times and were refused 7. Compound commands that ran none were refused 25 times and passed 305: #562's
+L1183, a heredoc into python editing docs, and L1411, an `lsof`/`kill` chain, are two. All 37
+refusals carry the guard's own predicate — "too complex to verify", "cannot be shown not to be git" or
+"can't be verified" — and 30 say "Split it into plain, separate commands"; 5 say "Run the plain
+command" and 2 "Run git directly with literal arguments", both of them over a `grep` with a
+directory argument named `eval`, which the guard read as an `eval` call (#527 L421, L425). A plain
+`python3` or `bash` script run by absolute path ran 32 times and was refused 0. None of the 32 ran
+git, so this does not show whether the guard reads inside a script; keeping a script's git in the
+worktree is its author's job either way. An unchained `gate-state --owner $PPID …` was refused
+twice (#402 L1376, #527 L667). Method: a refusal is a result carrying "This session is isolated in the
+worktree", and "runs git" is a `git` command word outside heredoc bodies. Calibrated on #402 L1371 (git,
+refused), #562 L1075 (git, passed) and #562 L1153 (a heredoc followed by `git diff`, passed), after a
+first draft also counted a heredoc that only mentioned git. The two records carry the cost, #562:23 as "repeated
+re-issues" and #564:19 as "several retries". 19 of their 23 refusals came before Step 9 loaded `pr-harden`, so
+`resolve-ticket` Step 1 carries the same sentences.
+
+*Pruned 0.38.1:* “`--owner $PPID` is this session's own claude process, which is how both gates tell
+your entry from one a co-located session left in the same directory.” The `owner` paragraph now says
+each gate allows the stop on the pid in its own entry, and the two gates' owner logic is the same code
+(the `OWNER_PID` block in `pr-harden-gate.sh` and in `harden-cycle-gate.sh`), so the sentence restated it. The
+2026-09-28 retro killed this prune while that paragraph said "the gate" (`REJECTED.md`).
 
 *Cut down, R4-02 — the rule it supports:* “A missing `reviewed-sha` or `verified-sha` call is the difference between a checked handover”
 

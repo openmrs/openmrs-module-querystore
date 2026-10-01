@@ -8,9 +8,9 @@
       "why": "Steps 2, 4 and 6 now name the `raises` entry, the `--against` run that holds it, and that a new file's budget rises from 0, which the linter and pool-run both check"
     },
     "pr-harden": {
-      "from": 9403,
-      "to": 9503,
-      "why": "the Stop gate runs in the session's cwd, so an attended session launched in another checkout must start in, or EnterWorktree into, the working tree before its first gate-state write, and must pass --owner a literal pid under the isolation guard; seen in #527 and #402 (parked 2026-09-24 at one record, reopened by the second), with the fail-open anticipated from the gate's KEY line and not observed"
+      "from": 9503,
+      "to": 9506,
+      "why": "State's sentence on the EnterWorktree isolation guard said it refuses a compound command that runs git, which four transcripts measured wrong both ways; it now says the guard refuses what it cannot verify, git or not, that a script run by absolute path passes, and that $PPID is refused even unchained (+23, records #562 and #564). Section 6's 'Neither is ever recorded as a blocking finding' is scoped to inside a round so it stops contradicting FINISH (+2), and the owner paragraph names each gate's own entry (+4), which makes the --owner $PPID sentence after the pr-set example a restatement, pruned (-26)"
     },
     "pr-harden/fixer.md": {
       "from": 1101,
@@ -28,22 +28,22 @@
       "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     },
     "resolve-ticket": {
-      "from": 6749,
-      "to": 6778,
-      "why": "the Stop gate runs in the session's cwd, so an attended session launched in another checkout must start in, or EnterWorktree into, the working tree before its first gate-state write, and must pass --owner a literal pid under the isolation guard; seen in #527 and #402 (parked 2026-09-24 at one record, reopened by the second), with the fail-open anticipated from the gate's KEY line and not observed"
+      "from": 6778,
+      "to": 6832,
+      "why": "Step 1 carries the isolation guard's refusal rule and its remedies itself, not only a pointer to pr-harden's State: in #562 and #564, 19 of the two runs' 23 refusals came before Step 9 loaded pr-harden, so the pointer's target was not in context when the guard refused"
     }
   },
   "words": {
     "harden": 7403,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 9503,
+    "pr-harden": 9506,
     "pr-harden/fixer.md": 1102,
     "pr-harden/reviewer.md": 510,
     "pr-harden/verifier.md": 1736,
     "pr-review": 7775,
     "pr-review/posting.md": 1804,
-    "resolve-ticket": 6778,
+    "resolve-ticket": 6832,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2532,
     "ticket-pool": 5084,

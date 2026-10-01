@@ -5032,3 +5032,124 @@ here. Neither REOPEN ON condition is met, so the rest below is counts.
 
 **Not a lesson:** #467's dash-vs-bash `: >` defect and the publisher race are target-repo domain.
 Referent and wording findings in #548/#552/#553/#555 are chartsearchai domain evidence.
+
+## 2026-10-02 (window: 4 records over 3 tickets — #560/PR561, pool-launched resolve-ticket and its appended pr-harden record, converged 2 rounds / 5 harden cycles; #562/PR563, attended, converged 3 rounds / 2 cycles; #564/PR565, attended, converged 2 rounds / 1 cycle) — 4 proposed, 3 applied (P2 and P3 after revision, P4 as a correction the gate found), 1 parked by the gate (P1); two refutation rounds, the second over the staged diff; linter 17 files, 0 findings; **pr-harden 0.38.1, resolve-ticket 0.24.1**
+
+Step 6's pre-read comparison: `origin/main` (`5943ef9`) and this store agreed on all 284 shared files,
+and on all 43 governance files. The three records were local-only. Proposals and both gate replies are
+in `proposals/2026-10-02-window-560-562-564.md`.
+
+**APPLIED after revision · pr-harden 0.38.1 *State* and resolve-ticket 0.24.1 Step 1: the isolation
+guard refuses what it cannot verify, git or not.**
+- Bar (a): #562:23 and #564:19. Two tickets and two sessions, both after 0.38.0 told an attended run to
+  `EnterWorktree`.
+- Measured over the five `EnterWorktree` windows in the store, in four sessions (#562, #564's session
+  with two, #402, #527).
+  Compound commands that ran git: 118 passed, 7 refused. Those that ran none: 305 passed, 25 refused.
+  Scripts run by absolute path: 32, none refused. An unchained `$PPID` gate-state line was refused
+  twice. All 37 refusals use the guard's own verifiability wording: 30 say "split", 5 "the plain
+  command", and 2 "git with literal arguments".
+- The gate's blocking objection, settled by re-measurement. In *State* alone the text could not have
+  reached 19 of the two records' 23 refusals, because those came before Step 9 loaded `pr-harden`.
+  #527 had 7 of 7 before. So resolve-ticket Step 1 now carries the same sentences, not only the 0.24.0
+  pointer.
+- Also applied from the gate: its wording ("do as its message says"), the script's git being its
+  author's to keep in the worktree, and its fourth window (#527).
+- Pruned: "a compound command that runs git" and "split the git commands".
+- Round 2, over the staged diff, settled one blocking objection. The evidence entry had said why
+  scripts pass ("the guard does not read inside it"), which the 32/0 figure cannot show, because none
+  of the 32 scripts ran git. The entry now says only that. Round 2 also made three wording fixes: five
+  windows, not four; both `eval` greps, not one; and "`EnterWorktree`'s" for resolve-ticket's
+  antecedent.
+
+**APPLIED · pr-harden 0.38.1 *State*: prune (b) of 2026-09-28, on its own REOPEN ON (:4934).**
+- The `owner` paragraph now says each gate allows the stop on the pid in its own entry.
+- The two gates' owner logic is the same code: `pr-harden-gate.sh`:208-222 and
+  `harden-cycle-gate.sh`:177-191.
+- So the "`--owner $PPID` … both gates" sentence was a restatement and is gone (−26 words).
+
+**APPLIED as a correction · pr-harden 0.38.1 *6 — VERIFY*: "Inside a round, neither is recorded as a
+blocking finding by the orchestrator".**
+- Bar (c), found by the round-1 gate and by no record.
+- :325 said "Neither is ever recorded as a blocking finding by the orchestrator". FINISH records "a
+  `not-the-environment` finding on the merging head" as blocking.
+- R3-07 added FINISH's rule and left :325 unscoped.
+
+**PARKED by the gate · P1: `verifier.md`'s `classification` has no value for a clean run.**
+- Died as a contradiction. FINISH and the gate key on a `not-the-environment` FINDING, not on the
+  label.
+  - #562's own orchestrator called its label a mislabel (`111381c1…` L2546), and #527's read one the
+    same way (`ebc78818…` L3073).
+  - A gap, as :4986-4987 ruled on a similar case.
+- **The proposer's own measurement was wrong, and that is the part worth keeping.**
+  - Its extractor looked for `verdict` only within 4000 characters of `classification`, and dropped
+    the rest silently.
+  - Calibrated on short synthetic reports only, it found 36 reports where there are 85.
+- Re-measured with round 1's JSON-parsing `scan_cls2.py` (re-run, exit 0, stderr empty): 85 reports.
+  - 41 carry `not-the-environment`: 40 of the 84 that say `works at runtime`, plus one that could not
+    determine.
+  - Of the 84 that say `works at runtime`, 43 list no repairs: 32 say `not-the-environment`, 10
+    `repaired`, and 1 has a free-text label.
+  - Of the 41, 36 were followed by a `verified-sha` write. In 14 of those the write sat in the same
+    command as a phase move carrying the previous reviewer's count, as *State* says to leave it.
+  - The other 5 show neither within 15 Bash calls. None was recorded as blocking.
+- A revival must not define the label as any defect of the artifact. FINISH sends non-blocking
+  verifier observations to the PR body, and #560's round-1 verifier set the label beside one
+  (`5d25fc45…` L1283; 560.md:21). A new schema value is arguably a minor bump.
+- **REOPEN ON:** an orchestrator recording a blocking finding, or running a round, because of a clean
+  run's label; or a second record.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 29 records** (+#560, four in a row; +#562,
+  one). #560's chain ended at cycle 5 on `harden`:240-245's *a change in the KIND of question*, so this
+  is the rule applied late. REOPEN unchanged.
+- **Prose the change made false, found by a fresh agent: 30 records.**
+  - +#562: four in harden P1 and P2, and r2's Decisions 118/119 "ships off", which cost 1 round.
+  - +#564: gate r2's comment, and pr r1's javadoc, which cost 1 round.
+  - None reached a merged head. REOPEN unchanged.
+- **main moving under a run: 9 records** (+#560, ADR 126 → 127 before round 1, by pr-harden's base
+  check as written). REOPEN unchanged.
+- **chartsearchai's nested `CLAUDE.md` byte budget: 11 records** (+#560: a refuter's instruction-file
+  bullet declined at 6 and 23 bytes of headroom). This is the first record where the cost is a rule
+  never written there at all. Target-repo property. REOPEN unchanged.
+- **Verifier repairing a stale omod on :8081: 2 records** (+#560). The operator asked for each verified
+  build to stay deployed on :8081, which is why the next run finds one. REOPEN unchanged: no wrong
+  verdict.
+- **Two rigs sharing llama-server port 18085: 2 records** (+#562). The operator's :8081 rig returned
+  500s until another session moved it to 18081. The cost was an outage, not a round, so the REOPEN ON
+  at :3531 is unmet.
+- **`closingIssuesReferences` changing after a post-edit read: 2 records.**
+  - #515 went green, then red. +#564 went red, then green: `[]` from create to ready, under bodies that
+    both opened `Fixes #564`, then `[564]` at merge, which closed #564.
+  - The REOPEN ON at :4405-4406 names a green read. #564's read was red.
+  - Its candidate guard, a re-read at FINISH, would have read `[]` again 19 s after the re-save. Cause
+    not established.
+
+**Parked, new, 1 record each.**
+- **A pre-registered gate the control arm already failed** (#562: "exit 0" could not be met, because
+  the OFF arm exits 3, and the refuter caught the relaxation). The CLAUDE.md calibration rule covers
+  it. **REOPEN ON:** a second record.
+- **A plan undercounting the pins a change reddens** (#562: a "two-line change" turned 13 classes red;
+  #564: "two pins" turned nine red). That is two records at 0 rounds and one gate re-run, with no lever.
+  **REOPEN ON:** one that cost a round.
+- **`verified-sha` recorded off the orchestrator's own live check, with no verifier subagent spawned**
+  (#564, `12e2feb4…` L1499-1523; the record says "author-run").
+  - The check was of a pre-polish build, carried to the head by a calibrated `javap` comparison.
+  - pr-harden's verifier is "a fresh subagent".
+  - **REOPEN ON:** a second record, or one where the carried check was wrong.
+- **A default flip moved existing tests off the path they pinned** (#562 r1, 1 round). **REOPEN ON:** a
+  second record.
+
+**Observed, no remedy owed.**
+- **Transcript paths that moved after the record named them.**
+  - #562, #564 and #402's 2026-09-28 record each name a worktree project folder. At write time the uuid
+    glob printed exactly that folder (#562 L2575, #564 L1575).
+  - The file now sits under the session's starting folder, and the worktree folder is gone.
+  - The uuid glob resolves it, as with #305's scratchpad (:4611).
+  - :4570's "#527 named the worktree it had moved into" fits the same move, and was not re-checked.
+- #564's Step 8 check read `[]`, and the run reported that as unresolved rather than rewording a body
+  that was already correct.
+- #560's and #564's refuters each refuted a ticket or plan premise, at 0 rounds.
+
+**Not a lesson:** #560's exemption design, #562's A/B arms and Decision 131, and #564's tail-partner
+arrangement are chartsearchai domain evidence.

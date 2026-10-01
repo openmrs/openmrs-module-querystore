@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.24.0
+version: 0.24.1
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -178,6 +178,10 @@ remaining steps, rather than telling you to spawn a reviewer for code that does 
 
 Attended from another checkout, start in the working tree or `EnterWorktree` into it before this
 write — the cwd is the working tree (table above); `pr-harden`'s **State** says why.
+`EnterWorktree`'s isolation guard then refuses what it cannot verify, git or not: do as its message
+says, or run the steps as a script by absolute path, whose git must still target this worktree. It
+refuses `$PPID` on a `gate-state` line even unchained, so run `echo $PPID` alone and pass that pid
+to `--owner`.
 
 `gate-state` is the only writer of either state file — it holds a lock across both and writes
 atomically, which an inline read-modify-write cannot, and under a parallel pool cannot safely be

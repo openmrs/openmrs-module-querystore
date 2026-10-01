@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.38.0
+version: 0.38.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -322,9 +322,9 @@ one. FINISH's own check and the Stop gate both read the last entry of that list 
 handed over, so a verifier run that goes unrecorded reads as no verifier run at all.
 
 `classification: "not-the-environment"` is a verification result and a candidate finding for the next
-reviewer. `"unrepairable"` aborts the run. Neither is ever recorded as a blocking finding by the
-orchestrator: **an environmental failure is not a review finding**, and if the loop is allowed to
-treat one as blocking it will grind rounds against a broken standalone until the cap.
+reviewer. `"unrepairable"` aborts the run. Inside a round, neither is recorded as a blocking finding
+by the orchestrator: **an environmental failure is not a review finding**, and if the loop is allowed
+to treat one as blocking it will grind rounds against a broken standalone until the cap.
 
 ### COMMIT
 
@@ -546,8 +546,10 @@ two disagree wherever a path component is a symlink (`/tmp` on macOS, a symlinke
 another checkout lands under the worktree's path, and the gate looks under the session's, where there
 is none — the same fail-OPEN, anticipated from `KEY="$(pwd -P)"` and not yet observed. So start the
 session in the worktree; if it is already running elsewhere, `EnterWorktree` into it before the
-opening entry. Its isolation guard then refuses a compound command that runs git, and `$PPID` on a
-`gate-state` line: split the git commands, run `echo $PPID` alone, and pass that pid to `--owner`.
+opening entry. Its isolation guard then refuses what it cannot verify, git or not: do as its message
+says, or run the steps as a script by absolute path, whose git must still target this worktree. It
+refuses `$PPID` on a `gate-state` line even unchained, so run `echo $PPID` alone and pass that pid to
+`--owner`.
 
 **Under `$HOME`, never in the repo** — an in-repo file would show up in the `git status --porcelain`
 the round measures, and would be swept into the round's own commit.
@@ -578,9 +580,9 @@ one.
 **`owner` is what tells your entry from somebody else's, and it is not the unattended marker's job.**
 This file is keyed on the CHECKOUT, so a pool run and an interactive session in the same directory read
 one entry. So stamp `owner` with `$PPID`, which from a tool shell is this session's own `claude`
-process; the gate allows the stop when that pid is alive and is not an ancestor of the stopping
-session, and when it is DEAD. An UNSTAMPED entry is held to the contract, so nothing is relaxed on a
-missing field.
+process; each gate allows the stop when the pid in its own entry is alive and is not an ancestor of
+the stopping session, and when it is DEAD. An UNSTAMPED entry is held to the contract, so nothing is
+relaxed on a missing field.
 
 **`awaiting` is not optional bookkeeping — without it an unattended run cannot proceed at all.**
 Every phase here delegates to a subagent, and while a background one is outstanding the orchestrator
@@ -692,13 +694,10 @@ Write it at every transition:
 ~/.claude/pipeline/gate-state --owner $PPID pr-set --pr 93 --round 2 --phase reviewed --blocking 1
 ```
 
-`--owner $PPID` is this session's own claude process, which is how both gates tell your entry from
-one a co-located session left in the same directory. Add `--override --reason "…"` only when taking
-the labelled override. `declined`, `reviewed_shas` and `verified_shas` have their own
-subcommands — `gate-state
-declined --round 1 --id r1-2 --finding "…" --reason "…"`, `gate-state reviewed-sha 3085ff02` and
-`gate-state verified-sha 3085ff02` — so a transition write never has to restate them and cannot drop
-them.
+Add `--override --reason "…"` only when taking the labelled override. `declined`, `reviewed_shas`
+and `verified_shas` have their own subcommands — `gate-state declined --round 1 --id r1-2 --finding
+"…" --reason "…"`, `gate-state reviewed-sha 3085ff02` and `gate-state verified-sha 3085ff02` — so a
+transition write never has to restate them and cannot drop them.
 
 `gate-state` holds an exclusive `flock` across both state files and
 writes atomically. Do not retype the mechanism.

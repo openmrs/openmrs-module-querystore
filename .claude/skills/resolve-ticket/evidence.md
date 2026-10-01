@@ -82,6 +82,13 @@ atomically, which an inline read-modify-write cannot, and under a parallel pool 
 retyped: measured with 20 concurrent writers, the inline form kept 3 of 20 entries and raised nothing.
 `pr-harden`'s **State** section has the rest of the subcommands.
 
+*Added 0.24.1 — the rule it supports:* “`EnterWorktree`'s isolation guard then refuses what it cannot verify, git or not”
+
+0.24.0 put only a pointer here, to `pr-harden`'s **State**. In #562 and #564 (2026-09-29 and -30) the
+first refusal came seconds after `EnterWorktree`, at this step's first `gate-state` write, and 19 of
+the two runs' 23 refusals came before Step 9 loaded `pr-harden`, so the text the pointer named was not
+in context when the guard refused. The measurement is in `pr-harden`'s `evidence.md`, *State*, 0.38.1.
+
 ## Step 2 — Plan before code
 
 *Cut down, B-01 — the rule it supports:* “Delegate the searching only when the question is broad and of unknown shape”
