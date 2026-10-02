@@ -58,6 +58,8 @@ public class PatientProgramRecordSerializerTest {
 		assertEquals("program-uuid", doc.getMetadata().get("program_uuid"));
 		assertEquals("HIV Treatment", doc.getMetadata().get("program_name"));
 		assertEquals("2024-01-15", doc.getMetadata().get("enrollment_date"));
+		assertEquals("2024-01-15", doc.getMetadata().get("clinical_date"));
+		assertEquals("clinical_event", doc.getMetadata().get("date_kind"));
 		assertNull(doc.getMetadata().get("completion_date"));
 		assertEquals(Boolean.TRUE, doc.getMetadata().get("active"));
 		assertEquals("state-concept-uuid", doc.getMetadata().get("current_state_uuid"));

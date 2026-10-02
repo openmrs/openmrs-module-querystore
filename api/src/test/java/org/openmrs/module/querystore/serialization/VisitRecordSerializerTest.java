@@ -61,6 +61,8 @@ public class VisitRecordSerializerTest {
 		assertEquals("visit", doc.getResourceType());
 		assertEquals("visit-uuid", doc.getResourceUuid());
 		assertEquals("2025-03-15", doc.getDate().toString());
+		assertEquals("2025-03-15", doc.getMetadata().get("clinical_date"));
+		assertEquals("clinical_event", doc.getMetadata().get("date_kind"));
 		assertEquals("Visit: Outpatient at Kenyatta National Hospital."
 		        + " Indication: Routine follow-up for diabetes", doc.getText());
 		assertEquals("visit-type-uuid", doc.getMetadata().get("visit_type_uuid"));

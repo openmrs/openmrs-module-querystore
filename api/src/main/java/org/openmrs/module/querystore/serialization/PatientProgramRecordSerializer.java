@@ -10,6 +10,8 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ACTIVE;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_CLINICAL_EVENT;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_COMPLETION_DATE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CURRENT_STATE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CURRENT_STATE_UUID;
@@ -74,6 +76,17 @@ public class PatientProgramRecordSerializer extends AbstractRecordSerializer<Pat
 	protected LocalDate getDate(PatientProgram program) {
 		Date enrolled = program.getDateEnrolled();
 		return DateFormatUtil.toLocalDate(enrolled != null ? enrolled : program.getDateCreated());
+	}
+
+	@Override
+	protected LocalDate getClinicalDate(PatientProgram program) {
+		return DateFormatUtil.toLocalDate(program.getDateEnrolled());
+	}
+
+	@Override
+	protected String getDateKind(PatientProgram program) {
+		return program.getDateEnrolled() == null
+		        ? DATE_KIND_ADMINISTRATIVE : DATE_KIND_CLINICAL_EVENT;
 	}
 
 	@Override

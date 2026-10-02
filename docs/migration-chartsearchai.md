@@ -1,5 +1,9 @@
 # Migrating chartsearchai's Elasticsearch pipeline to querystore
 
+> **Status: historical and superseded.** This captures the migration assumptions that preceded the
+> current service split. ChartSearchAI is a thin OpenMRS authorization, session, persistence, and
+> streaming relay; med-agent-hub owns clinical context assembly and the clinical answer stages.
+
 Notes capturing what came out of the design discussion, for the team that takes on the migration. The architectural decisions live in [adr.md](./adr.md); this doc is the chartsearchai-specific gap analysis.
 
 ## What chartsearchai uses Elasticsearch for today

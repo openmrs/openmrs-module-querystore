@@ -66,6 +66,7 @@ import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.HealthStatus;
 import org.openmrs.module.querystore.backend.Hit;
 import org.openmrs.module.querystore.backend.MetadataCodec;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -311,12 +312,20 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public List<QueryDocument> findAllByPatient(String patientUuid) {
+		return findPatientChart(patientUuid).getDocuments();
+	}
+
+	@Override
+	public PatientChartRead findPatientChart(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		Set<String> indexNames = allIndexNames();
-		if (indexNames.isEmpty()) {
-			return Collections.emptyList();
+		// An index the enumerator found but could not open never enters indexNames, so the
+		// per-index loop below cannot see it; only the enumerator knows it was dropped.
+		boolean incomplete = !schemaManager.skippedIndexNames().isEmpty();
+		if (indexNames.isEmpty() && !incomplete) {
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		TermQuery patientQuery = new TermQuery(new Term(LuceneFieldNames.PATIENT_UUID, patientUuid));
 		List<QueryDocument> all = new ArrayList<>();
@@ -326,15 +335,12 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 				collectAllByPatient(resourceType, patientQuery, all);
 			}
 			catch (IOException e) {
-				// One index failing should not strand the LLM caller — partial chart beats throwing.
-				// Mirrors the per-table tolerance in MysqlBackendStore.findAllByPatient and the
-				// per-index tolerance in existsByPatient: missing data converges to indexing on the
-				// next probe rather than poisoning the read path.
+				incomplete = true;
 				log.warn("findAllByPatient probe failed for " + indexName, e);
 			}
 		}
 		all.sort(BackendDocs.CHART_ORDER);
-		return all;
+		return new PatientChartRead(all, incomplete);
 	}
 
 	// Fields the chart consumer actually reads. EMBEDDING_STORED is deliberately excluded — the
@@ -356,7 +362,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 		CHART_LOAD_FIELDS = Collections.unmodifiableSet(fields);
 	}
 
-	private void collectAllByPatient(String resourceType, TermQuery patientQuery,
+	protected void collectAllByPatient(String resourceType, TermQuery patientQuery,
 	        List<QueryDocument> sink) throws IOException {
 		IndexWriter writer = schemaManager.ensureWriter(resourceType);
 		try (DirectoryReader reader = DirectoryReader.open(writer)) {

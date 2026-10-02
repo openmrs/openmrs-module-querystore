@@ -14,6 +14,9 @@ import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,9 +35,12 @@ import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.DriftReport;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
  * Guards the controller's {@code @ExceptionHandler} mapping: a thrown exception must surface as a
@@ -88,6 +94,32 @@ public class QueryStoreRestControllerTest {
 	}
 
 	@Test
+	public void handleMalformedQueryParameter_shouldReturn400() {
+		ResponseEntity<Object> response = controller.handleBadParameter(
+		        new TypeMismatchException("abc", Integer.class));
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertEquals("Malformed request parameter", errorOf(response));
+	}
+
+	@Test
+	public void malformedTypedParameters_shouldRouteThroughTheHttpExceptionHandler() throws Exception {
+		MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+		String[][] malformed = {
+		        { "limit", "abc" },
+		        { "startIndex", "1e9" },
+		        { "temporal", "yesplease" },
+		        { "interpret", "yesplease" }
+		};
+		for (String[] parameter : malformed) {
+			mvc.perform(get("/rest/v1/querystore/patientrecord")
+			        .param("patient", "patient-uuid")
+			        .param(parameter[0], parameter[1]))
+			        .andExpect(status().isBadRequest())
+			        .andExpect(content().string("{\"error\":\"Malformed request parameter\"}"));
+		}
+	}
+
+	@Test
 	public void handleUnexpected_shouldReturnCleanInternalServerError() {
 		ResponseEntity<Object> response = controller.handleUnexpected(new RuntimeException("sensitive detail"));
 		assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
@@ -109,6 +141,23 @@ public class QueryStoreRestControllerTest {
 		assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
 		assertEquals("scope:all must trigger exactly one global bootstrap launch", 1, launcher.launches);
 		assertEquals(Boolean.TRUE, ((Map<?, ?>) response.getBody()).get("accepted"));
+	}
+
+	@Test
+	public void contextOnlyParameters_requireContextModeThroughHttp() throws Exception {
+		authenticate();
+		QueryStoreService queryStore = mock(QueryStoreService.class);
+		when(queryStore.search("medications", 50)).thenReturn(Collections.<QueryDocument>emptyList());
+		controller.setQueryStoreService(queryStore);
+		controller.setMaximumPageSize(Integer.valueOf(100));
+		MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+		String[][] parameters = { { "types", "drug_order" }, { "temporal", "false" }, { "interpret", "true" } };
+		for (String[] parameter : parameters) {
+			mvc.perform(get("/rest/v1/querystore/patientrecord")
+			        .param("q", "medications").param(parameter[0], parameter[1]))
+			        .andExpect(status().isBadRequest())
+			        .andExpect(content().string("{\"error\":\"types, temporal and interpret require mode=context\"}"));
+		}
 	}
 
 	@Test

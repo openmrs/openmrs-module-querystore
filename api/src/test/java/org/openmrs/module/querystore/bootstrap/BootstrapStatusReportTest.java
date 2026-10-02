@@ -63,6 +63,21 @@ public class BootstrapStatusReportTest {
 	}
 
 	@Test
+	public void from_shouldReportIncompleteWhenAnExpectedTypeHasNoProgressRow() {
+		List<BootstrapProgress> rows = Collections.singletonList(
+		        row("obs", BootstrapStatus.COMPLETED, 278396, null));
+
+		BootstrapStatusReport report = BootstrapStatusReport.from(rows,
+		        java.util.Arrays.asList("obs", "condition"));
+
+		assertFalse("an interrupted bootstrap must not hide a type it never started", report.isComplete());
+		assertEquals("the report must identify the missing type, not just return an unexplained false",
+		        2, report.getTypes().size());
+		assertEquals("condition", report.getTypes().get(1).getResourceType());
+		assertEquals("NOT_STARTED", report.getTypes().get(1).getStatus());
+	}
+
+	@Test
 	public void from_shouldReportIncompleteAndSurfaceFailureWhenATypeFailed() {
 		List<BootstrapProgress> rows = new ArrayList<BootstrapProgress>();
 		rows.add(row("obs", BootstrapStatus.COMPLETED, 278396, null));
