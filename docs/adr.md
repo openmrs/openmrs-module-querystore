@@ -1468,8 +1468,11 @@ questions. Query normalization is retrieval quality, which this module owns.
    `temporal`. The REST twin exposes `interpret=true`. Explicit caller parameters remain fully
    supported — interpretation is opt-in, additive, and overridable.
 2. **The slice's similarity leg preprocesses the question server-side** (lab-panel abbreviation
-   expansion only) — always, idempotently, so a caller that still preprocesses loses nothing and a caller that sends
-   the raw question gets the same retrieval text. Stopword stripping has been explicitly removed: it destroys the grammatical context required by `multilingual-e5`'s self-attention (Decision 8) and is unnecessary for BM25 (which applies IDF naturally).
+   expansion only) — always and idempotently for callers that already expand panels. A caller
+   sending the raw question gets the same expanded retrieval text. Clients must not strip
+   stopwords: QueryStore cannot restore text removed before the request. Stopword stripping
+   has been explicitly removed: it destroys the grammatical context required by
+   `multilingual-e5`'s self-attention (Decision 8) and is unnecessary for BM25 (which applies IDF naturally).
 3. **`ContextSlice` traces the effective interpretation** (`effectiveTypes`, `temporalApplied`)
    so consumers can log and audit what the selection actually used. The REST envelope repeats
    those fields on every page together with `sliceId`, `chartSize`, and `chartTruncated`.

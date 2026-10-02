@@ -9,7 +9,9 @@
  */
 package org.openmrs.module.querystore.events;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.openmrs.BaseOpenmrsData;
 import org.openmrs.api.context.Context;
@@ -50,6 +52,16 @@ public class SerializerRegistry {
 			}
 		}
 		return null;
+	}
+
+	/** All indexed types, including module serializers with no historical bootstrapper. */
+	@SuppressWarnings("rawtypes")
+	public Set<String> getResourceTypeNames() {
+		Set<String> names = new HashSet<String>();
+		for (ClinicalRecordSerializer serializer : serializers()) {
+			names.add(serializer.getResourceType());
+		}
+		return names;
 	}
 
 	@SuppressWarnings("rawtypes")

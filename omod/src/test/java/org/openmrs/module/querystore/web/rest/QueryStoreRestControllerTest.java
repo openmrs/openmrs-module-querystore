@@ -144,6 +144,23 @@ public class QueryStoreRestControllerTest {
 	}
 
 	@Test
+	public void contextOnlyParameters_requireContextModeThroughHttp() throws Exception {
+		authenticate();
+		QueryStoreService queryStore = mock(QueryStoreService.class);
+		when(queryStore.search("medications", 50)).thenReturn(Collections.<QueryDocument>emptyList());
+		controller.setQueryStoreService(queryStore);
+		controller.setMaximumPageSize(Integer.valueOf(100));
+		MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+		String[][] parameters = { { "types", "drug_order" }, { "temporal", "false" }, { "interpret", "true" } };
+		for (String[] parameter : parameters) {
+			mvc.perform(get("/rest/v1/querystore/patientrecord")
+			        .param("q", "medications").param(parameter[0], parameter[1]))
+			        .andExpect(status().isBadRequest())
+			        .andExpect(content().string("{\"error\":\"types, temporal and interpret require mode=context\"}"));
+		}
+	}
+
+	@Test
 	public void reindex_returns503_whenScopeAllButDaemonTokenUnavailable() {
 		authenticate();
 		// launchAsync returns false when no daemon token is wired — the server cannot start the

@@ -35,7 +35,9 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 - **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`. A `limit` above the
   configured absolute maximum (`webservices.rest.maxResultsAbsolute`, default `100`) is clamped
   to that maximum silently, where framework-backed resources reject it; the response's `links`
-  carry the effective page size. A ranked read whose window (`startIndex + limit`) would extend
+  carry the effective page size. Paging links use the request's complete endpoint URL,
+  including the web application's context path, so clients can follow them directly.
+  A ranked read whose window (`startIndex + limit`) would extend
   past that maximum returns `400`, because ranked windows are not paged past the maximum result
   count.
 - **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also include
@@ -88,6 +90,10 @@ curl -s -u patient-reader:secret \
 
 **Errors:** missing `patient` and `q`, invalid paging, or malformed parameters return `400`; an
 unknown patient returns `404`; failed authentication/authorization returns `401`/`403`.
+The `types`, `temporal`, and `interpret` parameters require `mode=context`; supplying
+them on a full-chart or ranked read returns `400` instead of silently ignoring them.
+Explicit context `types` must name registered serializers; unknown names return
+`400`. Registered module types are accepted even if they have no bootstrapper.
 
 ---
 

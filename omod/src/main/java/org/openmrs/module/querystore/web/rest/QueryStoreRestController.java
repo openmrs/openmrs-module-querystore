@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.servlet.http.HttpServletRequest;
+
 import org.apache.commons.lang3.StringUtils;
 import org.openmrs.api.APIAuthenticationException;
 import org.openmrs.api.APIException;
@@ -28,6 +30,7 @@ import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
+import org.openmrs.module.querystore.events.SerializerRegistry;
 import org.openmrs.module.querystore.model.ContextSlice;
 import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
@@ -43,10 +46,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 /**
@@ -118,6 +121,7 @@ public class QueryStoreRestController {
 	@RequestMapping(value = "/patientrecord", method = RequestMethod.GET)
 	@ResponseBody
 	public ResponseEntity<Object> getPatientRecords(
+	        HttpServletRequest request,
 	        @RequestParam(value = "patient", required = false) String patient,
 	        @RequestParam(value = "q", required = false) String q,
 	        @RequestParam(value = "limit", required = false) Integer limit,
@@ -143,6 +147,9 @@ public class QueryStoreRestController {
 		if (requestedMode != null && !contextMode) {
 			return errorResponse(HttpStatus.BAD_REQUEST,
 			        "Unknown mode '" + requestedMode + "'; the only supported mode is \"context\"");
+		}
+		if (!contextMode && (types != null || temporal != null || interpret != null)) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "types, temporal and interpret require mode=context");
 		}
 		if (contextMode && patientUuid == null) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "mode=context requires a patient");
@@ -174,6 +181,14 @@ public class QueryStoreRestController {
 					}
 				}
 			}
+			if (!typeSet.isEmpty()) {
+				Set<String> knownTypes = serializerRegistry().getResourceTypeNames();
+				for (String type : typeSet) {
+					if (!knownTypes.contains(type)) {
+						return errorResponse(HttpStatus.BAD_REQUEST, "Unknown resource type '" + type + "'");
+					}
+				}
+			}
 			ContextSliceRequest sliceRequest = new ContextSliceRequest(typeSet, Boolean.TRUE.equals(temporal));
 			sliceRequest.setInterpretQuestion(Boolean.TRUE.equals(interpret));
 			ContextSlice slice = queryStoreService().getContextSlice(patientUuid, query, sliceRequest);
@@ -188,7 +203,7 @@ public class QueryStoreRestController {
 				baseParams.append("interpret=").append(interpret).append('&');
 			}
 			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size,
-			        baseParams.toString());
+			        request.getRequestURL().toString(), baseParams.toString());
 			// Question-dependent page: same private, revalidate-only caching as the full chart.
 			return ResponseEntity.ok().header("Cache-Control", "private, no-cache, must-revalidate").body((Object) sliceBody);
 		}
@@ -231,7 +246,7 @@ public class QueryStoreRestController {
 			totalCount = null;
 		}
 
-		Map<String, Object> body = PatientRecordView.page(page, ranked, from, size, totalCount,
+		Map<String, Object> body = PatientRecordView.page(request.getRequestURL().toString(), page, ranked, from, size, totalCount,
 		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete, maximum);
 		if (pageEtag != null) {
 			return ResponseEntity.ok()
@@ -244,20 +259,20 @@ public class QueryStoreRestController {
 	}
 
 	/** Convenience seam retained for existing direct controller tests. */
-	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex) {
-		return getPatientRecords(patient, q, limit, startIndex, null, null, null, null, null);
+	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex) {
+		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, null, null);
 	}
 
 	/** Convenience seam retained for existing conditional-read controller tests. */
-	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex,
+	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex,
 	        String ifNoneMatch) {
-		return getPatientRecords(patient, q, limit, startIndex, null, null, null, null, ifNoneMatch);
+		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, null, ifNoneMatch);
 	}
 
 	/** Convenience seam for the context-mode controller tests (no interpret flag). */
-	ResponseEntity<Object> getPatientRecords(String patient, String q, Integer limit, Integer startIndex,
+	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex,
 	        String mode, String types, Boolean temporal, String ifNoneMatch) {
-		return getPatientRecords(patient, q, limit, startIndex, mode, types, temporal, null, ifNoneMatch);
+		return getPatientRecords(request, patient, q, limit, startIndex, mode, types, temporal, null, ifNoneMatch);
 	}
 
 	private static boolean etagMatches(String ifNoneMatch, String pageEtag) {
@@ -457,6 +472,17 @@ public class QueryStoreRestController {
 	private BootstrapService injectedBootstrapService;
 
 	private QueryStoreService injectedQueryStoreService;
+
+	private SerializerRegistry injectedSerializerRegistry;
+
+	private SerializerRegistry serializerRegistry() {
+		return injectedSerializerRegistry != null ? injectedSerializerRegistry
+		        : Context.getRegisteredComponent("querystore.serializerRegistry", SerializerRegistry.class);
+	}
+
+	void setSerializerRegistry(SerializerRegistry registry) {
+		this.injectedSerializerRegistry = registry;
+	}
 
 	private BootstrapService bootstrapService() {
 		return injectedBootstrapService != null ? injectedBootstrapService

@@ -17,8 +17,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 
 /**
  * Server-side question interpretation and retrieval preprocessing for context slices (ADR
@@ -31,7 +29,6 @@ final class ContextQuestionInterpreter {
 	private ContextQuestionInterpreter() {
 	}
 
-	private static final Log log = LogFactory.getLog(ContextQuestionInterpreter.class);
 
 	/** The interpreted question: typed-complete resource types + whether the recency anchor applies. */
 	static final class Interpretation {
@@ -116,7 +113,7 @@ final class ContextQuestionInterpreter {
 	 * Retrieval preprocessing for the slice's similarity leg: expand lab-panel abbreviations so
 	 * both the abbreviation and the full clinical surface form reach the embedding and BM25 index.
 	 * Preserves full natural-language sentence structure for the transformer embedder and
-	 * multilingual queries. Idempotent for callers that still preprocess. Null/blank pass through unchanged.
+	 * multilingual queries. Idempotent for callers that already expand panels. Null/blank pass through unchanged.
 	 */
 	static String preprocess(String question) {
 		if (question == null || question.trim().isEmpty()) {

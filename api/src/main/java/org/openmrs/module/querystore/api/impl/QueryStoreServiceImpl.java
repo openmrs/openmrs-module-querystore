@@ -383,9 +383,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			temporal = temporal || interpreted.temporal;
 		}
 
-		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (panel
-		// expansion + stopword stripping) runs HERE, at the owner of the embedder — idempotent
-		// for callers that still preprocess. A failure degrades to the policy tiers alone —
+		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (lab-panel
+		// expansion only) runs HERE, at the owner of the embedder — idempotent for callers that
+		// already expand panels. A failure degrades to the policy tiers alone —
 		// selection must never block on the ranking layer.
 		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
 		if (StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {

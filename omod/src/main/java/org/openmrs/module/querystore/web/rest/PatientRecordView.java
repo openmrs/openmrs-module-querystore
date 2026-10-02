@@ -28,7 +28,6 @@ import java.util.TreeMap;
 
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.model.PatientChartFingerprint;
-import org.openmrs.module.webservices.rest.web.RestConstants;
 
 /**
  * Maps {@link QueryDocument}s to the {@code /querystore/patientrecord} REST response (ADR Decision 16).
@@ -70,10 +69,11 @@ final class PatientRecordView {
 	 * unknown-total page is full and the ranked window has remaining capacity. The final ranked page's
 	 * limit is reduced to that remaining capacity; a {@code prev} link is emitted when {@code startIndex > 0}.
 	 *
-	 * @param ranked whether these are q-ranked results (drives the per-row {@code rank} and the null totalCount)
+ * @param ranked whether these are q-ranked results (drives the per-row {@code rank} and the null totalCount)
+ * @param endpointUrl the request URL, including the deployment's web-application context path
 	 * @param baseParams the non-paging query params, already URL-encoded, ending in {@code &} (e.g. {@code "patient=x&q=y&"})
 	 */
-	static Map<String, Object> page(List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
+	static Map<String, Object> page(String endpointUrl, List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
 	        Integer totalCount, String baseParams, String snapshotId, Boolean chartTruncated,
 	        Boolean projectionComplete, int maximumResultWindow) {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>(docs.size());
@@ -95,7 +95,7 @@ final class PatientRecordView {
 
 		List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
 		if (startIndex > 0) {
-			links.add(link("prev", baseParams, Math.max(0, startIndex - limit), limit));
+			links.add(link("prev", endpointUrl, baseParams, Math.max(0, startIndex - limit), limit));
 		}
 		boolean canAdvance = startIndex <= Integer.MAX_VALUE - limit;
 		boolean hasNext = canAdvance && (totalCount != null
@@ -105,7 +105,7 @@ final class PatientRecordView {
 			int nextStart = startIndex + limit;
 			int nextLimit = ranked ? Math.min(limit, maximumResultWindow - nextStart) : limit;
 			if (nextLimit > 0) {
-				links.add(link("next", baseParams, nextStart, nextLimit));
+				links.add(link("next", endpointUrl, baseParams, nextStart, nextLimit));
 			}
 		}
 		if (!links.isEmpty()) {
@@ -124,11 +124,11 @@ final class PatientRecordView {
 	 */
 	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
 	        int startIndex, int limit) {
-		return contextPage(slice, startIndex, limit, null);
+		return contextPage(slice, startIndex, limit, null, null);
 	}
 
 	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
-	        int startIndex, int limit, String baseParams) {
+	        int startIndex, int limit, String endpointUrl, String baseParams) {
 		List<org.openmrs.module.querystore.model.ContextSliceRecord> all = slice.getRecords();
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
 		int pageSize = startIndex >= all.size() ? 0 : Math.min(limit, all.size() - startIndex);
@@ -156,10 +156,10 @@ final class PatientRecordView {
 		if (baseParams != null) {
 			List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
 			if (startIndex > 0) {
-				links.add(link("prev", baseParams, Math.max(0, startIndex - limit), limit));
+				links.add(link("prev", endpointUrl, baseParams, Math.max(0, startIndex - limit), limit));
 			}
 			if (startIndex <= Integer.MAX_VALUE - limit && startIndex + pageSize < all.size()) {
-				links.add(link("next", baseParams, startIndex + limit, limit));
+				links.add(link("next", endpointUrl, baseParams, startIndex + limit, limit));
 			}
 			if (!links.isEmpty()) {
 				env.put("links", links);
@@ -273,10 +273,10 @@ final class PatientRecordView {
 		return out.toString();
 	}
 
-	private static Map<String, Object> link(String rel, String baseParams, int startIndex, int limit) {
+	private static Map<String, Object> link(String rel, String endpointUrl, String baseParams, int startIndex, int limit) {
 		Map<String, Object> l = new LinkedHashMap<String, Object>();
 		l.put("rel", rel);
-		l.put("uri", "/ws/rest/" + RestConstants.VERSION_1 + "/querystore/patientrecord?" + baseParams
+		l.put("uri", endpointUrl + "?" + baseParams
 		        + "startIndex=" + startIndex + "&limit=" + limit);
 		return l;
 	}

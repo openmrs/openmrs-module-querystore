@@ -530,6 +530,14 @@ public class QueryStoreServiceImplTest {
 	// ---------- query-embedding cache ----------
 
 	@Test
+	public void chartRead_requiresExplicitProjectionCompletenessEvidence() {
+		assertFalse(new PatientChartRead(Collections.<QueryDocument>emptyList(), false).isProjectionComplete());
+		assertFalse(PatientChartRead.complete(Collections.<QueryDocument>emptyList()).isProjectionComplete());
+		assertFalse(service.getPatientChartRead(null).isProjectionComplete());
+		assertTrue(new PatientChartRead(Collections.<QueryDocument>emptyList(), false, true).isProjectionComplete());
+	}
+
+	@Test
 	public void searchByPatient_repeatedQuery_reusesCachedEmbedding() {
 		// The ONNX query encoder is the dominant cost on the prefilter path (measured 40-80 ms warm,
 		// 3-4 s cold). Same query string + same model -> reuse the float[]. A regression that drops

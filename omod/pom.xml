@@ -45,7 +45,7 @@
             <scope>provided</scope>
             <exclusions>
                 <!-- Spring MockMvc requires the Servlet 3 response contract. OpenMRS supplies the
-                     container API at runtime; tests use javax.servlet-api below. -->
+                     container API at runtime; javax.servlet-api below is provided. -->
                 <exclusion>
                     <groupId>javax.servlet</groupId>
                     <artifactId>servlet-api</artifactId>
@@ -80,7 +80,7 @@
             <groupId>javax.servlet</groupId>
             <artifactId>javax.servlet-api</artifactId>
             <version>3.1.0</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

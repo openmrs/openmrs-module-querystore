@@ -25,8 +25,9 @@ public final class PatientChartRead {
 
 	private final boolean projectionComplete;
 
+	/** A backend read cannot certify deployment-wide projection completeness. */
 	public PatientChartRead(List<QueryDocument> documents, boolean truncated) {
-		this(documents, truncated, true);
+		this(documents, truncated, false);
 	}
 
 	public PatientChartRead(List<QueryDocument> documents, boolean truncated, boolean projectionComplete) {
@@ -36,6 +37,7 @@ public final class PatientChartRead {
 		this.projectionComplete = projectionComplete;
 	}
 
+	/** An untruncated backend read; projection completeness still requires explicit evidence. */
 	public static PatientChartRead complete(List<QueryDocument> documents) {
 		return new PatientChartRead(documents, false);
 	}
