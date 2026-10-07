@@ -5153,3 +5153,127 @@ blocking finding by the orchestrator".**
 
 **Not a lesson:** #560's exemption design, #562's A/B arms and Decision 131, and #564's tail-partner
 arrangement are chartsearchai domain evidence.
+
+## 2026-10-07 (window: 3 records over 2 tickets, all from one attended session — #591, aborted at Step 1/2 as "condition 1/2", 0 rounds; #592's first run, aborted at Step 3 under condition 3, 0 rounds; #592/PR593, converged 2 rounds / 4 harden cycles, verifier ran, merged at the reviewed head `48abcf01`) — 0 proposed, 0 applied, 0 killed; no refutation round (nothing to refute); linter 17 files, 0 findings; **no skill file changed**
+
+Step 6's pre-read comparison: `origin/main` (`e12a1de`) and this store agreed on all 288 shared files,
+and on all 43 governance files (27 under `skills/`, 7 `hooks/`, `CLAUDE.md`, 3 `bin/`, 5 `pipeline/`).
+Each gate's skill copy matched its hook copy. The three records were local-only.
+
+All three records name session `9356b230…`. Its transcript is
+`~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-592/9356b230-6691-4281-ad32-2e72bb32ee1e.jsonl`
+(2026-10-02T09:02Z to 2026-10-05T11:10Z), with 19 subagent transcripts beside it. Line numbers
+below are that file's.
+
+**This is the first window under `resolve-ticket` 0.24.1 and `pr-harden` 0.38.1.**
+- The session loaded `resolve-ticket` at 2026-10-02T10:52Z (L358), after `e12a1de` was committed at
+  2026-10-01T22:52Z. That body carries the 0.24.1 sentence.
+- A loaded body carries no frontmatter (L358, L1496, L2412). So the version was dated against the
+  commit, and could not be read off the record.
+
+**No lesson cleared the bar with a lever.**
+
+**The isolation guard, measured after the 2026-10-02 fix: the rule held, and nothing is owed.**
+- Method: `artifacts/2026-10-07-isolation-guard/guard_refusals.py`, the 0.38.1 evidence entry's own
+  method.
+  - Its `--calibrate` reads the seven cases that entry names as the entry does.
+  - Over the entry's five windows it counts 37 refusals, the entry's figure. Exit 0.
+- From `EnterWorktree` (L656), the main loop made 189 Bash calls, of which 13 were refused, all 13
+  of them compound. The 19 subagents made 498 calls, of which 27 were refused.
+- Each of the 13 was followed by a call that passed, 7 of them a script run by absolute path.
+- Plain script-by-absolute-path calls: 25, none refused.
+  - Three of them (`mut2.sh`, `mut3.sh`, `mut5.sh`) ran `git checkout --` and `git status` inside the
+    worktree, which none of 0.38.1's 32 did.
+  - Their git targeted the worktree, so this still does not show whether the guard reads inside a
+    script.
+- `echo $PPID` ran alone (L640, L924), and a literal `--owner` followed it. No `$PPID` refusal, so
+  the 0.24.1 sentence held.
+- The largest class is `sed` handed a value computed at runtime: 14 of the 40, 12 of them in
+  subagents. It is not new: it was 6 of the five windows' 37 (#564's first window 4, #527 2).
+- The main-loop rate was 13 in 189 here, against 37 in 948 over the five windows. This is one
+  session, and no cause is claimed. Every refusal cost one retry. Splitting every compound call in
+  advance would cost more, since 155 of the 189 calls were compound. The rule's second clause, a
+  script, avoids the refusal outright, and was used.
+- 27 of the 40 refusals came from subagents, whose briefs carry no guard sentence.
+  - **Parked, new: guard refusals in the subagents of an `EnterWorktree` session.** Two sessions: #402
+    (12 refusals across about 1,000 tool calls, `pr-harden` evidence 0.38.0) and #592 (27 in 498
+    Bash calls).
+  - **REOPEN ON:** a refusal that cost a round or produced a wrong report.
+- #592 wrote its opening entry with `cd <worktree> && gate-state` (L643), before `EnterWorktree`
+  (L656), the reverse of Step 1's "before this write".
+  - Both calls fell in one turn, so no Stop could fire between them. #527 did the same before the
+    rule. Observed.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 30 records.** +#592, three escalations,
+  each on a real defect (`…10-05-…-592.md`:15-17). REOPEN unchanged (:3998-4000).
+- **Prose the change made false, found by a fresh agent: 31 records.** +#592, three harden quality
+  passes (`…10-05-…-592.md`:18). PR 593 merged at the reviewed head, and none of these is known to
+  have reached it. REOPEN unchanged (:4019-4026, :4671).
+- **`git checkout -- <path>` discarding the ORCHESTRATOR's own uncommitted work: increments only.**
+  +#592 (`…10-05-…-592.md`:24).
+  - The restore was a `cp` from the run's own set-aside copy, taken at L1196 and run at the end of
+    L1547. A javadoc edit had landed in between.
+  - A grep found the edit missing (L1553), and it was re-applied (L1555) before the first commit
+    (L1561).
+  - That is the mechanism that killed 2026-08-24's P1 (`cp` aside/back, :52-55), now observed. The
+    shipped `git-restore-backup.sh` does not reach a `cp`.
+  - L1547 opened with a `cmp` against that copy, which reported the difference. Its `&&` stopped
+    only the mutation, and the restore on a later line still ran.
+  - `harden` was loaded at L1496 and nothing was committed before the probe. So the reopen, an
+    incident where commit-before-probe WAS followed, is unmet.
+  - Afterwards its mutation scripts ran on a committed tree (L1892 before L1896, L2202 before L2204). From
+    `mut3.sh` (L1918) on, its mutation scripts also opened with
+    `[ -z "$(git status --porcelain)" ] || { echo "TREE NOT CLEAN"; exit 1; }`. That covers
+    `mut4.sh`, derived from it at L1925, and `mut5.sh` (L2203). The check never fired.
+    - That is commit-before-probe as a check the probe runs itself, a shape none of the killed
+      remedies has. It is a 1-record observation of a remedy, not a proposal.
+    - A rule asking for it would still be text the orchestrator must choose to follow. It would not
+      reach an inline probe like L1547's, and the loss came from one of those.
+- **harden's override taken on the ground that pr-harden covers it** (:1470, parked at 2 and never
+  advanced): **5 records**, #268:59, #337:27, #426:34, #469:21 and `…10-05-…-592.md`:23.
+  - In #592, pr-harden's r1 then raised two non-blocking findings, fixed before r2.
+  - No record shows the override losing a defect that pr-harden then missed. REOPEN unchanged.
+- **Abort condition 3 delivers nothing** (:3010): +#592's first run.
+  - The same session carried the second refuter's finding (`LlmProvider.java`:267-282) into the
+    maintainer's decision comment (2026-10-05T08:55Z) and re-ran. The re-run converged.
+  - #513's condition-3 abort (2026-09-24) was not counted by its window, and is not re-read here.
+    REOPEN unchanged.
+- **Transcript paths that moved after the record named them** (:5144), the other way round this time.
+  - #591:5 came from the `ls` the skill prescribes (L413), while the session sat in its starting
+    folder.
+  - After `EnterWorktree`, the file sits under the worktree's project folder, which outlived the
+    worktree.
+  - Neither of #592's records ran that `ls`. The first had it inside the compound command the guard
+    refused (L846). The retry dropped it, so `…10-02-…-592.md`:5 names only the session.
+  - The second (`…10-05-…-592.md`:6) names the starting folder.
+  - The uuid glob resolves all three.
+
+**Parked, new, 1 record each.**
+- **A ticket in this repo whose remedy lies in a repo this session can only read** (#591:2, :11).
+  - Condition 2's "cannot be pushed" covers it, so the abort list has no gap.
+  - Step 1's reading of #353's comment and ADR Decision 68 found it at 0 rounds.
+  - **REOPEN ON:** a second record, or one that spent code or a round first.
+- **Record headers without the skill's version**: 3 of 3 here, and 138 of the store's 150 skill-run
+  headers.
+  - The count is a regex over the first field of each `# ` line. Its 12 hits are all three-part
+    versions, and no two-part form occurs.
+  - A loaded body carries no frontmatter, so a run has its version only from the file on disk.
+  - **REOPEN ON:** a retro that attributes a record to the wrong version.
+
+**Observed, no remedy owed.**
+- #592's first-run refuters found two pass rules that a known-bad answer would pass
+  (`…10-02-…-592.md`:11, :14), at 0 rounds.
+  - That is the CLAUDE.md calibration rule, applied by the gate.
+  - It sits beside :5129, a gate the control arm already failed (too strict, where this was too lax),
+    and is not counted there.
+- #592's v2 refuter found the plan's "deleting each guard reddens a case" overstated
+  (`…10-05-…-592.md`:14). That is the opposite direction from :5132, and is not counted there.
+- The v2 refuter's count objection (substances against prescriptions) was recorded in the decision,
+  as it asked (L1392). r1 then changed the count (`…10-05-…-592.md`:19, :30). That is a design call
+  overturned in review, not a dropped objection.
+- `gate-state pr-set` without `--override` writes `override: false` (`gate-state`:389). So #592's
+  re-run (L925) re-armed the gate that its abort (L849) had released.
+
+**Not a lesson:** the KB's international drug names (#591, handed upstream), #592's composed
+sentence, its count of orders and the DDInter test excerpt are chartsearchai domain evidence.
