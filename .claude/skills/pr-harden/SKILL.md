@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.38.1
+version: 0.39.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -88,9 +88,9 @@ Refuse the run, with the reason, if any of these fails:
   PR, toward *1 — REVIEW*'s round 4; the cap stays this run's budget.
 
 Then write the opening state entry (`phase: "init"`, and `round: 1` unless you adopted an entry, whose
-`round` you keep) — see **State**. From this point the
-Stop gate will not let the turn end until the head being handed over has been reviewed with zero
-blocking findings — and verified, where any verifier ran — or the override is taken.
+`round` you keep) — see **State**. From this point the Stop gate, where it reads this entry, will not
+let the turn end until the head being handed over has been reviewed with zero blocking findings — and
+verified, where any verifier ran — or the override is taken.
 
 ## The round
 
@@ -544,12 +544,13 @@ two disagree wherever a path component is a symlink (`/tmp` on macOS, a symlinke
 
 **And the gate runs in the SESSION's cwd, which a shell `cd` does not move.** An entry written from
 another checkout lands under the worktree's path, and the gate looks under the session's, where there
-is none — the same fail-OPEN, anticipated from `KEY="$(pwd -P)"` and not yet observed. So start the
-session in the worktree; if it is already running elsewhere, `EnterWorktree` into it before the
-opening entry. Its isolation guard then refuses what it cannot verify, git or not: do as its message
-says, or run the steps as a script by absolute path, whose git must still target this worktree. It
-refuses `$PPID` on a `gate-state` line even unchained, so run `echo $PPID` alone and pass that pid to
-`--owner`.
+is none — the same fail-OPEN. So start the session in the worktree; if it is already running
+elsewhere, `EnterWorktree` into it before the opening entry. Its isolation guard then refuses what it
+cannot verify, git or not: do as its message says, or run the steps as a script by absolute path,
+whose git must still target this worktree. It refuses `$PPID` on a `gate-state` line even unchained,
+so run `echo $PPID` alone and pass that pid to `--owner`. **Where `EnterWorktree` refuses the
+checkout, the gate, run in the session's directory, reads no entry keyed on the checkout:** key each
+write `--cwd` on the checkout, and say so in the report.
 
 **Under `$HOME`, never in the repo** — an in-repo file would show up in the `git status --porcelain`
 the round measures, and would be swept into the round's own commit.

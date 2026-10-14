@@ -61,6 +61,9 @@ implemented — the thing it would track — or declined. Its brief carries hard
 - **Fix every home of a corrected claim, not the one the reviewer named** — see *Correcting a claim
   means finding every home of it*. And edit by script under the rules in *Editing by script*: assert
   before replacing, count neighbours after, verify by reading back.
+- **Run every mutation probe before the build `green` reports on.** A restore does not reach
+  `target/`, where a later probe leaves the mutant's classes and the surefire reports the orchestrator
+  spot-checks.
 
 **Declining is governed by harden's deferral rules, in full.** A declined finding needs the
 failure-mode sentence — *"if we ship without this, X breaks because Y"* — and without that sentence it

@@ -8,14 +8,14 @@
       "why": "Steps 2, 4 and 6 now name the `raises` entry, the `--against` run that holds it, and that a new file's budget rises from 0, which the linter and pool-run both check"
     },
     "pr-harden": {
-      "from": 9503,
-      "to": 9506,
-      "why": "State's sentence on the EnterWorktree isolation guard said it refuses a compound command that runs git, which four transcripts measured wrong both ways; it now says the guard refuses what it cannot verify, git or not, that a script run by absolute path passes, and that $PPID is refused even unchained (+23, records #562 and #564). Section 6's 'Neither is ever recorded as a blocking finding' is scoped to inside a round so it stops contradicting FINISH (+2), and the owner paragraph names each gate's own entry (+4), which makes the --owner $PPID sentence after the pr-set example a restatement, pruned (-26)"
+      "from": 9506,
+      "to": 9535,
+      "why": "State told a session running elsewhere to EnterWorktree into the checkout, and in #607 and PR 3787 the tool refused a checkout outside the session's git repository. State now says that there the gate, run in the session's directory, reads no entry keyed on the checkout, so each write is still keyed --cwd on the checkout and the report says so (+32), and Step 0's 'the Stop gate will not let the turn end' is scoped to where it reads the entry (+5). That is guidance, not enforcement. The paragraph's 'anticipated from KEY=\"$(pwd -P)\" and not yet observed' moves to evidence.md beside the 2026-10-14 gate measurement (-8)"
     },
     "pr-harden/fixer.md": {
-      "from": 1101,
-      "to": 1102,
-      "why": "the fixer is told to read fixer.md before it does anything else, as the verifier already was, so a compliant read is one role-file-check decides mechanically (owner's decision, 2026-09-27)"
+      "from": 1102,
+      "to": 1134,
+      "why": "the fixer runs its mutation probes before the build green reports on, because in #407 and #607 a probe run after that build left a failures=\"1\" surefire report that the orchestrator's step-5 spot-check read, each time costing a re-run"
     },
     "pr-harden/reviewer.md": {
       "from": 0,
@@ -28,22 +28,22 @@
       "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     },
     "resolve-ticket": {
-      "from": 6778,
-      "to": 6832,
-      "why": "Step 1 carries the isolation guard's refusal rule and its remedies itself, not only a pointer to pr-harden's State: in #562 and #564, 19 of the two runs' 23 refusals came before Step 9 loaded pr-harden, so the pointer's target was not in context when the guard refused"
+      "from": 6832,
+      "to": 6860,
+      "why": "Step 5: after a mutation probe, rebuild the module it compiled before anything runs the restored code from target/ or cites its reports, because in #250 and TRUNK-6826 a restored probe's mutant, still compiled in target/classes, was run: by two probe runs and by a Jetty start"
     }
   },
   "words": {
     "harden": 7403,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 9506,
-    "pr-harden/fixer.md": 1102,
+    "pr-harden": 9535,
+    "pr-harden/fixer.md": 1134,
     "pr-harden/reviewer.md": 510,
     "pr-harden/verifier.md": 1736,
     "pr-review": 7775,
     "pr-review/posting.md": 1804,
-    "resolve-ticket": 6832,
+    "resolve-ticket": 6860,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2532,
     "ticket-pool": 5084,

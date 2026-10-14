@@ -318,6 +318,26 @@ in it, and a repo-wide grep for a corrected claim will never reach it. On this l
 five files, left standing in the body because the fixer had no access and the orchestrator had edited
 that same body for something else without re-reading it.
 
+*Added 0.39.0, in `fixer.md` — the rule it supports:* “Run every mutation probe before the build `green` reports on”
+
+Two round-1 fixers ran their final root `mvn -o clean install`, then mutation probes, and reported
+that build as `green`; each time the orchestrator's step-5 spot-check found a probe's `failures="1"`
+among the surefire reports. #407/PR526 (2026-09-24, transcript `1244e489…`): the fixer's build finished
+at 12:22:10Z (`agent-a1336009…` L88-89), it committed (L98), and at 12:22:42Z it ran
+`mvn -o clean test -pl api` probes (L111); the orchestrator read `failures="1"` (main L358) and re-ran the
+root build, 0 failures (L363). PR #607 (2026-10-11, `f1b92832…`): the fixer's build (re)started at
+13:46:49Z (`agent-ad1f3257…` L241), and at 13:50:17Z a probe mutated `ChartSearchAiRestController.java`,
+ran `mvn -o test -pl omod -Dtest=ChartSearchAiHostDiagnosticsTest` and restored it (L264); the
+orchestrator found that class's report stamped 16:50:27 local against 16:49 for the rest (main
+L1090-1092) and re-ran three classes on the committed tree, 0 failures (L1096-1107). Neither cost a
+round. #607's round-2 brief put the probes before the final build, and round 2 left none
+(`…pr607.md`:21-22). Only #607's fixer read this file (`agent-ad1f3257…` L13): #407 predates it
+(`fixer.md` came with 0.36.0, 2026-09-27), and its fixer was briefed in the orchestrator's own words
+(main L342). #407's record (:19) put its residue on a `harden` Phase 2 lens; the transcript shows the
+fixer, and the lens's probes (`agent-a63c57a6…`, 11:47-11:49Z) were followed by the orchestrator's own
+root `mvn -o clean install` (main L246, 11:51-11:54Z). The 2026-09-24 retro parked it on that
+attribution (`REJECTED.md`), and #607 reopened it.
+
 ### 5 — GREEN
 
 *Cut down, R2-11 — the rule it supports:* “It is the fixer's build and the orchestrator does not re-run it”
@@ -718,6 +738,44 @@ your entry from one a co-located session left in the same directory.” The `own
 each gate allows the stop on the pid in its own entry, and the two gates' owner logic is the same code
 (the `OWNER_PID` block in `pr-harden-gate.sh` and in `harden-cycle-gate.sh`), so the sentence restated it. The
 2026-09-28 retro killed this prune while that paragraph said "the gate" (`REJECTED.md`).
+
+*Added 0.39.0 — the rule it supports:* “Where `EnterWorktree` refuses the checkout, the gate, run in the session's directory, reads no entry keyed on the checkout”
+
+Two attended `pr-harden` 0.38.1 runs were asked to harden a PR checked out outside the session's git
+repository, and `EnterWorktree` refused both with "Cannot enter worktree: <checkout> is not a registered
+worktree of <session repository>": chartsearchai PR #607 (2026-10-11, session in
+`openmrs-module-auditlogweb`, checkout `chartsearchai-threads`, a worktree of the
+`openmrs-module-chartsearchai` clone; transcript `f1b92832…` L994-995) and esm-patient-chart PR 3787
+(2026-10-13, session in `querystore`, checkout a main clone; `a1472a0f…` L80-81). The rule names the
+refusal and not a condition for it, because the tool's own description, as loaded in both runs
+(`f1b92832…` L991, `a1472a0f…` L74, harness 2.1.296), accepts on a first entry a path registered by the
+current repository "or, in a multi-repo workspace, a repository nested inside it", and on a further
+switch only "a worktree under `.claude/worktrees/` of the same repository". The 2026-10-14 retro's gates
+killed two drafts on that ground: "enters only a registered worktree of the session's own repository",
+and "the gate cannot see the run". Both runs keyed every write `--cwd` on the checkout unprompted
+(`f1b92832…` L1011, `a1472a0f…` L92) and said nothing enforced the run (`…pr607.md`:36, `…3787.md`:14).
+No stop in either run was one the gate should have refused. Each of #607's stops after its opening
+entry (L1011) came after an `await` write or after the terminal entry, and the checkout's HEAD never
+left the reviewed and verified `3b462015`; 3787's two (L101, L120) came after an `await` write and after
+the terminal entry. So the rule is guidance, not enforcement: it restores nothing these runs went
+without.
+
+Why `--cwd` on the checkout, measured 2026-10-14 on the live `pr-harden-gate.sh` with `HOME` pointed at
+a scratch state file, an unstamped entry each time
+(`skill-lessons/artifacts/2026-10-14-gate-key/gate_key_probe.sh`; against `always-allow.sh`, beside it,
+its controls fail and it exits 1). An in-flight entry (`phase: fixing`, `blocking: 1`) keyed on a
+scratch checkout blocked when the gate ran there and printed nothing, exit 0, when it ran in a sibling
+repository. Keyed on that sibling, the session's directory, the same entry blocked, so such an entry is
+read. A terminal entry there with no shas allowed. One carrying the checkout's HEAD as its reviewed sha
+blocked, because the head check runs `git -C "$KEY" rev-parse HEAD` and so read the sibling's HEAD. So
+an entry keyed on the session's directory blocks the handover once it carries the PR's shas, and
+without them it gives up the `reviewed_shas` that Step 1's identical-head comparison reads and the
+`verified_shas` FINISH reads. *State* keys on the working tree as well.
+
+*Moved here 0.39.0, from the same paragraph's second sentence:* “the same fail-OPEN, anticipated from
+`KEY="$(pwd -P)"` and not yet observed”. The measurement above, a checkout-keyed entry read from a
+sibling directory, is of the script and not of a run. In #607 and 3787 the sessions never left their
+launch directories, and no run has yet shown a stop the gate wrongly allowed.
 
 *Cut down, R4-02 — the rule it supports:* “A missing `reviewed-sha` or `verified-sha` call is the difference between a checked handover”
 

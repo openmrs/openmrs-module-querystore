@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.24.1
+version: 0.25.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -327,6 +327,9 @@ it doesn't fail, tighten it until it does.
 
 Then make it pass by changing production code. Never by changing the test, the expected values, or the
 test data — that is changing the specification, and on a failing test the pipeline is what is wrong.
+
+**After a mutation probe, rebuild the module it compiled before anything runs the restored code from
+`target/` or cites its reports.** A restore reaches the source, not `target/`.
 
 **Check `git branch --show-current` before you edit, not only before you commit.** Every phase of
 this pipeline delegates, and an agent that runs `git checkout` silently redirects everything after

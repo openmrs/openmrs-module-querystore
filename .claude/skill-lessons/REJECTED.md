@@ -5277,3 +5277,143 @@ below are that file's.
 
 **Not a lesson:** the KB's international drug names (#591, handed upstream), #592's composed
 sentence, its count of orders and the DDInter test excerpt are chartsearchai domain evidence.
+
+## 2026-10-14 (window: 3 run records — TRUNK-6826/PR6680, openmrs-core, resolve-ticket 0.24.1, converged 2 rounds / 2 harden cycles; chartsearchai PR #607, attended pr-harden 0.38.1, converged 3 rounds; esm-patient-chart PR 3787, attended pr-harden 0.38.1, converged 1 round) — 2 proposed, both applied after revision, 4 drafted limbs killed at the gates; two refutation rounds, the second over the staged diff; linter 17 files, 0 findings; **pr-harden 0.39.0, resolve-ticket 0.25.0**
+
+Step 6's pre-read comparison: `origin/main` (`53b7446`) and this store agreed on all 292 shared files, and
+on all 43 governance files (`skills/`, `hooks/`, `CLAUDE.md`, `bin/`, `pipeline/`). Each gate's skill
+copy matched its hook copy. The three records were local-only, and this ledger named none of them.
+Proposals, both gate replies and the revisions are in `proposals/2026-10-14-window-6826-607-3787.md`.
+
+**APPLIED after revision · pr-harden 0.39.0 *State*: where `EnterWorktree` refuses the checkout, the gate,
+run in the session's directory, reads no entry keyed on the checkout. Key each write `--cwd` on the
+checkout anyway, and say so in the report. Step 0's gate sentence is scoped to where the gate reads the
+entry.**
+- Bar (a): #607:36 and 3787:14. Two attended sessions (auditlogweb, querystore), two PRs, two target
+  repositories, one refusal text: "is not a registered worktree of <session repository>"
+  (`f1b92832…` L995, `a1472a0f…` L81).
+- *State* told a session already running elsewhere to `EnterWorktree` into the checkout, and named no
+  refusal. Both runs keyed `--cwd` on the checkout unprompted and said nothing enforced the run.
+- **Killed at the first gate: "`EnterWorktree` enters only a registered worktree of the session's own
+  repository".** The tool's own description, loaded in both runs (`f1b92832…` L991, `a1472a0f…` L74,
+  harness 2.1.296), is broader on a first entry (a repository "nested inside it" in a multi-repo
+  workspace) and narrower on a further switch ("a worktree under `.claude/worktrees/` of the same
+  repository").
+- **Killed at the second gate: "the gate cannot see the run".** An entry keyed on the session's own
+  directory is read. Measured on the live gate with a scratch `HOME`
+  (`artifacts/2026-10-14-gate-key/gate_key_probe.sh`): such an in-flight entry with no shas blocked, a
+  terminal one with no shas allowed, and one carrying the checkout's HEAD as its reviewed sha blocked
+  on the session directory's HEAD. So the rule states only what was measured: the gate, run in the
+  session's directory, printed nothing over an entry keyed on the checkout. Keying on the session's
+  directory instead would wedge the handover once shas are recorded, or give up the sha lists that
+  Step 1 and FINISH read.
+- **Step 0's "From this point the Stop gate will not let the turn end"**, now "where it reads this
+  entry". Round 2 found the State sentence made it contradict the document.
+- The paragraph's "anticipated from `KEY="$(pwd -P)"` and not yet observed" moved to evidence.md. The
+  measurement is of the script, not a run. No stop in either run was one the gate should have refused:
+  each #607 stop after its opening entry came after an `await` write or the terminal entry, and the
+  checkout's HEAD never left `3b462015`.
+- The `raises` why says the edit restores no enforcement, per round 1's non-blocking objection. Net +29
+  words.
+- **Not proposed, parked:** a gate that also finds this session's own entry by `owner` when none is keyed
+  on its cwd. **REOPEN ON:** a stop the gate should have refused, in a session whose entry was keyed
+  elsewhere, or a pool-launched session meeting the refusal.
+- **resolve-ticket Step 1** carries the parallel sentence. It is unedited for want of a record, not
+  because of abort condition 1, which compares GitHub repositories. This machine holds more than one
+  clone each of openmrs-core and chartsearchai (two of each under `~/Projects/openmrs`), so a
+  resolve-ticket session can meet the refusal. **REOPEN ON:** a resolve-ticket run that `EnterWorktree`
+  refuses.
+
+**APPLIED after revision · pr-harden 0.39.0 `fixer.md`: run every mutation probe before the build `green`
+reports on. resolve-ticket 0.25.0 Step 5: after a mutation probe, rebuild the module it compiled before
+anything runs the restored code from `target/` or cites its reports.**
+- Two parks reopened, each on "a second record". The 2026-09-24 seventh window's #407 park (:4227-4229)
+  is met by #607. The 2026-08-30 P3, #250 (:1099-1111), is met by TRUNK-6826. Its "submitted without
+  that rule title" clause is honoured: neither rule cites `pr-harden:"After any mutation rebuild with
+  clean"`.
+- **The fixer's class: #407 and #607, one mechanism.** Each round-1 fixer ran its final root
+  `mvn -o clean install`, then probes, and the orchestrator's step-5 spot-check read a probe's
+  `failures="1"`.
+  - #407's build finished at 12:22:10Z and its probes began at 12:22:42Z (`agent-a1336009…` L88-L111,
+    main L358-L363).
+  - #607's build (re)started at 13:46:49Z and its probe ran at 13:50:17Z (`agent-ad1f3257…` L241, L264;
+    main L1090-L1107).
+  - Only #607's fixer read `fixer.md` (L13). #407 predates the file (pr-harden 0.36.0, 2026-09-27), and
+    its fixer was briefed in the orchestrator's own words.
+- **The restored-mutant class: #250 and TRUNK-6826.** In each, a restored probe's mutant still compiled
+  in `target/classes` was run. In #250 two probe runs measured it. In TRUNK-6826 a Jetty start ran it
+  (`74a2fd99…` L742-L820), at L794 under Step 5, with `resolve-ticket` the only skill loaded (`harden`
+  came at L938). #250's transcript is gone, so who ran its revert-check, and at which step, cannot be
+  checked. It was a resolve-ticket run with no compaction (#250:1, :4), so that skill's text was in its
+  context throughout.
+- **Correction to a record, found by the first gate in #407's transcript:** #407:19 put its residue on a
+  `harden` Phase 2 quality lens. It was the round-1 fixer (main L342-L358). The lens's probes ran
+  11:47-11:49Z, before the orchestrator's own root build at 11:51-11:54Z (main L246). **So the
+  2026-09-24 ruling at :4227-4229, that *Only ONE of them may mutate the worktree* covers the shape,
+  rested on the misattribution and is withdrawn.**
+- **Killed at the first gate: the `harden` home** (a sentence in Phase 2's *Commit before anything
+  mutates the tree*). With #407 re-attributed, its only candidate is #250's unverifiable step.
+  **Parked:** a `harden`-run probe leaving `target/` residue, 1 unverifiable record (#250). **REOPEN ON:**
+  a record whose residue a `harden` pass or lens left.
+- **Killed at the first gate: resolve-ticket's drafted "Run it after your last mutation probe, and before
+  anything runs from `target/`", at Step 6.** Step 7's `harden` probes after Step 6 by design, so "last"
+  cannot mean the run's last. The universal is false of TRUNK-6826's deliberate runtime mutant
+  (L843-L858). Step 6 is also a step TRUNK-6826 had not reached at L794. The rule is now per probe,
+  scoped to the RESTORED code, and placed at Step 5.
+- Corrections to TRUNK-6826:23: the class's mtime caught the mutant (L797, L809), and `javap` only
+  confirmed the recompile (L810-L820). `wait-ready.sh`'s readiness requests did reach the mutant before
+  L809 (`session=200`, L797). The probes ran under resolve-ticket Step 5, not `harden`. Corrections to
+  this pass's own proposal: `mutate.sh` ran four probes, not three, and the `if (false)` mutant was the
+  fourth. Also #607:19's "At FINISH" was round 1's step-5 spot-check (L1090).
+- Prunes nothing in skill text. Net +32 (fixer.md) and +28 (resolve-ticket).
+
+**Parked counts advanced.**
+- **Prose the change made false, found by a fresh agent: 33 records.**
+  - +TRUNK-6826:15: harden P2 found a javadoc and test comment naming the wrong filter as the URL-rule
+    enforcer, at 1 cycle.
+  - +#607:13-15, :29 and :33. r1, blocking, at 1 round: "runs on Linux CI" in the test javadoc, ADR 174
+    and the PR body. Also the README's counters, and r2's `recordLaunch` javadoc.
+  - #607 merged at its reviewed head `3b462015`. PR 6680 merged at `e2fa05ef`, whose one commit after
+    the handed-over `6522f363` is "Merge master into TRUNK-6826". REOPEN unchanged.
+- **Phase 2 escalating repeatedly on the run's own fixes: 31 records** (+TRUNK-6826:15, one escalation,
+  counted as :4078 and :4351 count one). REOPEN unchanged.
+- **Guard refusals in the subagents of an `EnterWorktree` session** (:5198-5201): +TRUNK-6826.
+  - Its `guard_refusals.py` calibration passed (37/37).
+  - From L292, the main loop refused 10 of 151, all compound, and subagents refused 18 of 238. Scripts by
+    absolute path were refused 0 of 42. Each main-loop refusal's next call passed.
+  - The record's "a URL containing github" is two compound commands (main L462, `agent-a77863bc…` L37),
+    inside 0.38.1's "git or not". A script retry passed both.
+  - The cost was tool calls, so the REOPEN ON (a round, or a wrong report) is unmet.
+
+**Parked, new, 1 record each.**
+- **A test that skipped in all three Java CI jobs while three documents said it ran on Linux**
+  (#607:13-15, :25; r1 blocking, 1 round). An `assumeFalse` turned GNU `yes` rejecting `-t` into a skip.
+  **REOPEN ON:** a second record.
+- **A Phase 2 helper merge that introduced an overload ambiguity, caught only by re-running the ordering
+  mutation** (TRUNK-6826:24). The ledger holds no earlier Phase 2 edit that introduced a defect.
+  **REOPEN ON:** a second record.
+- **A runtime-visible frontend change that no verifier run covered, recorded as `converged`**
+  (3787:2-3).
+  - The run cited the author's manual run and an external bot, and ran no substitute. Step 6's third
+    case says "say which one can, use it".
+  - FINISH would have it read converged-but-unverified.
+  - **REOPEN ON:** a second record, or one whose change was wrong at runtime.
+
+**Observed, no remedy owed.**
+- #607's mutation-probe claim about a helper, read as covering its call sites (#607:16-18), is the shape
+  `fixer.md`'s *a mutation result measures the arms it moved, not the mechanism* names (:1951, pr-harden
+  0.21.0). The PR broke it before the loop, and fresh reviewers caught it as designed. The record's
+  "cost: 2 rounds" is discounted as :1996-1997 and :2487-2490 discount: r2 was owed by r1's blocking
+  finding, and r3 by r2's three non-blocking findings together.
+- #607:37, an `Agent` schema without `run_in_background`, is the condition *State*'s *Collecting in the
+  same turn* already names (measured at :3340-3343), recurring at no cost in an attended session. This
+  retro's own session's schema lacks the flag too.
+- TRUNK-6826's refuter caught a pattern inert under a context path at 0 rounds (TRUNK-6826:8, :14).
+- TRUNK-6826 substituted `jetty:run` for the omod standalone (TRUNK-6826:3), which is step 6's third case
+  followed.
+- TRUNK-6826 deleted an unverifiable javadoc clause rather than rewording it (TRUNK-6826:10).
+- #607:43 found a project memory ("Docker is off on this machine") contradicted by its own fixer. That is
+  the operator's memory file, not a skill.
+
+**Not a lesson:** TRUNK-6826's Spring 7 `UrlHandlerFilter` behaviour, #607's llama-server thread and
+cgroup readings, and 3787's `routes.json` ranges are target-repo domain evidence.

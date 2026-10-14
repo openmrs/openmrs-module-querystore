@@ -248,6 +248,23 @@ body.
 
 ## Step 5 — Test first, then the fix
 
+*Added 0.25.0 — the rule it supports:* “After a mutation probe, rebuild the module it compiled before anything runs the restored code from `target/` or cites its reports.”
+
+In two runs a restored probe's mutant, still compiled in `target/classes`, was run. #250 (2026-08-30, a
+resolve-ticket run with `harden` and `pr-harden`; `2026-08-30-…-250.md`:27): "the orchestrator hit
+exactly this: `api/target/classes` held a mutated class from a revert-check, and two probe runs silently
+measured the mutation. Caught only by an impossible answer." Its transcript (`1c475c8b…`) is gone, so who
+ran the revert-check, and at which step, cannot be checked. TRUNK-6826 (2026-10-11, openmrs-core,
+`74a2fd99…`): under Step 5, before `harden` was loaded (L938), `mutate.sh` ran four probes, restoring the
+source after each (L742-745), and Jetty was then started from `web/target/classes` (L794), where
+`TrailingSlashFilter.class` still carried the last probe's mtime (L797): the fourth probe's
+`if (false)` mutant. `wait-ready.sh`'s readiness requests reached that server (`session=200`, L797);
+the mtime caught it at L809, before any probe of its responses, and a one-module compile with a `javap`
+count confirmed the restored class (L810-820). That record's "harden mutation" and "until a javap check
+caught it" (`…TRUNK-6826.md`:23) are corrected here. Running MUTATED code from `target/` is a probe,
+which this rule does not stop: TRUNK-6826 ran one on purpose (L843-858). The 2026-08-30 retro parked
+#250 (`REJECTED.md`, REOPEN ON a second record), and TRUNK-6826 reopened it.
+
 *Cut down, C-01 — the rule it supports:* “Check `git branch --show-current` before you edit, not only before you commit.”
 
 **Check `git branch --show-current` before you edit, not only before you commit.** Every phase of this
