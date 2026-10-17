@@ -24,6 +24,7 @@ import org.openmrs.module.querystore.api.impl.QueryStoreServiceImpl;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
+import org.openmrs.module.querystore.embedding.OnnxEmbeddingProvider;
 import org.openmrs.module.querystore.sync.AfterCommitDispatcher;
 import org.openmrs.module.querystore.model.QueryDocument;
 
@@ -220,5 +221,35 @@ public class QueryStoreActivatorTest {
 		doc.setResourceUuid("u-1");
 		service.index(doc);
 		verify(chosen).upsert(doc);
+	}
+
+	@Test
+	public void stopped_closesTheOnnxEmbeddingProvider() {
+		// Server shutdown stops each module without closing the Spring context, so the bean's
+		// destroy-method never runs then; stopped() is the hook that does. Without this close every
+		// server start left the warmup session's CoreML files in the temp directory (issue #83).
+		OnnxEmbeddingProvider provider = mock(OnnxEmbeddingProvider.class);
+		QueryStoreActivator activatorWithProvider = new QueryStoreActivator() {
+			@Override
+			OnnxEmbeddingProvider findOnnxEmbeddingProvider() {
+				return provider;
+			}
+		};
+		activatorWithProvider.stopped();
+		verify(provider).close();
+	}
+
+	@Test
+	public void stopped_swallowsLookupFailure() {
+		// A cleanup step must not turn into a stop failure: when the context refresh fails at
+		// startup, OpenMRS stops the already-started modules with no querystore beans to look up.
+		QueryStoreActivator failingLookup = new QueryStoreActivator() {
+			@Override
+			OnnxEmbeddingProvider findOnnxEmbeddingProvider() {
+				throw new IllegalStateException("bean not available");
+			}
+		};
+		// Must not throw.
+		failingLookup.stopped();
 	}
 }

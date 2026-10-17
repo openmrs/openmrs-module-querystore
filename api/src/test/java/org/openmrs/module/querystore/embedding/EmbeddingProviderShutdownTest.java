@@ -32,6 +32,10 @@ import org.springframework.context.ConfigurableApplicationContext;
  * session compiles its partitions into {@code onnxruntime-*.model.mlmodel(c)} entries under the
  * temp directory, and only {@link OnnxEmbeddingProvider#close()} removes them, so every JVM that
  * loaded the model and exited without it left them behind.
+ *
+ * <p>OpenMRS closes the application context when a module start or stop refreshes it, not on
+ * server shutdown; the close that runs then is {@code QueryStoreActivator.stopped()}, pinned in
+ * {@code QueryStoreActivatorTest}.
  */
 public class EmbeddingProviderShutdownTest extends BaseModuleContextSensitiveTest {
 

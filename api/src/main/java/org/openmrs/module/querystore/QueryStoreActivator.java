@@ -23,6 +23,7 @@ import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.sync.AfterCommitDispatcher;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.embedding.OnnxEmbeddingProvider;
 
 public class QueryStoreActivator extends BaseModuleActivator implements DaemonTokenAware {
 
@@ -147,6 +148,13 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 		    "querystore.bootstrap.launcher", BootstrapLauncher.class);
 	}
 
+	/** Visible-for-testing seam over {@link Context#getRegisteredComponent}, mirroring
+	 *  {@link #findSyncDispatcher()} — see its note on the package-private contract. */
+	OnnxEmbeddingProvider findOnnxEmbeddingProvider() {
+		return Context.getRegisteredComponent(
+		    "querystore.embedding.onnx", OnnxEmbeddingProvider.class);
+	}
+
 	/**
 	 * Reads {@code querystore.backend} via {@link BackendStoreSelector} and injects the chosen
 	 * {@link BackendStore} into the service. Done here rather than at Spring wiring time because
@@ -170,7 +178,24 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 		// from cross-restart races, but a fresh start that re-runs autostart could overlap the
 		// previous run's progress-table writes. Bounded risk on the progress table only; proper
 		// shutdown coordination is a follow-up if real deployments hit it.
+		closeOnnxEmbeddingProvider();
 		log.info("Query Store module stopped");
+	}
+
+	/**
+	 * Closes the ONNX embedding sessions, which on macOS is also what deletes the CoreML models each
+	 * session compiled into the temp directory (issue #83). The bean's {@code destroy-method} alone
+	 * does not cover a server shutdown: OpenMRS closes the Spring context only when a module start or
+	 * stop refreshes it, and on shutdown it stops each module, calling this hook, without closing the
+	 * context. Closing a provider that is already closed, or was never used, does nothing.
+	 */
+	private void closeOnnxEmbeddingProvider() {
+		try {
+			findOnnxEmbeddingProvider().close();
+		}
+		catch (RuntimeException ex) {
+			log.warn("Could not close the ONNX embedding provider; its sessions stay open until the JVM exits", ex);
+		}
 	}
 
 	/** True when the autostart property is set to {@code "true"} (case-insensitive); the GP is
