@@ -31,6 +31,16 @@
       "from": 6832,
       "to": 6860,
       "why": "Step 5: after a mutation probe, rebuild the module it compiled before anything runs the restored code from target/ or cites its reports, because in #250 and TRUNK-6826 a restored probe's mutant, still compiled in target/classes, was run: by two probe runs and by a Jetty start"
+    },
+    "pr-review": {
+      "from": 7775,
+      "to": 8037,
+      "why": "Step 4 gains a length rule for inline comments, thread replies and body findings (the ask, why it matters in one sentence and the fix, 60 words at most, the verification's result and not its account, a reply no longer than what it answers), subsuming 'Fewer, sharper comments beat exhaustive ones' and the 'Keep each inline comment to its finding and the fix' clause, because feedback on 2026-10-17 asked for shorter review comments and, over 649 openmrs PRs, the comments this skill posted ran a median of 131 words of prose (p90 263) against 9 for the same reviewer before the skill and 21 for other reviewers on the same PRs, with 89% of its thread replies longer than the comment they answered; no earlier version had any length rule"
+    },
+    "pr-review/posting.md": {
+      "from": 1804,
+      "to": 1984,
+      "why": "the third gate line states that length rule and the fourth holds body findings to it, so a local run checks the rule before posting as it checks the label ban; the rule itself lives in SKILL.md because the @claude review Action loads that file alone"
     }
   },
   "words": {
@@ -41,8 +51,8 @@
     "pr-harden/fixer.md": 1134,
     "pr-harden/reviewer.md": 510,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 7775,
-    "pr-review/posting.md": 1804,
+    "pr-review": 8037,
+    "pr-review/posting.md": 1984,
     "resolve-ticket": 6860,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2532,
