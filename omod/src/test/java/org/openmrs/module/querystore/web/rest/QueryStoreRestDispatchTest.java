@@ -76,6 +76,20 @@ public class QueryStoreRestDispatchTest {
 	}
 
 	@Test
+	public void getObservationsWithoutGetPatients_gets403_onSearchRecentAndWarm() throws Exception {
+		// The omnibar shows its query store group to Get Observations, but the server keeps Get
+		// Patients: the patient check is core's own getPatientByUuid, which requires it, and without
+		// that check search and warm would tell a caller whether a uuid is a patient's chart.
+		signInWith(org.openmrs.util.PrivilegeConstants.GET_OBS);
+
+		mvc.perform(get("/rest/v1/querystore/patient/" + PATIENT + "/search").param("q", "cd4"))
+		        .andExpect(status().isForbidden());
+		mvc.perform(get("/rest/v1/querystore/patient/" + PATIENT + "/recent")).andExpect(status().isForbidden());
+		mvc.perform(post("/rest/v1/querystore/patient/" + PATIENT + "/warm")).andExpect(status().isForbidden());
+		org.mockito.Mockito.verifyNoInteractions(queryStore);
+	}
+
+	@Test
 	public void aBadParameter_gets400() throws Exception {
 		signIn(true);
 
@@ -108,6 +122,14 @@ public class QueryStoreRestDispatchTest {
 	}
 
 	private static void signIn(boolean everyPrivilege) {
+		signIn(privilege -> everyPrivilege);
+	}
+
+	private static void signInWith(String... privileges) {
+		signIn(Arrays.asList(privileges)::contains);
+	}
+
+	private static void signIn(java.util.function.Predicate<String> has) {
 		Context.setUserContext(new UserContext(null) {
 
 			@Override
@@ -122,7 +144,7 @@ public class QueryStoreRestDispatchTest {
 
 			@Override
 			public boolean hasPrivilege(String privilege) {
-				return everyPrivilege;
+				return has.test(privilege);
 			}
 		});
 	}
