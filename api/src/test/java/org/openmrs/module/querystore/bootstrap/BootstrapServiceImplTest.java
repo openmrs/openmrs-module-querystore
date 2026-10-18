@@ -1074,6 +1074,39 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void reindexPatient_whoseDeleteReportsAFailure_throws_beforeItsAfterDeleteHookOrAnyProjection() {
+		// code r3 S1: an index whose delete failed still holds the old rows, so the chart is not gone.
+		List<String> events = new java.util.ArrayList<String>();
+		final org.openmrs.module.querystore.backend.BulkWriteResult[] result = {
+		        new org.openmrs.module.querystore.backend.BulkWriteResult(3, 0, Collections.singletonList(
+		            new org.openmrs.module.querystore.backend.DocFailure("obs", "patient-uuid", "IOException", true))) };
+		service.setQueryStoreService(new RecordingQueryStoreService(events) {
+
+			@Override
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				events.add("delete");
+				return result[0];
+			}
+		});
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project:" + t);
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		for (int attempt = 0; attempt < 2; attempt++) {
+			try {
+				service.reindexPatient("patient-uuid", () -> events.add("after-delete"));
+				fail("a delete that did not finish must fail the reindex");
+			}
+			catch (IllegalStateException expected) {
+				// pass
+			}
+			result[0] = null;
+		}
+
+		assertEquals("no hook, no projection, for a failed result or no result", Arrays.asList("delete", "delete"), events);
+	}
+
+	@Test
 	public void reindexPatient_runsItsAfterDeleteHook_betweenTheDeleteAndTheProjection() {
 		List<String> events = new java.util.ArrayList<String>();
 		service.setQueryStoreService(new RecordingQueryStoreService(events));

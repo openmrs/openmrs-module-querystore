@@ -950,6 +950,61 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aRetryWhoseDeleteReportsAFailure_leavesTheChartFailed_withNoRows() {
+		// code r3 S1, through the real BootstrapServiceImpl: the delete reports one failed index and
+		// deletes nothing, so the old partial chart is still there and must not become "indexed".
+		QueryStoreServiceImpl deletesNothing = org.mockito.Mockito.spy(service);
+		org.mockito.Mockito.doReturn(new org.openmrs.module.querystore.backend.BulkWriteResult(1, 0,
+		    Collections.singletonList(new org.openmrs.module.querystore.backend.DocFailure("obs", PATIENT, "IOException", true))))
+		        .when(deletesNothing).bulkDeleteByPatient(PATIENT);
+		ProjectingBootstrapper obsType = new ProjectingBootstrapper(
+		        () -> index(obs("cd4-2", CD4, "CD4 count: 410.0 cells/µL", 410.0, "2026-04-01")));
+		service.setBootstrapServiceOverride(org.openmrs.module.querystore.bootstrap.RealBootstraps.create(deletesNothing,
+		    backend, obsType));
+		long[] now = { 1_000_000L };
+		BootstrapLauncher launcher = SynchronousLaunchers.create(() -> now[0]);
+		service.setBootstrapLauncher(launcher);
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		launcher.launchPatientWarm(PATIENT, () -> {
+			throw new IllegalStateException("conditions failed");
+		});
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+
+		service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		QueryResult after = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
+		assertEquals(IndexStatus.FAILED, after.getStatus());
+		assertTrue(after.getHits().isEmpty());
+		assertEquals("nothing was re-projected over the undeleted chart", 0, obsType.projections);
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+	}
+
+	/** An obs bootstrapper whose per-patient projection runs {@code onProject} and fetches nothing. */
+	private static final class ProjectingBootstrapper extends org.openmrs.module.querystore.bootstrap.TypeBootstrapper<Object> {
+
+		private final Runnable onProject;
+
+		int projections;
+
+		ProjectingBootstrapper(Runnable onProject) {
+			this.onProject = onProject;
+		}
+
+		@Override public String getResourceType() { return "obs"; }
+		@Override protected org.openmrs.module.querystore.serialization.ClinicalRecordSerializer<Object> getSerializer() { return null; }
+		@Override protected List<Object> fetchPage(java.time.Instant after, String afterUuid, int pageSize) {
+			return Collections.emptyList();
+		}
+		@Override protected List<Object> fetchPageForPatient(String patientUuid, java.time.Instant after, String afterUuid,
+		        int pageSize) {
+			projections++;
+			onProject.run();
+			return Collections.emptyList();
+		}
+	}
+
+	@Test
 	public void aPoisonChart_isRetriedOnItsBackoffSchedule_notOnEveryKeystroke() {
 		long[] now = { 1_000_000L };
 		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));

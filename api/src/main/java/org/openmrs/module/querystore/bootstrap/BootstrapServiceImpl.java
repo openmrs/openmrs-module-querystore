@@ -258,7 +258,12 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			// can't interleave with the delete. queryStoreService is called unconditionally (as
 			// elsewhere in this class): a null here is a wiring fault that must fail loudly, not
 			// silently skip the delete and leave stale docs alongside the re-projected ones.
-			queryStoreService.bulkDeleteByPatient(patientUuid);
+			BulkWriteResult deleted = queryStoreService.bulkDeleteByPatient(patientUuid);
+			// An index whose delete failed still holds the old rows (the backends log which): the
+			// chart is not gone, so re-projecting over it would report a mixed chart complete.
+			if (deleted == null || deleted.hasFailures()) {
+				throw new IllegalStateException("Deleting the patient's documents did not finish; not re-projecting");
+			}
 			afterDelete.run();
 			reportProjection(patientUuid, projectAllTypesForPatient(patientUuid), "Re-projection");
 		}
