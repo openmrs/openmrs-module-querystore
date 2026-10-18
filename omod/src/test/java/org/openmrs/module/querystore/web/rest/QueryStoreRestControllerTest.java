@@ -381,13 +381,8 @@ public class QueryStoreRestControllerTest {
 		    Arrays.asList("obs", "condition"), captor.getAllValues().get(0).getTypes());
 		assertEquals(Collections.singletonList("obs"), captor.getAllValues().get(1).getTypes());
 
-		try {
-			controller.search("patient-uuid", "cd4", null, "mymodule_note", null, null, null, null, null, true);
-			throw new AssertionError("expected a 403 for naming it");
-		}
-		catch (ContextAuthenticationException expected) {
-			// pass
-		}
+		assertTypeNotAvailable(
+		    () -> controller.search("patient-uuid", "cd4", null, "mymodule_note", null, null, null, null, null, true));
 	}
 
 	@Test
@@ -731,8 +726,30 @@ public class QueryStoreRestControllerTest {
 	}
 
 	@Test
-	public void unknownTypes_andAnOverlongQuery_are400s() {
-		authenticate();
+	public void unknownAndUnreadableNamedTypes_getTheSame403_andAnOverlongQueryIsA400() {
+		// Get Patients and Get Observations only. condition is registered but unreadable, mymodule_note
+		// is registered with no read privilege, faketype is not registered: the caller must not be able
+		// to tell which, so all three get one status and one body that does not echo the name.
+		Context.setUserContext(new UserContext(null) {
+
+			@Override
+			public User getAuthenticatedUser() {
+				return new User();
+			}
+
+			@Override
+			public boolean isAuthenticated() {
+				return true;
+			}
+
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return PrivilegeConstants.GET_PATIENTS.equals(privilege) || PrivilegeConstants.GET_OBS.equals(privilege);
+			}
+		});
+		BootstrapService bootstrap = mock(BootstrapService.class);
+		when(bootstrap.getResourceTypeNames()).thenReturn(Arrays.asList("obs", "condition", "mymodule_note"));
+		controller.setBootstrapService(bootstrap);
 		QueryStoreService queryStore = mock(QueryStoreService.class);
 		controller.setQueryStoreService(queryStore);
 		StringBuilder longQuery = new StringBuilder();
@@ -740,9 +757,10 @@ public class QueryStoreRestControllerTest {
 			longQuery.append('a');
 		}
 
-		assertEquals("Unknown type 'faketype'",
-		    badRequest(() -> controller.search("p", "cd4", null, "obs,faketype", null, null, null, null, null, true)));
-		assertEquals("Unknown type 'faketype'", badRequest(() -> controller.recent("p", null, "faketype", false)));
+		for (String type : new String[] { "faketype", "condition", "mymodule_note" }) {
+			assertTypeNotAvailable(() -> controller.search("p", "cd4", null, "obs," + type, null, null, null, null, null, true));
+			assertTypeNotAvailable(() -> controller.recent("p", null, type, false));
+		}
 		assertEquals("q must be at most 500 characters",
 		    badRequest(() -> controller.search("p", longQuery.toString(), null, null, null, null, null, null, null, true)));
 		org.mockito.Mockito.verifyNoInteractions(queryStore);
@@ -774,13 +792,8 @@ public class QueryStoreRestControllerTest {
 		verify(queryStore).query(captor.capture());
 		assertEquals(Collections.singletonList("obs"), captor.getValue().getTypes());
 
-		try {
-			controller.search("patient-uuid", "cd4", null, "condition", null, null, null, null, null, true);
-			throw new AssertionError("expected a 403 for a type the caller cannot read");
-		}
-		catch (ContextAuthenticationException expected) {
-			assertEquals(HttpStatus.FORBIDDEN, controller.handleAuthFailure(expected).getStatusCode());
-		}
+		assertTypeNotAvailable(
+		    () -> controller.search("patient-uuid", "cd4", null, "condition", null, null, null, null, null, true));
 	}
 
 	@Test
@@ -848,6 +861,20 @@ public class QueryStoreRestControllerTest {
 			    response.getHeaders().getFirst("Retry-After"));
 		}
 		assertEquals("failed", ((Map<?, ?>) controller.warm("failed-uuid").getBody()).get("status"));
+	}
+
+	/** Runs a call expected to name a type the caller may not search, and checks the one 403 it gets. */
+	private void assertTypeNotAvailable(Runnable call) {
+		try {
+			call.run();
+		}
+		catch (TypeNotAvailableException e) {
+			ResponseEntity<Object> response = controller.handleTypeNotAvailable(e);
+			assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+			assertEquals(Collections.singletonMap("error", "Type not available"), response.getBody());
+			return;
+		}
+		throw new AssertionError("expected a 403 Type not available");
 	}
 
 	/** Runs a call expected to fail parameter validation and returns the 400 body's error. */

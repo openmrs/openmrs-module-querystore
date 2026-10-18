@@ -98,6 +98,17 @@ public class QueryStoreRestDispatchTest {
 	}
 
 	@Test
+	public void anUnknownType_andAnUnreadableOne_getTheSame403ThroughDispatch() throws Exception {
+		signInWith(org.openmrs.util.PrivilegeConstants.GET_PATIENTS, org.openmrs.util.PrivilegeConstants.GET_OBS);
+
+		for (String type : new String[] { "faketype", "condition" }) {
+			mvc.perform(get("/rest/v1/querystore/patient/" + PATIENT + "/search").param("q", "cd4").param("types", type))
+			        .andExpect(status().isForbidden()).andExpect(bodyField("error", "Type not available"));
+		}
+		org.mockito.Mockito.verifyNoInteractions(queryStore);
+	}
+
+	@Test
 	public void anUnknownPatient_gets404() throws Exception {
 		signIn(true);
 

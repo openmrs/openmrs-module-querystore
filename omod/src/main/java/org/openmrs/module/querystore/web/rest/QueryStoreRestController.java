@@ -663,6 +663,12 @@ public class QueryStoreRestController {
 		return errorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
 	}
 
+	@ExceptionHandler(TypeNotAvailableException.class)
+	@ResponseBody
+	public ResponseEntity<Object> handleTypeNotAvailable(TypeNotAvailableException e) {
+		return errorResponse(HttpStatus.FORBIDDEN, "Type not available");
+	}
+
 	/** Non-null only when a test injects a launcher via {@link #setBootstrapLauncher}; production
 	 *  leaves this null and resolves the singleton from the Spring context per call. */
 	private BootstrapLauncher injectedBootstrapLauncher;

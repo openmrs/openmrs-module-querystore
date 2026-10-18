@@ -100,22 +100,18 @@ final class PatientRequests {
 	/**
 	 * The types to search: those the caller named, or every registered type, limited to types whose
 	 * records the caller could read through core ({@link #READ_PRIVILEGE}). Duplicates are dropped. A
-	 * named type that is not registered is a 400 (the Lucene and MySQL backends create an index or
-	 * table for any well-formed type a search names); a named type the caller may not read is a 403;
-	 * an unnamed one is left out. An empty result means every type; a caller who can read none of
-	 * them gets a 403, never an empty list.
+	 * named type that is not registered (the Lucene and MySQL backends create an index or table for
+	 * any well-formed type a search names) and a named type the caller may not read get the same 403
+	 * ({@link TypeNotAvailableException}), so the answer does not tell a caller which types are
+	 * registered; an unnamed unreadable one is left out. An empty result means every type; a caller
+	 * who can read none of them gets a 403, never an empty list.
 	 */
 	static List<String> readableTypes(String csv, List<String> known) {
 		List<String> requested = splitList(csv);
-		for (String type : requested) {
-			if (!known.contains(type)) {
-				throw new BadParameterException("Unknown type '" + echo(type) + "'");
-			}
-		}
 		if (!requested.isEmpty()) {
 			for (String type : requested) {
-				if (!canRead(type)) {
-					throw new ContextAuthenticationException("Insufficient privileges to read " + type);
+				if (!known.contains(type) || !canRead(type)) {
+					throw new TypeNotAvailableException();
 				}
 			}
 			return requested;
