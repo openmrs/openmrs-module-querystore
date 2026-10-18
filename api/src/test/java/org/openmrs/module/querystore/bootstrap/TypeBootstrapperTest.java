@@ -649,7 +649,7 @@ public class TypeBootstrapperTest {
 			return org.openmrs.module.querystore.backend.WriteResult.success();
 		}
 		@Override public void delete(String resourceType, String resourceUuid) { /* unused */ }
-		@Override public void bulkDeleteByPatient(String patientUuid) { /* unused */ }
+		@Override public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) { return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList()); }
 		@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> search(String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> getPatientChart(String patientUuid) { return Collections.emptyList(); }

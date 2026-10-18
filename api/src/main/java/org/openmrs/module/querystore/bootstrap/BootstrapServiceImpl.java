@@ -30,6 +30,7 @@ import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.api.ProjectionProgress;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
+import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
@@ -264,12 +265,18 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 	}
 
 	@Override
-	public void forgetPatient(String patientUuid) {
+	public boolean forgetPatient(String patientUuid) {
 		if (patientUuid == null || patientUuid.isEmpty()) {
-			return;
+			return false;
 		}
 		synchronized (patientLock(patientUuid)) {
-			queryStoreService.bulkDeleteByPatient(patientUuid);
+			BulkWriteResult deleted = queryStoreService.bulkDeleteByPatient(patientUuid);
+			// The backends log each index whose delete failed; such an index still holds the
+			// patient's documents, so the chart is not gone.
+			if (deleted == null || deleted.hasFailures()) {
+				return false;
+			}
+			return backendSelector != null && !backendSelector.getStore().existsByPatient(patientUuid);
 		}
 	}
 

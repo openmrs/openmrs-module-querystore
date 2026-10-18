@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.api.impl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -153,7 +154,7 @@ public class QueryStoreServiceImplTest {
 
 			@Override public void delete(String resourceType, String resourceUuid) { }
 
-			@Override public void bulkDeleteByPatient(String patientUuid) { }
+			@Override public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) { return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList()); }
 
 			@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
 
@@ -322,6 +323,29 @@ public class QueryStoreServiceImplTest {
 		assertEquals("service must forward the patient uuid to the backend",
 		        1, backend.bulkDeleteByPatientCount.get());
 		assertEquals("patient-9", backend.bulkDeleteByPatientUuids.get(0));
+	}
+
+	@Test
+	public void bulkDeleteByPatient_returnsTheBackendsResult_failuresIncluded() {
+		// r2 code S3: a caller that must know the chart is gone (forgetPatient) reads the failures.
+		BulkWriteResult partial = new BulkWriteResult(3, 2, Collections.singletonList(
+		    new org.openmrs.module.querystore.backend.DocFailure("obs", "patient-9", "IOException", true)));
+		FakeBackendStore backend = new FakeBackendStore(false) {
+
+			@Override
+			public BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				super.bulkDeleteByPatient(patientUuid);
+				return partial;
+			}
+		};
+		service.setBackend(backend);
+
+		assertSame(partial, service.bulkDeleteByPatient("patient-9"));
+	}
+
+	@Test
+	public void bulkDeleteByPatient_unwiredBackend_reportsAFailure_ratherThanSuccess() {
+		assertTrue(new QueryStoreServiceImpl().bulkDeleteByPatient("patient-9").hasFailures());
 	}
 
 	@Test
@@ -803,7 +827,7 @@ public class QueryStoreServiceImplTest {
 
 	// ---------- fakes ----------
 
-	private static final class FakeBackendStore implements BackendStore {
+	private static class FakeBackendStore implements BackendStore {
 		private final boolean existsByPatientReturn;
 		final AtomicInteger existsByPatientCount = new AtomicInteger();
 		final AtomicInteger hybridCount = new AtomicInteger();

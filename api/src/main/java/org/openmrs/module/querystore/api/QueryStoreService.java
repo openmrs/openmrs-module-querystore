@@ -106,8 +106,11 @@ public interface QueryStoreService extends OpenmrsService {
 	 * REST/admin caller) so the read store doesn't retain PHI past the core deletion.
 	 * Iterates the cross-session-merged set of indexes/tables on the configured backend, mirroring
 	 * the discovery contract of {@code searchByPatient} and {@code existsByPatient}.
+	 *
+	 * @return the backend's result, with a failure per index or table whose delete failed (its
+	 *         documents are still there); a caller that must know the chart is gone checks it
 	 */
-	void bulkDeleteByPatient(String patientUuid);
+	BulkWriteResult bulkDeleteByPatient(String patientUuid);
 
 	/**
 	 * The stored {@code last_modified} of each given record of one type, keyed by resource uuid; a

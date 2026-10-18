@@ -131,11 +131,15 @@ public interface BootstrapService extends OpenmrsService {
 
 	/**
 	 * Deletes the patient's documents under its per-patient lock, so it reads as not indexed and a
-	 * later warm projects it afresh. For a patient whose failed projection may have left a partial
-	 * chart, once nothing remembers that it failed. A {@code default} no-op so test doubles keep
-	 * compiling; the production implementation overrides it.
+	 * later warm projects it afresh: for a patient whose failed projection may have left a partial
+	 * chart, before its failure is forgotten. Returns whether the chart is gone, which is true only
+	 * when every index's delete succeeded and the patient has no document left; a caller keeps the
+	 * failure otherwise. A {@code default} that deletes nothing and returns {@code false}, so test
+	 * doubles keep compiling and nothing is forgotten on their word; the production implementation
+	 * overrides it.
 	 */
-	default void forgetPatient(String patientUuid) {
+	default boolean forgetPatient(String patientUuid) {
+		return false;
 	}
 
 	/**

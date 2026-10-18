@@ -1037,23 +1037,40 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
-	public void forgetPatient_deletesThePatientsDocuments_underItsPatientLock() {
+	public void forgetPatient_deletesThePatientsDocuments_underItsPatientLock_andSaysWhetherTheChartIsGone() {
 		final boolean[] locked = { false };
-		final int[] deletes = { 0 };
+		final org.openmrs.module.querystore.backend.BulkWriteResult[] result = {
+		        new org.openmrs.module.querystore.backend.BulkWriteResult(2, 2, Collections.emptyList()) };
 		service.setQueryStoreService(new RecordingQueryStoreService(new java.util.ArrayList<String>()) {
 
 			@Override
-			public void bulkDeleteByPatient(String patientUuid) {
-				deletes[0]++;
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
 				locked[0] = Thread.holdsLock(service.patientLock(patientUuid));
+				return result[0];
+			}
+		});
+		BackendStore store = org.mockito.Mockito.mock(BackendStore.class);
+		service.setBackendSelector(new BackendStoreSelector(Collections.<String, BackendStore> emptyMap()) {
+			@Override
+			public BackendStore getStore() {
+				return store;
 			}
 		});
 
-		service.forgetPatient("patient-uuid");
-		service.forgetPatient(null);
-
-		assertEquals(1, deletes[0]);
+		assertTrue("every type deleted and nothing left", service.forgetPatient("patient-uuid"));
 		assertTrue("so it cannot interleave with a projection of the patient", locked[0]);
+
+		org.mockito.Mockito.when(store.existsByPatient("patient-uuid")).thenReturn(true);
+		assertFalse("a document is still there", service.forgetPatient("patient-uuid"));
+
+		org.mockito.Mockito.when(store.existsByPatient("patient-uuid")).thenReturn(false);
+		result[0] = new org.openmrs.module.querystore.backend.BulkWriteResult(2, 1, Collections.singletonList(
+		    new org.openmrs.module.querystore.backend.DocFailure("obs", "patient-uuid", "IOException", true)));
+		assertFalse("a type's delete failed", service.forgetPatient("patient-uuid"));
+
+		result[0] = null;
+		assertFalse("no result is no proof", service.forgetPatient("patient-uuid"));
+		assertFalse(service.forgetPatient(null));
 	}
 
 	@Test
@@ -1156,10 +1173,11 @@ public class BootstrapServiceImplTest {
 		}
 
 		@Override
-		public void bulkDeleteByPatient(String patientUuid) {
+		public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
 			bulkDeleteCount++;
 			lastDeletedPatient = patientUuid;
 			events.add("delete");
+			return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList());
 		}
 
 		@Override
@@ -1413,7 +1431,7 @@ public class BootstrapServiceImplTest {
 			return org.openmrs.module.querystore.backend.WriteResult.success();
 		}
 		@Override public void delete(String resourceType, String resourceUuid) { }
-		@Override public void bulkDeleteByPatient(String patientUuid) { }
+		@Override public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) { return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList()); }
 		@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> search(String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> getPatientChart(String patientUuid) { return Collections.emptyList(); }

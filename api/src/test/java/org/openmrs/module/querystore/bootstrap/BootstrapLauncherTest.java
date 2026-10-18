@@ -314,6 +314,7 @@ public class BootstrapLauncherTest {
 	@Test
 	public void failedPatients_areBounded_oldestForgottenFirst() {
 		BootstrapLauncher launcher = SynchronousLaunchers.create();
+		launcher.setFailedChartDropper(uuid -> true);
 		for (int i = 0; i <= BootstrapLauncher.MAX_FAILED_PATIENTS; i++) {
 			launcher.launchPatientWarm("patient-" + i, () -> {
 				throw new IllegalStateException("x");
@@ -325,16 +326,18 @@ public class BootstrapLauncherTest {
 	}
 
 	@Test
-	public void aForgottenFailure_isHandedOn_outsideTheFailureMapLock() throws Exception {
-		// sec r1 S2. Past the bound the least recently failed patient is forgotten; its partial chart
-		// would then read as indexed, so whoever owns the documents is told to drop them.
+	public void pastTheBound_theEldestFailureIsForgottenOnlyOnceItsChartIsDropped_withTheMapUnlocked() throws Exception {
+		// sec r1 S2, r2 S1. While the chart is being dropped the patient must still read failed, so
+		// the entry stays in place until the dropper reports the chart gone.
 		BootstrapLauncher launcher = SynchronousLaunchers.create();
-		List<String> forgotten = new ArrayList<>();
+		List<String> dropped = new ArrayList<>();
+		final boolean[] stillFailedDuringDrop = { false };
 		final boolean[] lockFree = { false };
-		launcher.setOnFailureForgotten(uuid -> {
-			forgotten.add(uuid);
+		launcher.setFailedChartDropper(uuid -> {
+			dropped.add(uuid);
 			// Another thread reads the failure map: it would block if this thread held its lock.
-			Thread reader = new Thread(() -> launcher.hasFailed("anyone"));
+			final boolean[] failed = { false };
+			Thread reader = new Thread(() -> failed[0] = launcher.hasFailed(uuid));
 			reader.start();
 			try {
 				reader.join(2000);
@@ -343,6 +346,8 @@ public class BootstrapLauncherTest {
 				Thread.currentThread().interrupt();
 			}
 			lockFree[0] = !reader.isAlive();
+			stillFailedDuringDrop[0] = failed[0];
+			return true;
 		});
 
 		for (int i = 0; i <= BootstrapLauncher.MAX_FAILED_PATIENTS; i++) {
@@ -350,10 +355,48 @@ public class BootstrapLauncherTest {
 		}
 		failWarm(launcher, "patient-1");
 
-		assertEquals("one forgotten, the least recently failed; a repeat failure is not a new entry",
-		    java.util.Collections.singletonList("patient-0"), forgotten);
-		assertFalse(launcher.hasFailed("patient-0"));
-		assertTrue("the handler ran with the failure map unlocked", lockFree[0]);
+		assertEquals("one dropped, the least recently failed; a repeat failure is not a new entry",
+		    java.util.Collections.singletonList("patient-0"), dropped);
+		assertFalse("forgotten once its chart is gone", launcher.hasFailed("patient-0"));
+		assertTrue("the dropper ran with the failure map unlocked", lockFree[0]);
+		assertTrue("and the patient still read failed while it ran", stillFailedDuringDrop[0]);
+	}
+
+	@Test
+	public void aFailureWhoseChartCannotBeDropped_isKept_unchanged_andTheMapShrinksBackOnceDropsWork() {
+		long[] now = { 1_000_000L };
+		BootstrapLauncher launcher = SynchronousLaunchers.create(() -> now[0]);
+		failWarm(launcher, "stuck");
+		long backoff = launcher.millisUntilRetry("stuck");
+		List<String> attempts = new ArrayList<>();
+		final boolean[] works = { false };
+		launcher.setFailedChartDropper(uuid -> {
+			attempts.add(uuid);
+			if ("stuck".equals(uuid) && !works[0]) {
+				throw new IllegalStateException("delete failed");
+			}
+			return works[0];
+		});
+
+		for (int i = 0; i < BootstrapLauncher.MAX_FAILED_PATIENTS + 3; i++) {
+			failWarm(launcher, "patient-" + i);
+		}
+
+		assertTrue("a chart that could not be dropped still reads failed", launcher.hasFailed("stuck"));
+		assertEquals("and its failure is untouched: no extra failure counted", backoff, launcher.millisUntilRetry("stuck"));
+		assertTrue("each new failure tried one drop and stopped at it", attempts.size() <= 4);
+
+		works[0] = true;
+		attempts.clear();
+		failWarm(launcher, "patient-last");
+
+		assertEquals("back to the bound: the four over it dropped", 5, attempts.size());
+		int remembered = 0;
+		for (String uuid : attempts) {
+			remembered += launcher.hasFailed(uuid) ? 1 : 0;
+		}
+		assertEquals(0, remembered);
+		assertTrue(launcher.hasFailed("patient-last"));
 	}
 
 	@Test

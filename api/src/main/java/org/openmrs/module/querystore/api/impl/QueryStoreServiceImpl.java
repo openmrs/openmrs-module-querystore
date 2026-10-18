@@ -179,20 +179,19 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	public void setBootstrapLauncher(BootstrapLauncher bootstrapLauncher) {
 		this.bootstrapLauncher = bootstrapLauncher;
 		if (bootstrapLauncher != null) {
-			bootstrapLauncher.setOnFailureForgotten(uuid -> dropForgottenChart(bootstrapLauncher, uuid));
+			bootstrapLauncher.setFailedChartDropper(uuid -> dropFailedChart(bootstrapLauncher, uuid));
 		}
 	}
 
 	/**
-	 * The launcher forgot that this patient's projection failed, so its chart, maybe partial, would
-	 * read as indexed: drop it, so it reads not indexed and a later warm rebuilds it. Not while a
+	 * The launcher wants to forget that this patient's projection failed. Its chart, maybe partial,
+	 * would then read as indexed, so drop it first, and say whether it is gone: only then is the
+	 * failure forgotten, the patient reads not indexed, and a later warm rebuilds it. Not while a
 	 * projection of the patient runs: that one records its own outcome, and dropping its documents
 	 * mid-run would leave a partial chart it then reports complete.
 	 */
-	private void dropForgottenChart(BootstrapLauncher launcher, String patientUuid) {
-		if (!launcher.isWarming(patientUuid)) {
-			bootstrapService().forgetPatient(patientUuid);
-		}
+	private boolean dropFailedChart(BootstrapLauncher launcher, String patientUuid) {
+		return !launcher.isWarming(patientUuid) && bootstrapService().forgetPatient(patientUuid);
 	}
 
 	public void setBackend(BackendStore backend) {
@@ -286,15 +285,16 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	@Override
-	public void bulkDeleteByPatient(String patientUuid) {
+	public BulkWriteResult bulkDeleteByPatient(String patientUuid) {
 		if (patientUuid == null) {
-			return;
+			return new BulkWriteResult(0, 0, Collections.<DocFailure> emptyList());
 		}
 		if (backend == null) {
 			log.warn("No BackendStore wired; ignoring a bulkDeleteByPatient call");
-			return;
+			return new BulkWriteResult(0, 0,
+			        Collections.singletonList(new DocFailure(null, patientUuid, "No BackendStore wired", false)));
 		}
-		backend.bulkDeleteByPatient(patientUuid);
+		return backend.bulkDeleteByPatient(patientUuid);
 	}
 
 	@Override

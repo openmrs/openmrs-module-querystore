@@ -858,36 +858,83 @@ public class QueryStoreServiceQueryTest {
 	@Test
 	public void aFailedChartWhoseFailureIsForgotten_readsNotIndexed_notIndexed() {
 		// sec r1 S2: the failed warm left a partial chart. When the bounded failure map forgets the
-		// patient, that chart must not start reading as indexed: its documents are dropped.
-		BootstrapLauncher launcher = SynchronousLaunchers.create();
-		service.setBootstrapLauncher(launcher);
-		bootstrap.onForget = uuid -> backend.bulkDeleteByPatient(uuid);
-		bootstrap.onEnsureIndexed = uuid -> {
-			index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
-			throw new IllegalStateException("conditions failed");
+		// patient, that chart must not start reading as indexed: its documents are dropped first.
+		BootstrapLauncher launcher = failedPartialChart();
+		bootstrap.onForget = uuid -> {
+			backend.bulkDeleteByPatient(uuid);
+			return !backend.existsByPatient(uuid);
 		};
-		service.warm(PATIENT);
-		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
 
-		for (int i = 0; i < BootstrapLauncher.MAX_FAILED_PATIENTS; i++) {
-			launcher.launchPatientWarm("other-" + i, () -> {
-				throw new IllegalStateException("x");
-			});
-		}
+		failOthersPastTheBound(launcher);
 
 		assertEquals(Collections.singletonList(PATIENT), bootstrap.forgetCalls);
 		assertEquals(IndexStatus.NOT_INDEXED, service.getIndexStatus(PATIENT));
 	}
 
 	@Test
-	public void aForgottenFailure_ofAPatientBeingProjected_leavesItsDocuments() {
+	public void aForgottenFailureWhoseDeleteReportsAFailure_staysFailed_andServesNoRows() {
+		// r2 code S3 / sec S1: a delete that leaves rows behind must not let them read as indexed.
+		BootstrapLauncher launcher = failedPartialChart();
+		bootstrap.onForget = uuid -> false;
+
+		failOthersPastTheBound(launcher);
+
+		assertEquals(Collections.singletonList(PATIENT), bootstrap.forgetCalls);
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
+		QueryResult result = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		assertEquals(IndexStatus.FAILED, result.getStatus());
+		assertTrue(result.getHits().isEmpty());
+	}
+
+	@Test
+	public void aSearchWhileAForgottenChartIsBeingDropped_getsNoRows() {
+		// r2 sec S1: the patient reads failed for the whole delete, not indexed with half its rows.
+		BootstrapLauncher launcher = failedPartialChart();
+		QueryResult[] during = { null };
+		bootstrap.onForget = uuid -> {
+			during[0] = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+			backend.bulkDeleteByPatient(uuid);
+			return !backend.existsByPatient(uuid);
+		};
+
+		failOthersPastTheBound(launcher);
+
+		assertEquals(IndexStatus.FAILED, during[0].getStatus());
+		assertTrue(during[0].getHits().isEmpty());
+		assertEquals(IndexStatus.NOT_INDEXED, service.getIndexStatus(PATIENT));
+	}
+
+	/** A synchronous launcher on the service, with the patient's failed warm having left one row. */
+	private BootstrapLauncher failedPartialChart() {
+		BootstrapLauncher launcher = SynchronousLaunchers.create();
+		service.setBootstrapLauncher(launcher);
+		bootstrap.onEnsureIndexed = uuid -> {
+			index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+			throw new IllegalStateException("conditions failed");
+		};
+		service.warm(PATIENT);
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
+		bootstrap.onEnsureIndexed = null;
+		return launcher;
+	}
+
+	/** Enough other failures to push the patient, the least recently failed, past the bound. */
+	private static void failOthersPastTheBound(BootstrapLauncher launcher) {
+		for (int i = 0; i < BootstrapLauncher.MAX_FAILED_PATIENTS; i++) {
+			launcher.launchPatientWarm("other-" + i, () -> {
+				throw new IllegalStateException("x");
+			});
+		}
+	}
+
+	@Test
+	public void aForgottenFailure_ofAPatientBeingProjected_leavesItsDocumentsAndItsFailure() {
 		// A projection in flight records its own outcome; dropping its documents mid-run would leave it
 		// partial and then reported indexed.
 		service.setBootstrapLauncher(launcher);
 		launcher.warming = true;
 
-		launcher.forget(PATIENT);
-
+		assertFalse("not dropped, so not forgotten", launcher.forget(PATIENT));
 		assertTrue(bootstrap.forgetCalls.isEmpty());
 	}
 
@@ -1118,16 +1165,16 @@ public class QueryStoreServiceQueryTest {
 			return warming;
 		}
 
-		java.util.function.Consumer<String> forgotten;
+		java.util.function.Predicate<String> dropper;
 
 		@Override
-		public void setOnFailureForgotten(java.util.function.Consumer<String> handler) {
-			forgotten = handler;
+		public void setFailedChartDropper(java.util.function.Predicate<String> dropper) {
+			this.dropper = dropper;
 		}
 
-		/** Forgets a failure as the bound would. */
-		void forget(String patientUuid) {
-			forgotten.accept(patientUuid);
+		/** Asks to drop a failed chart as the bound would; whether it was dropped. */
+		boolean forget(String patientUuid) {
+			return dropper.test(patientUuid);
 		}
 	}
 
@@ -1161,13 +1208,11 @@ public class QueryStoreServiceQueryTest {
 
 		final List<String> forgetCalls = new ArrayList<>();
 
-		java.util.function.Consumer<String> onForget;
+		java.util.function.Predicate<String> onForget;
 
-		@Override public void forgetPatient(String patientUuid) {
+		@Override public boolean forgetPatient(String patientUuid) {
 			forgetCalls.add(patientUuid);
-			if (onForget != null) {
-				onForget.accept(patientUuid);
-			}
+			return onForget != null && onForget.test(patientUuid);
 		}
 
 		RuntimeException progressFailure;
