@@ -519,6 +519,20 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aProgressLookupThatFails_leavesProgressOut_andStillAnswersTheSearch() {
+		// code r1 N3: the hits are already computed; progress is a hint, not worth failing them over.
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		bootstrap.progressFailure = new IllegalStateException("no BootstrapService");
+		launcher.warming = true;
+
+		QueryResult result = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+
+		assertEquals(IndexStatus.PROJECTING, result.getStatus());
+		assertEquals(Collections.singletonList("cd4-1"), uuids(result.getHits()));
+		assertFalse(result.toMap().containsKey("progress"));
+	}
+
+	@Test
 	public void aProjectingChart_carriesItsProgressInTypes_andAnIndexedOneDoesNot() {
 		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
 		bootstrap.progress = new ProjectionProgress(4, 12);
@@ -1101,7 +1115,14 @@ public class QueryStoreServiceQueryTest {
 			}
 		}
 
-		@Override public ProjectionProgress getProjectionProgress(String patientUuid) { return progress; }
+		RuntimeException progressFailure;
+
+		@Override public ProjectionProgress getProjectionProgress(String patientUuid) {
+			if (progressFailure != null) {
+				throw progressFailure;
+			}
+			return progress;
+		}
 		@Override public void bootstrap() { }
 		@Override public void bootstrap(String resourceType) { }
 		@Override public void resyncType(String resourceType) { }

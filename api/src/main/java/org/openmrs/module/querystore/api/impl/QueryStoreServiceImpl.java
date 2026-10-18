@@ -35,6 +35,7 @@ import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.querystore.QueryStoreConstants;
 import org.openmrs.module.querystore.SafeLog;
 import org.openmrs.module.querystore.api.IndexStatus;
+import org.openmrs.module.querystore.api.ProjectionProgress;
 import org.openmrs.module.querystore.api.QueryResult;
 import org.openmrs.module.querystore.api.QuerySpec;
 import org.openmrs.module.querystore.api.QueryStoreService;
@@ -703,8 +704,18 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			emitRetrievalLog(spec.getQuery(), logged);
 		}
 		QueryResult result = new QueryResult(status, hits, groups, typeCounts);
-		return status == IndexStatus.PROJECTING
-		        ? result.withProgress(bootstrapService().getProjectionProgress(patientUuid)) : result;
+		return status == IndexStatus.PROJECTING ? result.withProgress(projectionProgress(patientUuid)) : result;
+	}
+
+	/** The patient's projection progress, or null when it can't be had: a hint, not worth failing a search over. */
+	private ProjectionProgress projectionProgress(String patientUuid) {
+		try {
+			return bootstrapService().getProjectionProgress(patientUuid);
+		}
+		catch (RuntimeException e) {
+			log.debug("Projection progress unavailable; answering without it", e);
+			return null;
+		}
 	}
 
 	/**
