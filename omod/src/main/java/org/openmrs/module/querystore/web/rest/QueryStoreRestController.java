@@ -524,7 +524,8 @@ public class QueryStoreRestController {
 	 * {@code 202 {"status": "projecting"}} when a warm started or is already running, and {@code 503}
 	 * with a {@code Retry-After} header when none could start (the daemon isn't up, or every
 	 * projection slot is busy, or a failed patient's retry backoff has not run out); its body carries
-	 * the patient's status.
+	 * the patient's status. {@code Retry-After} is the remaining backoff (whole seconds, rounded up)
+	 * for a failed patient in its backoff, else {@value #WARM_RETRY_AFTER_SECONDS}.
 	 */
 	@RequestMapping(value = "/patient/{patientUuid}/warm", method = RequestMethod.POST)
 	@ResponseBody
@@ -540,8 +541,11 @@ public class QueryStoreRestController {
 		}
 		Map<String, Object> body = new HashMap<String, Object>();
 		body.put("status", status.wireName());
-		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-		        .header("Retry-After", String.valueOf(WARM_RETRY_AFTER_SECONDS)).<Object> body(body);
+		// A failed chart in its retry backoff: come back when it runs out, not in 5 seconds.
+		long backoffMillis = status == IndexStatus.FAILED ? queryStoreService().getRetryAfterMillis(patientUuid) : 0;
+		long retryAfterSeconds = backoffMillis > 0 ? Math.max(1, (backoffMillis + 999) / 1000) : WARM_RETRY_AFTER_SECONDS;
+		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", String.valueOf(retryAfterSeconds))
+		        .<Object> body(body);
 	}
 
 	/** {@code {"status": "indexed" | "projecting" | "failed" | "not_indexed"}}. */

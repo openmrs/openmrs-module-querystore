@@ -904,6 +904,24 @@ public class QueryStoreRestControllerTest {
 		assertEquals("failed", ((Map<?, ?>) controller.warm("failed-uuid").getBody()).get("status"));
 	}
 
+	@Test
+	public void warm_ofAFailedChartInItsBackoff_saysToRetryWhenTheBackoffRunsOut() {
+		// r1 N1: Retry-After is the remaining backoff, rounded up to whole seconds, at least 1.
+		authenticate();
+		QueryStoreService queryStore = mock(QueryStoreService.class);
+		when(queryStore.warm(org.mockito.ArgumentMatchers.anyString())).thenReturn(IndexStatus.FAILED);
+		when(queryStore.getRetryAfterMillis("backoff-long")).thenReturn(45_500L);
+		when(queryStore.getRetryAfterMillis("backoff-short")).thenReturn(200L);
+		when(queryStore.getRetryAfterMillis("no-slot")).thenReturn(0L);
+		controller.setQueryStoreService(queryStore);
+
+		assertEquals("46", controller.warm("backoff-long").getHeaders().getFirst("Retry-After"));
+		assertEquals("1", controller.warm("backoff-short").getHeaders().getFirst("Retry-After"));
+		assertEquals("due, but no slot was free", String.valueOf(QueryStoreRestController.WARM_RETRY_AFTER_SECONDS),
+		    controller.warm("no-slot").getHeaders().getFirst("Retry-After"));
+		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, controller.warm("backoff-long").getStatusCode());
+	}
+
 	/** Runs a call expected to name a type the caller may not search, and checks the one 403 it gets. */
 	private void assertTypeNotAvailable(Runnable call) {
 		try {

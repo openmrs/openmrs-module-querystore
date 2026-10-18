@@ -220,6 +220,15 @@ public interface QueryStoreService extends OpenmrsService {
 	}
 
 	/**
+	 * How long until a warm may retry this patient's failed chart, in milliseconds: 0 when it may now,
+	 * or the chart has not failed. What {@code POST warm} puts in {@code Retry-After} while it waits.
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default long getRetryAfterMillis(String patientUuid) {
+		return 0;
+	}
+
+	/**
 	 * Deletes the patient's documents and re-projects every type, under the per-patient lock and
 	 * inside a projection slot: the bounded form of {@code BootstrapService.reindexPatient}, for a
 	 * request thread. Returns the patient's status after it ran ({@link IndexStatus#INDEXED}, or

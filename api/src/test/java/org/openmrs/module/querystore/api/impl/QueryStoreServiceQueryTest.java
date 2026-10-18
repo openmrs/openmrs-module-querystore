@@ -823,6 +823,17 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void retryAfterMillis_isTheFailedChartsRemainingBackoff() {
+		long[] now = { 1_000_000L };
+		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));
+		assertEquals(0, service.getRetryAfterMillis(PATIENT));
+		service.warm(PATIENT);
+		now[0] += 10_000;
+
+		assertEquals(BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS - 10_000, service.getRetryAfterMillis(PATIENT));
+	}
+
+	@Test
 	public void aPoisonChart_isRetriedOnItsBackoffSchedule_notOnEveryKeystroke() {
 		long[] now = { 1_000_000L };
 		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));

@@ -589,6 +589,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	@Override
+	public long getRetryAfterMillis(String patientUuid) {
+		return bootstrapLauncher == null ? 0 : bootstrapLauncher.millisUntilRetry(patientUuid);
+	}
+
+	@Override
 	public IndexStatus warm(String patientUuid) {
 		IndexStatus status = getIndexStatus(patientUuid);
 		if (status == IndexStatus.PROJECTING || status == IndexStatus.INDEXED || backend == null
