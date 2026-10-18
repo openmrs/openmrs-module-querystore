@@ -278,6 +278,43 @@ public class BootstrapLauncherTest {
 	}
 
 	@Test
+	public void launchPatientWarm_runsOnNotStarted_onlyWhenNoWarmForThePatientIsInFlight() {
+		// r3 code N2 / sec N1: the caller undoes what it set up for the warm only when none runs.
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+		int[] notStarted = { 0 };
+		Runnable count = () -> notStarted[0]++;
+
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true, count));
+		assertEquals("started", 0, notStarted[0]);
+		assertTrue("no slot, but this patient's warm is in flight", launcher.launchPatientWarm("patient-1", () -> true, count));
+		assertEquals(0, notStarted[0]);
+		assertFalse("no slot, nothing in flight for this patient", launcher.launchPatientWarm("patient-2", () -> true, count));
+		assertEquals(1, notStarted[0]);
+
+		BootstrapLauncher noToken = new BootstrapLauncher();
+		assertFalse(noToken.launchPatientWarm("patient-3", () -> true, count));
+		assertEquals("no daemon to start it", 2, notStarted[0]);
+	}
+
+	@Test
+	public void launchPatientWarm_thatCannotBeHandedToAThread_runsOnNotStarted_andRethrows() {
+		// r3 code N1.
+		BootstrapLauncher launcher = SynchronousLaunchers.failingToStart(() -> 0L);
+		int[] notStarted = { 0 };
+
+		try {
+			launcher.launchPatientWarm("patient-1", () -> true, () -> notStarted[0]++);
+			fail("expected the executor's failure");
+		}
+		catch (IllegalStateException expected) {
+			// pass
+		}
+		assertEquals(1, notStarted[0]);
+		assertFalse(launcher.isWarming("patient-1"));
+	}
+
+	@Test
 	public void syncProjections_andBackgroundWarms_shareOneBound() {
 		List<Runnable> parked = new ArrayList<>();
 		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);

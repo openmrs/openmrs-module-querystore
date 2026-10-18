@@ -654,10 +654,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (retry) {
 			retryPendingDelete.add(patientUuid);
 		}
-		boolean launched = bootstrapLauncher.launchPatientWarm(patientUuid, work);
-		if (!launched && retry) {
-			retryPendingDelete.remove(patientUuid);
-		}
+		// Cleared by the launcher only when no warm for the patient is left in flight, under the lock
+		// that publishes one, so a call that lost the race for the slot cannot clear the mark of the
+		// retry that won it, and a launch that throws does not leave the mark behind.
+		boolean launched = bootstrapLauncher.launchPatientWarm(patientUuid, work,
+		    retry ? () -> retryPendingDelete.remove(patientUuid) : () -> {
+		    });
 		return launched ? IndexStatus.PROJECTING : status;
 	}
 

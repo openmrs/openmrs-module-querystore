@@ -39,7 +39,25 @@ public final class SynchronousLaunchers {
 
 	/** {@link #parked(int, List)}, reading time (epoch millis) from {@code clock}. */
 	public static BootstrapLauncher parked(int slots, List<Runnable> parked, LongSupplier clock) {
-		BootstrapLauncher launcher = parked(slots, parked);
+		return park(new BootstrapLauncher(), slots, parked, clock);
+	}
+
+	/** Makes {@code launcher}, a subclass say, what {@link #parked(int, List, LongSupplier)} returns. */
+	public static <L extends BootstrapLauncher> L park(L launcher, int slots, List<Runnable> parked, LongSupplier clock) {
+		launcher.setMaxConcurrentProjections(slots);
+		launcher.setDaemonExecutor((task, token) -> parked.add(task));
+		launcher.setDaemonToken(new DaemonToken("token-parked"));
+		launcher.setClock(clock);
+		return launcher;
+	}
+
+	/** A real launcher whose background warms can never start: handing one to a thread throws. */
+	public static BootstrapLauncher failingToStart(LongSupplier clock) {
+		BootstrapLauncher launcher = new BootstrapLauncher();
+		launcher.setDaemonExecutor((task, token) -> {
+			throw new IllegalStateException("no thread for the warm");
+		});
+		launcher.setDaemonToken(new DaemonToken("token-failing"));
 		launcher.setClock(clock);
 		return launcher;
 	}

@@ -85,6 +85,10 @@ public class BootstrapLauncher {
 	// taking a slot of its own. An entry exists only while its projection holds a slot.
 	private final ConcurrentHashMap<String, CountDownLatch> inFlight = new ConcurrentHashMap<>();
 
+	// Taken to publish an in-flight entry, and by launchPatientWarm to decide that none is in flight,
+	// so that decision cannot interleave with another call's publication. Never held while waiting.
+	private final Object launchLock = new Object();
+
 	// Resource types with a launchResyncAsync running, so repeated requests share one scan.
 	private final Set<String> resyncing = ConcurrentHashMap.newKeySet();
 
@@ -181,7 +185,10 @@ public class BootstrapLauncher {
 				Thread.currentThread().interrupt();
 				return false;
 			}
-			CountDownLatch other = patientUuid == null ? null : inFlight.putIfAbsent(patientUuid, done);
+			CountDownLatch other;
+			synchronized (launchLock) {
+				other = patientUuid == null ? null : inFlight.putIfAbsent(patientUuid, done);
+			}
 			if (other == null) {
 				break;
 			}
@@ -351,23 +358,40 @@ public class BootstrapLauncher {
 	 *         free, in which case nothing runs and the caller may retry later.
 	 */
 	public boolean launchPatientWarm(String patientUuid, BooleanSupplier work) {
-		DaemonToken token = this.daemonToken;
-		if (token == null || patientUuid == null) {
+		return launchPatientWarm(patientUuid, work, () -> {
+		});
+	}
+
+	/**
+	 * {@link #launchPatientWarm(String, BooleanSupplier)}, running {@code onNotStarted} when this call
+	 * leaves no warm for the patient in flight: none could start, or handing it to a thread threw.
+	 * It runs under the lock that publishes in-flight projections, so it cannot undo the setup of a
+	 * warm another call has just started for the same patient.
+	 */
+	public boolean launchPatientWarm(String patientUuid, BooleanSupplier work, Runnable onNotStarted) {
+		if (patientUuid == null) {
 			return false;
 		}
+		DaemonToken token = this.daemonToken;
 		// Slot first, then the in-flight entry, so a patient is only ever in flight while its
 		// projection holds a slot: registering first let a racing duplicate report "in flight" for a
 		// warm that then found no slot and never ran.
 		Semaphore slots = this.projectionSlots;
-		if (!slots.tryAcquire()) {
-			log.debug("No projection slot free; not launching a warm");
-			return inFlight.containsKey(patientUuid);
-		}
 		CountDownLatch done = new CountDownLatch(1);
-		if (inFlight.putIfAbsent(patientUuid, done) != null) {
-			slots.release();
-			log.debug("Patient warm already in flight; ignoring duplicate");
-			return true;
+		synchronized (launchLock) {
+			if (token == null || !slots.tryAcquire()) {
+				log.debug("No daemon token or projection slot; not launching a warm");
+				if (inFlight.containsKey(patientUuid)) {
+					return true;
+				}
+				onNotStarted.run();
+				return false;
+			}
+			if (inFlight.putIfAbsent(patientUuid, done) != null) {
+				slots.release();
+				log.debug("Patient warm already in flight; ignoring duplicate");
+				return true;
+			}
 		}
 		log.debug("Patient warm starting (" + inFlight.size() + " in flight)");
 		try {
@@ -394,6 +418,11 @@ public class BootstrapLauncher {
 			inFlight.remove(patientUuid, done);
 			done.countDown();
 			slots.release();
+			synchronized (launchLock) {
+				if (!inFlight.containsKey(patientUuid)) {
+					onNotStarted.run();
+				}
+			}
 			throw e;
 		}
 		return true;

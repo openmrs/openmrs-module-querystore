@@ -1069,6 +1069,77 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aRetryThatThrowsAsItLaunches_leavesNoPendingDeleteMark() {
+		// code r3 N1: the executor's failure propagates out of warm(); the mark must not outlive it.
+		long[] now = { 1_000_000L };
+		BootstrapLauncher launcher = SynchronousLaunchers.failingToStart(() -> now[0]);
+		service.setBootstrapLauncher(launcher);
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		try {
+			launcher.runWithProjectionSlot(PATIENT, () -> {
+				throw new IllegalStateException("conditions failed");
+			}, 50);
+			fail("expected the projection's failure");
+		}
+		catch (IllegalStateException expected) {
+			// pass
+		}
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+
+		try {
+			service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+			fail("expected the launch failure");
+		}
+		catch (IllegalStateException expected) {
+			// pass
+		}
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
+	}
+
+	@Test
+	public void aRetryThatLosesTheSlotRace_doesNotClearTheMarkOfTheRetryThatWonIt() {
+		// code r3 N2 / sec N1. One slot, held by another patient. The first retry finds it taken and
+		// nothing in flight for this patient; before that call returns, the slot frees and a second
+		// search's retry wins it and parks before its delete. The loser must not clear the winner's
+		// mark: a search now still gets no rows.
+		long[] now = { 1_000_000L };
+		List<Runnable> parked = new ArrayList<>();
+		boolean[] raced = { false };
+		BootstrapLauncher launcher = SynchronousLaunchers.park(new BootstrapLauncher() {
+
+			@Override
+			public boolean launchPatientWarm(String patientUuid, java.util.function.BooleanSupplier work, Runnable onNotStarted) {
+				boolean launched = super.launchPatientWarm(patientUuid, work, onNotStarted);
+				if (!launched && PATIENT.equals(patientUuid) && !raced[0]) {
+					raced[0] = true;
+					parked.remove(0).run();
+					assertEquals(IndexStatus.PROJECTING,
+					    service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build())
+					            .getStatus());
+				}
+				return launched;
+			}
+		}, 1, parked, () -> now[0]);
+		service.setBootstrapLauncher(launcher);
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		assertTrue(launcher.launchPatientWarm(PATIENT, () -> {
+			throw new IllegalStateException("conditions failed");
+		}));
+		parked.remove(0).run();
+		assertTrue(launcher.launchPatientWarm("another-patient", () -> true));
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+
+		service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		QueryResult after = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+
+		assertTrue("the race ran", raced[0]);
+		assertEquals("the winner's retry is parked before its delete", 1, parked.size());
+		assertEquals(IndexStatus.PROJECTING, after.getStatus());
+		assertTrue("not the rows its delete is about to remove", after.getHits().isEmpty());
+	}
+
+	@Test
 	public void aRetryWhoseDeleteReportsAFailure_leavesTheChartFailed_withNoRows() {
 		// code r3 S1, through the real BootstrapServiceImpl: the delete reports one failed index and
 		// deletes nothing, so the old partial chart is still there and must not become "indexed".
@@ -1325,8 +1396,9 @@ public class QueryStoreServiceQueryTest {
 		boolean warming;
 
 		@Override
-		public boolean launchPatientWarm(String patientUuid, java.util.function.BooleanSupplier work) {
+		public boolean launchPatientWarm(String patientUuid, java.util.function.BooleanSupplier work, Runnable onNotStarted) {
 			if (!accept) {
+				onNotStarted.run();
 				return false;
 			}
 			launched.add(patientUuid);
