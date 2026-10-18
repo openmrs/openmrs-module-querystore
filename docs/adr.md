@@ -29,6 +29,7 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 14. [Authorization and Consumer API Surface](#decision-14-authorization-and-consumer-api-surface)
 15. [Full-Chart Retrieval — Unfiltered Per-Patient Enumeration](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration)
 16. [REST Read API — `patientrecord` Resource](#decision-16-rest-read-api--patientrecord-resource)
+17. [Context-Slice Read — Tiered Record Selection](#decision-17-context-slice-read--tiered-record-selection)
 
 [Open Questions](#open-questions)
 
@@ -1358,10 +1359,90 @@ Accepted
 - **The endpoint is NOT in the OpenMRS Swagger spec** (plain controllers aren't, unlike framework resources); it is documented in [`rest-api.md`](./rest-api.md) alongside the operational endpoints. Promoting it to a framework resource for Swagger discoverability is a deferred follow-up.
 - **The ES 10 000-hit cap (Decision 15) is surfaced explicitly via `chartTruncated`;** `totalCount` remains the number of records materialized by the backend and must not be used to infer completeness. The cap is not lifted; `search_after` remains the deferred v1.1 item.
 - **First REST touch on a never-indexed patient pays the Decision-15 cold-touch cost**; the 404 validation guards only bogus uuids.
-- **Ordinary reads surface, but do not repair, index completeness.** Full-chart reads carry the same expected-resource-type-aware `projectionComplete` signal as `indexingstatus`. Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to diagnose and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
+- **Ordinary reads surface, but do not repair, index completeness.** Full-chart and context reads carry the same expected-resource-type-aware `projectionComplete` signal as `indexingstatus`. Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to diagnose and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
 - **External clients can cache only in private memory.** The response is revalidated on use rather than given a shared-cache lifetime; a client treats an ETag/snapshot mismatch as a fresh chart and never serves the stale clinical payload.
 - **The endpoint is read-only** — indexing stays unexposed (Decision 14).
 - **Budget-aware retrieval, FHIR shaping, and a general non-AI read breadth remain deferred** — explicitly the next iteration.
+
+---
+
+## Decision 17: Context-Slice Read — Tiered Record Selection
+
+### Status
+Accepted
+
+### Context
+Two AI consumers assemble question-scoped context from this read store today — bundled
+ChartSearchAI in-process (`QueryStoreChartBuilder.buildScoped`) and med-agent-hub over the
+Decision 16 REST surface (`context_sources.py`) — and each implements its own selection policy
+over the same indexed documents. A measured comparison (harness engine-parity instrument,
+2026-07-22) showed the two policies drifting symmetrically: bundled lacked the mandatory clinical
+core (allergies + active conditions) the hub always includes, the hub lacks the obs-group panel
+completion bundled performs, and both re-derive semantics this store already owns (clinical-date
+kinds, group metadata, ranked search). The parity roadmap's shared context-selection amendment
+(2026-07-22, `clinical-ai-validation-harness` `openmrs-dual-provider-parity-roadmap-status.md`)
+directs consolidating the selection invariants here, at the data owner, while each engine keeps
+prompt composition, token budgeting, and question interpretation.
+
+### Decision
+1. **A fourth v1 read method returns a tier-tagged record selection**:
+   `ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request)`.
+   The request carries the caller's question interpretation — `types` (resource types whose
+   records must be typed-complete) and `temporal` (whether a recency anchor applies), plus
+   bounded knobs `recencyAnchorSize` (default 15) and `similarityLimit` (default 30). Querystore
+   performs **mechanical selection only**; it does not interpret the question.
+2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
+   highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
+   `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `exact` (explicit
+   UUIDs, dates, namespaced codes, labeled identifiers, and quoted phrases) → `typed` (resource
+   type ∈ `types`) → `recency_anchor` (the first `recencyAnchorSize` chart documents, only when
+   `temporal`) → `similarity` (uuid ∈ the `searchByPatient(question, similarityLimit)`
+   hits) → `panel` (obs-group family completion: when a group parent or any member is selected,
+   the whole family joins and any budget-droppable triggering record is promoted to `panel`).
+   Output preserves Decision 15's `record_date`-desc chart order. A panel-promoted similarity
+   record retains its original retrieval rank for traceability.
+3. **Degradation and edges follow the sibling reads**: blank question or `similarityLimit <= 0`
+   skips the search RPC; a search failure degrades to the policy tiers alone (never blocks);
+   cold-patient lazy bootstrap is inherited from `getPatientChart`. `ContextSlice` surfaces
+   `chartSize` and `chartTruncated` (true when the chart hit the Decision 15 ES cap) so a
+   capped chart is never silently absorbed into a "complete" slice.
+4. **Explicit non-goals, unchanged from Decisions 14/15/16**: no prompt composition, no token
+   or model awareness, no question NLU, no result the caller could not read via
+   `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling
+   reads. The REST surface (Decision 16) exposes the slice additively via
+   `patientrecord?...&mode=context&types=...&temporal=...`, with each record carrying its
+   `tier`. Every context page carries `chartSnapshotId`, the same stable complete-chart snapshot
+   the full-chart read publishes (`PatientChartFingerprint.snapshotId(chart, truncated,
+   projectionComplete)` over the complete chart the slice was selected from), plus a
+   deterministic `sliceId` over the complete ordered selection and effective interpretation.
+   A consumer that combines a full-chart ledger with a later slice must require matching
+   `chartSnapshotId` values and retry or fail when they differ; `sliceId` lets it reject mixed
+   pages and is neither a chart snapshot nor a cache validator.
+
+### Rationale
+1. **Selection is retrieval.** The tiers are query semantics over fields this store owns
+   (`clinical_status`, `obs_group_uuid`, `record_date`, the ranked search) — a smarter read,
+   not a prompt service. Decision 16 already deferred "budget-aware retrieval" as the next
+   iteration; this lands its selection half while budgets stay engine-side.
+2. **One implementation ends structural drift.** Safety-relevant invariants (mandatory core,
+   panel completion) implemented twice measurably diverged; conformance fixtures caught it
+   after the fact. A single implementation makes the shared `context_policy` fixture family
+   (dual-provider-conformance.v1) this module's own red-first test suite.
+3. **Consumers stay thin and source-neutral.** Engines pass their interpretation flags and
+   compose prompts from tagged records; the hub keeps its local policy for non-querystore
+   sources. `mandatory` tags tell a budget-constrained consumer what is never droppable.
+
+### Consequences
+- The v1 read surface grows to four methods; REST wraps all four uniformly (Decision 16 shape).
+- ChartSearchAI's `buildScoped` and the hub's querystore source become thin adapters over this
+  method (harness plan `querystore-context-slice-plan.md`, CP2/CP3); their intent-routing and
+  temporal detection remain caller-side, so interpretation drift between engines is still
+  possible and remains measured by the harness parity instrument.
+- Active-condition detection reads the `clinical_status` metadata the condition serializer
+  already emits; `diagnosis` documents without that metadata simply never match the mandatory
+  tier (no text sniffing).
+- The `panel` tier is additive beyond the four tiers the harness plan sketched; it makes family
+  completion honest instead of mislabeling joined members as `typed`.
 
 ---
 
