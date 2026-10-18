@@ -183,7 +183,8 @@ public interface QueryStoreService extends OpenmrsService {
 	 * paging (prototype consumer API for the omnibar; see {@link QuerySpec}). Same authorization as
 	 * {@link #searchByPatient}. A cold patient is projected first when {@link QuerySpec#isWait()},
 	 * else answered at once with an empty result whose {@link IndexStatus} says why: a background warm
-	 * is started where one can be, and a patient whose last warm failed is not retried here.
+	 * is started where one can be, and a patient whose last warm failed is retried only once its
+	 * retry backoff has run out (see {@link #warm}).
 	 * Throws {@link IllegalArgumentException} for a type no
 	 * provider registers.
 	 *
@@ -204,9 +205,12 @@ public interface QueryStoreService extends OpenmrsService {
 	/**
 	 * Starts projecting a never-indexed patient on a background thread and returns at once.
 	 * Idempotent: an indexed patient, or one already being projected, starts nothing. A patient whose
-	 * last warm failed ({@link IndexStatus#FAILED}) is retried with a full re-projection. Returns the
+	 * last warm failed ({@link IndexStatus#FAILED}) is retried with a full re-projection, once a backoff
+	 * has run out: 30 seconds after one failure, doubling with each failure in a row, at most an hour
+	 * ({@code BootstrapLauncher.millisUntilRetry}). Returns the
 	 * status after the call; {@link IndexStatus#NOT_INDEXED} or {@link IndexStatus#FAILED} means
-	 * nothing could be started (the daemon isn't up yet, or too many warms are running) and the
+	 * nothing could be started (the daemon isn't up yet, too many warms are running, or a failed
+	 * patient's backoff has not run out) and the
 	 * caller may retry.
 	 */
 	@Authorized(PrivilegeConstants.GET_PATIENTS)

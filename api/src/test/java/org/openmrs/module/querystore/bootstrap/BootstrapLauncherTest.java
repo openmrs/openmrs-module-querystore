@@ -409,6 +409,43 @@ public class BootstrapLauncherTest {
 	}
 
 	@Test
+	public void aFailedPatient_isDueForRetryOnlyAfterABackoffThatDoublesUpToACap() {
+		long[] now = { 1_000_000L };
+		BootstrapLauncher launcher = SynchronousLaunchers.create(() -> now[0]);
+		long base = BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+
+		assertEquals("never failed, nothing to wait for", 0, launcher.millisUntilRetry("patient-1"));
+		failWarm(launcher, "patient-1");
+		assertEquals(base, launcher.millisUntilRetry("patient-1"));
+		now[0] += base - 1;
+		assertEquals(1, launcher.millisUntilRetry("patient-1"));
+		now[0] += 1;
+		assertEquals("due once the backoff has run out", 0, launcher.millisUntilRetry("patient-1"));
+
+		failWarm(launcher, "patient-1");
+		assertEquals("a second failure in a row waits twice as long", 2 * base, launcher.millisUntilRetry("patient-1"));
+
+		for (int i = 0; i < 40; i++) {
+			failWarm(launcher, "patient-1");
+		}
+		assertEquals("a poison chart backs off to the cap, not forever", BootstrapLauncher.MAX_RETRY_BACKOFF_MILLIS,
+		    launcher.millisUntilRetry("patient-1"));
+		assertTrue(launcher.hasFailed("patient-1"));
+
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+		assertFalse("a full projection clears the failure", launcher.hasFailed("patient-1"));
+		assertEquals(0, launcher.millisUntilRetry("patient-1"));
+		failWarm(launcher, "patient-1");
+		assertEquals("and the count starts again", base, launcher.millisUntilRetry("patient-1"));
+	}
+
+	private static void failWarm(BootstrapLauncher launcher, String patientUuid) {
+		launcher.launchPatientWarm(patientUuid, () -> {
+			throw new IllegalStateException("projection blew up");
+		});
+	}
+
+	@Test
 	public void projectionSlots_areClampedTo32() {
 		java.util.List<Runnable> parked = new java.util.ArrayList<>();
 		BootstrapLauncher launcher = SynchronousLaunchers.parked(1000, parked);

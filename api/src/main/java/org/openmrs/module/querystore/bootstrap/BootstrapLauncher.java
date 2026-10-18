@@ -19,6 +19,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -85,18 +86,39 @@ public class BootstrapLauncher {
 	// Resource types with a launchResyncAsync running, so repeated requests share one scan.
 	private final Set<String> resyncing = ConcurrentHashMap.newKeySet();
 
-	// Patients whose last warm failed: the source of the "failed" index status. Bounded, least
-	// recently failed first out, so a caller warming uuids that never index cannot grow it forever.
-	private final Set<String> failedPatients = Collections.synchronizedSet(Collections.newSetFromMap(
-	    new LinkedHashMap<String, Boolean>(16, 0.75f, true) {
+	/** How long a patient whose projection failed once waits before a warm retries it. */
+	public static final long RETRY_BACKOFF_BASE_MILLIS = 30_000L;
+
+	/** Longest wait between retries: each failure in a row doubles the wait, up to this. */
+	public static final long MAX_RETRY_BACKOFF_MILLIS = 60 * 60_000L;
+
+	private volatile LongSupplier clock = System::currentTimeMillis;
+
+	// Patients whose last warm failed: the source of the "failed" index status, with how many times
+	// in a row and when last, for the retry backoff. Bounded, least recently failed first out, so a
+	// caller warming uuids that never index cannot grow it forever. Compound updates lock the map.
+	private final Map<String, Failure> failedPatients = Collections.synchronizedMap(
+	    new LinkedHashMap<String, Failure>() {
 
 		    private static final long serialVersionUID = 1L;
 
 		    @Override
-		    protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+		    protected boolean removeEldestEntry(Map.Entry<String, Failure> eldest) {
 			    return size() > MAX_FAILED_PATIENTS;
 		    }
-	    }));
+	    });
+
+	private static final class Failure {
+
+		final int inARow;
+
+		final long atMillis;
+
+		Failure(int inARow, long atMillis) {
+			this.inARow = inARow;
+			this.atMillis = atMillis;
+		}
+	}
 
 	/**
 	 * Sets how many per-patient projections may run at once ({@code querystore.projection.maxConcurrent}).
@@ -184,7 +206,7 @@ public class BootstrapLauncher {
 		}
 		catch (RuntimeException e) {
 			if (patientUuid != null) {
-				failedPatients.add(patientUuid);
+				recordFailure(patientUuid);
 			}
 			throw e;
 		}
@@ -361,7 +383,7 @@ public class BootstrapLauncher {
 				}
 				catch (RuntimeException e) {
 					// Fire-and-forget: no caller upstack, so the failure is kept for the status read.
-					failedPatients.add(patientUuid);
+					recordFailure(patientUuid);
 					SafeLog.warn(BootstrapLauncher.class, "Background patient warm failed (patient uuid at DEBUG)", e);
 					log.debug("Background warm failed for patient " + patientUuid);
 				}
@@ -395,7 +417,36 @@ public class BootstrapLauncher {
 	 * many are remembered.
 	 */
 	public boolean hasFailed(String patientUuid) {
-		return patientUuid != null && failedPatients.contains(patientUuid);
+		return patientUuid != null && failedPatients.containsKey(patientUuid);
+	}
+
+	/**
+	 * How long until a warm may retry this failed patient: 0 when it may now, or it has not failed.
+	 * The wait is {@link #RETRY_BACKOFF_BASE_MILLIS} after one failure and doubles with each failure
+	 * in a row, up to {@link #MAX_RETRY_BACKOFF_MILLIS}, so a chart that never projects is retried
+	 * now and then rather than on every keystroke, and is never given up on.
+	 */
+	public long millisUntilRetry(String patientUuid) {
+		Failure failure = patientUuid == null ? null : failedPatients.get(patientUuid);
+		if (failure == null) {
+			return 0;
+		}
+		long backoff = Math.min(MAX_RETRY_BACKOFF_MILLIS,
+		    RETRY_BACKOFF_BASE_MILLIS << Math.min(failure.inARow - 1, 20));
+		return Math.max(0, failure.atMillis + backoff - clock.getAsLong());
+	}
+
+	private void recordFailure(String patientUuid) {
+		synchronized (failedPatients) {
+			// Removed and put back, so the bound forgets the least recently failed first.
+			Failure previous = failedPatients.remove(patientUuid);
+			failedPatients.put(patientUuid, new Failure(previous == null ? 1 : previous.inARow + 1, clock.getAsLong()));
+		}
+	}
+
+	/** Package-private test seam: the time, in epoch millis, the retry backoff is measured against. */
+	void setClock(LongSupplier clock) {
+		this.clock = clock;
 	}
 
 	/**

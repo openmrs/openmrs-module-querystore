@@ -581,8 +581,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			return status;
 		}
 		// A retry re-projects in full: the failed warm may have left a partial chart, which
-		// ensureIndexed would take as indexed and skip.
+		// ensureIndexed would take as indexed and skip. It waits out a backoff, so a chart that never
+		// projects is not re-run by every keystroke or POST warm.
 		boolean retry = status == IndexStatus.FAILED;
+		if (retry && bootstrapLauncher != null && bootstrapLauncher.millisUntilRetry(patientUuid) > 0) {
+			return status;
+		}
 		BooleanSupplier work = () -> {
 			boolean full;
 			if (retry) {
@@ -616,11 +620,15 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		requireKnownTypes(spec.getTypes());
 		String patientUuid = spec.getPatientUuid();
 		IndexStatus status = getIndexStatus(patientUuid);
+		if (status == IndexStatus.FAILED) {
+			// Retried by a warm once its backoff has run out (the omnibar's searches are the only warms
+			// it gets), not on every keystroke. Until it re-projects, its chart may be partial.
+			warm(patientUuid);
+			status = getIndexStatus(patientUuid);
+		}
 		if (status != IndexStatus.INDEXED) {
 			// A partly-projected chart answers "no CD4" for a patient whose obs haven't landed yet,
-			// so a patient that is projecting, failed or not indexed gets no hits, only its status. A
-			// failed one isn't retried here, waiting or not: that would re-run a failing projection
-			// on every keystroke, and its chart may be partial. An explicit warm or reindex retries it.
+			// so a patient that is projecting, failed or not indexed gets no hits, only its status.
 			if (status == IndexStatus.FAILED) {
 				return QueryResult.empty(status, spec);
 			}

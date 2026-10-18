@@ -523,7 +523,8 @@ public class QueryStoreRestController {
 	 * failed, and returns at once: {@code 200 {"status": "indexed"}} when there was nothing to do,
 	 * {@code 202 {"status": "projecting"}} when a warm started or is already running, and {@code 503}
 	 * with a {@code Retry-After} header when none could start (the daemon isn't up, or every
-	 * projection slot is busy); its body carries the patient's status.
+	 * projection slot is busy, or a failed patient's retry backoff has not run out); its body carries
+	 * the patient's status.
 	 */
 	@RequestMapping(value = "/patient/{patientUuid}/warm", method = RequestMethod.POST)
 	@ResponseBody
@@ -555,8 +556,8 @@ public class QueryStoreRestController {
 	/**
 	 * The patient's newest documents: {@code {"status", "hits": [...]}}. Doesn't block on a cold
 	 * patient unless {@code wait=true}: a never-indexed one is warmed and answered {@code projecting}
-	 * with no hits, and one whose last warm failed is answered {@code failed} with no hits and not
-	 * retried (that takes a {@code POST warm}).
+	 * with no hits, and one whose last warm failed is answered {@code failed} with no hits, retried in
+	 * the background only once its retry backoff has run out.
 	 */
 	@RequestMapping(value = "/patient/{patientUuid}/recent", method = RequestMethod.GET)
 	@ResponseBody

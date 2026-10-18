@@ -588,19 +588,65 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
-	public void warm_afterAFailure_retriesWithAFullReprojection_andRecovers() {
-		service.setBootstrapLauncher(SynchronousLaunchers.create());
+	public void warm_afterAFailure_retriesWithAFullReprojection_onceTheBackoffRunsOut_andRecovers() {
+		long[] now = { 1_000_000L };
+		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));
 		service.warm(PATIENT);
 		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
 
-		// Second time round the projection works. A retry re-projects in full (reindexPatient), since a
-		// failed warm may have left a partial chart that ensureIndexed would skip.
+		// Second time round the projection works, but not before the backoff has run out.
 		bootstrap.onEnsureIndexed = uuid -> index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		assertEquals("too soon: nothing starts", IndexStatus.FAILED, service.warm(PATIENT));
+		assertTrue(bootstrap.reindexCalls.isEmpty());
+
+		// A retry re-projects in full (reindexPatient), since a failed warm may have left a partial
+		// chart that ensureIndexed would skip.
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
 		service.warm(PATIENT);
 
 		assertEquals(Collections.singletonList(PATIENT), bootstrap.reindexCalls);
 		assertEquals(IndexStatus.INDEXED, service.getIndexStatus(PATIENT));
 		assertEquals(1, service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).getHits().size());
+	}
+
+	@Test
+	public void aFailedPatient_isRetriedByALaterSearch_onceTheBackoffRunsOut() {
+		// The omnibar never calls POST warm: its searches are the only warms a failed chart gets.
+		long[] now = { 1_000_000L };
+		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));
+		service.warm(PATIENT);
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
+		bootstrap.onEnsureIndexed = uuid -> index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+		service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
+
+		assertEquals("the search retried the failed chart in full", Collections.singletonList(PATIENT),
+		    bootstrap.reindexCalls);
+		QueryResult after = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
+		assertEquals(IndexStatus.INDEXED, after.getStatus());
+		assertEquals(1, after.getHits().size());
+	}
+
+	@Test
+	public void aPoisonChart_isRetriedOnItsBackoffSchedule_notOnEveryKeystroke() {
+		long[] now = { 1_000_000L };
+		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));
+		bootstrap.onEnsureIndexed = uuid -> {
+			throw new IllegalStateException("this chart never projects");
+		};
+		service.warm(PATIENT);
+
+		// Ten minutes of a keystroke every second, waiting and not, plus a POST warm each time.
+		for (int second = 0; second < 600; second++) {
+			now[0] += 1000;
+			assertEquals(IndexStatus.FAILED, service.query(spec("cd4").wait(second % 2 == 0).build()).getStatus());
+			service.warm(PATIENT);
+		}
+
+		// Backoff 30 s, 60 s, 120 s, 240 s: retries at about 30, 90, 210 and 450 seconds in.
+		assertEquals(4, bootstrap.reindexCalls.size());
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
 	}
 
 	@Test

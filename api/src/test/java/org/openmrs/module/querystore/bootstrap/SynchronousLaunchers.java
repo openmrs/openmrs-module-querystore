@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import java.util.List;
+import java.util.function.LongSupplier;
 
 import org.openmrs.module.DaemonToken;
 
@@ -40,6 +41,13 @@ public final class SynchronousLaunchers {
 		BootstrapLauncher launcher = new BootstrapLauncher();
 		launcher.setDaemonExecutor((task, token) -> task.run());
 		launcher.setDaemonToken(new DaemonToken("token-synchronous"));
+		return launcher;
+	}
+
+	/** {@link #create()}, reading time (epoch millis) from {@code clock}, so a test can step past a retry backoff. */
+	public static BootstrapLauncher create(LongSupplier clock) {
+		BootstrapLauncher launcher = create();
+		launcher.setClock(clock);
 		return launcher;
 	}
 }
