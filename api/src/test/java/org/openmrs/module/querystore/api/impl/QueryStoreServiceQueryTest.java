@@ -787,6 +787,42 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aFailedChartWhoseFailureIsForgotten_readsNotIndexed_notIndexed() {
+		// sec r1 S2: the failed warm left a partial chart. When the bounded failure map forgets the
+		// patient, that chart must not start reading as indexed: its documents are dropped.
+		BootstrapLauncher launcher = SynchronousLaunchers.create();
+		service.setBootstrapLauncher(launcher);
+		bootstrap.onForget = uuid -> backend.bulkDeleteByPatient(uuid);
+		bootstrap.onEnsureIndexed = uuid -> {
+			index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+			throw new IllegalStateException("conditions failed");
+		};
+		service.warm(PATIENT);
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
+
+		for (int i = 0; i < BootstrapLauncher.MAX_FAILED_PATIENTS; i++) {
+			launcher.launchPatientWarm("other-" + i, () -> {
+				throw new IllegalStateException("x");
+			});
+		}
+
+		assertEquals(Collections.singletonList(PATIENT), bootstrap.forgetCalls);
+		assertEquals(IndexStatus.NOT_INDEXED, service.getIndexStatus(PATIENT));
+	}
+
+	@Test
+	public void aForgottenFailure_ofAPatientBeingProjected_leavesItsDocuments() {
+		// A projection in flight records its own outcome; dropping its documents mid-run would leave it
+		// partial and then reported indexed.
+		service.setBootstrapLauncher(launcher);
+		launcher.warming = true;
+
+		launcher.forget(PATIENT);
+
+		assertTrue(bootstrap.forgetCalls.isEmpty());
+	}
+
+	@Test
 	public void aPoisonChart_isRetriedOnItsBackoffSchedule_notOnEveryKeystroke() {
 		long[] now = { 1_000_000L };
 		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));
@@ -1001,6 +1037,18 @@ public class QueryStoreServiceQueryTest {
 		public boolean isWarming(String patientUuid) {
 			return warming;
 		}
+
+		java.util.function.Consumer<String> forgotten;
+
+		@Override
+		public void setOnFailureForgotten(java.util.function.Consumer<String> handler) {
+			forgotten = handler;
+		}
+
+		/** Forgets a failure as the bound would. */
+		void forget(String patientUuid) {
+			forgotten.accept(patientUuid);
+		}
 	}
 
 	private static final class CountingEmbeddingProvider implements EmbeddingProvider {
@@ -1030,6 +1078,17 @@ public class QueryStoreServiceQueryTest {
 		java.util.function.Consumer<String> onEnsureIndexed;
 
 		ProjectionProgress progress;
+
+		final List<String> forgetCalls = new ArrayList<>();
+
+		java.util.function.Consumer<String> onForget;
+
+		@Override public void forgetPatient(String patientUuid) {
+			forgetCalls.add(patientUuid);
+			if (onForget != null) {
+				onForget.accept(patientUuid);
+			}
+		}
 
 		@Override public ProjectionProgress getProjectionProgress(String patientUuid) { return progress; }
 		@Override public void bootstrap() { }

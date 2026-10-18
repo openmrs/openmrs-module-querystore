@@ -1037,6 +1037,26 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void forgetPatient_deletesThePatientsDocuments_underItsPatientLock() {
+		final boolean[] locked = { false };
+		final int[] deletes = { 0 };
+		service.setQueryStoreService(new RecordingQueryStoreService(new java.util.ArrayList<String>()) {
+
+			@Override
+			public void bulkDeleteByPatient(String patientUuid) {
+				deletes[0]++;
+				locked[0] = Thread.holdsLock(service.patientLock(patientUuid));
+			}
+		});
+
+		service.forgetPatient("patient-uuid");
+		service.forgetPatient(null);
+
+		assertEquals(1, deletes[0]);
+		assertTrue("so it cannot interleave with a projection of the patient", locked[0]);
+	}
+
+	@Test
 	public void reindexPatient_deletesExistingDocsThenReprojectsEveryType() {
 		List<String> events = new java.util.ArrayList<String>();
 		RecordingQueryStoreService qs = new RecordingQueryStoreService(events);
@@ -1110,7 +1130,7 @@ public class BootstrapServiceImplTest {
 
 	/** QueryStoreService that records bulkDeleteByPatient calls (and order, via the shared events
 	 *  list) so reindex tests can pin the delete-before-projection invariant. */
-	private static final class RecordingQueryStoreService implements QueryStoreService {
+	private static class RecordingQueryStoreService implements QueryStoreService {
 
 		private final List<String> events;
 

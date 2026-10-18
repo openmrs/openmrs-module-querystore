@@ -172,6 +172,21 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 	public void setBootstrapLauncher(BootstrapLauncher bootstrapLauncher) {
 		this.bootstrapLauncher = bootstrapLauncher;
+		if (bootstrapLauncher != null) {
+			bootstrapLauncher.setOnFailureForgotten(uuid -> dropForgottenChart(bootstrapLauncher, uuid));
+		}
+	}
+
+	/**
+	 * The launcher forgot that this patient's projection failed, so its chart, maybe partial, would
+	 * read as indexed: drop it, so it reads not indexed and a later warm rebuilds it. Not while a
+	 * projection of the patient runs: that one records its own outcome, and dropping its documents
+	 * mid-run would leave a partial chart it then reports complete.
+	 */
+	private void dropForgottenChart(BootstrapLauncher launcher, String patientUuid) {
+		if (!launcher.isWarming(patientUuid)) {
+			bootstrapService().forgetPatient(patientUuid);
+		}
 	}
 
 	public void setBackend(BackendStore backend) {

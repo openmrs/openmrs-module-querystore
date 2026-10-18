@@ -256,6 +256,16 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		}
 	}
 
+	@Override
+	public void forgetPatient(String patientUuid) {
+		if (patientUuid == null || patientUuid.isEmpty()) {
+			return;
+		}
+		synchronized (patientLock(patientUuid)) {
+			queryStoreService.bulkDeleteByPatient(patientUuid);
+		}
+	}
+
 	/** The per-type per-patient projection loop shared by {@link #ensureIndexed} and
 	 *  {@link #reindexPatient}. Per-type and per-record failures are isolated and logged so one
 	 *  type's failure doesn't abort the rest. Caller holds the per-patient lock.

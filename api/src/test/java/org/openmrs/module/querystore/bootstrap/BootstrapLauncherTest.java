@@ -325,6 +325,38 @@ public class BootstrapLauncherTest {
 	}
 
 	@Test
+	public void aForgottenFailure_isHandedOn_outsideTheFailureMapLock() throws Exception {
+		// sec r1 S2. Past the bound the least recently failed patient is forgotten; its partial chart
+		// would then read as indexed, so whoever owns the documents is told to drop them.
+		BootstrapLauncher launcher = SynchronousLaunchers.create();
+		List<String> forgotten = new ArrayList<>();
+		final boolean[] lockFree = { false };
+		launcher.setOnFailureForgotten(uuid -> {
+			forgotten.add(uuid);
+			// Another thread reads the failure map: it would block if this thread held its lock.
+			Thread reader = new Thread(() -> launcher.hasFailed("anyone"));
+			reader.start();
+			try {
+				reader.join(2000);
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			lockFree[0] = !reader.isAlive();
+		});
+
+		for (int i = 0; i <= BootstrapLauncher.MAX_FAILED_PATIENTS; i++) {
+			failWarm(launcher, "patient-" + i);
+		}
+		failWarm(launcher, "patient-1");
+
+		assertEquals("one forgotten, the least recently failed; a repeat failure is not a new entry",
+		    java.util.Collections.singletonList("patient-0"), forgotten);
+		assertFalse(launcher.hasFailed("patient-0"));
+		assertTrue("the handler ran with the failure map unlocked", lockFree[0]);
+	}
+
+	@Test
 	public void aSecondProjectionForAPatientInFlight_waitsForIt_andDoesNotProjectAgain() throws Exception {
 		// Every slot is busy, one of them with this patient's warm. The second projection must wait on
 		// that warm, not queue for a slot: queued, it would get the warm's slot when the warm finished

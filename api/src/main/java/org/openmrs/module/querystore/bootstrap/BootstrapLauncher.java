@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +20,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 import org.apache.commons.logging.Log;
@@ -66,9 +68,10 @@ public class BootstrapLauncher {
 	/** Largest {@code querystore.projection.maxConcurrent} honoured. */
 	public static final int MAX_PROJECTION_SLOTS = 32;
 
-	// How many failed patients are remembered. Past this the least recently failed is forgotten, and
-	// then reads as indexed if its failed warm left any document, or not indexed if it left none.
-	static final int MAX_FAILED_PATIENTS = 10_000;
+	// How many failed patients are remembered. Past this the least recently failed is forgotten and
+	// handed to setOnFailureForgotten, whose handler drops its documents: a failed warm may have left
+	// a partial chart, which would otherwise read as indexed once nothing says it failed.
+	public static final int MAX_FAILED_PATIENTS = 10_000;
 
 	// Every per-patient projection holds one of these while it runs: a background warm, and a
 	// synchronous cold-touch projection on a request thread alike. Daemon spawns a thread per warm and
@@ -94,19 +97,14 @@ public class BootstrapLauncher {
 
 	private volatile LongSupplier clock = System::currentTimeMillis;
 
+	private volatile Consumer<String> onFailureForgotten = patientUuid -> {
+	};
+
 	// Patients whose last warm failed: the source of the "failed" index status, with how many times
 	// in a row and when last, for the retry backoff. Bounded, least recently failed first out, so a
-	// caller warming uuids that never index cannot grow it forever. Compound updates lock the map.
-	private final Map<String, Failure> failedPatients = Collections.synchronizedMap(
-	    new LinkedHashMap<String, Failure>() {
-
-		    private static final long serialVersionUID = 1L;
-
-		    @Override
-		    protected boolean removeEldestEntry(Map.Entry<String, Failure> eldest) {
-			    return size() > MAX_FAILED_PATIENTS;
-		    }
-	    });
+	// caller warming uuids that never index cannot grow it forever (see recordFailure). Compound
+	// updates lock the map.
+	private final Map<String, Failure> failedPatients = Collections.synchronizedMap(new LinkedHashMap<String, Failure>());
 
 	private static final class Failure {
 
@@ -437,11 +435,36 @@ public class BootstrapLauncher {
 	}
 
 	private void recordFailure(String patientUuid) {
+		String forgotten = null;
 		synchronized (failedPatients) {
 			// Removed and put back, so the bound forgets the least recently failed first.
 			Failure previous = failedPatients.remove(patientUuid);
 			failedPatients.put(patientUuid, new Failure(previous == null ? 1 : previous.inARow + 1, clock.getAsLong()));
+			if (failedPatients.size() > MAX_FAILED_PATIENTS) {
+				Iterator<String> eldest = failedPatients.keySet().iterator();
+				forgotten = eldest.next();
+				eldest.remove();
+			}
 		}
+		if (forgotten != null) {
+			// Outside the map lock: the handler deletes documents, and waits for a patient lock to do it.
+			try {
+				onFailureForgotten.accept(forgotten);
+			}
+			catch (RuntimeException e) {
+				SafeLog.warn(BootstrapLauncher.class, "Could not drop a forgotten failed chart (patient uuid at DEBUG)", e);
+				log.debug("Could not drop the forgotten failed chart of patient " + forgotten);
+			}
+		}
+	}
+
+	/**
+	 * Who is told when a failed patient is forgotten past {@link #MAX_FAILED_PATIENTS}: called on the
+	 * thread that recorded the newer failure, outside this launcher's locks. Its job is to make the
+	 * patient read as not indexed, since a failed warm may have left a partial chart.
+	 */
+	public void setOnFailureForgotten(Consumer<String> handler) {
+		this.onFailureForgotten = handler;
 	}
 
 	/** Package-private test seam: the time, in epoch millis, the retry backoff is measured against. */

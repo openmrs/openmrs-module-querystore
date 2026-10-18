@@ -119,6 +119,15 @@ public interface BootstrapService extends OpenmrsService {
 	void reindexPatient(String patientUuid);
 
 	/**
+	 * Deletes the patient's documents under its per-patient lock, so it reads as not indexed and a
+	 * later warm projects it afresh. For a patient whose failed projection may have left a partial
+	 * chart, once nothing remembers that it failed. A {@code default} no-op so test doubles keep
+	 * compiling; the production implementation overrides it.
+	 */
+	default void forgetPatient(String patientUuid) {
+	}
+
+	/**
 	 * How far the patient's running {@link #ensureIndexed} or {@link #reindexPatient} has got, in
 	 * resource types; {@code null} when none is running for the patient in this JVM. A {@code default}
 	 * so test doubles keep compiling; the production implementation overrides it.
