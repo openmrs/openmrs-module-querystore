@@ -872,6 +872,59 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aDroppedChart_thatASyncedRecordWritesTo_isNotIndexed_untilAFullReindexRebuildsIt() {
+		// sec r3 S1. The drop succeeded and the failure is forgotten. The next synced record for the
+		// patient writes one document; that must not make the chart read indexed, and the next warm
+		// (here the one a search starts) must reindex it, not take the document as a projected chart.
+		BootstrapLauncher launcher = failedPartialChart();
+		bootstrap.onForget = uuid -> {
+			backend.bulkDeleteByPatient(uuid);
+			return !backend.existsByPatient(uuid);
+		};
+		failOthersPastTheBound(launcher);
+		assertEquals(Collections.singletonList(PATIENT), bootstrap.forgetCalls);
+		index(obs("cd4-9", CD4, "CD4 count: 500.0 cells/µL", 500.0, "2026-05-01"));
+		int projections = bootstrap.ensureIndexedCalls.size();
+
+		assertEquals(IndexStatus.NOT_INDEXED, service.getIndexStatus(PATIENT));
+		List<Runnable> parked = new ArrayList<>();
+		service.setBootstrapLauncher(SynchronousLaunchers.parked(1, parked));
+		QueryResult before = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		assertTrue("the synced document is not served", before.getHits().isEmpty());
+		assertTrue("the rebuild has not run yet", bootstrap.reindexCalls.isEmpty());
+		assertEquals(1, parked.size());
+
+		bootstrap.onDelete = uuid -> backend.bulkDeleteByPatient(uuid);
+		bootstrap.onEnsureIndexed = uuid -> {
+			index(obs("cd4-2", CD4, "CD4 count: 410.0 cells/µL", 410.0, "2026-04-01"));
+			index(obs("cd4-9", CD4, "CD4 count: 500.0 cells/µL", 500.0, "2026-05-01"));
+		};
+		parked.remove(0).run();
+
+		assertEquals("rebuilt by a full reindex", Collections.singletonList(PATIENT), bootstrap.reindexCalls);
+		assertEquals("not by a projection that skips a chart with documents", projections, bootstrap.ensureIndexedCalls.size());
+		assertEquals(IndexStatus.INDEXED, service.getIndexStatus(PATIENT));
+		assertEquals(2, service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).getHits().size());
+	}
+
+	@Test
+	public void aDroppedChart_aWaitingSearchJoinsTheReindexItStarts() {
+		BootstrapLauncher launcher = failedPartialChart();
+		bootstrap.onForget = uuid -> {
+			backend.bulkDeleteByPatient(uuid);
+			return !backend.existsByPatient(uuid);
+		};
+		failOthersPastTheBound(launcher);
+		index(obs("cd4-9", CD4, "CD4 count: 500.0 cells/µL", 500.0, "2026-05-01"));
+		bootstrap.onEnsureIndexed = uuid -> index(obs("cd4-2", CD4, "CD4 count: 410.0 cells/µL", 410.0, "2026-04-01"));
+
+		QueryResult waited = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(true).build());
+
+		assertEquals(Collections.singletonList(PATIENT), bootstrap.reindexCalls);
+		assertEquals(IndexStatus.INDEXED, waited.getStatus());
+	}
+
+	@Test
 	public void aForgottenFailureWhoseDeleteReportsAFailure_staysFailed_andServesNoRows() {
 		// r2 code S3 / sec S1: a delete that leaves rows behind must not let them read as indexed.
 		BootstrapLauncher launcher = failedPartialChart();

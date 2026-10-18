@@ -172,6 +172,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	// delete returns (or the projection ends), so the set holds at most one per running projection.
 	private final Set<String> retryPendingDelete = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+	// Patients whose chart was dropped to forget a failure, and that no full reindex has rebuilt
+	// since. A synced record may write a document meanwhile, which would make the chart read indexed;
+	// until the rebuild it reads not indexed and serves nothing. Only charts that had documents get
+	// one, so the set holds real patients, at most one entry each.
+	private final Set<String> droppedCharts = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	// Optional: without it, query()/warm() can't start a background projection and getIndexStatus()
 	// never reports PROJECTING. Wired in moduleApplicationContext.xml.
 	private BootstrapLauncher bootstrapLauncher;
@@ -191,8 +197,19 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 * its own outcome, and one that rebuilt the chart while this waited for the lock must keep it.
 	 */
 	private boolean dropFailedChart(BootstrapLauncher launcher, String patientUuid) {
-		return bootstrapService().forgetPatient(patientUuid,
-		    () -> launcher.hasFailed(patientUuid) && !launcher.isWarming(patientUuid));
+		boolean[] hadDocuments = { false };
+		boolean dropped = bootstrapService().forgetPatient(patientUuid, () -> {
+			if (!launcher.hasFailed(patientUuid) || launcher.isWarming(patientUuid)) {
+				return false;
+			}
+			hadDocuments[0] = backend != null && backend.existsByPatient(patientUuid);
+			return true;
+		});
+		if (dropped && hadDocuments[0]) {
+			// Before the launcher forgets the failure, so the patient never reads indexed between.
+			droppedCharts.add(patientUuid);
+		}
+		return dropped;
 	}
 
 	public void setBackend(BackendStore backend) {
@@ -565,6 +582,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (bootstrapLauncher != null && bootstrapLauncher.hasFailed(patientUuid)) {
 			return IndexStatus.FAILED;
 		}
+		// A dropped chart is not indexed until a full reindex, whatever single records landed since.
+		if (droppedCharts.contains(patientUuid)) {
+			return IndexStatus.NOT_INDEXED;
+		}
 		return backend.existsByPatient(patientUuid) ? IndexStatus.INDEXED : IndexStatus.NOT_INDEXED;
 	}
 
@@ -585,6 +606,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		BooleanSupplier work = () -> {
 			retryPendingDelete.add(patientUuid);
 			bootstrapService().reindexPatient(patientUuid, () -> retryPendingDelete.remove(patientUuid));
+			droppedCharts.remove(patientUuid);
 			return true;
 		};
 		try {
@@ -621,8 +643,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 		// A retry re-projects in full: the failed warm may have left a partial chart, which
 		// ensureIndexed would take as indexed and skip. It waits out a backoff, so a chart that never
-		// projects is not re-run by every keystroke or POST warm.
-		boolean retry = status == IndexStatus.FAILED;
+		// projects is not re-run by every keystroke or POST warm. A dropped chart is rebuilt the same
+		// way: documents synced since the drop would make ensureIndexed skip it.
+		boolean retry = status == IndexStatus.FAILED || droppedCharts.contains(patientUuid);
 		if (retry && bootstrapLauncher != null && bootstrapLauncher.millisUntilRetry(patientUuid) > 0) {
 			return status;
 		}
@@ -643,6 +666,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			// the projection failed (or the uuid is no live patient's).
 			if (!backend.existsByPatient(patientUuid)) {
 				throw new IllegalStateException("Warm finished with nothing indexed");
+			}
+			if (retry) {
+				droppedCharts.remove(patientUuid);
 			}
 			return full;
 		};
@@ -703,11 +729,18 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			status = getIndexStatus(patientUuid);
 		}
 		if (status != IndexStatus.INDEXED && status != IndexStatus.FAILED) {
+			if (droppedCharts.contains(patientUuid)) {
+				// Only a full reindex rebuilds a dropped chart, so start one (a waiting search then joins
+				// it below); a caller that must not start a retry starts none.
+				if (spec.isRetryFailed()) {
+					warm(patientUuid);
+				}
+			} else if (!spec.isWait() && status == IndexStatus.NOT_INDEXED) {
+				warm(patientUuid);
+			}
 			if (spec.isWait()) {
 				// Waits (bounded) for a projection of its own, or for the one already in flight.
 				ensureIndexedSafely(patientUuid);
-			} else if (status == IndexStatus.NOT_INDEXED) {
-				warm(patientUuid);
 			}
 			status = getIndexStatus(patientUuid);
 		}
