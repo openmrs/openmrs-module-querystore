@@ -27,6 +27,7 @@ import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.querystore.SafeLog;
 import org.openmrs.module.querystore.SkipLogFormat;
+import org.openmrs.module.querystore.api.ProjectionProgress;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
@@ -76,6 +77,10 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			patientLockStripes[i] = new Object();
 		}
 	}
+
+	// How far each patient's running per-patient projection has got. An entry exists only while one
+	// runs (under the patient's lock), so the map holds at most one per running projection.
+	private final Map<String, ProjectionProgress> projectionProgress = new ConcurrentHashMap<>();
 
 	/** The lock a patient's projections serialize on; the same object for the same uuid. */
 	Object patientLock(String patientUuid) {
@@ -259,33 +264,46 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 	 *          {@code null} when every type ran and every record was written */
 	private String projectAllTypesForPatient(String patientUuid) {
 		Map<String, ResourceTypeProvider> providers = discoverProviders();
+		List<String> resourceTypes = allResourceTypes(providers);
 		int failedTypes = 0;
 		int failedRecords = 0;
-		for (String resourceType : allResourceTypes(providers)) {
-			try {
-				failedRecords += runOneForPatient(resourceType, patientUuid, providers);
-			}
-			catch (UnsupportedOperationException noPerPatientImpl) {
-				// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
-				// default throw). Legitimate no-op for reference-data SPI types that don't carry a
-				// patient association — log at debug so a deployment with several such providers
-				// doesn't spam warnings on every cold searchByPatient.
-				if (log.isDebugEnabled()) {
-					log.debug("Skipping " + resourceType + " for patient " + patientUuid
-					        + " — no per-patient projection implemented");
+		int done = 0;
+		try {
+			for (String resourceType : resourceTypes) {
+				projectionProgress.put(patientUuid, new ProjectionProgress(done++, resourceTypes.size()));
+				try {
+					failedRecords += runOneForPatient(resourceType, patientUuid, providers);
+				}
+				catch (UnsupportedOperationException noPerPatientImpl) {
+					// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
+					// default throw). Legitimate no-op for reference-data SPI types that don't carry a
+					// patient association — log at debug so a deployment with several such providers
+					// doesn't spam warnings on every cold searchByPatient.
+					if (log.isDebugEnabled()) {
+						log.debug("Skipping " + resourceType + " for patient " + patientUuid
+						        + " — no per-patient projection implemented");
+					}
+				}
+				catch (RuntimeException e) {
+					SafeLog.warn(BootstrapServiceImpl.class, "Per-patient projection of " + resourceType
+					        + " failed; continuing with remaining types (patient uuid at DEBUG)", e);
+					log.debug("Per-patient projection of " + resourceType + " failed for patient " + patientUuid);
+					failedTypes++;
 				}
 			}
-			catch (RuntimeException e) {
-				SafeLog.warn(BootstrapServiceImpl.class, "Per-patient projection of " + resourceType
-				        + " failed; continuing with remaining types (patient uuid at DEBUG)", e);
-				log.debug("Per-patient projection of " + resourceType + " failed for patient " + patientUuid);
-				failedTypes++;
-			}
+		}
+		finally {
+			projectionProgress.remove(patientUuid);
 		}
 		if (failedTypes == 0 && failedRecords == 0) {
 			return null;
 		}
 		return failedTypes + " type(s) failed, " + failedRecords + " record(s) not projected";
+	}
+
+	@Override
+	public ProjectionProgress getProjectionProgress(String patientUuid) {
+		return patientUuid == null ? null : projectionProgress.get(patientUuid);
 	}
 
 	@Override

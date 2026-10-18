@@ -1007,6 +1007,36 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void projectionProgress_countsTypesDone_whileAPatientProjects_andIsGoneAfter() {
+		List<String> seen = new java.util.ArrayList<String>();
+		java.util.function.Consumer<String> record = t -> {
+			org.openmrs.module.querystore.api.ProjectionProgress p = service.getProjectionProgress("patient-uuid");
+			seen.add(p.getDone() + "/" + p.getTotal());
+			assertNull("another patient is not projecting", service.getProjectionProgress("patient-other"));
+		};
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = record;
+		EmptyPageBootstrapper enc = new EmptyPageBootstrapper("encounter");
+		enc.onFetch = record;
+		enc.perPatientFailure = new IllegalStateException("encounters failed");
+		EmptyPageBootstrapper cond = new EmptyPageBootstrapper("condition");
+		cond.onFetch = record;
+		service.setBootstrappers(Arrays.asList(obs, enc, cond));
+
+		assertNull(service.getProjectionProgress("patient-uuid"));
+		try {
+			service.reindexPatient("patient-uuid");
+			fail("expected the encounter failure to be reported");
+		}
+		catch (PartialProjectionException expected) {
+			// a failed type still counts as done: the projection moved past it
+		}
+
+		assertEquals(Arrays.asList("0/3", "1/3", "2/3"), seen);
+		assertNull("no progress once the projection has finished", service.getProjectionProgress("patient-uuid"));
+	}
+
+	@Test
 	public void reindexPatient_deletesExistingDocsThenReprojectsEveryType() {
 		List<String> events = new java.util.ArrayList<String>();
 		RecordingQueryStoreService qs = new RecordingQueryStoreService(events);

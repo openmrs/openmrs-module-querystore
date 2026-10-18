@@ -576,7 +576,8 @@ public class QueryStoreRestController {
 	/**
 	 * Patient-scoped search; see {@link QuerySpec} for what each parameter does. The body is
 	 * {@link QueryResult#toMap()}: {@code status}, {@code hits}, plus {@code groups} when
-	 * {@code collapse=concept} and {@code facets} when {@code facets=resourceType}. Defaults:
+	 * {@code collapse=concept}, {@code facets} when {@code facets=resourceType}, and {@code progress}
+	 * ({@code {"done": n, "total": m}}, in resource types) while the chart is projecting. Defaults:
 	 * {@code mode=hybrid}, {@code sort=relevance}, {@code collapse=none}, {@code limit=10},
 	 * {@code offset=0}, {@code wait=true}. An unknown value for any of them is a {@code 400}.
 	 */

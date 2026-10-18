@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.bootstrap;
 import java.util.List;
 
 import org.openmrs.api.OpenmrsService;
+import org.openmrs.module.querystore.api.ProjectionProgress;
 
 /**
  * Entry point for the initial-backfill path (ADR open question on bootstrap). Walks core's
@@ -116,6 +117,15 @@ public interface BootstrapService extends OpenmrsService {
 	 * logged and then reported as an {@link IncompleteProjectionException}, matching {@code ensureIndexed}.
 	 */
 	void reindexPatient(String patientUuid);
+
+	/**
+	 * How far the patient's running {@link #ensureIndexed} or {@link #reindexPatient} has got, in
+	 * resource types; {@code null} when none is running for the patient in this JVM. A {@code default}
+	 * so test doubles keep compiling; the production implementation overrides it.
+	 */
+	default ProjectionProgress getProjectionProgress(String patientUuid) {
+		return null;
+	}
 
 	List<BootstrapProgress> getStatus();
 

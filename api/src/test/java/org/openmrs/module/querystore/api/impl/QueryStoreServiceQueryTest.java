@@ -36,6 +36,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.openmrs.module.querystore.api.IndexStatus;
+import org.openmrs.module.querystore.api.ProjectionProgress;
 import org.openmrs.module.querystore.api.QueryResult;
 import org.openmrs.module.querystore.api.QuerySpec;
 import org.openmrs.module.querystore.backend.SchemaSpec;
@@ -489,6 +490,26 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aProjectingChart_carriesItsProgressInTypes_andAnIndexedOneDoesNot() {
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		bootstrap.progress = new ProjectionProgress(4, 12);
+		launcher.warming = true;
+
+		Map<String, Object> projecting = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).toMap();
+		launcher.warming = false;
+		bootstrap.progress = null;
+		Map<String, Object> indexed = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).toMap();
+
+		assertEquals("projecting", projecting.get("status"));
+		@SuppressWarnings("unchecked")
+		Map<String, Object> progress = (Map<String, Object>) projecting.get("progress");
+		assertEquals(4, progress.get("done"));
+		assertEquals(12, progress.get("total"));
+		assertEquals("indexed", indexed.get("status"));
+		assertFalse(indexed.containsKey("progress"));
+	}
+
+	@Test
 	public void aProjectingChart_aWaitingSearchThatOutwaitsItsBound_servesTheRowsAlreadyIndexed() {
 		List<Runnable> parked = new ArrayList<>();
 		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
@@ -914,6 +935,9 @@ public class QueryStoreServiceQueryTest {
 
 		java.util.function.Consumer<String> onEnsureIndexed;
 
+		ProjectionProgress progress;
+
+		@Override public ProjectionProgress getProjectionProgress(String patientUuid) { return progress; }
 		@Override public void bootstrap() { }
 		@Override public void bootstrap(String resourceType) { }
 		@Override public void resyncType(String resourceType) { }

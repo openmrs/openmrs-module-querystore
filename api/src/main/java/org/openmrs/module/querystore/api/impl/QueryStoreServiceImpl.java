@@ -673,7 +673,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			hits.forEach(h -> logged.add(h.getDocument()));
 			emitRetrievalLog(spec.getQuery(), logged);
 		}
-		return new QueryResult(status, hits, groups, typeCounts);
+		QueryResult result = new QueryResult(status, hits, groups, typeCounts);
+		return status == IndexStatus.PROJECTING
+		        ? result.withProgress(bootstrapService().getProjectionProgress(patientUuid)) : result;
 	}
 
 	/**

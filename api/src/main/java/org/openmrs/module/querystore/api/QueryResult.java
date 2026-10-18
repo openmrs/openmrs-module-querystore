@@ -40,17 +40,25 @@ public final class QueryResult {
 
 	private final Map<String, Integer> resourceTypeCounts;
 
+	private final ProjectionProgress progress;
+
 	/**
 	 * @param groups {@code null} unless the spec collapsed by concept
 	 * @param resourceTypeCounts {@code null} unless the spec asked for the resource-type facet
 	 */
 	public QueryResult(IndexStatus status, List<Hit> hits, List<ConceptGroup> groups,
 	        Map<String, Integer> resourceTypeCounts) {
+		this(status, hits, groups, resourceTypeCounts, null);
+	}
+
+	private QueryResult(IndexStatus status, List<Hit> hits, List<ConceptGroup> groups,
+	        Map<String, Integer> resourceTypeCounts, ProjectionProgress progress) {
 		this.status = status;
 		this.hits = Collections.unmodifiableList(new ArrayList<>(hits));
 		this.groups = groups == null ? null : Collections.unmodifiableList(new ArrayList<>(groups));
 		this.resourceTypeCounts = resourceTypeCounts == null ? null
 		        : Collections.unmodifiableMap(new LinkedHashMap<>(resourceTypeCounts));
+		this.progress = progress;
 	}
 
 	/** A result with nothing in it yet, for a cold patient answered without waiting. */
@@ -84,6 +92,16 @@ public final class QueryResult {
 		return resourceTypeCounts;
 	}
 
+	/** This result, carrying how far the patient's running projection has got. */
+	public QueryResult withProgress(ProjectionProgress progress) {
+		return new QueryResult(status, hits, groups, resourceTypeCounts, progress);
+	}
+
+	/** How far the patient's projection had got, when the result is {@link IndexStatus#PROJECTING}; else null. */
+	public ProjectionProgress getProgress() {
+		return progress;
+	}
+
 	public Map<String, Object> toMap() {
 		Map<String, Object> out = new LinkedHashMap<>();
 		out.put("status", status.wireName());
@@ -106,6 +124,12 @@ public final class QueryResult {
 			Map<String, Object> facets = new LinkedHashMap<>();
 			facets.put("resourceType", facet);
 			out.put("facets", facets);
+		}
+		if (progress != null) {
+			Map<String, Object> p = new LinkedHashMap<>();
+			p.put("done", progress.getDone());
+			p.put("total", progress.getTotal());
+			out.put("progress", p);
 		}
 		return out;
 	}
