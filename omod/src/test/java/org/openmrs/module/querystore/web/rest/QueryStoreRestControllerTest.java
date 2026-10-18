@@ -108,7 +108,8 @@ public class QueryStoreRestControllerTest {
 		String[][] malformed = {
 		        { "limit", "abc" },
 		        { "startIndex", "1e9" },
-		        { "temporal", "yesplease" }
+		        { "temporal", "yesplease" },
+		        { "interpret", "yesplease" }
 		};
 		for (String[] parameter : malformed) {
 			mvc.perform(get("/rest/v1/querystore/patientrecord")
@@ -151,12 +152,12 @@ public class QueryStoreRestControllerTest {
 		controller.setQueryStoreService(queryStore);
 		controller.setMaximumPageSize(Integer.valueOf(100));
 		MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
-		String[][] parameters = { { "types", "drug_order" }, { "temporal", "false" } };
+		String[][] parameters = { { "types", "drug_order" }, { "temporal", "false" }, { "interpret", "true" } };
 		for (String[] parameter : parameters) {
 			mvc.perform(get("/rest/v1/querystore/patientrecord")
 			        .param("q", "medications").param(parameter[0], parameter[1]))
 			        .andExpect(status().isBadRequest())
-			        .andExpect(content().string("{\"error\":\"types and temporal require mode=context\"}"));
+			        .andExpect(content().string("{\"error\":\"types, temporal and interpret require mode=context\"}"));
 		}
 	}
 

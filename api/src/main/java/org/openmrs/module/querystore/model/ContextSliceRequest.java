@@ -16,8 +16,9 @@ import java.util.Set;
 import org.openmrs.module.querystore.QueryStoreConstants;
 
 /**
- * Selection inputs for a context slice (ADR Decision 17): explicit resource types,
- * temporal intent, and bounded selection limits.
+ * Selection inputs for a context slice (ADR Decisions 17 and 18): explicit resource types,
+ * temporal intent, selection limits, and whether QueryStore should derive additional scope from
+ * the raw question. Derived scope is unioned with the caller's explicit additions.
  */
 public final class ContextSliceRequest {
 
@@ -28,6 +29,8 @@ public final class ContextSliceRequest {
 	private int recencyAnchorSize = QueryStoreConstants.CONTEXT_RECENCY_ANCHOR_DEFAULT;
 
 	private int similarityLimit = QueryStoreConstants.CONTEXT_SIMILARITY_LIMIT_DEFAULT;
+
+	private boolean interpretQuestion;
 
 	public ContextSliceRequest(Set<String> types, boolean temporal) {
 		this.types = types == null ? Collections.<String> emptySet()
@@ -57,5 +60,19 @@ public final class ContextSliceRequest {
 
 	public void setSimilarityLimit(int similarityLimit) {
 		this.similarityLimit = similarityLimit;
+	}
+
+	/**
+	 * When set, querystore derives the typed scope and the temporal flag from the question
+	 * itself (ADR Decision 18) and UNIONs the caller's {@link #getTypes types} / ORs the
+	 * caller's temporal flag. This keeps QueryStore's cue routing authoritative while retaining
+	 * module-contributed additions.
+	 */
+	public boolean isInterpretQuestion() {
+		return interpretQuestion;
+	}
+
+	public void setInterpretQuestion(boolean interpretQuestion) {
+		this.interpretQuestion = interpretQuestion;
 	}
 }

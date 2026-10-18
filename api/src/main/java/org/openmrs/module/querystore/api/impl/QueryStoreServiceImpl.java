@@ -463,16 +463,28 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		PatientChartRead chartRead = getPatientChartRead(patientUuid);
 		List<QueryDocument> chart = chartRead.getDocuments();
 
+		// Server-side interpretation (ADR Decision 18): derived types UNION the caller's,
+		// derived temporal ORs the caller's — module-contributed additions always survive.
 		Set<String> effectiveTypes = new HashSet<>(request.getTypes());
 		boolean temporal = request.isTemporal();
+		if (request.isInterpretQuestion()) {
+			ContextQuestionInterpreter.Interpretation interpreted =
+			        ContextQuestionInterpreter.interpret(question);
+			effectiveTypes.addAll(interpreted.types);
+			temporal = temporal || interpreted.temporal;
+		}
 
-		// Ranked-search hits are the semantic catch-all tier. A failure degrades to the policy
-		// tiers alone — selection must never block on the ranking layer.
+
+		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (lab-panel
+		// expansion only) runs HERE, at the owner of the embedder — idempotent for callers that
+		// already expand panels. A failure degrades to the policy tiers alone —
+		// selection must never block on the ranking layer.
 		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
 		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
 			try {
+				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
 				// The chart read above already ran any cold touch; a failed one is not run twice.
-				for (QueryDocument hit : rankedPatientSearch(patientUuid, question,
+				for (QueryDocument hit : rankedPatientSearch(patientUuid, retrievalQuestion,
 				        request.getSimilarityLimit())) {
 					if (hit != null && hit.getResourceUuid() != null
 					        && !similarityRanks.containsKey(hit.getResourceUuid())) {

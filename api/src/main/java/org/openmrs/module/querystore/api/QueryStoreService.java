@@ -187,8 +187,11 @@ public interface QueryStoreService extends OpenmrsService {
 	 * Records keep {@link #getPatientChart}'s {@code record_date}-desc order, each appearing
 	 * once under its highest tier.
 	 *
-	 * <p>Prompt composition and token budgeting stay in the consumer; {@code mandatory},
-	 * {@code exact}, {@code typed}, and {@code panel} records are protected there. A ranked-search
+	 * <p>When {@link ContextSliceRequest#isInterpretQuestion()} is enabled, QueryStore derives
+	 * typed scope, temporal intent, and retrieval preprocessing from the raw question and unions
+	 * them with the caller's explicit additions (ADR Decision 18). Prompt composition and token
+	 * budgeting stay in the consumer; {@code mandatory}, {@code exact}, {@code typed}, and
+	 * {@code panel} records are protected there. A ranked-search
 	 * failure or blank question degrades to the policy tiers alone; cold-patient lazy bootstrap
 	 * and the ES full-chart cap behave exactly as {@link #getPatientChart} (a capped chart is
 	 * surfaced via {@link org.openmrs.module.querystore.model.ContextSlice#isChartTruncated}).
