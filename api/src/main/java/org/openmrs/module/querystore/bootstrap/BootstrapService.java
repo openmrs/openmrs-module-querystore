@@ -119,6 +119,17 @@ public interface BootstrapService extends OpenmrsService {
 	void reindexPatient(String patientUuid);
 
 	/**
+	 * {@link #reindexPatient(String)}, running {@code afterDelete} once the patient's documents are
+	 * deleted and before any is re-projected: the point from which the old chart is gone. A
+	 * {@code default} so test doubles keep compiling; it runs {@code afterDelete} after the whole
+	 * reindex. The production implementation overrides it.
+	 */
+	default void reindexPatient(String patientUuid, Runnable afterDelete) {
+		reindexPatient(patientUuid);
+		afterDelete.run();
+	}
+
+	/**
 	 * Deletes the patient's documents under its per-patient lock, so it reads as not indexed and a
 	 * later warm projects it afresh. For a patient whose failed projection may have left a partial
 	 * chart, once nothing remembers that it failed. A {@code default} no-op so test doubles keep

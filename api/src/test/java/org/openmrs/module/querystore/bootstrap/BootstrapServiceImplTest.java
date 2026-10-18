@@ -1057,6 +1057,19 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void reindexPatient_runsItsAfterDeleteHook_betweenTheDeleteAndTheProjection() {
+		List<String> events = new java.util.ArrayList<String>();
+		service.setQueryStoreService(new RecordingQueryStoreService(events));
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project:" + t);
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		service.reindexPatient("patient-uuid", () -> events.add("after-delete"));
+
+		assertEquals(Arrays.asList("delete", "after-delete", "project:obs"), events);
+	}
+
+	@Test
 	public void reindexPatient_deletesExistingDocsThenReprojectsEveryType() {
 		List<String> events = new java.util.ArrayList<String>();
 		RecordingQueryStoreService qs = new RecordingQueryStoreService(events);

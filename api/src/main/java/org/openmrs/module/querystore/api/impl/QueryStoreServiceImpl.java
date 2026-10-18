@@ -167,6 +167,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		this.syncProjectionWaitMillis = Math.max(0, Math.min(MAX_SYNC_PROJECTION_WAIT_SECONDS * 1000L, millis));
 	}
 
+	// Patients whose failed-chart retry has been launched and has not yet deleted the old chart.
+	// An entry lives from just before the launch until the retry's delete returns (or the retry ends),
+	// so the set holds at most one per running projection.
+	private final Set<String> retryPendingDelete = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	// Optional: without it, query()/warm() can't start a background projection and getIndexStatus()
 	// never reports PROJECTING. Wired in moduleApplicationContext.xml.
 	private BootstrapLauncher bootstrapLauncher;
@@ -611,7 +616,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		BooleanSupplier work = () -> {
 			boolean full;
 			if (retry) {
-				bootstrapService().reindexPatient(patientUuid);
+				try {
+					bootstrapService().reindexPatient(patientUuid, () -> retryPendingDelete.remove(patientUuid));
+				}
+				finally {
+					retryPendingDelete.remove(patientUuid);
+				}
 				full = true;
 			} else {
 				full = bootstrapService().projectIfNotIndexed(patientUuid);
@@ -623,8 +633,24 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			}
 			return full;
 		};
-		return bootstrapLauncher != null && bootstrapLauncher.launchPatientWarm(patientUuid, work)
-		        ? IndexStatus.PROJECTING : status;
+		if (bootstrapLauncher == null) {
+			return status;
+		}
+		// Marked here, on the request thread and before the launch, so no search between now and the
+		// retry's delete serves the old rows that delete is about to remove.
+		if (retry) {
+			retryPendingDelete.add(patientUuid);
+		}
+		boolean launched = bootstrapLauncher.launchPatientWarm(patientUuid, work);
+		if (!launched && retry) {
+			retryPendingDelete.remove(patientUuid);
+		}
+		return launched ? IndexStatus.PROJECTING : status;
+	}
+
+	/** Whether a failed chart's retry has started and not yet deleted the old chart. */
+	boolean isRetryPendingDelete(String patientUuid) {
+		return retryPendingDelete.contains(patientUuid);
 	}
 
 	/**
@@ -646,12 +672,6 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			// it gets), not on every keystroke. Until it re-projects, its chart may be partial.
 			warm(patientUuid);
 			status = getIndexStatus(patientUuid);
-			if (status == IndexStatus.PROJECTING && !spec.isWait()) {
-				// A retry is starting, and it deletes the chart before re-projecting it: the rows
-				// there now are about to go. Answer as for a cold chart. A waiting search joins the
-				// retry below and searches what it rebuilt.
-				return spec.isPartialResults() ? QueryResult.empty(status, spec) : QueryResult.statusOnly(status);
-			}
 		}
 		if (status != IndexStatus.INDEXED && status != IndexStatus.FAILED) {
 			if (spec.isWait()) {
@@ -668,6 +688,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		// chart with nothing indexed has none to give.
 		if (status == IndexStatus.FAILED || status == IndexStatus.NOT_INDEXED) {
 			return QueryResult.empty(status, spec);
+		}
+		if (status == IndexStatus.PROJECTING && retryPendingDelete.contains(patientUuid)) {
+			// A failed chart's retry is under way and has not yet deleted the old chart, so the rows
+			// there now are about to go: answer as for a cold chart, waiting or not. Once the delete
+			// lands, the rebuilt chart's rows are served as they arrive.
+			return spec.isPartialResults() ? QueryResult.empty(status, spec) : QueryResult.statusOnly(status);
 		}
 		if (status == IndexStatus.PROJECTING && !spec.isPartialResults()) {
 			return QueryResult.statusOnly(status);

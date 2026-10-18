@@ -752,6 +752,61 @@ public class QueryStoreServiceQueryTest {
 		assertTrue(result.getGroups().isEmpty());
 		assertEquals("the retry was started and is parked", 1, parked.size());
 		assertTrue(launcher.isWarming(PATIENT));
+
+		// code r2 S1: later searches, before the retry's delete has landed, must not serve them either.
+		QueryResult next = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		service.setSyncProjectionWaitMillis(20);
+		QueryResult waitedOut = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(true).build());
+		assertEquals(IndexStatus.PROJECTING, next.getStatus());
+		assertTrue("the next keystroke", next.getHits().isEmpty());
+		assertEquals(IndexStatus.PROJECTING, waitedOut.getStatus());
+		assertTrue("a waiting search that gave up", waitedOut.getHits().isEmpty());
+	}
+
+	@Test
+	public void onceTheRetrysDeleteLands_searchesSeeTheRebuiltChartsRows() {
+		long[] now = { 1_000_000L };
+		List<Runnable> parked = new ArrayList<>();
+		failedChart(parked, now);
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+		service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		assertTrue(service.isRetryPendingDelete(PATIENT));
+		QueryResult[] midway = { null };
+		bootstrap.onDelete = uuid -> backend.bulkDeleteByPatient(uuid);
+		bootstrap.onEnsureIndexed = uuid -> {
+			index(obs("cd4-2", CD4, "CD4 count: 410.0 cells/µL", 410.0, "2026-04-01"));
+			midway[0] = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		};
+
+		parked.remove(0).run();
+
+		assertEquals(IndexStatus.PROJECTING, midway[0].getStatus());
+		assertEquals("the old rows are gone, the rebuilt one is served", Collections.singletonList("cd4-2"),
+		    uuids(midway[0].getHits()));
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+	}
+
+	@Test
+	public void aRetryThatCannotLaunch_orThrowsBeforeItsDelete_leavesNoPendingDeleteMark() {
+		long[] now = { 1_000_000L };
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = failedChart(parked, now);
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+		assertTrue(launcher.launchPatientWarm("another-patient", () -> true));
+
+		assertEquals("no slot: nothing launched", IndexStatus.FAILED,
+		    service.query(spec("cd4").partialResults(true).wait(false).build()).getStatus());
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+
+		parked.remove(0).run();
+		bootstrap.onDelete = uuid -> {
+			throw new IllegalStateException("delete blew up");
+		};
+		service.query(spec("cd4").partialResults(true).wait(false).build());
+		assertTrue(service.isRetryPendingDelete(PATIENT));
+		parked.remove(0).run();
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
 	}
 
 	@Test
@@ -1134,7 +1189,17 @@ public class QueryStoreServiceQueryTest {
 			}
 		}
 		@Override public void reindexPatient(String patientUuid) {
+			reindexPatient(patientUuid, () -> { });
+		}
+
+		java.util.function.Consumer<String> onDelete;
+
+		@Override public void reindexPatient(String patientUuid, Runnable afterDelete) {
 			reindexCalls.add(patientUuid);
+			if (onDelete != null) {
+				onDelete.accept(patientUuid);
+			}
+			afterDelete.run();
 			if (onEnsureIndexed != null) {
 				onEnsureIndexed.accept(patientUuid);
 			}

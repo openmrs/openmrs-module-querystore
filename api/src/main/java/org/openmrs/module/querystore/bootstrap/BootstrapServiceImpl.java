@@ -239,6 +239,12 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 
 	@Override
 	public void reindexPatient(String patientUuid) {
+		reindexPatient(patientUuid, () -> {
+		});
+	}
+
+	@Override
+	public void reindexPatient(String patientUuid, Runnable afterDelete) {
 		if (patientUuid == null || patientUuid.isEmpty()) {
 			return;
 		}
@@ -252,6 +258,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			// elsewhere in this class): a null here is a wiring fault that must fail loudly, not
 			// silently skip the delete and leave stale docs alongside the re-projected ones.
 			queryStoreService.bulkDeleteByPatient(patientUuid);
+			afterDelete.run();
 			reportProjection(patientUuid, projectAllTypesForPatient(patientUuid), "Re-projection");
 		}
 	}
