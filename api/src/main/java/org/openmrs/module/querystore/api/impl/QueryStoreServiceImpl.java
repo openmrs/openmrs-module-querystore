@@ -186,12 +186,13 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	/**
 	 * The launcher wants to forget that this patient's projection failed. Its chart, maybe partial,
 	 * would then read as indexed, so drop it first, and say whether it is gone: only then is the
-	 * failure forgotten, the patient reads not indexed, and a later warm rebuilds it. Not while a
-	 * projection of the patient runs: that one records its own outcome, and dropping its documents
-	 * mid-run would leave a partial chart it then reports complete.
+	 * failure forgotten, the patient reads not indexed, and a later warm rebuilds it. Only while it is
+	 * still failed and no projection of it runs, checked under the patient lock: a projection records
+	 * its own outcome, and one that rebuilt the chart while this waited for the lock must keep it.
 	 */
 	private boolean dropFailedChart(BootstrapLauncher launcher, String patientUuid) {
-		return !launcher.isWarming(patientUuid) && bootstrapService().forgetPatient(patientUuid);
+		return bootstrapService().forgetPatient(patientUuid,
+		    () -> launcher.hasFailed(patientUuid) && !launcher.isWarming(patientUuid));
 	}
 
 	public void setBackend(BackendStore backend) {

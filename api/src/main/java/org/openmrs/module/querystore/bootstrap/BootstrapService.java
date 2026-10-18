@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 import org.openmrs.api.OpenmrsService;
 import org.openmrs.module.querystore.api.ProjectionProgress;
@@ -132,13 +133,15 @@ public interface BootstrapService extends OpenmrsService {
 	/**
 	 * Deletes the patient's documents under its per-patient lock, so it reads as not indexed and a
 	 * later warm projects it afresh: for a patient whose failed projection may have left a partial
-	 * chart, before its failure is forgotten. Returns whether the chart is gone, which is true only
+	 * chart, before its failure is forgotten. {@code stillDroppable} is checked once the lock is held
+	 * and before anything is deleted: a projection may have rebuilt the chart while this waited for
+	 * the lock, and then nothing is deleted. Returns whether the chart is gone, which is true only
 	 * when every index's delete succeeded and the patient has no document left; a caller keeps the
 	 * failure otherwise. A {@code default} that deletes nothing and returns {@code false}, so test
 	 * doubles keep compiling and nothing is forgotten on their word; the production implementation
 	 * overrides it.
 	 */
-	default boolean forgetPatient(String patientUuid) {
+	default boolean forgetPatient(String patientUuid, BooleanSupplier stillDroppable) {
 		return false;
 	}
 

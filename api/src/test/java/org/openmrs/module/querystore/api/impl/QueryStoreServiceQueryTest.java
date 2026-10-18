@@ -950,6 +950,59 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aChartARetryRebuiltWhileTheDropWaitedForItsLock_isNotDeleted() throws Exception {
+		// code r3 S2, through the real BootstrapServiceImpl. This thread holds the patient lock while the
+		// drop of the eldest failure blocks on it, and then, re-entrantly, runs a retry of that
+		// patient to completion. The drop then gets the lock: it must see the patient is no longer
+		// failed and leave the rebuilt chart alone.
+		ProjectingBootstrapper obsType = new ProjectingBootstrapper(
+		        () -> index(obs("cd4-2", CD4, "CD4 count: 410.0 cells/µL", 410.0, "2026-04-01")));
+		org.openmrs.module.querystore.bootstrap.BootstrapServiceImpl real = org.openmrs.module.querystore.bootstrap.RealBootstraps
+		        .create(service, backend, obsType);
+		service.setBootstrapServiceOverride(real);
+		long[] now = { 1_000_000L };
+		List<Runnable> parked = new java.util.concurrent.CopyOnWriteArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(2, parked, () -> now[0]);
+		service.setBootstrapLauncher(launcher);
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		failParked(launcher, parked, PATIENT);
+		for (int i = 0; i < BootstrapLauncher.MAX_FAILED_PATIENTS - 1; i++) {
+			failParked(launcher, parked, "other-" + i);
+		}
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+		Thread drop;
+		synchronized (org.openmrs.module.querystore.bootstrap.RealBootstraps.patientLock(real, PATIENT)) {
+			assertTrue(launcher.launchPatientWarm("other-last", () -> {
+				throw new IllegalStateException("x");
+			}));
+			drop = new Thread(parked.remove(0));
+			drop.start();
+			long deadline = System.currentTimeMillis() + 5000;
+			while (drop.getState() != Thread.State.BLOCKED && System.currentTimeMillis() < deadline) {
+				Thread.sleep(5);
+			}
+			assertEquals("the drop is waiting for the patient lock", Thread.State.BLOCKED, drop.getState());
+
+			service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+			parked.remove(0).run();
+			assertEquals("the retry rebuilt the chart", IndexStatus.INDEXED, service.getIndexStatus(PATIENT));
+		}
+		drop.join(5000);
+
+		assertTrue("the rebuilt chart is still there", backend.existsByPatient(PATIENT));
+		assertEquals(IndexStatus.INDEXED, service.getIndexStatus(PATIENT));
+		assertEquals(Collections.singletonList("cd4-2"),
+		    uuids(service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).getHits()));
+	}
+
+	private static void failParked(BootstrapLauncher launcher, List<Runnable> parked, String patientUuid) {
+		assertTrue(launcher.launchPatientWarm(patientUuid, () -> {
+			throw new IllegalStateException("x");
+		}));
+		parked.remove(0).run();
+	}
+
+	@Test
 	public void aRetryWhoseDeleteReportsAFailure_leavesTheChartFailed_withNoRows() {
 		// code r3 S1, through the real BootstrapServiceImpl: the delete reports one failed index and
 		// deletes nothing, so the old partial chart is still there and must not become "indexed".
@@ -1265,7 +1318,10 @@ public class QueryStoreServiceQueryTest {
 
 		java.util.function.Predicate<String> onForget;
 
-		@Override public boolean forgetPatient(String patientUuid) {
+		@Override public boolean forgetPatient(String patientUuid, java.util.function.BooleanSupplier stillDroppable) {
+			if (!stillDroppable.getAsBoolean()) {
+				return false;
+			}
 			forgetCalls.add(patientUuid);
 			return onForget != null && onForget.test(patientUuid);
 		}

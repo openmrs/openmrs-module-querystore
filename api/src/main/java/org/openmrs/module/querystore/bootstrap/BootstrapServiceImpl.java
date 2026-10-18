@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
@@ -270,11 +271,14 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 	}
 
 	@Override
-	public boolean forgetPatient(String patientUuid) {
+	public boolean forgetPatient(String patientUuid, BooleanSupplier stillDroppable) {
 		if (patientUuid == null || patientUuid.isEmpty()) {
 			return false;
 		}
 		synchronized (patientLock(patientUuid)) {
+			if (!stillDroppable.getAsBoolean()) {
+				return false;
+			}
 			BulkWriteResult deleted = queryStoreService.bulkDeleteByPatient(patientUuid);
 			// The backends log each index whose delete failed; such an index still holds the
 			// patient's documents, so the chart is not gone.

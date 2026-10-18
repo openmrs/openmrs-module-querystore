@@ -1037,6 +1037,31 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void forgetPatient_checksThatThePatientIsStillDroppable_underItsPatientLock_beforeDeletingAnything() {
+		// code r3 S2: a retry can rebuild the chart while the drop waits for the lock; the check that
+		// the patient is still failed and not warming must run once the lock is held.
+		final int[] deletes = { 0 };
+		service.setQueryStoreService(new RecordingQueryStoreService(new java.util.ArrayList<String>()) {
+
+			@Override
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				deletes[0]++;
+				return super.bulkDeleteByPatient(patientUuid);
+			}
+		});
+		final boolean[] checkedUnderLock = { false };
+
+		boolean gone = service.forgetPatient("patient-uuid", () -> {
+			checkedUnderLock[0] = Thread.holdsLock(service.patientLock("patient-uuid"));
+			return false;
+		});
+
+		assertFalse(gone);
+		assertEquals("nothing deleted", 0, deletes[0]);
+		assertTrue(checkedUnderLock[0]);
+	}
+
+	@Test
 	public void forgetPatient_deletesThePatientsDocuments_underItsPatientLock_andSaysWhetherTheChartIsGone() {
 		final boolean[] locked = { false };
 		final org.openmrs.module.querystore.backend.BulkWriteResult[] result = {
@@ -1057,20 +1082,20 @@ public class BootstrapServiceImplTest {
 			}
 		});
 
-		assertTrue("every type deleted and nothing left", service.forgetPatient("patient-uuid"));
+		assertTrue("every type deleted and nothing left", service.forgetPatient("patient-uuid", () -> true));
 		assertTrue("so it cannot interleave with a projection of the patient", locked[0]);
 
 		org.mockito.Mockito.when(store.existsByPatient("patient-uuid")).thenReturn(true);
-		assertFalse("a document is still there", service.forgetPatient("patient-uuid"));
+		assertFalse("a document is still there", service.forgetPatient("patient-uuid", () -> true));
 
 		org.mockito.Mockito.when(store.existsByPatient("patient-uuid")).thenReturn(false);
 		result[0] = new org.openmrs.module.querystore.backend.BulkWriteResult(2, 1, Collections.singletonList(
 		    new org.openmrs.module.querystore.backend.DocFailure("obs", "patient-uuid", "IOException", true)));
-		assertFalse("a type's delete failed", service.forgetPatient("patient-uuid"));
+		assertFalse("a type's delete failed", service.forgetPatient("patient-uuid", () -> true));
 
 		result[0] = null;
-		assertFalse("no result is no proof", service.forgetPatient("patient-uuid"));
-		assertFalse(service.forgetPatient(null));
+		assertFalse("no result is no proof", service.forgetPatient("patient-uuid", () -> true));
+		assertFalse(service.forgetPatient(null, () -> true));
 	}
 
 	@Test
