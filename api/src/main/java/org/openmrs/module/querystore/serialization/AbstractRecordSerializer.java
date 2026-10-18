@@ -12,6 +12,8 @@ package org.openmrs.module.querystore.serialization;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CONCEPT_CLASS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CONCEPT_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CONCEPT_UUID;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DESCRIPTION;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ENCOUNTER_TYPE_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ENCOUNTER_TYPE_UUID;
@@ -25,6 +27,8 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PROVIDER_N
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PROVIDER_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VISIT_UUID;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_CLINICAL_EVENT;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_UNKNOWN;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -60,6 +64,11 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 		doc.setPatientUuid(getPatientUuid(record));
 		doc.setResourceUuid(getResourceUuid(record));
 		doc.setDate(getDate(record));
+		LocalDate clinicalDate = getClinicalDate(record);
+		if (clinicalDate != null) {
+			doc.putMetadata(FIELD_CLINICAL_DATE, clinicalDate.toString());
+		}
+		doc.putMetadata(FIELD_DATE_KIND, getDateKind(record));
 		doc.setLastModified(getLastModified(record));
 		populate(record, doc);
 		String text = doc.getText();
@@ -74,6 +83,22 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 	protected abstract String getResourceUuid(T record);
 
 	protected abstract LocalDate getDate(T record);
+
+	/**
+	 * Clinical date used for explicit temporal reasoning. Most source records use their record date;
+	 * serializers with a distinct onset, enrollment, dispense, or administrative date override it.
+	 */
+	protected LocalDate getClinicalDate(T record) {
+		return getDate(record);
+	}
+
+	/**
+	 * Describes the meaning of {@link #getDate(Object)}, not whether a record contains any clinical
+	 * fact. This prevents a record-created timestamp from being presented as an encounter date.
+	 */
+	protected String getDateKind(T record) {
+		return getDate(record) == null ? DATE_KIND_UNKNOWN : DATE_KIND_CLINICAL_EVENT;
+	}
 
 	/**
 	 * Returns the source-entity timestamp the backend uses as a write-version: any concurrent write

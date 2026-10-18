@@ -20,15 +20,18 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
+import org.openmrs.module.querystore.QueryStoreConstants;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.Filter;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
+import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
 
@@ -215,14 +218,14 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 *  the cycle in bean construction. Context lookup defers it to call time, when both beans are
 	 *  fully wired. An unavailable service (no Spring context in test envs; narrow activation
 	 *  window) throws from Context.getService and is absorbed by the catch — the search still runs
-	 *  and returns whatever the backend has. */
-	private void ensureIndexedSafely(String patientUuid) {
+	 *  and returns whatever the backend has.
+	 *
+	 *  @return {@code true} when the projection ran; {@code false} when it failed and was
+	 *          swallowed, so a caller that claims completeness can disclose the gap. */
+	private boolean ensureIndexedSafely(String patientUuid) {
 		try {
-			BootstrapService bootstrapService = bootstrapServiceOverride;
-			if (bootstrapService == null) {
-				bootstrapService = Context.getService(BootstrapService.class);
-			}
-			bootstrapService.ensureIndexed(patientUuid);
+			bootstrapService().ensureIndexed(patientUuid);
+			return true;
 		}
 		catch (RuntimeException e) {
 			// Index-failure must not block search; whatever did get indexed (or what was already
@@ -230,6 +233,24 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			// feature shipped.
 			log.warn("Auto-index for patient " + patientUuid
 			        + " failed; serving search with whatever is indexed", e);
+			return false;
+		}
+	}
+
+	private BootstrapService bootstrapService() {
+		return bootstrapServiceOverride == null
+		        ? Context.getService(BootstrapService.class) : bootstrapServiceOverride;
+	}
+
+	private boolean isProjectionComplete() {
+		try {
+			BootstrapService bootstrap = bootstrapService();
+			return BootstrapStatusReport.from(bootstrap.getStatus(),
+			        bootstrap.getResourceTypeNames()).isComplete();
+		}
+		catch (RuntimeException e) {
+			log.warn("Could not verify QueryStore projection completeness; reporting incomplete", e);
+			return false;
 		}
 	}
 
@@ -246,15 +267,33 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (backend == null || patientUuid == null) {
 			return Collections.emptyList();
 		}
+		return getPatientChartRead(patientUuid).getDocuments();
+	}
+
+	@Override
+	public PatientChartRead getPatientChartRead(String patientUuid) {
+		if (patientUuid == null) {
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
+		}
+		if (backend == null) {
+			throw new IllegalStateException(
+			        "No BackendStore wired into QueryStoreServiceImpl; cannot determine whether the patient chart is complete");
+		}
 		// Same cold-bootstrap protocol as searchByPatient: probe existsByPatient, lazy-project on
 		// miss, then read. Decision 15 explicitly mirrors searchByPatient's behaviour here so the
 		// first method to touch a never-indexed patient pays the projection cost once. The shared
 		// ensureIndexedSafely also keeps the swallow-on-failure semantics consistent — an
 		// index-failure must not block the LLM full-chart caller any more than it blocks search.
+		// It must be disclosed, though: records this patient has in OpenMRS that were never
+		// projected are missing from this read, which is exactly what truncated means. Neither the
+		// backend's read-side bit nor the deployment-wide projection state can see a failed touch.
+		boolean coldTouchFailed = false;
 		if (!backend.existsByPatient(patientUuid)) {
-			ensureIndexedSafely(patientUuid);
+			coldTouchFailed = !ensureIndexedSafely(patientUuid);
 		}
-		return backend.findAllByPatient(patientUuid);
+		PatientChartRead chartRead = backend.findPatientChart(patientUuid);
+		return new PatientChartRead(chartRead.getDocuments(), chartRead.isTruncated() || coldTouchFailed,
+		        isProjectionComplete());
 	}
 
 	private List<QueryDocument> runHybrid(String query, int limit, Filter scope) {
@@ -281,7 +320,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 */
 	private float[] embedQueryCached(String query) {
 		String modelName = embeddingProvider.getModelName();
-		String key = (modelName == null ? "" : modelName) + ' ' + query;
+		String key = (modelName == null ? "" : modelName) + '\u0000' + query;
 		float[] cached = queryEmbedCache.get(key);
 		if (cached != null) {
 			return cached;

@@ -28,6 +28,7 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 13. [Module Extension SPI (Service Provider Interface) for Custom Resource Types](#decision-13-module-extension-spi-service-provider-interface-for-custom-resource-types)
 14. [Authorization and Consumer API Surface](#decision-14-authorization-and-consumer-api-surface)
 15. [Full-Chart Retrieval — Unfiltered Per-Patient Enumeration](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration)
+16. [REST Read API — `patientrecord` Resource](#decision-16-rest-read-api--patientrecord-resource)
 
 [Open Questions](#open-questions)
 
@@ -754,10 +755,16 @@ The cap raise from 3 → 10 has a real trade-off worth naming: synonyms feed *bo
 
 Patterns common to all type-specific serializers, distilled from the Obs and Condition implementations. These are contract-level rules; the abstract base implements the template-method shape that enforces them.
 
-**Cross-cutting `record_date` source.** The cross-cutting `record_date` field uses the type's most clinically meaningful "this record was made" timestamp:
-- Types with a clinical-event time field (e.g., `obs_datetime` on Obs) use that.
-- Types without one (e.g., Condition) fall back to `dateCreated` (the audit field).
-- Onset, end, resolution, and other clinical-fact dates remain on dedicated metadata fields per [Decision 7](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time) — they are *not* the cross-cutting `record_date`.
+**Cross-cutting `record_date` source.** `record_date` is a deterministic sort/filter date for a
+record, not a universal assertion that a clinical event happened on that day. Types with a
+clinical-event time (for example `obs_datetime`) use it; types without one may use `dateCreated`
+for stable ordering. Serializers also emit `clinical_date` and `date_kind`: `clinical_date` is the record's temporally
+safe event date (absent when it has none — e.g., a Condition's onset, or `null` on a Patient),
+while `date_kind` qualifies `record_date` itself, so temporal consumers must never reinterpret an
+administrative sort date as a clinical event. Onset, end, resolution, and other clinical-fact dates
+remain dedicated metadata fields per [Decision 7](#decision-7-date-separation--excluded-from-embeddings-included-at-query-time).
+
+**Re-bootstrap advisory on upgrade.** `clinical_date` and `date_kind` are emitted only by documents produced AFTER the upgrade; pre-upgrade Lucene segments and Elasticsearch documents carry neither. `PatientRecordView` renders a missing `date_kind` as `unknown`, and `rest-api.md` tells consumers not to treat `date` as a clinical event date unless `dateKind` is `clinical_event`, so on an existing deployment the whole chart reads as temporally unusable until it is re-projected, and a consumer cannot tell "this record has no clinical date" from "this deployment has not re-projected yet". Operators on existing deployments should re-run `BootstrapService.bootstrap()` (or the per-type resync) so every record passes through the updated serializers; both fields live in record metadata, so re-projection alone populates them. During the re-bootstrap window querystore is briefly internally inconsistent: re-projected resource types carry both fields, types not yet re-indexed carry neither, and a patient whose chart spans both sees `unknown` on one side only. The window is operator-observable in `BootstrapProgress` and resolves at completion.
 
 **Free-text annotations are metadata-only.** Free-text clinician annotations — `comment` on obs, `additional_detail` on condition, and the equivalent on other types — are excluded from the stored `text` field but indexed as metadata for BM25 keyword matching. Citation-clean text is the contract; consumers that want the annotation render it from the metadata field at presentation time.
 
@@ -1322,6 +1329,42 @@ Now that querystore serializes every clinical record into per-type indices via t
 
 ---
 
+## Decision 16: REST Read API — `patientrecord` Resource
+
+### Status
+Accepted
+
+### Context
+[Decision 14](#decision-14-authorization-and-consumer-api-surface) made the in-process `QueryStoreService` the v1 surface and deferred REST/FHIR as "explicitly additive — they layer on top of the same Java service." [Decision 15](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration) reaffirmed that "any future surface (REST/FHIR) wraps all three methods uniformly." A concrete need now forces that additive layer: non-JVM consumers, including med-agent-hub, need an authorized HTTP entry point to the same read behavior. This decision promotes a REST **read** surface for the existing read methods to v1. It deliberately mirrors today's capabilities only — there is no per-read reconciliation, question-conditioned budget-aware retrieval, FHIR shaping, or separate external-consumer read policy.
+
+### Decision
+1. **A read-only REST endpoint at `GET /ws/rest/v1/querystore/patientrecord`, a plain Spring `@Controller`** mirroring the module's existing operational endpoints (`indexingstatus`/`reindex`/`drift`). It wraps `QueryStoreService` and applies its `@Authorized(GET_PATIENTS)` gate at the service call: `?patient={uuid}` → `getPatientChart`; `?patient={uuid}&q={text}` → `searchByPatient`; `?q={text}` (no patient) → cross-patient `search` (Decision 14's coarse-gate caveat applies).
+
+2. **A paged JSON envelope** — `{ results: [...], totalCount, links: [prev/next] }` honoring `limit`/`startIndex` (the OpenMRS `PageableResult` shape, hand-rolled). Each record serializes via a unit-tested mapper: `resourceType`, `resourceUuid` (core cross-walk key), `date` (sort date), `clinicalDate`, `dateKind`, `lastModified`, `text`, and `metadata`. `clinicalDate` is the record's temporally safe event date (`null` when it has none); `dateKind` describes what `date` means, so `date` alone is never a temporal assertion unless `dateKind = clinical_event`. **`embedding` is never exposed** ([Decision 3](#decision-3-pluggable-backend-spi-with-three-reference-implementations)). Ranked results convey relevance by **list order** (optional 1-based `rank`); there is **no `score`** — `searchByPatient` returns `List<QueryDocument>` and discards the backend's per-hit score.
+
+3. **Authorization is Decision 14's, unchanged** — `@Authorized(GET_PATIENTS)` fires at the service call; the controller also issues an explicit `Context.requirePrivilege(GET_PATIENTS)` mirroring its siblings. An unknown `patient` uuid → `404` (validated via `PatientService.getPatientByUuid` first, avoiding a wasted cold-touch projection on a bogus id); `limit <= 0` / malformed params → `400` via the shared `@ExceptionHandler`.
+
+4. **Full-chart freshness is explicit and private.** A full-chart response carries a stable complete-chart `snapshotId`, a strong page-specific `ETag`, and `Cache-Control: private, no-cache, must-revalidate`. A client uses `If-None-Match` to revalidate an unchanged page (`304` has no response body), and it rejects a multi-page result with mixed snapshot IDs. The hash includes resource identity, dates and date semantics, text, last-modified version, and canonical metadata. Ranked query windows do not claim a stable complete snapshot.
+
+5. **In-JVM consumers keep using the Java service.** This endpoint is the additive HTTP layer for external/non-JVM consumers, not a replacement for Decision 14's in-process surface. med-agent-hub uses this endpoint under a configured OpenMRS service account; ChartSearchAI relays inference requests to the hub and does not implement a second QueryStore client.
+
+### Rationale
+1. **Mirror the closest sibling.** The module's REST endpoints are plain `@Controller`s; a read endpoint in the same shape avoids inventing a divergent mechanism. The `webservices.rest` framework's value — uuid CRUD, self-links, auto-representations, Swagger — assumes an `OpenmrsObject`; `QueryDocument` is a plain read-DTO, so the framework adds friction (stubbed CRUD, no canonical self-link) without proportional benefit for a read projection. The framework remains a clean upgrade path if Swagger discoverability is later required.
+2. **Mirroring the three Java methods keeps the surface honest** — the REST layer adds reachability, not capability. Budget-aware retrieval, FHIR, and ordering/aggregation params are separate decisions.
+3. **No fabricated score** respects what the service returns (list order is the real signal); **embedding exclusion** follows Decision 3.
+4. **In-process for in-JVM callers** preserves auth identity and byte-stability — an HTTP loopback would run under a service account (weakening Decision 14's "no result a core API would refuse *for this caller*") and risk chart byte-drift through JSON round-tripping.
+
+### Consequences
+- **The endpoint is NOT in the OpenMRS Swagger spec** (plain controllers aren't, unlike framework resources); it is documented in [`rest-api.md`](./rest-api.md) alongside the operational endpoints. Promoting it to a framework resource for Swagger discoverability is a deferred follow-up.
+- **The ES 10 000-hit cap (Decision 15) is surfaced explicitly via `chartTruncated`;** `totalCount` remains the number of records materialized by the backend and must not be used to infer completeness. The cap is not lifted; `search_after` remains the deferred v1.1 item.
+- **First REST touch on a never-indexed patient pays the Decision-15 cold-touch cost**; the 404 validation guards only bogus uuids.
+- **Ordinary reads surface, but do not repair, index completeness.** Full-chart reads carry the same expected-resource-type-aware `projectionComplete` signal as `indexingstatus`. Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to diagnose and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
+- **External clients can cache only in private memory.** The response is revalidated on use rather than given a shared-cache lifetime; a client treats an ETag/snapshot mismatch as a fresh chart and never serves the stale clinical payload.
+- **The endpoint is read-only** — indexing stays unexposed (Decision 14).
+- **Budget-aware retrieval, FHIR shaping, and a general non-AI read breadth remain deferred** — explicitly the next iteration.
+
+---
+
 ## Open Questions
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.
@@ -1500,4 +1543,3 @@ A `PatientProgram` can have multiple workflows ([`ProgramWorkflow`](https://open
 
 ### ServiceOrder frequency / numberOfRepeats / location surfacing
 `ServiceOrder` (parent of `TestOrder` and `ReferralOrder`) declares three fields beyond what the v1 serializers surface: `frequency` (`OrderFrequency` — repeat schedule), `numberOfRepeats` (`Integer` — bounded repeat count), and `location` (`Concept` — the service-performance location, *distinct* from the encounter's `Location` already captured by `putEncounterContext`). The v1 serializer ignores all three. The gap was inherited from the original TestOrder implementation and codified across both subtypes when populate logic was promoted to `AbstractServiceOrderRecordSerializer` (rule-of-two promotion). The miss is more visible for referrals than for lab tests: a referral expressing "weekly cardiology visits for 6 weeks at Karen Hospital" loses the cadence (`frequency`/`numberOfRepeats`) and the destination (`ServiceOrder.location`) in the projected document. Decision needed on whether to: (a) surface `frequency_uuid` / `frequency` + `number_of_repeats` + `service_location_uuid` / `service_location_name` for both subtypes (consistent with `drug_order`'s frequency treatment); (b) surface them only for `referral_order` where the clinical use case is strongest, leaving `test_order` unchanged; or (c) ratify the omission as out-of-scope for v1 and document the gap in the field-descriptions table. Affects retrieval quality for repeat-scheduled lab orders and any referral query touching cadence or destination. Surfacing is additive — pure serializer change plus a one-time re-projection per [Decision 1](#decision-1-cqrs-pattern--separate-read-store-from-transactional-database).
-

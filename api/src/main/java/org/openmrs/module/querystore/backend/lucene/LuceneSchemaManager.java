@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Map;
@@ -82,6 +83,19 @@ final class LuceneSchemaManager implements AutoCloseable {
 	}
 
 	/**
+	 * Index directories the most recent {@link #listAllIndexes()} found on disk but could not
+	 * open (typically a stale {@code write.lock} from a previous JVM). They never reach
+	 * {@code writers}, so {@link #knownIndexNames()} cannot report them; a cross-type read that
+	 * claims completeness has to consult this instead. Reflects filesystem state, so a snapshot
+	 * from a concurrent enumeration is an equally valid answer.
+	 */
+	Set<String> skippedIndexNames() {
+		return lastSkippedIndexNames;
+	}
+
+	private volatile Set<String> lastSkippedIndexNames = Collections.emptySet();
+
+	/**
 	 * Enumerates {@code querystore_*} index directories on disk. Used by cross-type operations
 	 * (e.g. {@code bulkDeleteByPatient}) where the caller does not know which types contain
 	 * documents for a given patient. Symmetric with the MySQL backend's {@code listAllTables}.
@@ -105,7 +119,9 @@ final class LuceneSchemaManager implements AutoCloseable {
 	 */
 	Set<String> listAllIndexes() {
 		Set<String> names = new HashSet<>();
+		Set<String> skipped = new HashSet<>();
 		if (!Files.isDirectory(indexRoot)) {
+			lastSkippedIndexNames = Collections.emptySet();
 			return names;
 		}
 		try (DirectoryStream<Path> stream = Files.newDirectoryStream(indexRoot,
@@ -132,12 +148,15 @@ final class LuceneSchemaManager implements AutoCloseable {
 				// the entire cross-type read path (bulkDeleteByPatient, existsByPatient, bm25/knn).
 				// Swallow per-dir with a WARN so one bad index doesn't become a global outage; the
 				// next ensureWriter(resourceType) call from a specific code path can still surface
-				// the failure to that caller.
+				// the failure to that caller. The skipped name is kept in skippedIndexNames() so a
+				// read that claims completeness can disclose the gap instead of serving the
+				// patient's chart with a whole resource type silently missing.
 				try {
 					writers.computeIfAbsent(name, this::openWriter);
 					names.add(name);
 				}
 				catch (RuntimeException ex) {
+					skipped.add(name);
 					log.warn("Could not open Lucene index directory '" + name + "'; skipping for"
 					        + " this enumeration. A type-specific ensureWriter call will surface"
 					        + " the underlying error to the caller of that path.", ex);
@@ -147,6 +166,7 @@ final class LuceneSchemaManager implements AutoCloseable {
 		catch (IOException e) {
 			throw new IllegalStateException("Could not enumerate Lucene indexes under " + indexRoot, e);
 		}
+		lastSkippedIndexNames = Collections.unmodifiableSet(skipped);
 		return names;
 	}
 
