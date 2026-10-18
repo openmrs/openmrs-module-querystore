@@ -722,6 +722,71 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aNonWaitingSearchThatStartsAFailedChartsRetry_answersEmptyProjecting_notTheRowsTheRetryWillDelete() {
+		// code r1 S1. The retry is reindexPatient, which deletes the chart before it re-projects. Parked,
+		// it has not run yet, so the old partial rows are still there; this answer must not carry them.
+		long[] now = { 1_000_000L };
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = failedChart(parked, now);
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+
+		QueryResult result = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).collapse(QuerySpec.Collapse.CONCEPT)
+		        .partialResults(true).wait(false).build());
+
+		assertEquals(IndexStatus.PROJECTING, result.getStatus());
+		assertTrue(result.getHits().isEmpty());
+		assertTrue(result.getGroups().isEmpty());
+		assertEquals("the retry was started and is parked", 1, parked.size());
+		assertTrue(launcher.isWarming(PATIENT));
+	}
+
+	@Test
+	public void aWaitingSearchThatStartsAFailedChartsRetry_joinsIt_thenSearchesTheRebuiltChart() throws Exception {
+		long[] now = { 1_000_000L };
+		List<Runnable> parked = new java.util.concurrent.CopyOnWriteArrayList<>();
+		failedChart(parked, now);
+		now[0] += BootstrapLauncher.RETRY_BACKOFF_BASE_MILLIS;
+		service.setSyncProjectionWaitMillis(10_000);
+		bootstrap.onEnsureIndexed = uuid -> index(obs("cd4-2", CD4, "CD4 count: 410.0 cells/µL", 410.0, "2026-04-01"));
+		Thread runner = new Thread(() -> {
+			try {
+				while (parked.isEmpty()) {
+					Thread.sleep(10);
+				}
+				Thread.sleep(100);
+				parked.remove(0).run();
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		});
+		runner.start();
+
+		QueryResult result = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(true).build());
+		runner.join(10_000);
+
+		assertEquals(IndexStatus.INDEXED, result.getStatus());
+		assertTrue(uuids(result.getHits()).contains("cd4-2"));
+		assertEquals(Collections.singletonList(PATIENT), bootstrap.reindexCalls);
+	}
+
+	/**
+	 * A one-slot parked launcher on {@code now}, with the patient's chart partly indexed and its last
+	 * warm failed (at {@code now}).
+	 */
+	private BootstrapLauncher failedChart(List<Runnable> parked, long[] now) {
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked, () -> now[0]);
+		service.setBootstrapLauncher(launcher);
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		assertTrue(launcher.launchPatientWarm(PATIENT, () -> {
+			throw new IllegalStateException("conditions failed");
+		}));
+		parked.remove(0).run();
+		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
+		return launcher;
+	}
+
+	@Test
 	public void aPoisonChart_isRetriedOnItsBackoffSchedule_notOnEveryKeystroke() {
 		long[] now = { 1_000_000L };
 		service.setBootstrapLauncher(SynchronousLaunchers.create(() -> now[0]));

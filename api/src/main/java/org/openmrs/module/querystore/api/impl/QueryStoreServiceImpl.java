@@ -625,6 +625,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			// it gets), not on every keystroke. Until it re-projects, its chart may be partial.
 			warm(patientUuid);
 			status = getIndexStatus(patientUuid);
+			if (status == IndexStatus.PROJECTING && !spec.isWait()) {
+				// A retry is starting, and it deletes the chart before re-projecting it: the rows
+				// there now are about to go. Answer as for a cold chart. A waiting search joins the
+				// retry below and searches what it rebuilt.
+				return spec.isPartialResults() ? QueryResult.empty(status, spec) : QueryResult.statusOnly(status);
+			}
 		}
 		if (status != IndexStatus.INDEXED && status != IndexStatus.FAILED) {
 			if (spec.isWait()) {

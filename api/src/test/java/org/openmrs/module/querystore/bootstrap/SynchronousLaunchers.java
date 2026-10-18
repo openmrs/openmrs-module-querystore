@@ -37,6 +37,13 @@ public final class SynchronousLaunchers {
 		return launcher;
 	}
 
+	/** {@link #parked(int, List)}, reading time (epoch millis) from {@code clock}. */
+	public static BootstrapLauncher parked(int slots, List<Runnable> parked, LongSupplier clock) {
+		BootstrapLauncher launcher = parked(slots, parked);
+		launcher.setClock(clock);
+		return launcher;
+	}
+
 	public static BootstrapLauncher create() {
 		BootstrapLauncher launcher = new BootstrapLauncher();
 		launcher.setDaemonExecutor((task, token) -> task.run());
