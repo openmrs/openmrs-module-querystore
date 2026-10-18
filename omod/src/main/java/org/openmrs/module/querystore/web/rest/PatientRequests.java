@@ -128,6 +128,20 @@ final class PatientRequests {
 		return readable.size() == known.size() ? new ArrayList<String>() : readable;
 	}
 
+	/**
+	 * Whether the caller can read every registered type ({@link #canRead}; a type with no mapped
+	 * privilege is not readable). Only such a caller is served a projecting chart's partial rows and
+	 * progress ({@link org.openmrs.module.querystore.api.QuerySpec#isPartialResults()}).
+	 */
+	static boolean canReadEvery(List<String> known) {
+		for (String type : known) {
+			if (!canRead(type)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	private static boolean canRead(String type) {
 		String privilege = READ_PRIVILEGE.get(type);
 		return privilege != null && Context.hasPrivilege(privilege);

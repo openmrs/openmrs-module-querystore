@@ -642,6 +642,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (status == IndexStatus.FAILED || status == IndexStatus.NOT_INDEXED) {
 			return QueryResult.empty(status, spec);
 		}
+		if (status == IndexStatus.PROJECTING && !spec.isPartialResults()) {
+			return QueryResult.statusOnly(status);
+		}
 
 		List<QueryResult.Hit> pool = candidates(spec);
 		boolean faceted = spec.getFacets().contains(QuerySpec.Facet.RESOURCE_TYPE);

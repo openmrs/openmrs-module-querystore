@@ -417,7 +417,7 @@ public class QueryStoreServiceQueryTest {
 	@Test
 	public void coldPatient_withoutWait_warmsInTheBackgroundAndAnswersEmptyAtOnce() {
 		QueryResult result = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD)
-		        .collapse(QuerySpec.Collapse.CONCEPT).wait(false).build());
+		        .collapse(QuerySpec.Collapse.CONCEPT).partialResults(true).wait(false).build());
 
 		assertEquals(IndexStatus.PROJECTING, result.getStatus());
 		assertTrue(result.getHits().isEmpty());
@@ -427,7 +427,7 @@ public class QueryStoreServiceQueryTest {
 
 		// While the warm runs, a second keystroke neither blocks nor launches another.
 		launcher.warming = true;
-		QueryResult again = service.query(spec("cd4").wait(false).build());
+		QueryResult again = service.query(spec("cd4").partialResults(true).wait(false).build());
 		assertEquals(IndexStatus.PROJECTING, again.getStatus());
 		assertEquals(1, launcher.launched.size());
 	}
@@ -471,12 +471,12 @@ public class QueryStoreServiceQueryTest {
 		launcher.warming = true;
 		List<String> obsOnly = Collections.singletonList("obs");
 
-		QueryResult search = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).types(obsOnly).wait(false).build());
+		QueryResult search = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).types(obsOnly).partialResults(true).wait(false).build());
 		QueryResult collapsed = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).types(obsOnly)
-		        .collapse(QuerySpec.Collapse.CONCEPT).wait(false).build());
+		        .collapse(QuerySpec.Collapse.CONCEPT).partialResults(true).wait(false).build());
 		QueryResult recent = service.query(QuerySpec.forPatient(PATIENT).sort(QuerySpec.Sort.RECENT).types(obsOnly)
-		        .limit(5).wait(false).build());
-		QueryResult everything = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
+		        .limit(5).partialResults(true).wait(false).build());
+		QueryResult everything = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
 
 		assertEquals(IndexStatus.PROJECTING, search.getStatus());
 		assertEquals(Collections.singletonList("cd4-1"), uuids(search.getHits()));
@@ -490,15 +490,44 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aProjectingChart_forACallerWhoCannotReadEveryType_getsNoRowsNoGroupsNoFacetsNoProgress_untilIndexed() {
+		// sec r1 B1. The caller reads conditions and allergies, not diagnoses, which project between
+		// them. Rows landing per type, or progress stepping per type, would let the caller time the
+		// diagnosis step, so until the chart is indexed the body is the bare status.
+		index(doc("condition", "cond-1", MALARIA, "Condition: Malaria, active", "2026-01-02"));
+		bootstrap.progress = new ProjectionProgress(4, 12);
+		launcher.warming = true;
+		QuerySpec.Builder restricted = spec("malaria").mode(QuerySpec.Mode.KEYWORD)
+		        .types(Collections.singletonList("condition")).collapse(QuerySpec.Collapse.CONCEPT)
+		        .facet(QuerySpec.Facet.RESOURCE_TYPE).wait(false);
+
+		Map<String, Object> projecting = service.query(restricted.build()).toMap();
+		Map<String, Object> recent = service.query(QuerySpec.forPatient(PATIENT).sort(QuerySpec.Sort.RECENT)
+		        .types(Collections.singletonList("condition")).wait(false).build()).toMap();
+
+		Map<String, Object> bare = new java.util.LinkedHashMap<>();
+		bare.put("status", "projecting");
+		bare.put("hits", Collections.emptyList());
+		assertEquals(bare, projecting);
+		assertEquals(bare, recent);
+		assertTrue("and no second warm started", launcher.launched.isEmpty());
+
+		launcher.warming = false;
+		QueryResult indexed = service.query(restricted.build());
+		assertEquals(IndexStatus.INDEXED, indexed.getStatus());
+		assertEquals(1, indexed.getGroups().size());
+	}
+
+	@Test
 	public void aProjectingChart_carriesItsProgressInTypes_andAnIndexedOneDoesNot() {
 		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
 		bootstrap.progress = new ProjectionProgress(4, 12);
 		launcher.warming = true;
 
-		Map<String, Object> projecting = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).toMap();
+		Map<String, Object> projecting = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build()).toMap();
 		launcher.warming = false;
 		bootstrap.progress = null;
-		Map<String, Object> indexed = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).toMap();
+		Map<String, Object> indexed = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build()).toMap();
 
 		assertEquals("projecting", projecting.get("status"));
 		@SuppressWarnings("unchecked")
@@ -518,7 +547,7 @@ public class QueryStoreServiceQueryTest {
 		service.setSyncProjectionWaitMillis(20);
 		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
 
-		QueryResult waited = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(true).build());
+		QueryResult waited = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(true).build());
 
 		assertEquals(IndexStatus.PROJECTING, waited.getStatus());
 		assertEquals(Collections.singletonList("cd4-1"), uuids(waited.getHits()));
@@ -580,7 +609,7 @@ public class QueryStoreServiceQueryTest {
 		assertTrue("the projection reached its half-written point", written.await(10, java.util.concurrent.TimeUnit.SECONDS));
 
 		assertEquals(IndexStatus.PROJECTING, service.getIndexStatus(PATIENT));
-		QueryResult concurrent = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
+		QueryResult concurrent = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
 		assertEquals(IndexStatus.PROJECTING, concurrent.getStatus());
 		assertEquals("what has landed so far, labelled projecting", Collections.singletonList("cd4-1"),
 		    uuids(concurrent.getHits()));

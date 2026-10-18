@@ -69,6 +69,11 @@ public final class QueryResult {
 		                : null);
 	}
 
+	/** Only the status: no hits, and no groups, facets or progress whatever the spec asked for. */
+	public static QueryResult statusOnly(IndexStatus status) {
+		return new QueryResult(status, Collections.<Hit> emptyList(), null, null);
+	}
+
 	public IndexStatus getStatus() {
 		return status;
 	}

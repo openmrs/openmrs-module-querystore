@@ -70,6 +70,8 @@ public final class QuerySpec {
 
 	private final boolean wait;
 
+	private final boolean partialResults;
+
 	private QuerySpec(Builder b) {
 		this.patientUuid = b.patientUuid;
 		this.query = StringUtils.trimToNull(b.query);
@@ -82,6 +84,7 @@ public final class QuerySpec {
 		this.limit = b.limit;
 		this.offset = b.offset;
 		this.wait = b.wait;
+		this.partialResults = b.partialResults;
 	}
 
 	public String getPatientUuid() {
@@ -131,6 +134,16 @@ public final class QuerySpec {
 		return wait;
 	}
 
+	/**
+	 * Whether a {@link IndexStatus#PROJECTING} chart is searched as far as it has landed, with its
+	 * progress. Off by default: then a projecting chart answers its bare status, no hits, groups,
+	 * facets or progress. Turn it on only for a caller who can read every registered type: rows and
+	 * progress arrive type by type, so their timing marks when each type, readable or not, finished.
+	 */
+	public boolean isPartialResults() {
+		return partialResults;
+	}
+
 	public static Builder forPatient(String patientUuid) {
 		return new Builder(patientUuid);
 	}
@@ -156,6 +169,8 @@ public final class QuerySpec {
 		private int offset = 0;
 
 		private boolean wait = true;
+
+		private boolean partialResults;
 
 		private Builder(String patientUuid) {
 			this.patientUuid = patientUuid;
@@ -204,6 +219,11 @@ public final class QuerySpec {
 
 		public Builder wait(boolean wait) {
 			this.wait = wait;
+			return this;
+		}
+
+		public Builder partialResults(boolean partialResults) {
+			this.partialResults = partialResults;
 			return this;
 		}
 

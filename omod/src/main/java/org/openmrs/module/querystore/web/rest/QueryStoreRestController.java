@@ -569,7 +569,7 @@ public class QueryStoreRestController {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 		requirePatient(patientUuid);
 		QuerySpec spec = QuerySpec.forPatient(patientUuid).sort(QuerySpec.Sort.RECENT).types(readableTypes(types))
-		        .limit(pageSize(limit, 5)).wait(wait).build();
+		        .limit(pageSize(limit, 5)).wait(wait).partialResults(canReadEveryType()).build();
 		return new ResponseEntity<Object>(queryStoreService().query(spec).toMap(), HttpStatus.OK);
 	}
 
@@ -599,7 +599,8 @@ public class QueryStoreRestController {
 		        .mode(parse(QuerySpec.Mode.class, "mode", mode, QuerySpec.Mode.HYBRID))
 		        .sort(parse(QuerySpec.Sort.class, "sort", sort, QuerySpec.Sort.RELEVANCE))
 		        .collapse(parse(QuerySpec.Collapse.class, "collapse", collapse, QuerySpec.Collapse.NONE))
-		        .types(readableTypes(types)).limit(pageSize(limit, QuerySpec.DEFAULT_LIMIT)).wait(wait);
+		        .types(readableTypes(types)).limit(pageSize(limit, QuerySpec.DEFAULT_LIMIT)).wait(wait)
+		        .partialResults(canReadEveryType());
 		if (offset != null) {
 			if (offset < 0 || offset > MAX_OFFSET) {
 				throw new BadParameterException("offset must be between 0 and " + MAX_OFFSET);
@@ -621,6 +622,10 @@ public class QueryStoreRestController {
 
 	private List<String> readableTypes(String csv) {
 		return PatientRequests.readableTypes(csv, bootstrapService().getResourceTypeNames());
+	}
+
+	private boolean canReadEveryType() {
+		return PatientRequests.canReadEvery(bootstrapService().getResourceTypeNames());
 	}
 
 	private static ResponseEntity<Object> statusResponse(IndexStatus status, HttpStatus httpStatus) {

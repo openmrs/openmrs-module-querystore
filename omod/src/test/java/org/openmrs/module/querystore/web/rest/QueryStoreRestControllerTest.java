@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.web.rest;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -794,6 +795,46 @@ public class QueryStoreRestControllerTest {
 
 		assertTypeNotAvailable(
 		    () -> controller.search("patient-uuid", "cd4", null, "condition", null, null, null, null, null, true));
+	}
+
+	@Test
+	public void partialResults_areAskedForOnlyByACallerWhoCanReadEveryRegisteredType() {
+		// sec r1 B1: Get Conditions and Get Allergies without Get Diagnoses, which projects between them.
+		Context.setUserContext(new UserContext(null) {
+
+			@Override
+			public User getAuthenticatedUser() {
+				return new User();
+			}
+
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return PrivilegeConstants.GET_PATIENTS.equals(privilege) || PrivilegeConstants.GET_CONDITIONS.equals(privilege)
+				        || PrivilegeConstants.GET_ALLERGIES.equals(privilege);
+			}
+		});
+		BootstrapService bootstrap = mock(BootstrapService.class);
+		when(bootstrap.getResourceTypeNames()).thenReturn(Arrays.asList("condition", "diagnosis", "allergy"));
+		controller.setBootstrapService(bootstrap);
+		QueryStoreService queryStore = mock(QueryStoreService.class);
+		when(queryStore.query(org.mockito.ArgumentMatchers.any(QuerySpec.class)))
+		        .thenReturn(QueryResult.empty(IndexStatus.INDEXED, QuerySpec.forPatient("p").query("x").build()));
+		controller.setQueryStoreService(queryStore);
+
+		controller.search("patient-uuid", "malaria", null, null, null, null, null, null, null, false);
+		controller.recent("patient-uuid", null, "condition,allergy", false);
+		authenticate();
+		when(bootstrap.getResourceTypeNames()).thenReturn(Arrays.asList("condition", "diagnosis", "allergy"));
+		controller.search("patient-uuid", "malaria", null, "condition", null, null, null, null, null, false);
+		when(bootstrap.getResourceTypeNames()).thenReturn(Arrays.asList("condition", "mymodule_note"));
+		controller.recent("patient-uuid", null, null, false);
+
+		ArgumentCaptor<QuerySpec> captor = ArgumentCaptor.forClass(QuerySpec.class);
+		verify(queryStore, org.mockito.Mockito.times(4)).query(captor.capture());
+		assertFalse("cannot read diagnosis", captor.getAllValues().get(0).isPartialResults());
+		assertFalse("naming only readable types does not help", captor.getAllValues().get(1).isPartialResults());
+		assertTrue("reads every registered type, whatever it names", captor.getAllValues().get(2).isPartialResults());
+		assertFalse("an SPI type with no read privilege counts as unreadable", captor.getAllValues().get(3).isPartialResults());
 	}
 
 	@Test

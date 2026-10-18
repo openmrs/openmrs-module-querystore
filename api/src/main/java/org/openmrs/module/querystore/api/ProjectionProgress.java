@@ -11,8 +11,10 @@ package org.openmrs.module.querystore.api;
 
 /**
  * How far a patient's running projection has got, in resource types: {@code done} of {@code total}
- * have been projected (or have failed and been passed over). Counts types, never records, so it
- * tells a caller nothing about the chart's contents, only how soon to look again.
+ * have been projected (or have failed and been passed over). It counts types, not records, but it
+ * steps once per type in a fixed order, so the time spent at each step says how much of that type
+ * the patient has. It is therefore served only to a caller who can read every registered type
+ * ({@link QuerySpec#isPartialResults()}).
  */
 public final class ProjectionProgress {
 
