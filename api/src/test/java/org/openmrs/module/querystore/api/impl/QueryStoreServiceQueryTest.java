@@ -1003,6 +1003,72 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aReindexThatHasNotDeletedYet_servesNoRows_thenServesTheRebuiltChart() throws Exception {
+		// code r3 S3: POST /reindex and bench cold=true. The reindex runs on its own thread and stops
+		// before its delete; a search meanwhile must not get the rows that delete is about to remove.
+		service.setBootstrapLauncher(SynchronousLaunchers.create());
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		java.util.concurrent.CountDownLatch atDelete = new java.util.concurrent.CountDownLatch(1);
+		java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+		bootstrap.onDelete = uuid -> {
+			atDelete.countDown();
+			try {
+				release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			backend.bulkDeleteByPatient(uuid);
+		};
+		bootstrap.onEnsureIndexed = uuid -> index(obs("cd4-2", CD4, "CD4 count: 410.0 cells/µL", 410.0, "2026-04-01"));
+		Thread reindex = new Thread(() -> service.reindex(PATIENT));
+		reindex.start();
+		assertTrue(atDelete.await(10, java.util.concurrent.TimeUnit.SECONDS));
+
+		QueryResult during = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		release.countDown();
+		reindex.join(10_000);
+
+		assertEquals(IndexStatus.PROJECTING, during.getStatus());
+		assertTrue("not the rows about to be deleted", during.getHits().isEmpty());
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+		assertEquals(Collections.singletonList("cd4-2"),
+		    uuids(service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build()).getHits()));
+	}
+
+	@Test
+	public void aReindexThatFindsNoSlot_leavesNoPendingDeleteMark() {
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+		assertTrue(launcher.launchPatientWarm("another-patient", () -> true));
+		service.setBootstrapLauncher(launcher);
+		service.setSyncProjectionWaitMillis(20);
+
+		assertEquals(IndexStatus.NOT_INDEXED, service.reindex(PATIENT));
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+	}
+
+	@Test
+	public void anIndexedChartWhoseMergeReindexHasNotDeletedYet_servesNoRows() {
+		// code r3 S3, the merge path: reconcileMerge calls reindexPatient with no slot, so the chart reads
+		// indexed; the bootstrap service reports its delete pending until it lands.
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		bootstrap.deletePending = true;
+
+		QueryResult during = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		QueryResult restricted = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
+		bootstrap.deletePending = false;
+		QueryResult after = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
+
+		assertEquals(IndexStatus.PROJECTING, during.getStatus());
+		assertTrue(during.getHits().isEmpty());
+		assertEquals(IndexStatus.PROJECTING, restricted.getStatus());
+		assertTrue(restricted.getHits().isEmpty());
+		assertEquals(IndexStatus.INDEXED, after.getStatus());
+		assertEquals(1, after.getHits().size());
+	}
+
+	@Test
 	public void aRetryWhoseDeleteReportsAFailure_leavesTheChartFailed_withNoRows() {
 		// code r3 S1, through the real BootstrapServiceImpl: the delete reports one failed index and
 		// deletes nothing, so the old partial chart is still there and must not become "indexed".
@@ -1349,6 +1415,10 @@ public class QueryStoreServiceQueryTest {
 		}
 
 		java.util.function.Consumer<String> onDelete;
+
+		boolean deletePending;
+
+		@Override public boolean isDeletePending(String patientUuid) { return deletePending; }
 
 		@Override public void reindexPatient(String patientUuid, Runnable afterDelete) {
 			reindexCalls.add(patientUuid);

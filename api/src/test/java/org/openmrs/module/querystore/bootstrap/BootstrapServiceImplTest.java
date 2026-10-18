@@ -1132,6 +1132,42 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void reindexPatient_reportsItsDeletePending_fromEntryUntilTheDeleteLands_orTheReindexEnds() {
+		// code r3 S3: the merge path reindexes with no slot, so nothing else marks the delete.
+		List<String> events = new java.util.ArrayList<String>();
+		final boolean[] fail = { false };
+		service.setQueryStoreService(new RecordingQueryStoreService(events) {
+
+			@Override
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				events.add("delete, pending=" + service.isDeletePending(patientUuid));
+				if (fail[0]) {
+					throw new IllegalStateException("delete blew up");
+				}
+				return super.bulkDeleteByPatient(patientUuid);
+			}
+		});
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project, pending=" + service.isDeletePending("patient-uuid"));
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		assertFalse(service.isDeletePending("patient-uuid"));
+		service.reindexPatient("patient-uuid");
+		fail[0] = true;
+		try {
+			service.reindexPatient("patient-uuid");
+			fail("expected the delete's failure");
+		}
+		catch (IllegalStateException expected) {
+			// pass
+		}
+
+		assertEquals(Arrays.asList("delete, pending=true", "delete", "project, pending=false", "delete, pending=true"),
+		    events);
+		assertFalse("cleared when the reindex ends, however it ends", service.isDeletePending("patient-uuid"));
+	}
+
+	@Test
 	public void reindexPatient_runsItsAfterDeleteHook_betweenTheDeleteAndTheProjection() {
 		List<String> events = new java.util.ArrayList<String>();
 		service.setQueryStoreService(new RecordingQueryStoreService(events));

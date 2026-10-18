@@ -131,6 +131,16 @@ public interface BootstrapService extends OpenmrsService {
 	}
 
 	/**
+	 * Whether a {@link #reindexPatient} of the patient has started and not yet deleted its old
+	 * documents: from the call until that delete lands (or the reindex ends). Those documents are
+	 * about to go, so a search should not serve them. A {@code default} that says no, so test doubles
+	 * keep compiling; the production implementation overrides it.
+	 */
+	default boolean isDeletePending(String patientUuid) {
+		return false;
+	}
+
+	/**
 	 * Deletes the patient's documents under its per-patient lock, so it reads as not indexed and a
 	 * later warm projects it afresh: for a patient whose failed projection may have left a partial
 	 * chart, before its failure is forgotten. {@code stillDroppable} is checked once the lock is held

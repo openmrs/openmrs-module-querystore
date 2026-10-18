@@ -80,6 +80,10 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		}
 	}
 
+	// Patients whose reindexPatient has started and not yet deleted their old documents (see
+	// isDeletePending). An entry exists only while such a call runs.
+	private final Set<String> deletePending = ConcurrentHashMap.newKeySet();
+
 	// How far each patient's running per-patient projection has got. An entry exists only while one
 	// runs (under the patient's lock), so the map holds at most one per running projection.
 	private final Map<String, ProjectionProgress> projectionProgress = new ConcurrentHashMap<>();
@@ -250,6 +254,21 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		if (patientUuid == null || patientUuid.isEmpty()) {
 			return;
 		}
+		deletePending.add(patientUuid);
+		try {
+			reindexPatientUnderLock(patientUuid, afterDelete);
+		}
+		finally {
+			deletePending.remove(patientUuid);
+		}
+	}
+
+	@Override
+	public boolean isDeletePending(String patientUuid) {
+		return patientUuid != null && deletePending.contains(patientUuid);
+	}
+
+	private void reindexPatientUnderLock(String patientUuid, Runnable afterDelete) {
 		synchronized (patientLock(patientUuid)) {
 			// Force a full re-projection (repairs a partially-indexed patient, which ensureIndexed's
 			// existsByPatient gate refuses to touch). Delete FIRST: this clears stale rows AND means
@@ -265,6 +284,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			if (deleted == null || deleted.hasFailures()) {
 				throw new IllegalStateException("Deleting the patient's documents did not finish; not re-projecting");
 			}
+			deletePending.remove(patientUuid);
 			afterDelete.run();
 			reportProjection(patientUuid, projectAllTypesForPatient(patientUuid), "Re-projection");
 		}

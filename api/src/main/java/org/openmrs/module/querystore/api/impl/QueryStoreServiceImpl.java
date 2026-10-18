@@ -167,9 +167,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		this.syncProjectionWaitMillis = Math.max(0, Math.min(MAX_SYNC_PROJECTION_WAIT_SECONDS * 1000L, millis));
 	}
 
-	// Patients whose failed-chart retry has been launched and has not yet deleted the old chart.
-	// An entry lives from just before the launch until the retry's delete returns (or the retry ends),
-	// so the set holds at most one per running projection.
+	// Patients whose failed-chart retry has been launched, or whose reindex has been asked for, and
+	// that has not yet deleted the old chart. An entry lives from just before the launch until the
+	// delete returns (or the projection ends), so the set holds at most one per running projection.
 	private final Set<String> retryPendingDelete = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
 	// Optional: without it, query()/warm() can't start a background projection and getIndexStatus()
@@ -578,8 +578,13 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (backend == null || patientUuid == null) {
 			return IndexStatus.NOT_INDEXED;
 		}
+		// Marked on this thread, before the projection registers, so no search serves the rows the
+		// delete is about to remove; cleared once that delete lands. Marked again when the work starts,
+		// since a warm that found no slot clears the mark of a patient not yet in flight.
+		retryPendingDelete.add(patientUuid);
 		BooleanSupplier work = () -> {
-			bootstrapService().reindexPatient(patientUuid);
+			retryPendingDelete.add(patientUuid);
+			bootstrapService().reindexPatient(patientUuid, () -> retryPendingDelete.remove(patientUuid));
 			return true;
 		};
 		try {
@@ -592,6 +597,13 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			SafeLog.warn(QueryStoreServiceImpl.class, "Patient reindex failed (patient uuid at DEBUG)", e);
 			log.debug("Patient reindex failed for " + patientUuid);
 			return IndexStatus.FAILED;
+		}
+		finally {
+			// The delete did not run (no slot, or it failed first). A projection of the patient still
+			// in flight, waited on and outlasted, owns the mark if it set one.
+			if (bootstrapLauncher == null || !bootstrapLauncher.isWarming(patientUuid)) {
+				retryPendingDelete.remove(patientUuid);
+			}
 		}
 	}
 
@@ -649,9 +661,23 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		return launched ? IndexStatus.PROJECTING : status;
 	}
 
-	/** Whether a failed chart's retry has started and not yet deleted the old chart. */
+	/** Whether a failed chart's retry, or a reindex, has started here and not yet deleted the old chart. */
 	boolean isRetryPendingDelete(String patientUuid) {
 		return retryPendingDelete.contains(patientUuid);
+	}
+
+	/** {@link #isRetryPendingDelete}, or a reindex the bootstrap service is running (a merge's). */
+	private boolean deletePending(String patientUuid) {
+		if (retryPendingDelete.contains(patientUuid)) {
+			return true;
+		}
+		try {
+			return bootstrapService().isDeletePending(patientUuid);
+		}
+		catch (RuntimeException e) {
+			log.debug("Bootstrap service unavailable; taking no delete as pending", e);
+			return false;
+		}
 	}
 
 	/**
@@ -690,11 +716,13 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (status == IndexStatus.FAILED || status == IndexStatus.NOT_INDEXED) {
 			return QueryResult.empty(status, spec);
 		}
-		if (status == IndexStatus.PROJECTING && retryPendingDelete.contains(patientUuid)) {
-			// A failed chart's retry is under way and has not yet deleted the old chart, so the rows
-			// there now are about to go: answer as for a cold chart, waiting or not. Once the delete
+		if ((status == IndexStatus.PROJECTING || status == IndexStatus.INDEXED) && deletePending(patientUuid)) {
+			// A retry, a reindex or a merge's reindex is under way and has not yet deleted the old chart,
+			// so the rows there now are about to go: answer as for a chart being projected, waiting or
+			// not. (A merge's reindex takes no slot, so its chart still reads indexed.) Once the delete
 			// lands, the rebuilt chart's rows are served as they arrive.
-			return spec.isPartialResults() ? QueryResult.empty(status, spec) : QueryResult.statusOnly(status);
+			return spec.isPartialResults() ? QueryResult.empty(IndexStatus.PROJECTING, spec)
+			        : QueryResult.statusOnly(IndexStatus.PROJECTING);
 		}
 		if (status == IndexStatus.PROJECTING && !spec.isPartialResults()) {
 			return QueryResult.statusOnly(status);
