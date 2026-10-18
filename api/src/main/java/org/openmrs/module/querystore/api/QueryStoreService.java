@@ -182,9 +182,10 @@ public interface QueryStoreService extends OpenmrsService {
 	 * Patient-scoped query with a retrieval mode, type filter, sort, collapse-by-concept, facets and
 	 * paging (prototype consumer API for the omnibar; see {@link QuerySpec}). Same authorization as
 	 * {@link #searchByPatient}. A cold patient is projected first when {@link QuerySpec#isWait()},
-	 * else answered at once with an empty result whose {@link IndexStatus} says why: a background warm
-	 * is started where one can be, and a patient whose last warm failed is retried only once its
-	 * retry backoff has run out (see {@link #warm}).
+	 * else answered at once with its {@link IndexStatus}: a background warm is started where one can
+	 * be, and a patient whose last warm failed is retried only once its retry backoff has run out
+	 * (see {@link #warm}). A {@link IndexStatus#PROJECTING} chart is searched as far as it has landed;
+	 * a {@link IndexStatus#FAILED} or {@link IndexStatus#NOT_INDEXED} one gets an empty result.
 	 * Throws {@link IllegalArgumentException} for a type no
 	 * provider registers.
 	 *

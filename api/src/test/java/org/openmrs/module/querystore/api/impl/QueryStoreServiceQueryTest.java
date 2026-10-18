@@ -462,6 +462,48 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aProjectingChart_servesTheRowsAlreadyIndexed_withinTheRequestedTypesOnly() {
+		// A warm is part way: obs and a condition have landed. The caller may read obs only, so the REST
+		// layer asks for obs; the partial answer must not carry the condition.
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		index(doc("condition", "cond-1", CD4, "Condition: CD4 lymphocytopenia", "2026-03-01"));
+		launcher.warming = true;
+		List<String> obsOnly = Collections.singletonList("obs");
+
+		QueryResult search = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).types(obsOnly).wait(false).build());
+		QueryResult collapsed = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).types(obsOnly)
+		        .collapse(QuerySpec.Collapse.CONCEPT).wait(false).build());
+		QueryResult recent = service.query(QuerySpec.forPatient(PATIENT).sort(QuerySpec.Sort.RECENT).types(obsOnly)
+		        .limit(5).wait(false).build());
+		QueryResult everything = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
+
+		assertEquals(IndexStatus.PROJECTING, search.getStatus());
+		assertEquals(Collections.singletonList("cd4-1"), uuids(search.getHits()));
+		assertEquals(IndexStatus.PROJECTING, collapsed.getStatus());
+		assertEquals(1, collapsed.getGroups().size());
+		assertEquals(1, collapsed.getGroups().get(0).getCount());
+		assertEquals(IndexStatus.PROJECTING, recent.getStatus());
+		assertEquals(Collections.singletonList("cd4-1"), uuids(recent.getHits()));
+		assertEquals(2, everything.getHits().size());
+		assertTrue("serving a partial chart starts no second warm", launcher.launched.isEmpty());
+	}
+
+	@Test
+	public void aProjectingChart_aWaitingSearchThatOutwaitsItsBound_servesTheRowsAlreadyIndexed() {
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+		assertTrue(launcher.launchPatientWarm(PATIENT, () -> true));
+		service.setBootstrapLauncher(launcher);
+		service.setSyncProjectionWaitMillis(20);
+		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+
+		QueryResult waited = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(true).build());
+
+		assertEquals(IndexStatus.PROJECTING, waited.getStatus());
+		assertEquals(Collections.singletonList("cd4-1"), uuids(waited.getHits()));
+	}
+
+	@Test
 	public void warm_onAnIndexedPatient_startsNothing() {
 		index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
 
@@ -519,7 +561,8 @@ public class QueryStoreServiceQueryTest {
 		assertEquals(IndexStatus.PROJECTING, service.getIndexStatus(PATIENT));
 		QueryResult concurrent = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).wait(false).build());
 		assertEquals(IndexStatus.PROJECTING, concurrent.getStatus());
-		assertTrue("no partial answer while projecting", concurrent.getHits().isEmpty());
+		assertEquals("what has landed so far, labelled projecting", Collections.singletonList("cd4-1"),
+		    uuids(concurrent.getHits()));
 
 		release.countDown();
 		search.join(10_000);

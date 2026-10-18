@@ -626,21 +626,21 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			warm(patientUuid);
 			status = getIndexStatus(patientUuid);
 		}
-		if (status != IndexStatus.INDEXED) {
-			// A partly-projected chart answers "no CD4" for a patient whose obs haven't landed yet,
-			// so a patient that is projecting, failed or not indexed gets no hits, only its status.
-			if (status == IndexStatus.FAILED) {
-				return QueryResult.empty(status, spec);
+		if (status != IndexStatus.INDEXED && status != IndexStatus.FAILED) {
+			if (spec.isWait()) {
+				// Waits (bounded) for a projection of its own, or for the one already in flight.
+				ensureIndexedSafely(patientUuid);
+			} else if (status == IndexStatus.NOT_INDEXED) {
+				warm(patientUuid);
 			}
-			if (!spec.isWait()) {
-				return QueryResult.empty(warm(patientUuid), spec);
-			}
-			// Waits (bounded) for a projection of its own, or for the one already in flight.
-			ensureIndexedSafely(patientUuid);
 			status = getIndexStatus(patientUuid);
-			if (status != IndexStatus.INDEXED) {
-				return QueryResult.empty(status, spec);
-			}
+		}
+		// A projecting chart is served as far as it has landed, labelled projecting: the caller says
+		// "still indexing", since a partial chart answers "no CD4" for obs that haven't landed yet. A
+		// failed chart gets no hits (it may be partial, with nothing on its way to fill it), and a
+		// chart with nothing indexed has none to give.
+		if (status == IndexStatus.FAILED || status == IndexStatus.NOT_INDEXED) {
+			return QueryResult.empty(status, spec);
 		}
 
 		List<QueryResult.Hit> pool = candidates(spec);

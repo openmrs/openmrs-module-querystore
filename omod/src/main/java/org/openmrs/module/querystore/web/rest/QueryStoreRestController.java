@@ -555,8 +555,9 @@ public class QueryStoreRestController {
 
 	/**
 	 * The patient's newest documents: {@code {"status", "hits": [...]}}. Doesn't block on a cold
-	 * patient unless {@code wait=true}: a never-indexed one is warmed and answered {@code projecting}
-	 * with no hits, and one whose last warm failed is answered {@code failed} with no hits, retried in
+	 * patient unless {@code wait=true}: a never-indexed one is warmed and answered {@code projecting},
+	 * a projecting one gets the documents indexed so far with {@code projecting}, and one whose last
+	 * warm failed is answered {@code failed} with no hits, retried in
 	 * the background only once its retry backoff has run out.
 	 */
 	@RequestMapping(value = "/patient/{patientUuid}/recent", method = RequestMethod.GET)
