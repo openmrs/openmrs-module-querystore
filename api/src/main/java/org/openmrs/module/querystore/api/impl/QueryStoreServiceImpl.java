@@ -168,9 +168,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	// Patients whose failed-chart retry has been launched, or whose reindex has been asked for, and
-	// that has not yet deleted the old chart. An entry lives from just before the launch until the
-	// delete returns (or the projection ends), so the set holds at most one per running projection.
-	private final Set<String> retryPendingDelete = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	// that has not yet deleted the old chart, with how many such calls hold a mark. Each call adds one
+	// just before its launch or wait and drops only its own, once its delete returns or the call ends
+	// without one, so a call that gives up cannot clear another's mark nor leave its own behind.
+	private final Map<String, Integer> retryPendingDelete = new java.util.concurrent.ConcurrentHashMap<>();
 
 	// Patients whose chart was dropped to forget a failure, and that no full reindex has rebuilt
 	// since. A synced record may write a document meanwhile, which would make the chart read indexed;
@@ -600,12 +601,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			return IndexStatus.NOT_INDEXED;
 		}
 		// Marked on this thread, before the projection registers, so no search serves the rows the
-		// delete is about to remove; cleared once that delete lands. Marked again when the work starts,
-		// since a warm that found no slot clears the mark of a patient not yet in flight.
-		retryPendingDelete.add(patientUuid);
+		// delete is about to remove; this call's mark is dropped once that delete lands.
+		Runnable unmark = markPendingDelete(patientUuid);
 		BooleanSupplier work = () -> {
-			retryPendingDelete.add(patientUuid);
-			bootstrapService().reindexPatient(patientUuid, () -> retryPendingDelete.remove(patientUuid));
+			bootstrapService().reindexPatient(patientUuid, unmark);
 			droppedCharts.remove(patientUuid);
 			return true;
 		};
@@ -621,12 +620,24 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			return IndexStatus.FAILED;
 		}
 		finally {
-			// The delete did not run (no slot, or it failed first). A projection of the patient still
-			// in flight, waited on and outlasted, owns the mark if it set one.
-			if (bootstrapLauncher == null || !bootstrapLauncher.isWarming(patientUuid)) {
-				retryPendingDelete.remove(patientUuid);
-			}
+			// The delete did not run (no slot, a projection of the patient outlasted the wait, or it
+			// failed first). Any other call's mark is its own to drop.
+			unmark.run();
 		}
+	}
+
+	/**
+	 * Adds one mark to the patient's pending delete, for one call. The returned runnable drops that
+	 * mark; it does so once, however often it runs.
+	 */
+	private Runnable markPendingDelete(String patientUuid) {
+		retryPendingDelete.merge(patientUuid, 1, Integer::sum);
+		java.util.concurrent.atomic.AtomicBoolean dropped = new java.util.concurrent.atomic.AtomicBoolean();
+		return () -> {
+			if (dropped.compareAndSet(false, true)) {
+				retryPendingDelete.computeIfPresent(patientUuid, (uuid, marks) -> marks > 1 ? marks - 1 : null);
+			}
+		};
 	}
 
 	@Override
@@ -646,17 +657,21 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		// projects is not re-run by every keystroke or POST warm. A dropped chart is rebuilt the same
 		// way: documents synced since the drop would make ensureIndexed skip it.
 		boolean retry = status == IndexStatus.FAILED || droppedCharts.contains(patientUuid);
-		if (retry && bootstrapLauncher != null && bootstrapLauncher.millisUntilRetry(patientUuid) > 0) {
+		if (bootstrapLauncher == null || retry && bootstrapLauncher.millisUntilRetry(patientUuid) > 0) {
 			return status;
 		}
+		// Marked here, on the request thread and before the launch, so no search between now and the
+		// retry's delete serves the old rows that delete is about to remove.
+		Runnable unmark = retry ? markPendingDelete(patientUuid) : () -> {
+		};
 		BooleanSupplier work = () -> {
 			boolean full;
 			if (retry) {
 				try {
-					bootstrapService().reindexPatient(patientUuid, () -> retryPendingDelete.remove(patientUuid));
+					bootstrapService().reindexPatient(patientUuid, unmark);
 				}
 				finally {
-					retryPendingDelete.remove(patientUuid);
+					unmark.run();
 				}
 				full = true;
 			} else {
@@ -672,31 +687,20 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			}
 			return full;
 		};
-		if (bootstrapLauncher == null) {
-			return status;
-		}
-		// Marked here, on the request thread and before the launch, so no search between now and the
-		// retry's delete serves the old rows that delete is about to remove.
-		if (retry) {
-			retryPendingDelete.add(patientUuid);
-		}
-		// Cleared by the launcher only when no warm for the patient is left in flight, under the lock
-		// that publishes one, so a call that lost the race for the slot cannot clear the mark of the
-		// retry that won it, and a launch that throws does not leave the mark behind.
-		boolean launched = bootstrapLauncher.launchPatientWarm(patientUuid, work,
-		    retry ? () -> retryPendingDelete.remove(patientUuid) : () -> {
-		    });
+		// Dropped by the launcher when this call starts no warm (one already in flight, no slot, or a
+		// launch that throws), so neither this mark nor another call's is left behind or cleared.
+		boolean launched = bootstrapLauncher.launchPatientWarm(patientUuid, work, unmark);
 		return launched ? IndexStatus.PROJECTING : status;
 	}
 
 	/** Whether a failed chart's retry, or a reindex, has started here and not yet deleted the old chart. */
 	boolean isRetryPendingDelete(String patientUuid) {
-		return retryPendingDelete.contains(patientUuid);
+		return retryPendingDelete.containsKey(patientUuid);
 	}
 
 	/** {@link #isRetryPendingDelete}, or a reindex the bootstrap service is running (a merge's). */
 	private boolean deletePending(String patientUuid) {
-		if (retryPendingDelete.contains(patientUuid)) {
+		if (retryPendingDelete.containsKey(patientUuid)) {
 			return true;
 		}
 		try {

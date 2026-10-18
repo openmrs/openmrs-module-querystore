@@ -278,8 +278,9 @@ public class BootstrapLauncherTest {
 	}
 
 	@Test
-	public void launchPatientWarm_runsOnNotStarted_onlyWhenNoWarmForThePatientIsInFlight() {
-		// r3 code N2 / sec N1: the caller undoes what it set up for the warm only when none runs.
+	public void launchPatientWarm_runsOnNotStarted_wheneverThisCallStartsNoWarm() {
+		// r3 code N2 / sec N1, r4 code B1: the caller undoes its own setup whenever its work will not run,
+		// including when another call's warm for the patient is in flight.
 		List<Runnable> parked = new ArrayList<>();
 		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
 		int[] notStarted = { 0 };
@@ -288,13 +289,18 @@ public class BootstrapLauncherTest {
 		assertTrue(launcher.launchPatientWarm("patient-1", () -> true, count));
 		assertEquals("started", 0, notStarted[0]);
 		assertTrue("no slot, but this patient's warm is in flight", launcher.launchPatientWarm("patient-1", () -> true, count));
-		assertEquals(0, notStarted[0]);
-		assertFalse("no slot, nothing in flight for this patient", launcher.launchPatientWarm("patient-2", () -> true, count));
 		assertEquals(1, notStarted[0]);
+		assertFalse("no slot, nothing in flight for this patient", launcher.launchPatientWarm("patient-2", () -> true, count));
+		assertEquals(2, notStarted[0]);
+
+		BootstrapLauncher twoSlots = SynchronousLaunchers.parked(2, parked);
+		assertTrue(twoSlots.launchPatientWarm("patient-4", () -> true, count));
+		assertTrue("a slot is free, but this patient's warm is in flight", twoSlots.launchPatientWarm("patient-4", () -> true, count));
+		assertEquals(3, notStarted[0]);
 
 		BootstrapLauncher noToken = new BootstrapLauncher();
 		assertFalse(noToken.launchPatientWarm("patient-3", () -> true, count));
-		assertEquals("no daemon to start it", 2, notStarted[0]);
+		assertEquals("no daemon to start it", 4, notStarted[0]);
 	}
 
 	@Test

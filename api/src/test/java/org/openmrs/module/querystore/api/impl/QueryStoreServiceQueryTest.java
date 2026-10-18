@@ -1102,6 +1102,30 @@ public class QueryStoreServiceQueryTest {
 	}
 
 	@Test
+	public void aReindexThatGivesUpOnAnotherProjectionOfThePatient_leavesThatChartSearchable() {
+		// code r4 B1. A plain warm of the patient is in flight and outlasts the reindex's wait. The warm
+		// sets no mark, so nothing but the reindex can clear its own: once the warm finishes, the chart
+		// must serve its rows, not answer empty projecting until a restart.
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(2, parked);
+		service.setBootstrapLauncher(launcher);
+		service.setSyncProjectionWaitMillis(20);
+		bootstrap.onEnsureIndexed = uuid -> index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
+		assertEquals(IndexStatus.PROJECTING, service.warm(PATIENT));
+		assertEquals(1, parked.size());
+
+		assertEquals("gave up waiting for the warm", IndexStatus.NOT_INDEXED, service.reindex(PATIENT));
+		parked.remove(0).run();
+
+		assertEquals(IndexStatus.INDEXED, service.getIndexStatus(PATIENT));
+		assertFalse(service.isRetryPendingDelete(PATIENT));
+		QueryResult after = service.query(spec("cd4").mode(QuerySpec.Mode.KEYWORD).partialResults(true).wait(false).build());
+		assertEquals(IndexStatus.INDEXED, after.getStatus());
+		assertEquals(Collections.singletonList("cd4-1"), uuids(after.getHits()));
+		assertTrue("the reindex never ran", bootstrap.reindexCalls.isEmpty());
+	}
+
+	@Test
 	public void anIndexedChartWhoseMergeReindexHasNotDeletedYet_servesNoRows() {
 		// code r3 S3, the merge path: reconcileMerge calls reindexPatient with no slot, so the chart reads
 		// indexed; the bootstrap service reports its delete pending until it lands.

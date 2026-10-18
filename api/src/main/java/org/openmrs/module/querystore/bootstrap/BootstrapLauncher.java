@@ -364,9 +364,8 @@ public class BootstrapLauncher {
 
 	/**
 	 * {@link #launchPatientWarm(String, BooleanSupplier)}, running {@code onNotStarted} when this call
-	 * leaves no warm for the patient in flight: none could start, or handing it to a thread threw.
-	 * It runs under the lock that publishes in-flight projections, so it cannot undo the setup of a
-	 * warm another call has just started for the same patient.
+	 * starts no warm, so {@code work} will never run: one for the patient is already in flight, none
+	 * could start, or handing it to a thread threw. It undoes only this call's own setup.
 	 */
 	public boolean launchPatientWarm(String patientUuid, BooleanSupplier work, Runnable onNotStarted) {
 		if (patientUuid == null) {
@@ -381,15 +380,13 @@ public class BootstrapLauncher {
 		synchronized (launchLock) {
 			if (token == null || !slots.tryAcquire()) {
 				log.debug("No daemon token or projection slot; not launching a warm");
-				if (inFlight.containsKey(patientUuid)) {
-					return true;
-				}
 				onNotStarted.run();
-				return false;
+				return inFlight.containsKey(patientUuid);
 			}
 			if (inFlight.putIfAbsent(patientUuid, done) != null) {
 				slots.release();
 				log.debug("Patient warm already in flight; ignoring duplicate");
+				onNotStarted.run();
 				return true;
 			}
 		}
@@ -418,11 +415,7 @@ public class BootstrapLauncher {
 			inFlight.remove(patientUuid, done);
 			done.countDown();
 			slots.release();
-			synchronized (launchLock) {
-				if (!inFlight.containsKey(patientUuid)) {
-					onNotStarted.run();
-				}
-			}
+			onNotStarted.run();
 			throw e;
 		}
 		return true;
