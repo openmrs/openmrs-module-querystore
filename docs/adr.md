@@ -1392,7 +1392,8 @@ budgeting, and question interpretation.
    The request carries the caller's question interpretation — `types` (resource types whose
    records must be typed-complete) and `temporal` (whether a recency anchor applies), plus
    bounded knobs `recencyAnchorSize` (default 15) and `similarityLimit` (default 30). Querystore
-   performs **mechanical selection only**; it does not interpret the question.
+   performs **mechanical selection only**; it interprets the question only when the caller opts
+   in ([Decision 18](#decision-18-context-slice-question-interpretation-and-retrieval-preprocessing)).
 2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
    highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
    `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `exact` (explicit
@@ -1414,7 +1415,8 @@ budgeting, and question interpretation.
    or a failed cold touch may have omitted records) so an incomplete chart is never silently
    absorbed into a "complete" slice.
 4. **Explicit non-goals, unchanged from Decisions 14/15/16**: no prompt composition, no token
-   or model awareness, no question NLU, no result the caller could not read via
+   or model awareness, no question NLU (Decision 18's opt-in interpretation is mechanical cue
+   matching), no result the caller could not read via
    `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling
    reads. The REST surface (Decision 16) exposes the slice additively via
    `patientrecord?...&mode=context&types=...&temporal=...`, with each record carrying its
@@ -1443,8 +1445,9 @@ budgeting, and question interpretation.
 ### Consequences
 - The v1 read surface grows to four methods; REST wraps all four uniformly (Decision 16 shape).
 - ChartSearchAI's `buildScoped` and the hub's querystore source become thin adapters over this
-  method; their intent-routing and temporal detection remain caller-side, so interpretation drift
-  between engines is still possible.
+  method. A caller that does not opt into Decision 18's interpretation keeps its intent-routing and
+  temporal detection caller-side, so interpretation drift between engines remains possible for
+  such callers.
 - Active-condition detection reads the `clinical_status` metadata the condition serializer
   already emits; `diagnosis` documents without that metadata simply never match the mandatory
   tier (no text sniffing).
@@ -1461,8 +1464,8 @@ Accepted
 ### Context
 [Decision 17](#decision-17-context-slice-read--tiered-record-selection) kept question
 interpretation caller-side: each consumer derived the typed scope and the temporal flag itself and
-passed them as request parameters. The harness engine-parity instrument then measured the expected
-consequence: the two consumers' interpreters and their retrieval preprocessing drifted (bundled
+passed them as request parameters. The expected consequence followed: the two consumers'
+interpreters and their retrieval preprocessing drifted (bundled
 sent a stopword-stripped, panel-expanded question with its own topK; the hub sent the raw question
 with the server default), producing systematically different similarity tiers for identical
 questions. Query normalization is retrieval quality, which this module owns.
@@ -1473,8 +1476,10 @@ questions. Query normalization is retrieval quality, which this module owns.
    NLU), UNIONs the caller's `types` (module-contributed scopes survive), and ORs the caller's
    `temporal`. Everyday idioms that share a word with a cue (`in order to`, `under what
    conditions`, `condition of`, `last name`) are blanked before matching, since each false cue
-   pulls whole types into the protected `typed` tier. The REST twin exposes `interpret=true`. Explicit caller parameters remain fully
-   supported — interpretation is opt-in, additive, and overridable.
+   pulls whole types into the protected `typed` tier. The REST twin exposes `interpret=true`.
+   Explicit caller parameters remain fully supported. Interpretation is opt-in and additive:
+   derived types only add to the caller's, so a caller cannot remove one; a caller that wants only
+   its own scope leaves `interpretQuestion` unset.
 2. **The slice's similarity leg preprocesses the question server-side** (lab-panel abbreviation
    expansion only) — always and idempotently for callers that already expand panels. A caller
    sending the raw question gets the same expanded retrieval text. Clients must not strip
