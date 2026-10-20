@@ -502,8 +502,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		// expansion only) runs HERE, at the owner of the embedder — idempotent for callers that
 		// already expand panels. A failure degrades to the policy tiers alone —
 		// selection must never block on the ranking layer. Over-fetch candidates so records
-		// already claimed by higher-priority policy tiers and repeated longitudinal observations
-		// of the same concept do not starve distinct concepts of similarity slots.
+		// already claimed by higher-priority policy tiers and identical repeats of one value do not
+		// starve other records of similarity slots. A series of distinct values of one concept still
+		// takes one slot per value (thirty different BP readings can fill thirty slots).
 		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
 		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
 			try {
@@ -546,8 +547,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	/**
-	 * Picks up to {@code limit} similarity records one repeat-group at a time, so repeated
-	 * observations of one value do not starve distinct concepts of slots. A group is a concept and
+	 * Picks up to {@code limit} similarity records one repeat-group at a time, so identical repeats
+	 * of one value share a slot instead of starving other records of slots. A group is a concept and
 	 * its rendered value: identical repeats ("Pregnancy status: No" three times) share one slot, while
 	 * distinct values of one concept stay separate, so a trend question keeps its series. Within a
 	 * group the newest record comes first, since rankers never see dates (Decision 7) and a repeat's
