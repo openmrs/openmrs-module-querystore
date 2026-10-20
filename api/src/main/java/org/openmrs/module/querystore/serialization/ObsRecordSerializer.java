@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.serialization;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_COMMENT;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DESCRIPTION;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_INTERPRETATION;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_CODES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_NAMES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_CONCEPT_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_UUID;
@@ -157,8 +158,16 @@ public class ObsRecordSerializer extends AbstractRecordSerializer<Obs> {
 		if (!codedMappings.isEmpty()) {
 			mergeStringListMetadata(doc, FIELD_MAPPING_NAMES, codedMappings);
 		}
+		// The answer's names are merged above, so a question naming the answer's code (CIEL:703)
+		// must match the record too.
+		List<String> codedCodes = ConceptNameUtil.getMappingCodes(valueCoded);
+		if (!codedCodes.isEmpty()) {
+			mergeStringListMetadata(doc, FIELD_MAPPING_CODES, codedCodes);
+		}
 	}
 
+	/** Appends the answer concept's list after the question concept's, dropping duplicates. Each part
+	 *  is already sorted and capped, so the merged list is deterministic and holds up to twice the cap. */
 	private static void mergeStringListMetadata(QueryDocument doc, String key, List<String> additions) {
 		Object existing = doc.getMetadata().get(key);
 		if (!(existing instanceof List)) {

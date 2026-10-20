@@ -396,6 +396,33 @@ public class ObsRecordSerializerTest {
 		assertEquals(null, doc.getMetadata().get("mapping_names"));
 	}
 
+	@Test
+	public void serialize_codedObs_carriesItsAnswersMappingCodes() {
+		// The answer's names are merged, so a question naming the answer's code must match too.
+		Concept question = concept("HIV test result");
+		question.setConceptMappings(new LinkedHashSet<>(Collections.singletonList(codedMapping("CIEL", "1040"))));
+		Concept answer = concept("Positive");
+		answer.setConceptMappings(new LinkedHashSet<>(Arrays.asList(codedMapping("CIEL", "703"),
+				codedMapping("CIEL", "1040"))));
+		Obs obs = obs(question);
+		obs.setValueCoded(answer);
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals(Arrays.asList("CIEL:1040", "CIEL:703"), doc.getMetadata().get("mapping_codes"));
+	}
+
+	private static ConceptMap codedMapping(String sourceName, String code) {
+		ConceptReferenceTerm t = new ConceptReferenceTerm();
+		t.setCode(code);
+		org.openmrs.ConceptSource source = new org.openmrs.ConceptSource();
+		source.setName(sourceName);
+		t.setConceptSource(source);
+		ConceptMap m = new ConceptMap();
+		m.setConceptReferenceTerm(t);
+		return m;
+	}
+
 	private static ConceptMap termMapping(String name) {
 		ConceptReferenceTerm t = new ConceptReferenceTerm();
 		t.setName(name);
