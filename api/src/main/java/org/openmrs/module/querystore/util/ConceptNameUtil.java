@@ -248,7 +248,8 @@ public final class ConceptNameUtil {
 
 	/**
 	 * The concept's live reference-term codes, each namespaced by its source as {@code SOURCE:CODE}
-	 * ({@code CIEL:857}, {@code LOINC:14937-7}), so a question naming a code can match the record
+	 * ({@code CIEL:857}, {@code LOINC:14937-7}, {@code SNOMED-CT:72341003}, whitespace in a source
+	 * name written as a hyphen), so a question naming a code can match the record
 	 * exactly (ADR Decision 17 §2). A code is kept whether or not its term carries a name: SNOMED
 	 * terms on demo deployments carry codes alone. Retired terms, terms without a source, and blank
 	 * sources or codes are skipped; the result is de-duplicated, sorted and capped at
@@ -270,7 +271,9 @@ public final class ConceptNameUtil {
 			if (source == null || source.trim().isEmpty() || code == null || code.trim().isEmpty()) {
 				continue;
 			}
-			sorted.add(source.trim() + ":" + code.trim());
+			// A question names a code as one token, so whitespace inside a source name becomes a
+			// hyphen: CIEL's "SNOMED CT" is stored, and matched, as SNOMED-CT.
+			sorted.add(source.trim().replaceAll("\\s+", "-") + ":" + code.trim());
 		}
 		List<String> result = new ArrayList<>(Math.min(sorted.size(), MAX_MAPPING_CODES));
 		for (String c : sorted) {

@@ -473,6 +473,17 @@ public class ConceptNameUtilTest {
 		assertTrue(ConceptNameUtil.getMappingCodes(null).isEmpty());
 	}
 
+	@Test
+	public void getMappingCodes_writesASourceNameWithSpacesAsOneTypableToken() {
+		// CIEL-based dictionaries name sources "SNOMED CT" and "IMO ProblemIT". A question can only
+		// name a code as one token, so the stored namespace is that token: "SNOMED-CT:72341003".
+		Concept c = conceptWithMappings("Hypertension",
+				mappingTo(sourcedTerm("SNOMED CT", "38341003", null)),
+				mappingTo(sourcedTerm("IMO  ProblemIT", "10000", null)));
+
+		assertEquals(Arrays.asList("IMO-ProblemIT:10000", "SNOMED-CT:38341003"), ConceptNameUtil.getMappingCodes(c));
+	}
+
 	private static ConceptReferenceTerm sourcedTerm(String source, String code, String name) {
 		ConceptReferenceTerm t = term(name, code);
 		if (source != null) {
