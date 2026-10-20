@@ -104,28 +104,38 @@ public final class ConceptNameUtil {
 	 * deterministic cross-locale fallback, sort the descriptions collection upstream. Returned
 	 * text is trimmed; whitespace-only descriptions are dropped to avoid indexing empty tokens.
 	 */
+	private static final String FORM_PROMPT_DESCRIPTION_PREFIX = "Question on encounter form";
+
 	public static String getDescription(Concept concept) {
 		if (concept == null || concept.getDescriptions() == null
 				|| concept.getDescriptions().isEmpty()) {
 			return "";
 		}
 		String localeLanguage = resolveLocale().getLanguage();
-		ConceptDescription fallback = null;
+		String fallback = null;
 		for (ConceptDescription cd : concept.getDescriptions()) {
 			String text = cd.getDescription();
-			if (text == null || text.trim().isEmpty()) {
+			if (text == null) {
+				continue;
+			}
+			String trimmed = text.trim();
+			if (trimmed.isEmpty() || isFormPromptBoilerplate(trimmed)) {
 				continue;
 			}
 			if (cd.getLocale() != null
 					&& cd.getLocale().getLanguage().equals(localeLanguage)) {
-				return text.trim();
+				return trimmed;
 			}
 			if (fallback == null) {
-				fallback = cd;
+				fallback = trimmed;
 			}
 		}
-		return fallback != null && fallback.getDescription() != null
-				? fallback.getDescription().trim() : "";
+		return fallback != null ? fallback : "";
+	}
+
+	private static boolean isFormPromptBoilerplate(String description) {
+		return description.regionMatches(true, 0,
+				FORM_PROMPT_DESCRIPTION_PREFIX, 0, FORM_PROMPT_DESCRIPTION_PREFIX.length());
 	}
 
 	/**

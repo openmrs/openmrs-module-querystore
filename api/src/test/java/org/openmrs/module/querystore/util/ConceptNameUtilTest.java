@@ -295,6 +295,30 @@ public class ConceptNameUtilTest {
 	}
 
 	@Test
+	public void getDescription_skipsFormPromptInstructionBoilerplate() {
+		// CIEL Question-class concepts carry form-authoring prompt instructions ("Question on
+		// encounter form: 'Does the patient have any of the following conditions?'") that stuff
+		// conversational query words ("does", "patient", "have", "any") into the BM25 channel.
+		Concept formPromptOnly = new Concept();
+		formPromptOnly.addName(preferredName("Adult WHO condition query"));
+		formPromptOnly.addDescription(description(
+				"Question on encounter form: 'Does the patient have any of the following conditions?'",
+				Locale.ENGLISH));
+		assertEquals("", ConceptNameUtil.getDescription(formPromptOnly));
+
+		Concept withClinicalFallback = new Concept();
+		withClinicalFallback.addName(preferredName("Serum creatinine"));
+		withClinicalFallback.addDescription(description(
+				"Question on encounter form: 'Enter latest serum creatinine'", Locale.ENGLISH));
+		withClinicalFallback.addDescription(description(
+				"Laboratory test that determines a blood serum creatinine level. Often used with BUN to assess kidney function.",
+				Locale.ENGLISH));
+		assertEquals(
+				"Laboratory test that determines a blood serum creatinine level. Often used with BUN to assess kidney function.",
+				ConceptNameUtil.getDescription(withClinicalFallback));
+	}
+
+	@Test
 	public void getMappingNames_returnsEmpty_whenConceptNull() {
 		assertTrue(ConceptNameUtil.getMappingNames(null).isEmpty());
 	}
