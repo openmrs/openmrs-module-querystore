@@ -294,6 +294,23 @@ public class ContextSliceTest {
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(sentence).get("identifier-1"));
 	}
 
+	/** "code is" before an ordinary word names no identifier: "the" would make every record that
+	 *  contains it exact, the tier budgeted consumers protect. An identifier carries a digit. */
+	@Test
+	public void aWordAfterALabelIsNotAnIdentifierUnlessItCarriesADigit() {
+		backend.chart.add(doc("obs", "the-1", "Note: the patient is stable", LocalDate.of(2022, 1, 1)));
+		backend.chart.add(doc("obs", "loinc-1", "Lab code: 100-8 result", LocalDate.of(2022, 1, 2)));
+		backend.chart.add(doc("diagnosis", "icd-1", "Diagnosis: E11.9 Type 2 diabetes", LocalDate.of(2022, 1, 3)));
+		ContextSliceRequest none = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		assertFalse(tiersByUuid(service.getContextSlice(PATIENT, "What code is the latest diagnosis?", none))
+		        .containsKey("the-1"), "\"the\" after \"code is\" is not an identifier");
+		assertEquals(QueryStoreConstants.TIER_EXACT,
+		        tiersByUuid(service.getContextSlice(PATIENT, "Which result has code: 100-8?", none)).get("loinc-1"));
+		assertEquals(QueryStoreConstants.TIER_EXACT,
+		        tiersByUuid(service.getContextSlice(PATIENT, "The code is E11.9", none)).get("icd-1"));
+	}
+
 	@Test
 	public void similarityHits_joinTheSlice_andFailureDegradesToPolicyTiers() {
 		backend.hits = Collections.singletonList(

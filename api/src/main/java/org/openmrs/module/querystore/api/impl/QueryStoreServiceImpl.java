@@ -65,7 +65,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	        Pattern.CASE_INSENSITIVE);
 
 	private static final Pattern LABELED_IDENTIFIER = Pattern.compile(
-	        "\\b(?:mrn|id|identifier|code)(?:\\s+is\\s+|\\s*[:=#]\\s*)([a-z0-9][a-z0-9._/-]{2,})\\b",
+	        "\\b(?:mrn|id|identifier|code)(?:\\s+is\\s+|\\s*[:=#]\\s*)((?=[a-z._/-]*\\d)[a-z0-9][a-z0-9._/-]{2,})\\b",
 	        Pattern.CASE_INSENSITIVE);
 
 	private static final Pattern NAMESPACE_CODE = Pattern.compile(
