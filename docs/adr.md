@@ -1397,7 +1397,7 @@ budgeting, and question interpretation.
    `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `exact` (explicit
    UUIDs, dates (also matched against the day of an ISO date-time such as a visit's
    `end_date_time`), namespaced codes matched against a record's `mapping_codes`, labeled identifiers,
-   and quoted phrases) → `typed` (resource
+   and quoted phrases in straight or curly quotes, each starting and ending on a non-space) → `typed` (resource
    type ∈ `types`) → `recency_anchor` (the first `recencyAnchorSize` chart documents, only when
    `temporal`) → `similarity` (uuid ∈ the `searchByPatient(question, similarityLimit)`
    hits) → `panel` (obs-group family completion: when a group parent or any member is selected,

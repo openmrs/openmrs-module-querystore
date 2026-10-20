@@ -360,6 +360,35 @@ public class ContextSliceTest {
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("visit-ended"), "got " + tiers);
 	}
 
+	/** A one-letter quoted word opens no phrase, and the closing quote of one phrase with the
+	 *  opening quote of the next does not make the words between them a phrase: "and" would make
+	 *  nearly every record exact, a tier the consumer must not drop. */
+	@Test
+	public void aQuotedPhraseNeedsTextInsideItsOwnQuotes() {
+		backend.chart.add(doc("obs", "and-1", "Note: blood and urine sent", LocalDate.of(2022, 1, 1)));
+		backend.chart.add(doc("drug_order", "bid-1", "Drug order: Amoxicillin 500 mg bid", LocalDate.of(2022, 1, 2)));
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "Did he take \"a\" and \"bid\"?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false)));
+
+		assertFalse(tiers.containsKey("and-1"), "the words between two quoted phrases are not a phrase: " + tiers);
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("bid-1"));
+	}
+
+	/** Curly quotes, the default on macOS and iOS keyboards, open a quoted phrase too. */
+	@Test
+	public void curlyQuotesOpenAQuotedPhrase() {
+		backend.chart.add(doc("obs", "chest-1", "Chief complaint: chest pain on exertion", LocalDate.of(2022, 1, 1)));
+		backend.chart.add(doc("obs", "sob-1", "Symptom: shortness of breath", LocalDate.of(2022, 1, 2)));
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT,
+		        "Did the patient\u2019s notes mention \u201Cchest pain\u201D or \u2018shortness of breath\u2019?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false)));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("chest-1"));
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("sob-1"));
+	}
+
 	@Test
 	public void similarityHits_joinTheSlice_andFailureDegradesToPolicyTiers() {
 		backend.hits = Collections.singletonList(
