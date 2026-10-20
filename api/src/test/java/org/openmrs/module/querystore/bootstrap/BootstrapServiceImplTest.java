@@ -643,6 +643,34 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void aBackendChangeWalksTheCorpusAfreshWithoutSkipping() {
+		// A flip back to a backend that still holds a previous session's documents must not skip
+		// them: serializers may have changed since, and the reset exists to walk the corpus afresh.
+		AtomicInteger writes = new AtomicInteger();
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				writes.incrementAndGet();
+				return org.openmrs.module.querystore.backend.WriteResult.success();
+			}
+
+			@Override
+			public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+				return Collections.singletonMap("obs-1", OneStoredRecordBootstrapper.VERSION);
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneStoredRecordBootstrapper()));
+		BootstrapProgress previous = new BootstrapProgress("obs");
+		previous.setBackend("previous-backend");
+		previous.setStatus(BootstrapStatus.COMPLETED);
+		dao.save(previous);
+
+		service.bootstrap("obs");
+
+		assertEquals("the reset re-projects the record the store holds", 1, writes.get());
+	}
+
+	@Test
 	public void ensureIndexed_iteratesEveryRegisteredType() {
 		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
 		EmptyPageBootstrapper enc = new EmptyPageBootstrapper("encounter");

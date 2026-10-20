@@ -296,6 +296,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		synchronized (lock) {
 			BootstrapProgress progress = progressDao.find(resourceType);
 			String currentBackend = currentBackendName();
+			boolean walkAfresh = forceRestart;
 			if (progress == null) {
 				progress = new BootstrapProgress(resourceType);
 				progress.setBackend(currentBackend);
@@ -325,10 +326,11 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				        + ")");
 				resetProgressForBackend(progress, currentBackend);
 				progressDao.save(progress);
+				walkAfresh = true;
 			}
-			// A resync re-projects on purpose, so only a plain bootstrap skips records the store
-			// already holds at their current version.
-			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao, !forceRestart);
+			// A resync or a backend change walks the corpus afresh, so it rewrites every record; only
+			// a plain bootstrap skips records the store already holds at their current version.
+			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao, !walkAfresh);
 		}
 	}
 
