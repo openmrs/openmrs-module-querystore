@@ -29,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 
@@ -193,6 +194,42 @@ public class TypeBootstrapperTest {
 		assertEquals(BootstrapStatus.COMPLETED, progress.getStatus());
 		assertEquals("only the two non-poison entities were indexed", 2, progress.getDocumentsIndexed());
 		assertEquals("cursor advanced past every entity including poison", "c", progress.getCursorUuid());
+	}
+
+	@Test
+	public void run_embeddingProviderClosed_marksFailedWithoutCheckpointingThePage() {
+		// A server stop closes the provider while a bootstrap may still be running. Skipping like a
+		// poison record would advance the cursor past records never indexed, so the scan must end
+		// FAILED (re-runnable) with the cursor still before the page that hit the closed provider.
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("a", Instant.parse("2025-01-01T00:00:00Z")));
+		b.queuePage(entity("b", Instant.parse("2025-01-02T00:00:00Z")),
+		        entity("c", Instant.parse("2025-01-03T00:00:00Z")));
+		EmbeddingProvider closesAfterFirst = new EmbeddingProvider() {
+			int calls;
+
+			@Override public int getDimensions() { return 8; }
+
+			@Override
+			public float[] embed(String text) {
+				if (++calls > 1) {
+					throw new EmbeddingProviderClosedException();
+				}
+				return new float[8];
+			}
+		};
+		BootstrapProgress progress = new BootstrapProgress("test");
+
+		try {
+			b.run(progress, service, closesAfterFirst, progressDao);
+			fail("expected EmbeddingProviderClosedException");
+		}
+		catch (EmbeddingProviderClosedException expected) {
+		}
+
+		assertEquals(BootstrapStatus.FAILED, progress.getStatus());
+		assertEquals("cursor stays at the last fully indexed page", "a", progress.getCursorUuid());
+		assertEquals(1, progress.getDocumentsIndexed());
 	}
 
 	@Test

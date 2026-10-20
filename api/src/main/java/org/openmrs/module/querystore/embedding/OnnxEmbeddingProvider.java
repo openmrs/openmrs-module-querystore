@@ -46,6 +46,9 @@ import org.slf4j.LoggerFactory;
  * <p>{@link #embed(String)} and {@link #embedQuery(String)} serialize on the instance lock —
  * ONNX {@code OrtSession.run} is not thread-safe, so concurrent kNN queries against this
  * provider queue.
+ *
+ * <p>{@link #close()} is terminal: once it has run, both throw
+ * {@link EmbeddingProviderClosedException} rather than reopening a session.
  */
 public class OnnxEmbeddingProvider implements EmbeddingProvider {
 
@@ -81,6 +84,8 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 
 	private String explicitQueryModelPath;
 
+	private boolean closed;
+
 	/**
 	 * Default constructor for Spring context — resolves model paths from OpenMRS global
 	 * properties.
@@ -109,6 +114,7 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 
 	@Override
 	public synchronized float[] embed(String text) {
+		ensureOpen();
 		try {
 			return runInference(getSession(), expectsTokenTypeIds, getTokenizer(), text);
 		}
@@ -119,6 +125,7 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 
 	@Override
 	public synchronized float[] embedQuery(String text) {
+		ensureOpen();
 		try {
 			OrtSession qs = getQuerySession();
 			if (qs != null) {
@@ -144,10 +151,21 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 		return explicitModelPath;
 	}
 
+	/**
+	 * Releases the sessions for good; a later {@link #embed} or {@link #embedQuery} throws
+	 * {@link EmbeddingProviderClosedException}. Calling it again does nothing.
+	 */
 	public synchronized void close() {
+		closed = true;
 		closeArticleSession();
 		closeQuerySession();
 		env = null;
+	}
+
+	private void ensureOpen() {
+		if (closed) {
+			throw new EmbeddingProviderClosedException();
+		}
 	}
 
 	private void closeArticleSession() {
