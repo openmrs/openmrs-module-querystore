@@ -1405,7 +1405,9 @@ budgeting, and question interpretation.
    record retains its original retrieval rank for traceability.
 3. **Degradation and edges follow the sibling reads**: blank question or `similarityLimit <= 0`
    skips the search RPC; a search failure degrades to the policy tiers alone (never blocks);
-   cold-patient lazy bootstrap is inherited from `getPatientChart`. `ContextSlice` surfaces
+   cold-patient lazy bootstrap is inherited from `getPatientChart` and runs once per slice: the
+   similarity search reads what the chart read's touch projected rather than touching the patient
+   again, so a failed touch is not repeated within one request. `ContextSlice` surfaces
    `chartSize` and `chartTruncated` (true when a documented cap, a handled backend read failure,
    or a failed cold touch may have omitted records) so an incomplete chart is never silently
    absorbed into a "complete" slice.

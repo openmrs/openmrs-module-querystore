@@ -210,6 +210,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (needsColdTouch(patientUuid)) {
 			ensureIndexedSafely(patientUuid);
 		}
+		return rankedPatientSearch(patientUuid, query, limit);
+	}
+
+	/** The ranked read of one patient's indexed documents, without the cold touch. The context slice
+	 *  runs it after its own chart read has touched the patient, so a failed touch is not repeated. */
+	private List<QueryDocument> rankedPatientSearch(String patientUuid, String query, int limit) {
 		List<QueryDocument> hits = readableByCaller(runHybrid(query, limit, Filter.patientScope(patientUuid)));
 		emitRetrievalLog(query, hits);
 		return hits;
@@ -453,9 +459,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		// Ranked-search hits are the semantic catch-all tier. A failure degrades to the policy
 		// tiers alone — selection must never block on the ranking layer.
 		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
-		if (StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
+		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
 			try {
-				for (QueryDocument hit : searchByPatient(patientUuid, question,
+				// The chart read above already ran any cold touch; a failed one is not run twice.
+				for (QueryDocument hit : rankedPatientSearch(patientUuid, question,
 				        request.getSimilarityLimit())) {
 					if (hit != null && hit.getResourceUuid() != null
 					        && !similarityRanks.containsKey(hit.getResourceUuid())) {

@@ -324,6 +324,28 @@ public class ContextSliceTest {
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(slice).get("chest-1"));
 	}
 
+	/** The slice reads the chart and then searches it. A cold touch that failed on the chart read
+	 *  must not be run again by the search: each touch is a full serialize-and-embed pass. */
+	@Test
+	public void aFailedColdTouchRunsOncePerSlice() {
+		backend.hasDocuments = false;
+		AtomicInteger touches = new AtomicInteger();
+		org.openmrs.module.querystore.bootstrap.BootstrapService bootstrap = org.mockito.Mockito
+		        .mock(org.openmrs.module.querystore.bootstrap.BootstrapService.class);
+		org.mockito.Mockito.doAnswer(invocation -> {
+			touches.incrementAndGet();
+			throw new IllegalStateException("embedder unavailable");
+		}).when(bootstrap).ensureIndexed(PATIENT);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "Any recent labs?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		assertEquals(1, touches.get(), "the projection ran once for the slice");
+		assertTrue(slice.isChartTruncated(), "the failed touch is still disclosed");
+		assertEquals(1, backend.hybridCount.get(), "the similarity search still ran");
+	}
+
 	@Test
 	public void similarityHits_joinTheSlice_andFailureDegradesToPolicyTiers() {
 		backend.hits = Collections.singletonList(
@@ -523,9 +545,11 @@ public class ContextSliceTest {
 
 		final AtomicInteger hybridCount = new AtomicInteger();
 
+		boolean hasDocuments = true;
+
 		@Override
 		public boolean existsByPatient(String patientUuid) {
-			return true;
+			return hasDocuments;
 		}
 
 		@Override
