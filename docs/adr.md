@@ -1404,8 +1404,9 @@ prompt composition, token budgeting, and question interpretation.
 3. **Degradation and edges follow the sibling reads**: blank question or `similarityLimit <= 0`
    skips the search RPC; a search failure degrades to the policy tiers alone (never blocks);
    cold-patient lazy bootstrap is inherited from `getPatientChart`. `ContextSlice` surfaces
-   `chartSize` and `chartTruncated` (true when the chart hit the Decision 15 ES cap) so a
-   capped chart is never silently absorbed into a "complete" slice.
+   `chartSize` and `chartTruncated` (true when a documented cap, a handled backend read failure,
+   or a failed cold touch may have omitted records) so an incomplete chart is never silently
+   absorbed into a "complete" slice.
 4. **Explicit non-goals, unchanged from Decisions 14/15/16**: no prompt composition, no token
    or model awareness, no question NLU, no result the caller could not read via
    `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling

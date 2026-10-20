@@ -17,8 +17,9 @@ import java.util.Set;
 
 /**
  * A tier-tagged record selection over one patient's chart (ADR Decision 17), in the chart's
- * {@code record_date}-desc order. {@code chartTruncated} surfaces the Decision 15 backend cap
- * explicitly — a slice built on a capped chart is never silently presented as complete.
+ * {@code record_date}-desc order. {@code chartTruncated} is true when a documented cap, a handled
+ * backend read failure, or a failed cold touch may have omitted records, so a slice built on an
+ * incomplete chart is never silently presented as complete.
  */
 public final class ContextSlice {
 
