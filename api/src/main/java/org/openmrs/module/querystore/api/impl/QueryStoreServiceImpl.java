@@ -281,7 +281,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 */
 	private float[] embedQueryCached(String query) {
 		String modelName = embeddingProvider.getModelName();
-		String key = (modelName == null ? "" : modelName) + ' ' + query;
+		String key = (modelName == null ? "" : modelName) + '\u0000' + query;
 		float[] cached = queryEmbedCache.get(key);
 		if (cached != null) {
 			return cached;
