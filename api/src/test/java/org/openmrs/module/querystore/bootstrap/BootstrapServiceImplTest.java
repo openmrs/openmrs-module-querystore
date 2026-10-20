@@ -1128,37 +1128,6 @@ public class BootstrapServiceImplTest {
 		@Override public TypeBootstrapper<?> getBootstrapper() { return bootstrapper; }
 	}
 
-	/** One obs record at a fixed version, on every scan. */
-	private static final class OneStoredRecordBootstrapper extends TypeBootstrapper<String> {
-		static final Instant VERSION = Instant.parse("2026-01-01T00:00:00Z");
-
-		@Override public String getResourceType() { return "obs"; }
-		@Override protected Instant getDateChanged(String e) { return VERSION; }
-		@Override protected String getUuid(String e) { return e; }
-
-		@Override
-		protected List<String> fetchPage(Instant afterDateChanged, String afterUuid, int pageSize) {
-			return afterUuid == null ? Collections.singletonList("obs-1") : Collections.<String> emptyList();
-		}
-
-		@Override
-		protected ClinicalRecordSerializer<String> getSerializer() {
-			return new ClinicalRecordSerializer<String>() {
-				@Override public String getResourceType() { return "obs"; }
-				@Override public Class<String> getSupportedType() { return String.class; }
-				@Override public QueryDocument serialize(String uuid) {
-					QueryDocument doc = new QueryDocument();
-					doc.setResourceType("obs");
-					doc.setResourceUuid(uuid);
-					doc.setPatientUuid("patient-uuid");
-					doc.setText("Weight: 70 kg");
-					doc.setLastModified(VERSION);
-					return doc;
-				}
-			};
-		}
-	}
-
 	private static class NullQueryStoreService implements QueryStoreService {
 		@Override
 		public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
@@ -1191,5 +1160,36 @@ public class BootstrapServiceImplTest {
 		}
 
 		@Override public void save(BootstrapProgress p) { store.put(p.getResourceType(), p); }
+	}
+
+	/** One obs record at a fixed version, on every scan. */
+	private static final class OneStoredRecordBootstrapper extends TypeBootstrapper<String> {
+		static final Instant VERSION = Instant.parse("2026-01-01T00:00:00Z");
+
+		@Override public String getResourceType() { return "obs"; }
+		@Override protected Instant getDateChanged(String e) { return VERSION; }
+		@Override protected String getUuid(String e) { return e; }
+
+		@Override
+		protected List<String> fetchPage(Instant afterDateChanged, String afterUuid, int pageSize) {
+			return afterUuid == null ? Collections.singletonList("obs-1") : Collections.<String> emptyList();
+		}
+
+		@Override
+		protected ClinicalRecordSerializer<String> getSerializer() {
+			return new ClinicalRecordSerializer<String>() {
+				@Override public String getResourceType() { return "obs"; }
+				@Override public Class<String> getSupportedType() { return String.class; }
+				@Override public QueryDocument serialize(String uuid) {
+					QueryDocument doc = new QueryDocument();
+					doc.setResourceType("obs");
+					doc.setResourceUuid(uuid);
+					doc.setPatientUuid("patient-uuid");
+					doc.setText("Weight: 70 kg");
+					doc.setLastModified(VERSION);
+					return doc;
+				}
+			};
+		}
 	}
 }

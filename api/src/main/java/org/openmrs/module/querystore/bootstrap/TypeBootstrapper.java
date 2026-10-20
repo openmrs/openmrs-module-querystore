@@ -148,14 +148,15 @@ public abstract class TypeBootstrapper<T> {
 				if (page == null) {
 					break;
 				}
+				if (skipUnchanged) {
+					page = page.withEntities(withoutStoredAtCurrentVersion(page.entities, service));
+				}
 				// Batch the writes: one bulkIndex per page instead of one index() per record avoids the
 				// per-doc commit (MySQL per-row txn+fsync, Lucene segment-per-doc) that dominates backfill
 				// wall-clock — ADR Decision 3. The cursor is checkpointed per page, not per record; a crash
 				// mid-page re-does that page on resume, which the version-guarded upsert makes idempotent.
-				List<T> toProject = skipUnchanged ? withoutStoredAtCurrentVersion(page.entities, service)
-				        : page.entities;
 				progress.setDocumentsIndexed(progress.getDocumentsIndexed()
-				        + projectBatch(toProject, service, embedder));
+				        + projectBatch(page.entities, service, embedder));
 				progress.setCursorDateChanged(page.nextCursorDate);
 				progress.setCursorUuid(page.nextCursorUuid);
 				progressDao.save(progress);
@@ -342,6 +343,11 @@ public abstract class TypeBootstrapper<T> {
 			this.entities = entities;
 			this.nextCursorDate = nextCursorDate;
 			this.nextCursorUuid = nextCursorUuid;
+		}
+
+		/** The same page and cursor with only {@code kept} left to project. */
+		PageResult<E> withEntities(List<E> kept) {
+			return new PageResult<E>(kept, nextCursorDate, nextCursorUuid);
 		}
 	}
 }

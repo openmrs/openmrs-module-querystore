@@ -106,6 +106,15 @@ public interface QueryStoreService extends OpenmrsService {
 	void bulkDeleteByPatient(String patientUuid);
 
 	/**
+	 * The stored {@code last_modified} of each given record of one type, keyed by resource uuid; a
+	 * record not stored is absent. Used by the sync pipeline's bootstrap, like {@link #index}, and so
+	 * not {@code @Authorized}. The default reports none, which makes a caller re-project every record.
+	 */
+	default Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+		return Collections.emptyMap();
+	}
+
+	/**
 	 * Hybrid (BM25 + semantic) search within a patient's chart.
 	 *
 	 * <p>Cold-patient side effect: when no documents are indexed for {@code patientUuid}, the call
@@ -165,13 +174,4 @@ public interface QueryStoreService extends OpenmrsService {
 	 */
 	@Authorized(PrivilegeConstants.GET_PATIENTS)
 	List<QueryDocument> getPatientChart(String patientUuid);
-
-	/**
-	 * The stored {@code last_modified} of each given record of one type, keyed by resource uuid; a
-	 * record not stored is absent. Used by the sync pipeline's bootstrap, like {@link #index}, and so
-	 * not {@code @Authorized}. The default reports none, which makes a caller re-project every record.
-	 */
-	default Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
-		return Collections.emptyMap();
-	}
 }
