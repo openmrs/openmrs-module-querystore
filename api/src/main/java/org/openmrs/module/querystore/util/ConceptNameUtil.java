@@ -104,8 +104,6 @@ public final class ConceptNameUtil {
 	 * deterministic cross-locale fallback, sort the descriptions collection upstream. Returned
 	 * text is trimmed; whitespace-only descriptions are dropped to avoid indexing empty tokens.
 	 */
-	private static final String FORM_PROMPT_DESCRIPTION_PREFIX = "Question on encounter form";
-
 	public static String getDescription(Concept concept) {
 		if (concept == null || concept.getDescriptions() == null
 				|| concept.getDescriptions().isEmpty()) {
@@ -132,6 +130,9 @@ public final class ConceptNameUtil {
 		}
 		return fallback != null ? fallback : "";
 	}
+
+	/** Starts a form-prompt boilerplate description, which describes the form rather than the concept. */
+	private static final String FORM_PROMPT_DESCRIPTION_PREFIX = "Question on encounter form";
 
 	private static boolean isFormPromptBoilerplate(String description) {
 		return description.regionMatches(true, 0,
