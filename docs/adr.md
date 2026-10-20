@@ -1395,7 +1395,8 @@ budgeting, and question interpretation.
 2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
    highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
    `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `exact` (explicit
-   UUIDs, dates, namespaced codes matched against a record's `mapping_codes`, labeled identifiers,
+   UUIDs, dates (also matched against the day of an ISO date-time such as a visit's
+   `end_date_time`), namespaced codes matched against a record's `mapping_codes`, labeled identifiers,
    and quoted phrases) → `typed` (resource
    type ∈ `types`) → `recency_anchor` (the first `recencyAnchorSize` chart documents, only when
    `temporal`) → `similarity` (uuid ∈ the `searchByPatient(question, similarityLimit)`

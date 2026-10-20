@@ -577,8 +577,15 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 	}
 
+	/**
+	 * Whether {@code signal} occurs in {@code searchable} with no letter or digit on either side.
+	 * A date signal is also bounded by the {@code t} of an ISO date-time ({@code 2024-03-05t10:15}),
+	 * so a question naming the day a visit ended matches its {@code end_date_time}.
+	 */
 	private static boolean containsBounded(String searchable, String signal) {
+		boolean dateSignal = ISO_DATE.matcher(signal).matches();
 		int from = 0;
+
 		while (from <= searchable.length() - signal.length()) {
 			int index = searchable.indexOf(signal, from);
 			if (index < 0) {
@@ -587,7 +594,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			int end = index + signal.length();
 			boolean leftBounded = index == 0 || !Character.isLetterOrDigit(searchable.charAt(index - 1));
 			boolean rightBounded = end == searchable.length()
-					|| !Character.isLetterOrDigit(searchable.charAt(end));
+					|| !Character.isLetterOrDigit(searchable.charAt(end))
+					|| (dateSignal && searchable.charAt(end) == 't' && end + 1 < searchable.length()
+					        && Character.isDigit(searchable.charAt(end + 1)));
 			if (leftBounded && rightBounded) {
 				return true;
 			}

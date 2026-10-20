@@ -346,6 +346,20 @@ public class ContextSliceTest {
 		assertEquals(1, backend.hybridCount.get(), "the similarity search still ran");
 	}
 
+	/** A visit's start and end are date-times; the date a question names matches the day part. */
+	@Test
+	public void aDateInTheQuestionMatchesADateTimeValue() {
+		QueryDocument visit = doc("visit", "visit-ended", "Visit: Inpatient admission", LocalDate.of(2024, 3, 1));
+		visit.putMetadata(QueryStoreConstants.FIELD_END_DATE_TIME, "2024-03-05T10:15:00");
+		backend.chart.add(visit);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT,
+		        "What happened at the visit that ended 2024-03-05?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false)));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("visit-ended"), "got " + tiers);
+	}
+
 	@Test
 	public void similarityHits_joinTheSlice_andFailureDegradesToPolicyTiers() {
 		backend.hits = Collections.singletonList(
