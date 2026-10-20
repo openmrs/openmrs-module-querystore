@@ -16,6 +16,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.BaseOpenmrsData;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.openmrs.module.querystore.serialization.AbstractRecordSerializer;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 
 /**
@@ -52,6 +53,7 @@ public final class RecordProjector {
 	        boolean purge, RecordIndexer indexer, AfterCommitDispatcher dispatcher) {
 		List<T> tree = serializer.collectTree(root);
 		List<QueryDocument> toIndex = new ArrayList<>(tree.size());
+		List<T> indexedNodes = new ArrayList<>(tree.size());
 		List<String> toDelete = new ArrayList<>(purge ? tree.size() : 0);
 		for (T node : tree) {
 			if (purge || node.getVoided()) {
@@ -60,6 +62,7 @@ public final class RecordProjector {
 				QueryDocument doc = serializer.serialize(node);
 				if (doc != null) {
 					toIndex.add(doc);
+					indexedNodes.add(node);
 				}
 			}
 		}
@@ -74,7 +77,13 @@ public final class RecordProjector {
 			// Per-entity failure isolation: a single poison document (e.g., embedder throws on a
 			// pathological text) must not skip its sibling members. The dispatcher's outer guard
 			// remains as a last-resort catch for anything that escapes here.
-			for (QueryDocument doc : toIndex) {
+			for (int i = 0; i < toIndex.size(); i++) {
+				QueryDocument doc = toIndex.get(i);
+				// The save event publishes before the save stamps the audit dates, so a new record
+				// serializes with no version. By now it has been committed, so read it off the node.
+				if (doc.getLastModified() == null) {
+					doc.setLastModified(AbstractRecordSerializer.lastModifiedOf(indexedNodes.get(i)));
+				}
 				try {
 					indexer.index(doc);
 				}

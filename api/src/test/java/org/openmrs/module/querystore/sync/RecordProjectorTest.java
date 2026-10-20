@@ -92,6 +92,28 @@ public class RecordProjectorTest {
 		assertEquals("pat-1", service.bulkDeletedPatients.get(0));
 	}
 
+	@Test
+	public void project_readsTheVersionTheSaveStampsBeforeTheWriteRuns() {
+		// The save event publishes before the save stamps dateCreated, so the version is read when
+		// the after-commit write runs; without it the document carries no version at all, which
+		// disables the backend's version guard and the bootstrap top-up's skip.
+		Encounter enc = encounter("enc-new", false);
+		java.util.List<Runnable> pending = new java.util.ArrayList<>();
+		AfterCommitDispatcher afterCommit = new AfterCommitDispatcher(new SyncExecutor()) {
+			@Override
+			public void dispatch(Runnable task) {
+				pending.add(task);
+			}
+		};
+
+		RecordProjector.project(new EncounterRecordSerializer(), enc, false, indexer, afterCommit);
+		Date stamped = new Date(1792479801789L);
+		enc.setDateCreated(stamped);
+		pending.forEach(Runnable::run);
+
+		assertEquals(stamped.toInstant(), service.indexed.get(0).getLastModified());
+	}
+
 	private static Encounter encounter(String uuid, boolean voided) {
 		Encounter enc = new Encounter();
 		enc.setUuid(uuid);
