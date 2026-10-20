@@ -6,8 +6,10 @@ The query store's primary in-JVM consumer surface is the Java `QueryStoreService
 - a thin read adapter for authorized non-JVM clients and external services such as med-agent-hub; and
 - operational endpoints for observing and repairing index state.
 
-The read adapter delegates to the existing service methods. It does not add per-request
-reconciliation, completeness claims, or a second read policy.
+The read adapter delegates to the existing service methods and applies their read policy,
+including the per-type privilege filter. Full-chart reads report the service's completeness
+signals (`chartTruncated`, `projectionComplete`); the adapter does not reconcile or repair the
+index per request.
 
 All endpoints are served under the OpenMRS REST namespace (the module requires the
 `webservices.rest` module):
@@ -183,8 +185,6 @@ instance; previously it could only start at module startup. Poll
   Accepted` and the work proceeds in the background. Overlapping `scope:"all"` requests collapse to
   a single in-flight run via an in-flight guard in the launcher; even if two runs did overlap, the
   per-resource-type locks keep the progress bookkeeping safe.
-- **Idempotent overlap:** if a Querystore reindex is already running, another `scope:"all"` request
-  is accepted without launching a second worker.
 - **Opt-in by design:** the global scope is requested *explicitly* with `scope:"all"` (matched
   case-insensitively), never by omitting `patient` — an absent field overlaps with a malformed
   request, and the global scan is the most expensive operation in the module.
@@ -254,6 +254,6 @@ curl -s -X POST -u admin:Admin123 -H 'Content-Type: application/json' \
   triggering a reindex during active charting on that patient.
 - **Concurrent bridge writes converge.** A live `saveObs` (etc.) during either scope's reindex is
   reconciled by the version-protection invariant (newer write wins, older dropped) — no corruption.
-- **Single-type backfill.** To advance just one resource type in-process, call
-  `BootstrapService.bootstrap(resourceType)`; external operators use the REST `scope:"type"` trigger
-  documented above.
+- **Single-type backfill.** To advance just one resource type in-process (e.g. retry a `FAILED`
+  type after fixing its data), `BootstrapService.bootstrap(resourceType)` is available on the Java
+  service; only the per-patient and `scope:"all"` triggers are exposed over REST.
