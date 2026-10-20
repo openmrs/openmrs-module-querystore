@@ -9,8 +9,8 @@
  */
 package org.openmrs.module.querystore.bootstrap;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -176,12 +176,17 @@ public abstract class TypeBootstrapper<T> {
 		}
 	}
 
+	private static final Duration ONE_SECOND = Duration.ofSeconds(1);
+
 	/**
 	 * Core stores audit dates to the second, which is what this scan reads back, while sync stamps
 	 * the in-memory date it projected, which can carry milliseconds; both describe one record state.
+	 * MySQL rounds the fraction on insert (21.789 is stored as :22) unless TIME_TRUNCATE_FRACTIONAL
+	 * makes it truncate (:21), so a stored version less than a second from the scanned one is the
+	 * same state under either mode.
 	 */
-	private static boolean sameSecond(Instant a, Instant b) {
-		return b != null && a.truncatedTo(ChronoUnit.SECONDS).equals(b.truncatedTo(ChronoUnit.SECONDS));
+	private static boolean withinOneSecond(Instant stored, Instant scanned) {
+		return scanned != null && Duration.between(stored, scanned).abs().compareTo(ONE_SECOND) < 0;
 	}
 
 	/** The entities whose stored version differs from their own, or that are not stored at all. */
@@ -200,7 +205,7 @@ public abstract class TypeBootstrapper<T> {
 		List<T> changed = new ArrayList<T>(entities.size());
 		for (T entity : entities) {
 			Instant version = stored.get(getUuid(entity));
-			if (version == null || !sameSecond(version, getDateChanged(entity))) {
+			if (version == null || !withinOneSecond(version, getDateChanged(entity))) {
 				changed.add(entity);
 			}
 		}

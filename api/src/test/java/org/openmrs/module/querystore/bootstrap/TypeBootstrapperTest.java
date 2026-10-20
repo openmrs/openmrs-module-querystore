@@ -304,14 +304,29 @@ public class TypeBootstrapperTest {
 	@Test
 	public void run_aTopUpTreatsAVersionTheDatabaseKeptToTheSecondAsCurrent() {
 		// Sync stamps the in-memory audit date (milliseconds); core stores it to the second, which
-		// is what the scan reads back. The same record state must not count as changed.
+		// is what the scan reads back. MySQL rounds the fraction on insert (07:03:21.789 is stored
+		// as 07:03:22) unless TIME_TRUNCATE_FRACTIONAL is set, when it truncates (07:03:21). Either
+		// way the same record state must not count as changed.
 		FakeBootstrapper b = new FakeBootstrapper();
-		b.queuePage(entity("synced", Instant.parse("2026-10-20T07:03:21Z")));
-		service.storedVersions.put("synced", Instant.parse("2026-10-20T07:03:21.789Z"));
+		b.queuePage(entity("rounded", Instant.parse("2026-10-20T07:03:22Z")),
+		    entity("truncated", Instant.parse("2026-10-20T07:03:21Z")));
+		service.storedVersions.put("rounded", Instant.parse("2026-10-20T07:03:21.789Z"));
+		service.storedVersions.put("truncated", Instant.parse("2026-10-20T07:03:21.789Z"));
 
 		b.run(new BootstrapProgress("test"), service, embedder, progressDao, true);
 
 		assertEquals(Collections.<String> emptyList(), indexedUuids());
+	}
+
+	@Test
+	public void run_aTopUpReprojectsAVersionASecondOrMoreAway() {
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("edited", Instant.parse("2026-10-20T07:03:23Z")));
+		service.storedVersions.put("edited", Instant.parse("2026-10-20T07:03:21.789Z"));
+
+		b.run(new BootstrapProgress("test"), service, embedder, progressDao, true);
+
+		assertEquals(Collections.singletonList("edited"), indexedUuids());
 	}
 
 	@Test
