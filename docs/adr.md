@@ -1346,7 +1346,7 @@ Accepted
 
 4. **Full-chart freshness is explicit and private.** A full-chart response carries a stable complete-chart `snapshotId`, a strong page-specific `ETag`, and `Cache-Control: private, no-cache, must-revalidate`. A client uses `If-None-Match` to revalidate an unchanged page (`304` has no response body), and it rejects a multi-page result with mixed snapshot IDs. The hash includes resource identity, dates and date semantics, text, last-modified version, and canonical metadata. Ranked query windows do not claim a stable complete snapshot.
 
-5. **In-JVM consumers keep using the Java service.** This endpoint is the additive HTTP layer for external/non-JVM consumers, not a replacement for Decision 14's in-process surface. med-agent-hub uses this endpoint under a configured OpenMRS service account; ChartSearchAI relays inference requests to the hub and does not implement a second QueryStore client.
+5. **In-JVM consumers keep using the Java service.** This endpoint is the additive HTTP layer for external/non-JVM consumers, not a replacement for Decision 14's in-process surface.
 
 ### Rationale
 1. **Mirror the closest sibling.** The module's REST endpoints are plain `@Controller`s; a read endpoint in the same shape avoids inventing a divergent mechanism. The `webservices.rest` framework's value — uuid CRUD, self-links, auto-representations, Swagger — assumes an `OpenmrsObject`; `QueryDocument` is a plain read-DTO, so the framework adds friction (stubbed CRUD, no canonical self-link) without proportional benefit for a read projection. The framework remains a clean upgrade path if Swagger discoverability is later required.
