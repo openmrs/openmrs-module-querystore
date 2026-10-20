@@ -695,6 +695,47 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void ensureIndexed_aPatientWhoseTouchLeftRecordsOutIsProjectedAgain() {
+		// One type projects and another fails: the patient now has documents, so the existence
+		// probe alone would read the chart as complete from then on. The incomplete touch must keep
+		// the patient cold, so a later call (a second read, or a waiter on the per-patient lock)
+		// projects it again and reports the gap again instead of returning as if indexed.
+		EmptyPageBootstrapper failing = new EmptyPageBootstrapper("condition");
+		failing.perPatientFailure = new RuntimeException("serializer bug");
+		EmptyPageBootstrapper ok = new EmptyPageBootstrapper("obs");
+		service.setBootstrappers(Arrays.<TypeBootstrapper<?>> asList(failing, ok));
+		CountingBackendStore backend = installBackend();
+		backend.hasDocuments = false;
+
+		assertColdTouchFails("patient-uuid");
+		assertTrue(service.isPatientProjectionIncomplete("patient-uuid"));
+		backend.hasDocuments = true; // the obs the touch did project
+
+		assertColdTouchFails("patient-uuid");
+		assertEquals("the incomplete patient was projected again", 2, failing.fetchForPatientCount);
+
+		failing.perPatientFailure = null;
+		service.ensureIndexed("patient-uuid");
+		assertEquals(3, failing.fetchForPatientCount);
+		assertTrue("a complete projection clears the mark",
+		        !service.isPatientProjectionIncomplete("patient-uuid"));
+
+		service.ensureIndexed("patient-uuid");
+		assertEquals("a complete patient with documents is not projected again", 3, failing.fetchForPatientCount);
+	}
+
+	private CountingBackendStore installBackend() {
+		final CountingBackendStore backend = new CountingBackendStore(Collections.<String, Long> emptyMap());
+		service.setBackendSelector(new BackendStoreSelector(Collections.<String, BackendStore> emptyMap()) {
+			@Override
+			public BackendStore getStore() {
+				return backend;
+			}
+		});
+		return backend;
+	}
+
+	@Test
 	public void ensureIndexed_skipsBootstrapperWithoutPerPatientImpl() {
 		// A bootstrapper that doesn't override fetchPageForPatient throws UnsupportedOperationException
 		// — the per-patient loop must treat it as a per-type skip (logged), not abort the whole call.
@@ -854,10 +895,23 @@ public class BootstrapServiceImplTest {
 		EmptyPageBootstrapper ok = new EmptyPageBootstrapper("encounter");
 		service.setBootstrappers(Arrays.asList(failing, ok));
 
-		service.reindexPatient("patient-uuid");
+		try {
+			service.reindexPatient("patient-uuid");
+			fail("a re-projection that left records out must report it");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue(expected.getMessage(), expected.getMessage().contains("patient-uuid"));
+		}
 
 		assertEquals(1, qs.bulkDeleteCount);
 		assertEquals("a per-type projection failure must not abort the rest", 1, ok.fetchForPatientCount);
+		assertTrue("the patient stays marked incomplete for its reads",
+		        service.isPatientProjectionIncomplete("patient-uuid"));
+
+		failing.perPatientFailure = null;
+		service.reindexPatient("patient-uuid");
+		assertTrue("a complete re-projection clears the mark",
+		        !service.isPatientProjectionIncomplete("patient-uuid"));
 	}
 
 	// ---------- fakes ----------
@@ -914,6 +968,9 @@ public class BootstrapServiceImplTest {
 
 		private final Set<String> failing;
 
+		/** What {@link #existsByPatient} answers for every patient; {@code null} leaves it out of scope. */
+		Boolean hasDocuments;
+
 		CountingBackendStore(Map<String, Long> counts) {
 			this(counts, Collections.<String> emptySet());
 		}
@@ -968,7 +1025,10 @@ public class BootstrapServiceImplTest {
 
 		@Override
 		public boolean existsByPatient(String patientUuid) {
-			throw new UnsupportedOperationException();
+			if (hasDocuments == null) {
+				throw new UnsupportedOperationException();
+			}
+			return hasDocuments;
 		}
 
 		@Override

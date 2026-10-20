@@ -34,6 +34,7 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.DriftReport;
+import org.openmrs.module.querystore.bootstrap.IncompleteProjectionException;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
@@ -274,6 +275,30 @@ public class QueryStoreRestControllerTest {
 		    body.get("documentsIndexed"));
 		verify(bootstrap).reindexPatient("patient-uuid");
 		assertEquals("a per-patient reindex must not also launch a global bootstrap", 0, launcher.launches);
+	}
+
+	@Test
+	public void reindex_withPatient_reportsAReprojectionThatLeftRecordsOut() {
+		authenticate();
+		BootstrapService bootstrap = mock(BootstrapService.class);
+		org.mockito.Mockito.doThrow(new IncompleteProjectionException(
+		        "Re-projection for patient patient-uuid was incomplete: 1 type(s) failed, 0 record(s) not projected"))
+		        .when(bootstrap).reindexPatient("patient-uuid");
+		QueryStoreService queryStore = mock(QueryStoreService.class);
+		when(queryStore.getPatientChart("patient-uuid")).thenReturn(Arrays.asList(new QueryDocument()));
+		controller.setBootstrapService(bootstrap);
+		controller.setQueryStoreService(queryStore);
+
+		ResponseEntity<Object> response = controller.reindex(Collections.singletonMap("patient", "patient-uuid"));
+
+		assertEquals("a partial re-projection is not a success", HttpStatus.INTERNAL_SERVER_ERROR,
+		    response.getStatusCode());
+		Map<?, ?> body = (Map<?, ?>) response.getBody();
+		assertEquals("patient-uuid", body.get("patient"));
+		assertEquals("what did project is still counted", Integer.valueOf(1), body.get("documentsIndexed"));
+		assertEquals(
+		    "Re-projection for patient patient-uuid was incomplete: 1 type(s) failed, 0 record(s) not projected",
+		    body.get("error"));
 	}
 
 	@Test

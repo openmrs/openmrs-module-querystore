@@ -528,6 +528,39 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void getPatientChartRead_keepsReportingATouchThatLeftRecordsOut() {
+		// The first touch projected obs but failed on a condition. The patient now has documents,
+		// so the existence probe alone would read the chart as complete from the second read on,
+		// with the condition still missing. The patient stays cold until a projection completes.
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Collections.singletonList(doc("obs", "obs-1"));
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.incompletePatients.add("patient-uuid");
+		bootstrap.onEnsureIndexed = uuid -> { throw new IllegalStateException("1 type(s) failed"); };
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		PatientChartRead chart = service.getPatientChartRead("patient-uuid");
+
+		assertEquals("the incomplete patient is projected again", 1, bootstrap.ensureIndexedCalls.size());
+		assertTrue("a read after a partial touch must still disclose the gap", chart.isTruncated());
+		assertEquals(1, chart.getDocuments().size());
+	}
+
+	@Test
+	public void searchByPatient_projectsAPatientWhoseTouchLeftRecordsOutAgain() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.incompletePatients.add("patient-uuid");
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		service.searchByPatient("patient-uuid", "weight", 5);
+
+		assertEquals(Collections.singletonList("patient-uuid"), bootstrap.ensureIndexedCalls);
+	}
+
+	@Test
 	public void getPatientChart_bootstrapServiceUnavailable_skipsAutoIndexQuietly() {
 		// No override and no OpenMRS Context: Context.getService throws, the ensureIndexedSafely
 		// catch absorbs the failure, and the chart enumeration still runs against whatever is
@@ -770,7 +803,11 @@ public class QueryStoreServiceImplTest {
 		java.util.function.Consumer<String> onEnsureIndexed;
 		List<BootstrapProgress> status = Collections.emptyList();
 		List<String> resourceTypes = Collections.emptyList();
+		final java.util.Set<String> incompletePatients = new java.util.HashSet<>();
 
+		@Override public boolean isPatientProjectionIncomplete(String patientUuid) {
+			return incompletePatients.contains(patientUuid);
+		}
 		@Override public void bootstrap() { }
 		@Override public void bootstrap(String resourceType) { }
 		@Override public void resyncType(String resourceType) { }

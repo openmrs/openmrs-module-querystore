@@ -182,7 +182,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (backend == null || patientUuid == null) {
 			return Collections.emptyList();
 		}
-		if (!backend.existsByPatient(patientUuid)) {
+		if (needsColdTouch(patientUuid)) {
 			ensureIndexedSafely(patientUuid);
 		}
 		List<QueryDocument> hits = readableByCaller(runHybrid(query, limit, Filter.patientScope(patientUuid)));
@@ -239,6 +239,22 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 	}
 
+	/** A patient is cold when the backend holds none of its documents, or when its last projection
+	 *  left records out: it then has documents, but reading them as the whole chart would hide the
+	 *  gap, so it is projected again. The second question is asked only of a patient with documents. */
+	private boolean needsColdTouch(String patientUuid) {
+		if (!backend.existsByPatient(patientUuid)) {
+			return true;
+		}
+		try {
+			return bootstrapService().isPatientProjectionIncomplete(patientUuid);
+		}
+		catch (RuntimeException e) {
+			log.debug("Could not ask whether patient " + patientUuid + " was projected completely", e);
+			return false;
+		}
+	}
+
 	private BootstrapService bootstrapService() {
 		return bootstrapServiceOverride == null
 		        ? Context.getService(BootstrapService.class) : bootstrapServiceOverride;
@@ -281,16 +297,18 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			throw new IllegalStateException(
 			        "No BackendStore wired into QueryStoreServiceImpl; cannot determine whether the patient chart is complete");
 		}
-		// Same cold-bootstrap protocol as searchByPatient: probe existsByPatient, lazy-project on
-		// miss, then read. Decision 15 explicitly mirrors searchByPatient's behaviour here so the
+		// Same cold-bootstrap protocol as searchByPatient: probe whether the patient is cold,
+		// lazy-project if so, then read. Decision 15 explicitly mirrors searchByPatient's behaviour here so the
 		// first method to touch a never-indexed patient pays the projection cost once. The shared
 		// ensureIndexedSafely also keeps the swallow-on-failure semantics consistent — an
 		// index-failure must not block the LLM full-chart caller any more than it blocks search.
 		// It must be disclosed, though: records this patient has in OpenMRS that were never
 		// projected are missing from this read, which is exactly what truncated means. Neither the
-		// backend's read-side bit nor the deployment-wide projection state can see a failed touch.
+		// backend's read-side bit nor the deployment-wide projection state can see a failed touch,
+		// and a touch that projected some types leaves documents behind, so needsColdTouch keeps
+		// such a patient cold and every read projects it again until nothing is left out.
 		boolean coldTouchFailed = false;
-		if (!backend.existsByPatient(patientUuid)) {
+		if (needsColdTouch(patientUuid)) {
 			coldTouchFailed = !ensureIndexedSafely(patientUuid);
 		}
 		PatientChartRead chartRead = backend.findPatientChart(patientUuid);

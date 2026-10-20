@@ -28,6 +28,7 @@ import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
+import org.openmrs.module.querystore.bootstrap.IncompleteProjectionException;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.module.webservices.rest.web.RestUtil;
@@ -277,7 +278,8 @@ public class QueryStoreRestController {
 	 * <ul>
 	 * <li>{@code {"patient":"<uuid>"}} — force a full re-projection of one patient (delete + re-index
 	 * every type), then report the resulting document count. <strong>Synchronous</strong>: bounded to
-	 * one patient and runs in the authenticated request thread. The delete-before-reindex invariant
+	 * one patient and runs in the authenticated request thread. A re-projection that left records out
+	 * returns {@code 500} with the same count and an {@code error} naming how many types and records failed. The delete-before-reindex invariant
 	 * lives in {@link BootstrapService#reindexPatient} (unit-tested) so this stays a thin adapter.</li>
 	 * <li>{@code {"scope":"all"}} — launch the global bootstrap over every patient and type.
 	 * <strong>Asynchronous</strong>: a full-corpus scan cannot run in a request thread, so it is handed
@@ -370,12 +372,24 @@ public class QueryStoreRestController {
 			return errorResponse(HttpStatus.BAD_REQUEST, "patient or scope (\"all\" or \"type\") is required");
 		}
 
-		bootstrapService().reindexPatient(patientUuid);
+		String incomplete = null;
+		try {
+			bootstrapService().reindexPatient(patientUuid);
+		}
+		catch (IncompleteProjectionException e) {
+			// Every type was attempted and what projected stays indexed, but records were left out:
+			// report the gap instead of a success. The message carries counts, not record content.
+			incomplete = e.getMessage();
+		}
 
 		int documentsIndexed = queryStoreService().getPatientChart(patientUuid).size();
 		Map<String, Object> result = new HashMap<String, Object>();
 		result.put("patient", patientUuid);
 		result.put("documentsIndexed", documentsIndexed);
+		if (incomplete != null) {
+			result.put("error", incomplete);
+			return new ResponseEntity<Object>(result, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
 		return new ResponseEntity<Object>(result, HttpStatus.OK);
 	}
 

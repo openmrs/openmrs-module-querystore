@@ -160,6 +160,11 @@ have *some* documents.
 { "patient": "dd9836d7-1691-11df-97a5-7038c432aabf", "documentsIndexed": 154 }
 ```
 
+If any record could not be re-projected (a type failed, or a record could not be embedded or
+written), the call returns `500` with the same `patient` and `documentsIndexed` (what did project
+stays indexed) and an `error` naming how many types and records failed. Full-chart reads of that
+patient then report `chartTruncated: true` until a projection completes.
+
 ```bash
 curl -s -X POST -u admin:Admin123 -H 'Content-Type: application/json' \
   -d '{"patient":"dd9836d7-1691-11df-97a5-7038c432aabf"}' \
