@@ -154,6 +154,31 @@ public class ContextSliceTest {
 		return tiers;
 	}
 
+	/** The slice is built from the full chart and the similarity read, so it omits what they omit
+	 *  for a caller missing a type's core read privilege (Decision 14 point 4), in every tier. */
+	@Test
+	public void aCallerWithoutATypesCorePrivilegeGetsNoneOfItsRecordsInAnyTier() {
+		ContextSliceRequest request = new ContextSliceRequest(
+		        new java.util.HashSet<String>(Arrays.asList("drug_order", "allergy")), false);
+		org.openmrs.api.context.Context.setUserContext(new org.openmrs.api.context.UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !org.openmrs.util.PrivilegeConstants.GET_ALLERGIES.equals(privilege);
+			}
+		});
+		ContextSlice slice;
+		try {
+			slice = service.getContextSlice(PATIENT, "Any drug allergies or medications?", request);
+		}
+		finally {
+			org.openmrs.api.context.Context.clearUserContext();
+		}
+
+		Map<String, String> tiers = tiersByUuid(slice);
+		assertFalse(tiers.containsKey("allergy-1"), "an allergy the caller cannot read reached the slice: " + tiers);
+		assertTrue(tiers.containsKey("med-1"), "a readable typed record must still be served: " + tiers);
+	}
+
 	@Test
 	public void mandatoryCore_ridesEverySlice_regardlessOfTypesAndSimilarity() {
 		JsonNode fixtureCase = fixtureCase("context_policy", "context.enumerated-medications-are-complete");
