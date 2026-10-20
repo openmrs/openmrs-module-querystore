@@ -641,11 +641,57 @@ public class BootstrapServiceImplTest {
 		EmptyPageBootstrapper ok = new EmptyPageBootstrapper("encounter");
 		service.setBootstrappers(Arrays.asList(failing, ok));
 
-		service.ensureIndexed("patient-uuid");
+		assertColdTouchFails("patient-uuid");
 
 		assertEquals(1, failing.fetchForPatientCount);
-		assertEquals("non-failing type still ran after the failure",
+		assertEquals("non-failing type still ran before the failure was reported",
 		        1, ok.fetchForPatientCount);
+	}
+
+	@Test
+	public void ensureIndexed_aRecordTheEmbedderCannotEmbedFailsTheTouch() {
+		// The embedder is down and the patient was never indexed: every record is skipped and
+		// nothing is written, so the touch must not read as a projection that succeeded.
+		service.setEmbeddingProvider(new EmbeddingProvider() {
+			@Override public int getDimensions() { return 8; }
+			@Override public float[] embed(String text) { throw new IllegalStateException("embedder unavailable"); }
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneRecordBootstrapper(false)));
+
+		assertColdTouchFails("patient-uuid");
+	}
+
+	@Test
+	public void ensureIndexed_aWriteTheBackendRejectsFailsTheTouch() {
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				return org.openmrs.module.querystore.backend.WriteResult.failed(
+				        new org.openmrs.module.querystore.backend.DocFailure(document.getResourceType(),
+				                document.getResourceUuid(), "simulated backend failure", true));
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneRecordBootstrapper(false)));
+
+		assertColdTouchFails("patient-uuid");
+	}
+
+	@Test
+	public void ensureIndexed_aRecordWithNothingToIndexIsNotAFailure() {
+		// A null serialization (a group-obs parent) is a skip by design, not a failed projection.
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneRecordBootstrapper(true)));
+
+		service.ensureIndexed("patient-uuid");
+	}
+
+	private void assertColdTouchFails(String patientUuid) {
+		try {
+			service.ensureIndexed(patientUuid);
+			fail("a cold touch that failed to project records must report it");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue(expected.getMessage(), expected.getMessage().contains(patientUuid));
+		}
 	}
 
 	@Test
@@ -1076,7 +1122,7 @@ public class BootstrapServiceImplTest {
 		@Override public TypeBootstrapper<?> getBootstrapper() { return bootstrapper; }
 	}
 
-	private static final class NullQueryStoreService implements QueryStoreService {
+	private static class NullQueryStoreService implements QueryStoreService {
 		@Override
 		public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
 			return org.openmrs.module.querystore.backend.WriteResult.success();
@@ -1090,7 +1136,44 @@ public class BootstrapServiceImplTest {
 		@Override public void onShutdown() { }
 	}
 
-	private static final class ZeroEmbedder implements EmbeddingProvider {
+	/** One per-patient record, serialized to a document or, with {@code nothingToIndex}, to null. */
+	private static final class OneRecordBootstrapper extends TypeBootstrapper<String> {
+		private final boolean nothingToIndex;
+
+		OneRecordBootstrapper(boolean nothingToIndex) { this.nothingToIndex = nothingToIndex; }
+
+		@Override public String getResourceType() { return "obs"; }
+		@Override protected Instant getDateChanged(String e) { return Instant.EPOCH; }
+		@Override protected String getUuid(String e) { return e; }
+		@Override protected List<String> fetchPage(Instant a, String u, int p) { return Collections.emptyList(); }
+
+		@Override
+		protected List<String> fetchPageForPatient(String patientUuid, Instant afterDateChanged, String afterUuid,
+		                                           int pageSize) {
+			return afterUuid == null ? Collections.singletonList("obs-1") : Collections.<String> emptyList();
+		}
+
+		@Override
+		protected ClinicalRecordSerializer<String> getSerializer() {
+			return new ClinicalRecordSerializer<String>() {
+				@Override public String getResourceType() { return "obs"; }
+				@Override public Class<String> getSupportedType() { return String.class; }
+				@Override public QueryDocument serialize(String uuid) {
+					if (nothingToIndex) {
+						return null;
+					}
+					QueryDocument doc = new QueryDocument();
+					doc.setResourceType("obs");
+					doc.setResourceUuid(uuid);
+					doc.setPatientUuid("patient-uuid");
+					doc.setText("Weight: 70 kg");
+					return doc;
+				}
+			};
+		}
+	}
+
+	private static class ZeroEmbedder implements EmbeddingProvider {
 		@Override public int getDimensions() { return 8; }
 		@Override public float[] embed(String text) { return new float[8]; }
 	}

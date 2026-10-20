@@ -174,7 +174,13 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			if (backendSelector != null && backendSelector.getStore().existsByPatient(patientUuid)) {
 				return;
 			}
-			projectAllTypesForPatient(patientUuid);
+			// Reported AFTER every type has run, so one failure still leaves the rest projected; the
+			// caller then discloses the gap rather than reading this patient's chart as complete.
+			String failures = projectAllTypesForPatient(patientUuid);
+			if (failures != null) {
+				throw new IllegalStateException("Cold-touch projection for patient " + patientUuid
+				        + " was incomplete: " + failures);
+			}
 		}
 	}
 
@@ -200,12 +206,17 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 
 	/** The per-type per-patient projection loop shared by {@link #ensureIndexed} and
 	 *  {@link #reindexPatient}. Per-type and per-record failures are isolated and logged so one
-	 *  type's failure doesn't abort the rest. Caller holds the per-patient lock. */
-	private void projectAllTypesForPatient(String patientUuid) {
+	 *  type's failure doesn't abort the rest. Caller holds the per-patient lock.
+	 *
+	 *  @return what was not projected, as "N type(s) failed, M record(s) not projected", or
+	 *          {@code null} when every type ran and every record was written */
+	private String projectAllTypesForPatient(String patientUuid) {
 		Map<String, ResourceTypeProvider> providers = discoverProviders();
+		int failedTypes = 0;
+		int failedRecords = 0;
 		for (String resourceType : allResourceTypes(providers)) {
 			try {
-				runOneForPatient(resourceType, patientUuid, providers);
+				failedRecords += runOneForPatient(resourceType, patientUuid, providers);
 			}
 			catch (UnsupportedOperationException noPerPatientImpl) {
 				// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
@@ -220,8 +231,13 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			catch (RuntimeException e) {
 				log.warn("Per-patient projection of " + resourceType + " for patient " + patientUuid
 				        + " failed; continuing with remaining types", e);
+				failedTypes++;
 			}
 		}
+		if (failedTypes == 0 && failedRecords == 0) {
+			return null;
+		}
+		return failedTypes + " type(s) failed, " + failedRecords + " record(s) not projected";
 	}
 
 	@Override
@@ -364,11 +380,12 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		p.setBackend(backend);
 	}
 
-	private void runOneForPatient(String resourceType, String patientUuid,
-	                              Map<String, ResourceTypeProvider> providers) {
+	private int runOneForPatient(String resourceType, String patientUuid,
+	                             Map<String, ResourceTypeProvider> providers) {
 		// Callers iterate allResourceTypes, which already filters providers with a null bootstrapper
 		// — so for every resourceType reaching here, resolveBootstrapper returns non-null. No guard needed.
-		resolveBootstrapper(resourceType, providers).runForPatient(patientUuid, queryStoreService, embeddingProvider);
+		return resolveBootstrapper(resourceType, providers).runForPatient(patientUuid, queryStoreService,
+		        embeddingProvider);
 	}
 
 	/**

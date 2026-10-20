@@ -138,7 +138,7 @@ public abstract class TypeBootstrapper<T> {
 				// wall-clock — ADR Decision 3. The cursor is checkpointed per page, not per record; a crash
 				// mid-page re-does that page on resume, which the version-guarded upsert makes idempotent.
 				progress.setDocumentsIndexed(progress.getDocumentsIndexed()
-				        + projectBatch(page.entities, service, embedder));
+				        + projectBatch(page.entities, service, embedder).written);
 				progress.setCursorDateChanged(page.nextCursorDate);
 				progress.setCursorUuid(page.nextCursorUuid);
 				progressDao.save(progress);
@@ -166,20 +166,25 @@ public abstract class TypeBootstrapper<T> {
 	 * cursor lives only for the duration of the call. Per-record serialize/embed failures are isolated
 	 * by {@link #serializeAndEmbed}; a page-fetch failure propagates (the poison-page fallback that
 	 * {@link #run} uses is scoped to the global scan for now — a per-patient orphan still surfaces).
+	 *
+	 * @return how many of the patient's records were not projected: a serialize or embed failure, or a
+	 *         write the backend rejected. A null serialization is a skip by design and is not counted.
 	 */
-	public final void runForPatient(String patientUuid, QueryStoreService service, EmbeddingProvider embedder) {
+	public final int runForPatient(String patientUuid, QueryStoreService service, EmbeddingProvider embedder) {
 		Instant cursor = null;
 		String cursorUuid = null;
+		int failed = 0;
 		while (true) {
 			List<T> page = fetchPageForPatient(patientUuid, cursor, cursorUuid, PAGE_SIZE);
 			if (page.isEmpty()) {
 				break;
 			}
-			projectBatch(page, service, embedder);
+			failed += projectBatch(page, service, embedder).failed;
 			T last = page.get(page.size() - 1);
 			cursor = getDateChanged(last);
 			cursorUuid = getUuid(last);
 		}
+		return failed;
 	}
 
 	/**
@@ -230,20 +235,32 @@ public abstract class TypeBootstrapper<T> {
 	}
 
 	/** Serialize + embed every entity in the page and write the resulting documents in one
-	 *  {@link QueryStoreService#bulkIndex} call, returning the count of confirmed writes. A null
-	 *  serialization (group-obs parent) or a per-record serialize/embed failure is skipped, not fatal;
-	 *  a backend write failure is logged via the per-doc {@link BulkWriteResult#getFailures()} and not
-	 *  counted, keeping {@code documents_indexed} honest (writes confirmed, not "calls that didn't throw"). */
-	private int projectBatch(List<T> page, QueryStoreService service, EmbeddingProvider embedder) {
+	 *  {@link QueryStoreService#bulkIndex} call. {@code written} counts confirmed writes, keeping
+	 *  {@code documents_indexed} honest (writes confirmed, not "calls that didn't throw"); {@code failed}
+	 *  counts the records a serialize/embed failure or a rejected write left out. A null serialization
+	 *  (group-obs parent) is skipped and counted as neither. Neither failure is fatal to the scan; a
+	 *  backend write failure is logged via the per-doc {@link BulkWriteResult#getFailures()}. */
+	private BatchOutcome projectBatch(List<T> page, QueryStoreService service, EmbeddingProvider embedder) {
+		BatchOutcome outcome = new BatchOutcome();
 		List<QueryDocument> batch = new ArrayList<QueryDocument>(page.size());
 		for (T entity : page) {
-			QueryDocument doc = serializeAndEmbed(entity, embedder);
+			QueryDocument doc;
+			try {
+				doc = serializeAndEmbed(entity, embedder);
+			}
+			catch (RuntimeException e) {
+				// retryable=null → "unknown": a thrown exception, not a DocFailure-bearing WriteResult.
+				log.warn(SkipLogFormat.format("bootstrap", getResourceType(), getUuid(entity),
+				        null, e.getMessage()), e);
+				outcome.failed++;
+				continue;
+			}
 			if (doc != null) {
 				batch.add(doc);
 			}
 		}
 		if (batch.isEmpty()) {
-			return 0;
+			return outcome;
 		}
 		BulkWriteResult result = service.bulkIndex(batch);
 		for (DocFailure failure : result.getFailures()) {
@@ -251,27 +268,29 @@ public abstract class TypeBootstrapper<T> {
 			// to re-project after a transient backend incident.
 			log.warn(SkipLogFormat.format("bootstrap", failure));
 		}
-		return result.getSucceeded();
+		outcome.written = result.getSucceeded();
+		outcome.failed += result.getFailures().size();
+		return outcome;
 	}
 
-	/** Serializes and embeds one entity into a write-ready document, or returns {@code null} to skip it:
-	 *  a null serialization (e.g. a group-obs parent) or a per-record serialize/embed failure (logged,
-	 *  never fatal to the scan). */
+	/** Serializes and embeds one entity into a write-ready document, or returns {@code null} where it has
+	 *  nothing to index (e.g. a group-obs parent). A serialize or embed failure propagates to
+	 *  {@link #projectBatch}, which logs and counts it. */
 	private QueryDocument serializeAndEmbed(T entity, EmbeddingProvider embedder) {
-		try {
-			QueryDocument doc = getSerializer().serialize(entity);
-			if (doc == null) {
-				return null;
-			}
-			doc.setEmbedding(embedder.embed(doc.getEmbeddingInput()));
-			return doc;
-		}
-		catch (RuntimeException e) {
-			// retryable=null → "unknown": a thrown exception, not a DocFailure-bearing WriteResult.
-			log.warn(SkipLogFormat.format("bootstrap", getResourceType(), getUuid(entity),
-			        null, e.getMessage()), e);
+		QueryDocument doc = getSerializer().serialize(entity);
+		if (doc == null) {
 			return null;
 		}
+		doc.setEmbedding(embedder.embed(doc.getEmbeddingInput()));
+		return doc;
+	}
+
+	/** What one {@link #projectBatch} call wrote and what it left out. */
+	private static final class BatchOutcome {
+
+		int written;
+
+		int failed;
 	}
 
 	/** A fetched page plus the cursor to resume after it. {@code entities} may be empty (an all-poison
