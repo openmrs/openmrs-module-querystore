@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -175,6 +176,14 @@ public abstract class TypeBootstrapper<T> {
 		}
 	}
 
+	/**
+	 * Core stores audit dates to the second, which is what this scan reads back, while sync stamps
+	 * the in-memory date it projected, which can carry milliseconds; both describe one record state.
+	 */
+	private static boolean sameSecond(Instant a, Instant b) {
+		return b != null && a.truncatedTo(ChronoUnit.SECONDS).equals(b.truncatedTo(ChronoUnit.SECONDS));
+	}
+
 	/** The entities whose stored version differs from their own, or that are not stored at all. */
 	private List<T> withoutStoredAtCurrentVersion(List<T> entities, QueryStoreService service) {
 		List<String> uuids = new ArrayList<String>(entities.size());
@@ -191,7 +200,7 @@ public abstract class TypeBootstrapper<T> {
 		List<T> changed = new ArrayList<T>(entities.size());
 		for (T entity : entities) {
 			Instant version = stored.get(getUuid(entity));
-			if (version == null || !version.equals(getDateChanged(entity))) {
+			if (version == null || !sameSecond(version, getDateChanged(entity))) {
 				changed.add(entity);
 			}
 		}

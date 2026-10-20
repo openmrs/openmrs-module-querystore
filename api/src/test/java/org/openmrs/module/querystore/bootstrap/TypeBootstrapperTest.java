@@ -302,6 +302,19 @@ public class TypeBootstrapperTest {
 	}
 
 	@Test
+	public void run_aTopUpTreatsAVersionTheDatabaseKeptToTheSecondAsCurrent() {
+		// Sync stamps the in-memory audit date (milliseconds); core stores it to the second, which
+		// is what the scan reads back. The same record state must not count as changed.
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("synced", Instant.parse("2026-10-20T07:03:21Z")));
+		service.storedVersions.put("synced", Instant.parse("2026-10-20T07:03:21.789Z"));
+
+		b.run(new BootstrapProgress("test"), service, embedder, progressDao, true);
+
+		assertEquals(Collections.<String> emptyList(), indexedUuids());
+	}
+
+	@Test
 	public void run_aForcedReprojectionEmbedsEveryRecordEvenAtItsStoredVersion() {
 		// A resync re-projects on purpose (drift, or new fields an upgrade added), so it never skips.
 		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
