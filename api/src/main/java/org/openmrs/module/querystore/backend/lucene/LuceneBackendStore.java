@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -285,6 +286,38 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 	}
 
 	@Override
+	public Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		if (resourceUuids.isEmpty() || !hasIndex(resourceType)) {
+			return Collections.emptyMap();
+		}
+		IndexWriter writer = schemaManager.ensureWriter(resourceType);
+		Map<String, Instant> found = new HashMap<>();
+		try (DirectoryReader reader = DirectoryReader.open(writer)) {
+			IndexSearcher searcher = new IndexSearcher(reader);
+			for (String uuid : resourceUuids) {
+				Long millis = storedLastModified(reader, searcher, new Term(LuceneFieldNames.RESOURCE_UUID, uuid));
+				if (millis != null) {
+					found.put(uuid, Instant.ofEpochMilli(millis));
+				}
+			}
+		}
+		catch (IOException e) {
+			log.warn("findLastModified failed for " + resourceType, e);
+			return Collections.emptyMap();
+		}
+		return found;
+	}
+
+	private boolean hasIndex(String resourceType) {
+		for (String indexName : allIndexNames()) {
+			if (resourceType.equals(BackendDocs.stripPrefix(indexName))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@Override
 	public long countByType(String resourceType) {
 		// Drift detection (ADR: Sync reliability and reconciliation). No index for this type yet →
 		// indexed nothing (0); a count that errors → unknown (-1). Don't create a writer for a type
@@ -499,24 +532,28 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 
 	private Long findStoredLastModified(IndexWriter writer, Term uuidTerm) throws IOException {
 		try (DirectoryReader reader = DirectoryReader.open(writer)) {
-			IndexSearcher searcher = new IndexSearcher(reader);
-			TopDocs hits = searcher.search(new TermQuery(uuidTerm), 1);
-			if (hits.scoreDocs.length == 0) {
-				return null;
-			}
-			ScoreDoc hit = hits.scoreDocs[0];
-			int leafIdx = leafContextOf(reader, hit.doc);
-			NumericDocValues values = reader.leaves().get(leafIdx).reader()
-			        .getNumericDocValues(LuceneFieldNames.LAST_MODIFIED);
-			if (values == null) {
-				return null;
-			}
-			int localDocId = hit.doc - reader.leaves().get(leafIdx).docBase;
-			if (!values.advanceExact(localDocId)) {
-				return null;
-			}
-			return values.longValue();
+			return storedLastModified(reader, new IndexSearcher(reader), uuidTerm);
 		}
+	}
+
+	private static Long storedLastModified(DirectoryReader reader, IndexSearcher searcher, Term uuidTerm)
+	        throws IOException {
+		TopDocs hits = searcher.search(new TermQuery(uuidTerm), 1);
+		if (hits.scoreDocs.length == 0) {
+			return null;
+		}
+		ScoreDoc hit = hits.scoreDocs[0];
+		int leafIdx = leafContextOf(reader, hit.doc);
+		NumericDocValues values = reader.leaves().get(leafIdx).reader()
+		        .getNumericDocValues(LuceneFieldNames.LAST_MODIFIED);
+		if (values == null) {
+			return null;
+		}
+		int localDocId = hit.doc - reader.leaves().get(leafIdx).docBase;
+		if (!values.advanceExact(localDocId)) {
+			return null;
+		}
+		return values.longValue();
 	}
 
 	private static int leafContextOf(DirectoryReader reader, int globalDocId) {
