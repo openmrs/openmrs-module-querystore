@@ -52,11 +52,12 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * {@link QueryStoreServiceImpl#getContextSlice} — the tiered record-selection contract (ADR
  * Decision 17). One implementation of the provider-neutral {@code context_policy} selection
  * invariants (dual-provider-conformance.v1), tested through the real composed service path
- * with a scripted backend. Each test loads its case directly from the local fixture copy
- * (src/test/resources/conformance) and asserts against the fixture's own declared ids and
- * expected tiers — not hand-duplicated literals — so fixture and selector changes remain visible
- * here. {@code context.mandatory-overflow-abstains} is intentionally not covered:
- * token-budget enforcement is the answer engine's responsibility (see
+ * with a scripted backend. Each test loads its case directly from the local fixture
+ * (src/test/resources/conformance), which carries only the cases these tests read, each unchanged
+ * from the shared fixture set, and asserts against the fixture's own declared ids and expected
+ * tiers, not hand-duplicated literals, so fixture and selector changes remain visible here.
+ * Abstaining when the mandatory core overflows a token budget is not tested here: token-budget
+ * enforcement is the answer engine's responsibility (see
  * {@link org.openmrs.module.querystore.model.ContextSliceRecord}), not querystore's.
  */
 public class ContextSliceTest {

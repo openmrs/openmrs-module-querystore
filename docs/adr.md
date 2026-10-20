@@ -1378,14 +1378,12 @@ Accepted
 Two AI consumers assemble question-scoped context from this read store today — bundled
 ChartSearchAI in-process (`QueryStoreChartBuilder.buildScoped`) and med-agent-hub over the
 Decision 16 REST surface (`context_sources.py`) — and each implements its own selection policy
-over the same indexed documents. A measured comparison (harness engine-parity instrument,
-2026-07-22) showed the two policies drifting symmetrically: bundled lacked the mandatory clinical
-core (allergies + active conditions) the hub always includes, the hub lacks the obs-group panel
-completion bundled performs, and both re-derive semantics this store already owns (clinical-date
-kinds, group metadata, ranked search). The parity roadmap's shared context-selection amendment
-(2026-07-22, `clinical-ai-validation-harness` `openmrs-dual-provider-parity-roadmap-status.md`)
-directs consolidating the selection invariants here, at the data owner, while each engine keeps
-prompt composition, token budgeting, and question interpretation.
+over the same indexed documents. Compared side by side, the two policies drifted symmetrically:
+bundled lacked the mandatory clinical core (allergies + active conditions) the hub always includes,
+the hub lacks the obs-group panel completion bundled performs, and both re-derive semantics this
+store already owns (clinical-date kinds, group metadata, ranked search). The selection invariants
+therefore belong here, at the data owner, while each engine keeps prompt composition, token
+budgeting, and question interpretation.
 
 ### Decision
 1. **A fourth v1 read method returns a tier-tagged record selection**:
@@ -1431,8 +1429,9 @@ prompt composition, token budgeting, and question interpretation.
    iteration; this lands its selection half while budgets stay engine-side.
 2. **One implementation ends structural drift.** Safety-relevant invariants (mandatory core,
    panel completion) implemented twice measurably diverged; conformance fixtures caught it
-   after the fact. A single implementation makes the shared `context_policy` fixture family
-   (dual-provider-conformance.v1) this module's own red-first test suite.
+   after the fact. A single implementation makes the provider-neutral `context_policy` cases
+   (`api/src/test/resources/conformance/dual-provider-conformance.v1.json`, each case unchanged
+   from the shared fixture set) this module's own red-first test suite.
 3. **Consumers stay thin and source-neutral.** Engines pass their interpretation flags and
    compose prompts from tagged records; the hub keeps its local policy for non-querystore
    sources. `mandatory` tags tell a budget-constrained consumer what is never droppable.
@@ -1440,13 +1439,12 @@ prompt composition, token budgeting, and question interpretation.
 ### Consequences
 - The v1 read surface grows to four methods; REST wraps all four uniformly (Decision 16 shape).
 - ChartSearchAI's `buildScoped` and the hub's querystore source become thin adapters over this
-  method (harness plan `querystore-context-slice-plan.md`, CP2/CP3); their intent-routing and
-  temporal detection remain caller-side, so interpretation drift between engines is still
-  possible and remains measured by the harness parity instrument.
+  method; their intent-routing and temporal detection remain caller-side, so interpretation drift
+  between engines is still possible.
 - Active-condition detection reads the `clinical_status` metadata the condition serializer
   already emits; `diagnosis` documents without that metadata simply never match the mandatory
   tier (no text sniffing).
-- The `panel` tier is additive beyond the four tiers the harness plan sketched; it makes family
+- The `panel` tier is additive beyond the four policy tiers above it; it makes family
   completion honest instead of mislabeling joined members as `typed`.
 
 ---
