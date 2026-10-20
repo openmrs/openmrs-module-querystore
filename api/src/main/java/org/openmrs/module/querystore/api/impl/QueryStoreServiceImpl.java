@@ -56,7 +56,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 	private static final Log log = LogFactory.getLog(QueryStoreServiceImpl.class);
 
-	private static final Pattern QUOTED_PHRASE = Pattern.compile("[\\\"]([^\\\"]{2,})[\\\"]|'([^']{2,})'");
+	private static final Pattern QUOTED_PHRASE = Pattern.compile(
+	        "[\\\"]([^\\\"]{2,})[\\\"]|(?<![\\p{L}\\p{N}])'([^']{2,})'(?![\\p{L}\\p{N}])");
 
 	private static final Pattern ISO_DATE = Pattern.compile("\\b\\d{4}-\\d{2}-\\d{2}\\b");
 

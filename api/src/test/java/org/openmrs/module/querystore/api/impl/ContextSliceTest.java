@@ -311,6 +311,17 @@ public class ContextSliceTest {
 		        tiersByUuid(service.getContextSlice(PATIENT, "The code is E11.9", none)).get("icd-1"));
 	}
 
+	/** An apostrophe inside a word does not open a quoted phrase. */
+	@Test
+	public void aQuotedPhraseAfterAnApostropheIsStillExact() {
+		backend.chart.add(doc("obs", "chest-1", "Chief complaint: chest pain on exertion", LocalDate.of(2022, 1, 1)));
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "Did the patient's notes mention 'chest pain'?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(slice).get("chest-1"));
+	}
+
 	@Test
 	public void similarityHits_joinTheSlice_andFailureDegradesToPolicyTiers() {
 		backend.hits = Collections.singletonList(
