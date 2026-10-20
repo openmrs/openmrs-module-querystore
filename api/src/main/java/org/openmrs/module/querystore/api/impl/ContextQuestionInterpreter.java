@@ -69,13 +69,26 @@ final class ContextQuestionInterpreter {
 	        "(?:over |in |during )?(?:the )?past (?:few )?(?:\\d+ )?(?:days?|weeks?|months?|years?)",
 	        "this (?:week|month|year)");
 
+	/**
+	 * Everyday idioms that share a word with a cue but name no records ("in order to", "under what
+	 * conditions", "last name"). They are blanked before the cues run, so each false cue does not pull
+	 * whole types into the typed tier or add a recency anchor. A cue elsewhere in the question still
+	 * applies.
+	 */
+	private static final Pattern IDIOMS = cues(
+	        "in order (?:to|that|for|of)", "out of order", "order of",
+	        "under (?:what|which|these|those|such|certain|normal|the same) conditions?",
+	        "on (?:the )?condition that", "condition of",
+	        "in (?:good|poor|fair|stable|critical|serious|bad|satisfactory) condition",
+	        "last names?", "at last", "last resort");
+
 	private static Pattern cues(String... words) {
 		return Pattern.compile("\\b(?:" + String.join("|", words) + ")\\b", Pattern.CASE_INSENSITIVE);
 	}
 
 	static Interpretation interpret(String question) {
 		Set<String> types = new HashSet<String>();
-		String text = question == null ? "" : question.trim();
+		String text = question == null ? "" : IDIOMS.matcher(question).replaceAll(" ").trim();
 		if (!text.isEmpty()) {
 			for (Map.Entry<Pattern, String[]> entry : TYPE_CUES.entrySet()) {
 				if (entry.getKey().matcher(text).find()) {

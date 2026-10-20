@@ -1471,7 +1471,9 @@ questions. Query normalization is retrieval quality, which this module owns.
 1. **`ContextSliceRequest.interpretQuestion`**: when set, querystore derives the typed scope and
    temporal flag from the question via conservative word-boundary cues (mechanical matching, not
    NLU), UNIONs the caller's `types` (module-contributed scopes survive), and ORs the caller's
-   `temporal`. The REST twin exposes `interpret=true`. Explicit caller parameters remain fully
+   `temporal`. Everyday idioms that share a word with a cue (`in order to`, `under what
+   conditions`, `condition of`, `last name`) are blanked before matching, since each false cue
+   pulls whole types into the protected `typed` tier. The REST twin exposes `interpret=true`. Explicit caller parameters remain fully
    supported — interpretation is opt-in, additive, and overridable.
 2. **The slice's similarity leg preprocesses the question server-side** (lab-panel abbreviation
    expansion only) — always and idempotently for callers that already expand panels. A caller

@@ -30,6 +30,34 @@ public class ContextQuestionInterpreterTest {
 		assertTypes("Which tests were ordered?", "drug_order", "test_order", "referral_order");
 	}
 
+	/** Each false cue pulls whole types into the typed tier, which a budgeted consumer must not
+	 *  drop: an idiom that only shares a word with a cue names no records. */
+	@Test
+	public void interpret_doesNotReadCommonIdiomsAsTypedCues() {
+		assertTypes("Was the dose raised in order to control her BP?");
+		assertTypes("Under what conditions should the dressing be changed?");
+		assertTypes("What was the condition of the wound?");
+		assertTypes("Is the patient in good condition for discharge?");
+		assertTypes("Is the glucometer out of order?");
+		assertTypes("List the vaccines in order of date");
+	}
+
+	@Test
+	public void interpret_doesNotReadCommonIdiomsAsRecency() {
+		for (String question : Arrays.asList("What is the patient's last name?", "Did the rash resolve at last?",
+		        "Is surgery the last resort?")) {
+			assertFalse(question + " should not imply recency", ContextQuestionInterpreter.interpret(question).temporal);
+		}
+	}
+
+	@Test
+	public void interpret_stillReadsTheCueBesideAnIdiom() {
+		assertTypes("Which orders were placed in order to treat the infection?",
+		        "drug_order", "test_order", "referral_order");
+		assertTypes("What conditions does she have?", "condition", "diagnosis");
+		assertTrue(ContextQuestionInterpreter.interpret("What was the last viral load?").temporal);
+	}
+
 	@Test
 	public void interpret_recognizesTemporalCuesWithoutInventingTypes() {
 		ContextQuestionInterpreter.Interpretation interpretation =
