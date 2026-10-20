@@ -11,6 +11,7 @@ package org.openmrs.module.querystore.api.impl;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -511,7 +512,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 				// The chart read above already ran any cold touch; a failed one is not run twice.
 				List<QueryDocument> hits = rankedPatientSearch(patientUuid, retrievalQuestion, candidateLimit);
 				similarityRanks = selectDiversifiedSimilarityRanks(
-				        hits, policyTiers.keySet(), request.getSimilarityLimit());
+				        hits, policyTiers.keySet(), chartPositions(chart), request.getSimilarityLimit());
 			}
 			catch (RuntimeException e) {
 				log.warn("Context-slice ranked search failed for patient " + patientUuid
@@ -544,30 +545,46 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		                chartRead.isProjectionComplete()));
 	}
 
+	/**
+	 * Picks up to {@code limit} similarity records one repeat-group at a time, so repeated
+	 * observations of one value do not starve distinct concepts of slots. A group is a concept and
+	 * its rendered value: identical repeats ("Pregnancy status: No" three times) share one slot, while
+	 * distinct values of one concept stay separate, so a trend question keeps its series. Within a
+	 * group the newest record comes first, since rankers never see dates (Decision 7) and a repeat's
+	 * slot must report its latest date. Records a policy tier already claimed are skipped. Each pick
+	 * keeps its own 1-based search rank.
+	 */
 	private static Map<String, Integer> selectDiversifiedSimilarityRanks(List<QueryDocument> hits,
-	        Set<String> policyClaimedUuids, int limit) {
-		Map<String, List<String>> buckets = new LinkedHashMap<>();
+	        Set<String> policyClaimedUuids, Map<String, Integer> chartPositions, int limit) {
+		Map<String, Integer> searchRanks = new HashMap<>();
+		Map<String, List<String>> groups = new LinkedHashMap<>();
 		Set<String> seenUuids = new HashSet<>(policyClaimedUuids);
-		for (QueryDocument hit : hits) {
+		for (int i = 0; i < hits.size(); i++) {
+			QueryDocument hit = hits.get(i);
 			if (hit == null || hit.getResourceUuid() == null || !seenUuids.add(hit.getResourceUuid())) {
 				continue;
 			}
-			String key = conceptKey(hit);
-			List<String> bucket = buckets.get(key);
-			if (bucket == null) {
-				bucket = new ArrayList<>();
-				buckets.put(key, bucket);
+			searchRanks.put(hit.getResourceUuid(), Integer.valueOf(i + 1));
+			String key = repeatKey(hit);
+			List<String> group = groups.get(key);
+			if (group == null) {
+				group = new ArrayList<>();
+				groups.put(key, group);
 			}
-			bucket.add(hit.getResourceUuid());
+			group.add(hit.getResourceUuid());
+		}
+		for (List<String> group : groups.values()) {
+			group.sort(Comparator.comparingInt(uuid -> chartPositions.getOrDefault(uuid, Integer.MAX_VALUE)));
 		}
 		Map<String, Integer> ranks = new LinkedHashMap<>();
 		int depth = 0;
 		boolean addedInPass = true;
 		while (ranks.size() < limit && addedInPass) {
 			addedInPass = false;
-			for (List<String> bucket : buckets.values()) {
-				if (depth < bucket.size()) {
-					ranks.put(bucket.get(depth), Integer.valueOf(ranks.size() + 1));
+			for (List<String> group : groups.values()) {
+				if (depth < group.size()) {
+					String uuid = group.get(depth);
+					ranks.put(uuid, searchRanks.get(uuid));
 					addedInPass = true;
 					if (ranks.size() >= limit) {
 						break;
@@ -579,19 +596,26 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		return ranks;
 	}
 
-	private static String conceptKey(QueryDocument doc) {
-		Object conceptUuid = doc.getMetadata().get(QueryStoreConstants.FIELD_CONCEPT_UUID);
-		if (conceptUuid != null) {
-			String key = conceptUuid.toString().trim();
-			if (!key.isEmpty()) {
-				Object valueCodedUuid = doc.getMetadata().get(QueryStoreConstants.FIELD_VALUE_CODED_UUID);
-				if (valueCodedUuid != null && !valueCodedUuid.toString().trim().isEmpty()) {
-					return "concept:" + key + ":coded:" + valueCodedUuid.toString().trim();
-				}
-				return "concept:" + key;
+	/** Each chart record's index in the {@code record_date}-desc chart: lower is newer. */
+	private static Map<String, Integer> chartPositions(List<QueryDocument> chart) {
+		Map<String, Integer> positions = new HashMap<>();
+		for (int i = 0; i < chart.size(); i++) {
+			QueryDocument doc = chart.get(i);
+			if (doc != null && doc.getResourceUuid() != null && !positions.containsKey(doc.getResourceUuid())) {
+				positions.put(doc.getResourceUuid(), Integer.valueOf(i));
 			}
 		}
-		return "resource:" + doc.getResourceUuid();
+		return positions;
+	}
+
+	/** A record's concept and its rendered value; a record without a concept is its own group. */
+	private static String repeatKey(QueryDocument doc) {
+		Object conceptUuid = doc.getMetadata().get(QueryStoreConstants.FIELD_CONCEPT_UUID);
+		String concept = conceptUuid == null ? "" : conceptUuid.toString().trim();
+		if (concept.isEmpty()) {
+			return "resource:" + doc.getResourceUuid();
+		}
+		return "concept:" + concept + "\n" + (doc.getText() == null ? "" : doc.getText().trim());
 	}
 
 	private static Set<String> exactSignals(String question) {

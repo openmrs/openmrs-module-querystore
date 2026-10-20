@@ -674,6 +674,79 @@ public class ContextSliceTest {
 		assertFalse(tiers.containsKey("preg-3"));
 	}
 
+	/** Rankers never see dates (Decision 7), so of identical repeats the slot goes to the newest. */
+	@Test
+	public void similarityLeg_givesARepeatedValuesSlotToItsNewestRecord() {
+		QueryDocument older = doc("obs", "creat-old", "Serum creatinine (umol/L): 88 umol/L", LocalDate.of(2025, 1, 1));
+		older.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+		QueryDocument newer = doc("obs", "creat-new", "Serum creatinine (umol/L): 88 umol/L", LocalDate.of(2026, 6, 25));
+		newer.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+		backend.chart.add(1, newer);
+		backend.chart.add(older);
+		backend.hits = Arrays.asList(older, newer);
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(1);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "What is the creatinine?", request));
+
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-new"), "got " + tiers);
+		assertFalse(tiers.containsKey("creat-old"), "got " + tiers);
+	}
+
+	/** Distinct values of one concept are a series, not repeats: a trend question keeps them. */
+	@Test
+	public void similarityLeg_keepsANumericSeriesWhenConceptsOutnumberSlots() {
+		List<QueryDocument> hits = new ArrayList<QueryDocument>();
+		String[] values = { "88", "120", "193.7" };
+		for (int i = 0; i < values.length; i++) {
+			QueryDocument creat = doc("obs", "creat-" + i, "Serum creatinine (umol/L): " + values[i] + " umol/L",
+			        LocalDate.of(2026, 3 + i, 1));
+			creat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+			hits.add(creat);
+		}
+		for (int i = 0; i < 3; i++) {
+			QueryDocument other = doc("obs", "other-" + i, "Other " + i + ": 1", LocalDate.of(2025, 1, 1 + i));
+			other.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-other-" + i);
+			hits.add(other);
+		}
+		backend.chart.addAll(hits);
+		backend.hits = hits;
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(3);
+
+		Map<String, String> tiers = tiersByUuid(
+		        service.getContextSlice(PATIENT, "How has her creatinine changed this year?", request));
+
+		for (int i = 0; i < values.length; i++) {
+			assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-" + i), "got " + tiers);
+		}
+	}
+
+	/** A diversified pick keeps each record's own search rank, so budgeting by rank drops by relevance. */
+	@Test
+	public void similarityLeg_aDiversifiedPickCarriesTheRecordsOwnSearchRank() {
+		QueryDocument first = doc("obs", "preg-1", "Pregnancy status: No", LocalDate.of(2026, 6, 1));
+		first.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		QueryDocument repeat = doc("obs", "preg-2", "Pregnancy status: No", LocalDate.of(2026, 5, 1));
+		repeat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		QueryDocument creat = doc("obs", "creat-1", "Serum creatinine (umol/L): 193.7 umol/L", LocalDate.of(2026, 3, 1));
+		creat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+		backend.chart.addAll(Arrays.asList(first, repeat, creat));
+		backend.hits = Arrays.asList(first, repeat, creat);
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(2);
+
+		Map<String, Integer> ranks = new LinkedHashMap<String, Integer>();
+		for (ContextSliceRecord record : service.getContextSlice(PATIENT, "kidney issues?", request).getRecords()) {
+			if (QueryStoreConstants.TIER_SIMILARITY.equals(record.getTier())) {
+				ranks.put(record.getDocument().getResourceUuid(), record.getRank());
+			}
+		}
+
+		assertEquals(Integer.valueOf(1), ranks.get("preg-1"), "got " + ranks);
+		assertEquals(Integer.valueOf(3), ranks.get("creat-1"), "got " + ranks);
+	}
+
 	/** Scripted backend: canned chart + canned similarity hits, everything else inert. */
 	private static final class FakeBackendStore implements BackendStore {
 
