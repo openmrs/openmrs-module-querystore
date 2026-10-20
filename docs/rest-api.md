@@ -63,9 +63,10 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   `clinical_event`. Ranked records also carry a 1-based `rank`.
 - **Excluded:** embeddings and backend scores are never returned.
 
-Context mode adds a `tier` to every record. Records that participated in similarity search retain
-their original 1-based search `rank`, even when panel completion promotes them to the protected
-`panel` tier and even though the slice itself remains in chart order. The
+Context mode adds a `tier` to every record. A record selected by the similarity tier carries its
+original 1-based search `rank`, and keeps it when panel completion promotes it to the protected
+`panel` tier, even though the slice itself remains in chart order. A search hit that a higher tier
+already selected carries no `rank`. The
 response returns `chartSize`, `chartTruncated`,
 `effectiveTypes`, `temporalApplied`, `chartSnapshotId`, and `sliceId`. The `chartSnapshotId`
 fingerprints the complete chart materialization from which the selection was made. Consumers that
