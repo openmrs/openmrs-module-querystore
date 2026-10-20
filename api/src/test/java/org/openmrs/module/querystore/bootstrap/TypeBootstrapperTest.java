@@ -281,6 +281,48 @@ public class TypeBootstrapperTest {
 		assertEquals("cursor advanced past the recovered poison window", "c", progress.getCursorUuid());
 	}
 
+	@Test
+	public void run_aTopUpSkipsRecordsStoredAtTheirCurrentVersion() {
+		// A restart's top-up walks every record changed since the last checkpoint, most of which
+		// steady-state sync already indexed at that very version; re-embedding them is the cost.
+		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
+		Instant later = Instant.parse("2025-01-02T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("same", earlier), entity("changed", later), entity("new", later));
+		service.storedVersions.put("same", earlier);
+		service.storedVersions.put("changed", earlier);
+		BootstrapProgress progress = new BootstrapProgress("test");
+
+		b.run(progress, service, embedder, progressDao, true);
+
+		assertEquals(Arrays.asList("changed", "new"), indexedUuids());
+		assertEquals(2, embedder.inputs.size());
+		assertEquals(BootstrapStatus.COMPLETED, progress.getStatus());
+		assertEquals("the cursor still advances past the skipped record's page", "new", progress.getCursorUuid());
+	}
+
+	@Test
+	public void run_aForcedReprojectionEmbedsEveryRecordEvenAtItsStoredVersion() {
+		// A resync re-projects on purpose (drift, or new fields an upgrade added), so it never skips.
+		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("same", earlier));
+		service.storedVersions.put("same", earlier);
+		BootstrapProgress progress = new BootstrapProgress("test");
+
+		b.run(progress, service, embedder, progressDao, false);
+
+		assertEquals(Collections.singletonList("same"), indexedUuids());
+	}
+
+	private List<String> indexedUuids() {
+		List<String> uuids = new ArrayList<>();
+		for (QueryDocument doc : service.indexed) {
+			uuids.add(doc.getResourceUuid());
+		}
+		return uuids;
+	}
+
 	// ---------- fakes ----------
 
 	private static TestEntity entity(String uuid, Instant ts) {
@@ -401,7 +443,19 @@ public class TypeBootstrapperTest {
 	private static final class RecordingQueryStoreService implements QueryStoreService {
 		final List<QueryDocument> indexed = new ArrayList<>();
 		final List<Integer> bulkBatchSizes = new ArrayList<>();
+		final Map<String, Instant> storedVersions = new HashMap<>();
 		String failUuid;
+
+		@Override
+		public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+			Map<String, Instant> found = new HashMap<>();
+			for (String uuid : resourceUuids) {
+				if (storedVersions.containsKey(uuid)) {
+					found.put(uuid, storedVersions.get(uuid));
+				}
+			}
+			return found;
+		}
 
 		// Record the batch size per call, then route to the interface default (which loops index())
 		// so `indexed` still captures every doc — lets a test assert "one bulkIndex per page" while

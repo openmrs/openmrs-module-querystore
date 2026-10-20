@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.bootstrap;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -120,6 +121,19 @@ public abstract class TypeBootstrapper<T> {
 
 	public final void run(BootstrapProgress progress, QueryStoreService service, EmbeddingProvider embedder,
 	                      BootstrapProgressDao progressDao) {
+		run(progress, service, embedder, progressDao, false);
+	}
+
+	/**
+	 * As {@link #run(BootstrapProgress, QueryStoreService, EmbeddingProvider, BootstrapProgressDao)};
+	 * with {@code skipUnchanged}, a record the store already holds at its current version is neither
+	 * serialized, embedded nor written. A restart's top-up walks every record changed since the last
+	 * checkpoint, and steady-state sync has indexed most of them already, so re-embedding is the whole
+	 * cost of the window in which the type is RUNNING. A forced re-projection must not skip: it exists
+	 * to rewrite records whose stored version is current.
+	 */
+	public final void run(BootstrapProgress progress, QueryStoreService service, EmbeddingProvider embedder,
+	                      BootstrapProgressDao progressDao, boolean skipUnchanged) {
 		progress.setStatus(BootstrapStatus.RUNNING);
 		if (progress.getStartedAt() == null) {
 			progress.setStartedAt(Instant.now());
@@ -137,8 +151,10 @@ public abstract class TypeBootstrapper<T> {
 				// per-doc commit (MySQL per-row txn+fsync, Lucene segment-per-doc) that dominates backfill
 				// wall-clock — ADR Decision 3. The cursor is checkpointed per page, not per record; a crash
 				// mid-page re-does that page on resume, which the version-guarded upsert makes idempotent.
+				List<T> toProject = skipUnchanged ? withoutStoredAtCurrentVersion(page.entities, service)
+				        : page.entities;
 				progress.setDocumentsIndexed(progress.getDocumentsIndexed()
-				        + projectBatch(page.entities, service, embedder));
+				        + projectBatch(toProject, service, embedder));
 				progress.setCursorDateChanged(page.nextCursorDate);
 				progress.setCursorUuid(page.nextCursorUuid);
 				progressDao.save(progress);
@@ -157,6 +173,29 @@ public abstract class TypeBootstrapper<T> {
 			progressDao.save(progress);
 			throw e;
 		}
+	}
+
+	/** The entities whose stored version differs from their own, or that are not stored at all. */
+	private List<T> withoutStoredAtCurrentVersion(List<T> entities, QueryStoreService service) {
+		List<String> uuids = new ArrayList<String>(entities.size());
+		for (T entity : entities) {
+			String uuid = getUuid(entity);
+			if (uuid != null) {
+				uuids.add(uuid);
+			}
+		}
+		Map<String, Instant> stored = service.findStoredVersions(getResourceType(), uuids);
+		if (stored.isEmpty()) {
+			return entities;
+		}
+		List<T> changed = new ArrayList<T>(entities.size());
+		for (T entity : entities) {
+			Instant version = stored.get(getUuid(entity));
+			if (version == null || !version.equals(getDateChanged(entity))) {
+				changed.add(entity);
+			}
+		}
+		return changed;
 	}
 
 	/**

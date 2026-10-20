@@ -619,6 +619,30 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void bootstrapSkipsARecordStoredAtItsVersionAndResyncReprojectsIt() {
+		AtomicInteger writes = new AtomicInteger();
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				writes.incrementAndGet();
+				return org.openmrs.module.querystore.backend.WriteResult.success();
+			}
+
+			@Override
+			public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+				return Collections.singletonMap("obs-1", OneStoredRecordBootstrapper.VERSION);
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneStoredRecordBootstrapper()));
+
+		service.bootstrap("obs");
+		assertEquals("a top-up leaves a record stored at its version alone", 0, writes.get());
+
+		service.resyncType("obs");
+		assertEquals("a resync re-projects it", 1, writes.get());
+	}
+
+	@Test
 	public void ensureIndexed_iteratesEveryRegisteredType() {
 		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
 		EmptyPageBootstrapper enc = new EmptyPageBootstrapper("encounter");
@@ -1076,7 +1100,38 @@ public class BootstrapServiceImplTest {
 		@Override public TypeBootstrapper<?> getBootstrapper() { return bootstrapper; }
 	}
 
-	private static final class NullQueryStoreService implements QueryStoreService {
+	/** One obs record at a fixed version, on every scan. */
+	private static final class OneStoredRecordBootstrapper extends TypeBootstrapper<String> {
+		static final Instant VERSION = Instant.parse("2026-01-01T00:00:00Z");
+
+		@Override public String getResourceType() { return "obs"; }
+		@Override protected Instant getDateChanged(String e) { return VERSION; }
+		@Override protected String getUuid(String e) { return e; }
+
+		@Override
+		protected List<String> fetchPage(Instant afterDateChanged, String afterUuid, int pageSize) {
+			return afterUuid == null ? Collections.singletonList("obs-1") : Collections.<String> emptyList();
+		}
+
+		@Override
+		protected ClinicalRecordSerializer<String> getSerializer() {
+			return new ClinicalRecordSerializer<String>() {
+				@Override public String getResourceType() { return "obs"; }
+				@Override public Class<String> getSupportedType() { return String.class; }
+				@Override public QueryDocument serialize(String uuid) {
+					QueryDocument doc = new QueryDocument();
+					doc.setResourceType("obs");
+					doc.setResourceUuid(uuid);
+					doc.setPatientUuid("patient-uuid");
+					doc.setText("Weight: 70 kg");
+					doc.setLastModified(VERSION);
+					return doc;
+				}
+			};
+		}
+	}
+
+	private static class NullQueryStoreService implements QueryStoreService {
 		@Override
 		public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
 			return org.openmrs.module.querystore.backend.WriteResult.success();

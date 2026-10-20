@@ -326,7 +326,9 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				resetProgressForBackend(progress, currentBackend);
 				progressDao.save(progress);
 			}
-			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao);
+			// A resync re-projects on purpose, so only a plain bootstrap skips records the store
+			// already holds at their current version.
+			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao, !forceRestart);
 		}
 	}
 

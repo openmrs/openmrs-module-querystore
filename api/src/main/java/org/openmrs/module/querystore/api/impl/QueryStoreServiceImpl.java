@@ -9,6 +9,7 @@
  */
 package org.openmrs.module.querystore.api.impl;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -239,6 +240,21 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			return Collections.emptyList();
 		}
 		return runHybrid(query, limit, null);
+	}
+
+	@Override
+	public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+		if (backend == null || resourceUuids == null || resourceUuids.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		try {
+			return backend.findLastModified(resourceType, resourceUuids);
+		}
+		catch (RuntimeException e) {
+			// A failed lookup only costs the skip: the caller re-projects every record.
+			log.warn("Stored-version lookup failed for " + resourceType + "; re-projecting the page", e);
+			return Collections.emptyMap();
+		}
 	}
 
 	@Override
