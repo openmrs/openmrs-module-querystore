@@ -10,20 +10,26 @@
 package org.openmrs.module.querystore.sync;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Date;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.openmrs.CodedOrFreeText;
+import org.openmrs.Condition;
 import org.openmrs.Encounter;
 import org.openmrs.EncounterType;
 import org.openmrs.Patient;
 import org.openmrs.module.querystore.sync.SyncTestSupport.ImmediateDispatcher;
 import org.openmrs.module.querystore.sync.SyncTestSupport.RecordingService;
 import org.openmrs.module.querystore.sync.SyncTestSupport.ZeroEmbedder;
+import org.openmrs.module.querystore.model.QueryDocument;
+import org.openmrs.module.querystore.serialization.ConditionRecordSerializer;
 import org.openmrs.module.querystore.serialization.EncounterRecordSerializer;
 import org.openmrs.module.querystore.serialization.PatientRecordSerializer;
+import org.openmrs.module.querystore.util.DateFormatUtil;
 
 /**
  * Direct tests of the projection the events consumer drives (ADR Decision 12). Locks its behaviour
@@ -112,6 +118,66 @@ public class RecordProjectorTest {
 		pending.forEach(Runnable::run);
 
 		assertEquals(stamped.toInstant(), service.indexed.get(0).getLastModified());
+	}
+
+	@Test
+	public void project_indexesWhatTheSaveCommittedNotTheStateTheEventSaw() {
+		// The save event publishes before the save stamps dateCreated, and a condition's record_date
+		// is its dateCreated. Indexing the event-time serialization would store no record_date, and
+		// with the committed version stamped on it the restart top-up would never repair it.
+		Condition condition = new Condition();
+		condition.setUuid("cond-new");
+		CodedOrFreeText name = new CodedOrFreeText();
+		name.setNonCoded("Hypertension");
+		condition.setCondition(name);
+		Patient patient = new Patient();
+		patient.setUuid("patient-uuid");
+		condition.setPatient(patient);
+		java.util.List<Runnable> pending = new java.util.ArrayList<>();
+
+		RecordProjector.project(new ConditionRecordSerializer(), condition, false, indexer, deferred(pending));
+		Date stamped = new Date(1792479801789L);
+		condition.setDateCreated(stamped);
+		pending.forEach(Runnable::run);
+
+		QueryDocument indexed = service.indexed.get(0);
+		assertEquals(DateFormatUtil.toLocalDate(stamped), indexed.getDate());
+		assertEquals(stamped.toInstant(), indexed.getLastModified());
+	}
+
+	@Test
+	public void project_leavesTheVersionUnsetWhenTheCommittedRecordCannotBeSerialized() {
+		// The event-time content predates the save, so it must not carry the committed version:
+		// without one, the restart top-up rewrites the document from core instead of skipping it.
+		Encounter enc = encounter("enc-new", false);
+		java.util.List<Runnable> pending = new java.util.ArrayList<>();
+		EncounterRecordSerializer failsAfterCommit = new EncounterRecordSerializer() {
+			private int calls;
+
+			@Override
+			protected void populate(Encounter encounter, QueryDocument doc) {
+				if (++calls > 1) {
+					throw new IllegalStateException("lazy association outside its session");
+				}
+				super.populate(encounter, doc);
+			}
+		};
+
+		RecordProjector.project(failsAfterCommit, enc, false, indexer, deferred(pending));
+		enc.setDateCreated(new Date(1792479801789L));
+		pending.forEach(Runnable::run);
+
+		assertEquals(1, service.indexed.size());
+		assertNull(service.indexed.get(0).getLastModified());
+	}
+
+	private static AfterCommitDispatcher deferred(java.util.List<Runnable> pending) {
+		return new AfterCommitDispatcher(new SyncExecutor()) {
+			@Override
+			public void dispatch(Runnable task) {
+				pending.add(task);
+			}
+		};
 	}
 
 	private static Encounter encounter(String uuid, boolean voided) {

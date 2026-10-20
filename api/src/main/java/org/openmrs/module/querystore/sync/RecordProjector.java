@@ -16,7 +16,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.BaseOpenmrsData;
 import org.openmrs.module.querystore.model.QueryDocument;
-import org.openmrs.module.querystore.serialization.AbstractRecordSerializer;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 
 /**
@@ -38,8 +37,10 @@ import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
  * PurgeServiceEvent}; every other event passes {@code false} and lets the entity's own state decide.
  *
  * <p><b>Synchronous serialize, asynchronous write.</b> Serialization runs on the caller's thread
- * (inside the originating transaction, so lazy navigations resolve against an open session); the
- * embed + index/delete is handed to {@code dispatcher} to run after commit. Per-node failures inside
+ * (inside the originating transaction, so lazy navigations resolve against an open session and the
+ * associations the serializer reads are initialized); the embed + index/delete is handed to
+ * {@code dispatcher} to run after commit, which serializes the same nodes again so the write holds
+ * what the save committed (see {@link #committedDocument}). Per-node failures inside
  * the dispatched task are caught so one poison record cannot skip its siblings.
  */
 public final class RecordProjector {
@@ -47,6 +48,31 @@ public final class RecordProjector {
 	private static final Log log = LogFactory.getLog(RecordProjector.class);
 
 	private RecordProjector() {
+	}
+
+	/**
+	 * The document to write after commit. The save event publishes before the save stamps the audit
+	 * dates and runs its save handlers, so the event-time serialization holds pre-save content: a new
+	 * condition, diagnosis, allergy or patient has no {@code record_date}, and a new record has no
+	 * version. The saved node is the same instance and now holds what was committed, so it is
+	 * serialized again. If that fails (a lazy association outside its session), the event-time
+	 * document is written as it is, without a version stamped onto pre-save content, so the
+	 * bootstrap top-up does not skip it and rewrites it from core. Returns {@code null} when the
+	 * committed node has nothing to index or was voided since the event.
+	 */
+	static <T extends BaseOpenmrsData> QueryDocument committedDocument(ClinicalRecordSerializer<T> serializer,
+	        T node, QueryDocument eventTime) {
+		try {
+			if (Boolean.TRUE.equals(node.getVoided())) {
+				return null;
+			}
+			return serializer.serialize(node);
+		}
+		catch (RuntimeException e) {
+			log.debug("Could not serialize the committed " + serializer.getResourceType() + "/" + node.getUuid()
+			        + "; writing the event-time document without a version", e);
+			return eventTime;
+		}
 	}
 
 	public static <T extends BaseOpenmrsData> void project(ClinicalRecordSerializer<T> serializer, T root,
@@ -78,11 +104,9 @@ public final class RecordProjector {
 			// pathological text) must not skip its sibling members. The dispatcher's outer guard
 			// remains as a last-resort catch for anything that escapes here.
 			for (int i = 0; i < toIndex.size(); i++) {
-				QueryDocument doc = toIndex.get(i);
-				// The save event publishes before the save stamps the audit dates, so a new record
-				// serializes with no version. By now it has been committed, so read it off the node.
-				if (doc.getLastModified() == null) {
-					doc.setLastModified(AbstractRecordSerializer.lastModifiedOf(indexedNodes.get(i)));
+				QueryDocument doc = committedDocument(serializer, indexedNodes.get(i), toIndex.get(i));
+				if (doc == null) {
+					continue;
 				}
 				try {
 					indexer.index(doc);
