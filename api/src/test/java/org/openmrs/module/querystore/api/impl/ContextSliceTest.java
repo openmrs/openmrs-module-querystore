@@ -250,7 +250,8 @@ public class ContextSliceTest {
 		QueryDocument identified = doc("visit", "11111111-1111-4111-8111-111111111111",
 		        "Visit: historical review", LocalDate.of(2022, 2, 2));
 		QueryDocument coded = doc("obs", "coded-1", "Laboratory result", LocalDate.of(2022, 1, 1));
-		coded.putMetadata(QueryStoreConstants.FIELD_MAPPING_NAMES,
+		// As ConceptNameUtil.getMappingCodes writes it for a concept mapped to CIEL 12345.
+		coded.putMetadata(QueryStoreConstants.FIELD_MAPPING_CODES,
 		        Collections.singletonList("CIEL:12345"));
 		backend.chart.add(identified);
 		backend.chart.add(coded);

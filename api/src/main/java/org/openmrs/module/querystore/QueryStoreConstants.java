@@ -61,6 +61,7 @@ public final class QueryStoreConstants {
 	public static final String FIELD_SYNONYMS = "synonyms";
 	public static final String FIELD_DESCRIPTION = "description";
 	public static final String FIELD_MAPPING_NAMES = "mapping_names";
+	public static final String FIELD_MAPPING_CODES = "mapping_codes";
 
 	/**
 	 * BM25 query-time boost applied to the description field across all backends. Less than 1.0
