@@ -39,6 +39,9 @@ import org.openmrs.module.querystore.bootstrap.BootstrapProgress;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatus;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.openmrs.api.context.Context;
+import org.openmrs.api.context.UserContext;
+import org.openmrs.util.PrivilegeConstants;
 
 public class QueryStoreServiceImplTest {
 
@@ -160,6 +163,91 @@ public class QueryStoreServiceImplTest {
 		// A backend (or test double) that doesn't implement countByType degrades to -1 ("unknown"), so
 		// drift detection reports "not computable" for that tier rather than a false zero.
 		assertEquals(-1L, new FakeBackendStore(false).countByType("obs"));
+	}
+
+	/**
+	 * Decision 14 point 4: no record a core API would refuse. A caller holding Get Patients but not a
+	 * type's own read privilege is refused that type's records by core, so the read path omits them,
+	 * on the full chart and on ranked and cross-patient search alike.
+	 */
+	@Test
+	public void getPatientChartRead_omitsRecordsOfATypeTheCallerCannotReadThroughCore() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Arrays.asList(doc("obs", "obs-1"), doc("condition", "cond-1"),
+		        doc("patient", "patient-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> chart = asCallerWithout(PrivilegeConstants.GET_OBS,
+		        () -> service.getPatientChartRead("patient-uuid").getDocuments());
+
+		assertEquals(Arrays.asList("cond-1", "patient-1"), uuids(chart));
+	}
+
+	@Test
+	public void searchByPatient_omitsRankedRecordsOfATypeTheCallerCannotReadThroughCore() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.hybridReturn = hits(doc("obs", "obs-1"), doc("condition", "cond-1"), doc("drug_order", "order-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> ranked = asCallerWithout(PrivilegeConstants.GET_CONDITIONS,
+		        () -> service.searchByPatient("patient-uuid", "blood pressure", 10));
+
+		assertEquals(Arrays.asList("obs-1", "order-1"), uuids(ranked));
+	}
+
+	@Test
+	public void search_acrossPatientsOmitsRecordsOfATypeTheCallerCannotReadThroughCore() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.hybridReturn = hits(doc("obs", "obs-1"), doc("encounter", "enc-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> found = asCallerWithout(PrivilegeConstants.GET_ENCOUNTERS,
+		        () -> service.search("blood pressure", 10));
+
+		assertEquals(Collections.singletonList("obs-1"), uuids(found));
+	}
+
+	@Test
+	public void aCallerHoldingEveryTypesPrivilegeReadsEveryRecord() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Arrays.asList(doc("obs", "obs-1"), doc("appointments_appointment", "appt-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> chart = asCallerWithout("No Such Privilege",
+		        () -> service.getPatientChartRead("patient-uuid").getDocuments());
+
+		assertEquals(Arrays.asList("obs-1", "appt-1"), uuids(chart));
+	}
+
+	private static <T> T asCallerWithout(String deniedPrivilege, java.util.function.Supplier<T> read) {
+		Context.setUserContext(new UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !deniedPrivilege.equals(privilege);
+			}
+		});
+		try {
+			return read.get();
+		}
+		finally {
+			Context.clearUserContext();
+		}
+	}
+
+	private static SearchResult hits(QueryDocument... docs) {
+		List<org.openmrs.module.querystore.backend.Hit> hits = new java.util.ArrayList<>();
+		for (int i = 0; i < docs.length; i++) {
+			hits.add(new org.openmrs.module.querystore.backend.Hit(docs[i], 1.0 - i * 0.1, i + 1));
+		}
+		return new SearchResult(hits);
+	}
+
+	private static List<String> uuids(List<QueryDocument> docs) {
+		List<String> uuids = new java.util.ArrayList<>();
+		for (QueryDocument d : docs) {
+			uuids.add(d.getResourceUuid());
+		}
+		return uuids;
 	}
 
 	private static QueryDocument doc(String resourceType, String resourceUuid) {
@@ -640,7 +728,8 @@ public class QueryStoreServiceImplTest {
 		}
 		@Override public SearchResult bm25(SearchRequest req) { bm25Count.incrementAndGet(); return SearchResult.empty(); }
 		@Override public SearchResult knn(SearchRequest req) { knnCount.incrementAndGet(); return SearchResult.empty(); }
-		@Override public SearchResult hybrid(SearchRequest req) { hybridCount.incrementAndGet(); return SearchResult.empty(); }
+		SearchResult hybridReturn = SearchResult.empty();
+		@Override public SearchResult hybrid(SearchRequest req) { hybridCount.incrementAndGet(); return hybridReturn; }
 		// Non-null capabilities even though this fake currently overrides hybrid(): the
 		// BackendStore.hybrid default-method (post-Decision-3 SPI reshape) dereferences
 		// capabilities().supportsKnn(), so a future test that forgets to override hybrid()

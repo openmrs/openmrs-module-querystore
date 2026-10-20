@@ -11,6 +11,7 @@ package org.openmrs.module.querystore.api.impl;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,7 @@ import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.openmrs.util.PrivilegeConstants;
 
 /**
  * Default {@link QueryStoreService}. Delegates writes and search to the configured
@@ -183,7 +185,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (!backend.existsByPatient(patientUuid)) {
 			ensureIndexedSafely(patientUuid);
 		}
-		List<QueryDocument> hits = runHybrid(query, limit, Filter.patientScope(patientUuid));
+		List<QueryDocument> hits = readableByCaller(runHybrid(query, limit, Filter.patientScope(patientUuid)));
 		emitRetrievalLog(query, hits);
 		return hits;
 	}
@@ -259,7 +261,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (backend == null) {
 			return Collections.emptyList();
 		}
-		return runHybrid(query, limit, null);
+		return readableByCaller(runHybrid(query, limit, null));
 	}
 
 	@Override
@@ -292,8 +294,62 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			coldTouchFailed = !ensureIndexedSafely(patientUuid);
 		}
 		PatientChartRead chartRead = backend.findPatientChart(patientUuid);
-		return new PatientChartRead(chartRead.getDocuments(), chartRead.isTruncated() || coldTouchFailed,
-		        isProjectionComplete());
+		return new PatientChartRead(readableByCaller(chartRead.getDocuments()),
+		        chartRead.isTruncated() || coldTouchFailed, isProjectionComplete());
+	}
+
+	/**
+	 * The read privilege core's own {@code get<Type>ByUuid} is {@code @Authorized} with, per core
+	 * resource type (verified against openmrs-api 2.9). A caller holding Get Patients but not one of
+	 * these is refused that type's records by core, so Decision 14 point 4 refuses them here too.
+	 * A module-contributed type has no core privilege and stays behind the Get Patients gate alone.
+	 */
+	static final Map<String, String> CORE_READ_PRIVILEGES;
+
+	static {
+		Map<String, String> privileges = new HashMap<String, String>();
+		privileges.put("patient", PrivilegeConstants.GET_PATIENTS);
+		privileges.put("obs", PrivilegeConstants.GET_OBS);
+		privileges.put("encounter", PrivilegeConstants.GET_ENCOUNTERS);
+		privileges.put("visit", PrivilegeConstants.GET_VISITS);
+		privileges.put("condition", PrivilegeConstants.GET_CONDITIONS);
+		privileges.put("diagnosis", PrivilegeConstants.GET_DIAGNOSES);
+		privileges.put("allergy", PrivilegeConstants.GET_ALLERGIES);
+		privileges.put("drug_order", PrivilegeConstants.GET_ORDERS);
+		privileges.put("test_order", PrivilegeConstants.GET_ORDERS);
+		privileges.put("referral_order", PrivilegeConstants.GET_ORDERS);
+		privileges.put("program", PrivilegeConstants.GET_PATIENT_PROGRAMS);
+		privileges.put("medication_dispense", PrivilegeConstants.GET_MEDICATION_DISPENSE);
+		CORE_READ_PRIVILEGES = Collections.unmodifiableMap(privileges);
+	}
+
+	/**
+	 * The documents whose type the calling user may read through core. With no user context bound
+	 * there is no caller to check, and nothing reaches one: a call through the service proxy is refused
+	 * by its {@code @Authorized} gate before it gets here. Each type's privilege is asked once per read.
+	 */
+	private List<QueryDocument> readableByCaller(List<QueryDocument> documents) {
+		if (documents.isEmpty() || !Context.isSessionOpen()) {
+			return documents;
+		}
+		Map<String, Boolean> readable = new HashMap<String, Boolean>();
+		List<QueryDocument> kept = new ArrayList<QueryDocument>(documents.size());
+		for (QueryDocument document : documents) {
+			String privilege = document == null ? null : CORE_READ_PRIVILEGES.get(document.getResourceType());
+			if (privilege == null) {
+				kept.add(document);
+				continue;
+			}
+			Boolean mayRead = readable.get(privilege);
+			if (mayRead == null) {
+				mayRead = Context.hasPrivilege(privilege);
+				readable.put(privilege, mayRead);
+			}
+			if (mayRead) {
+				kept.add(document);
+			}
+		}
+		return kept.size() == documents.size() ? documents : kept;
 	}
 
 	private List<QueryDocument> runHybrid(String query, int limit, Filter scope) {

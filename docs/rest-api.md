@@ -30,7 +30,11 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 | `patient=<uuid>&q=<text>` | `searchByPatient(patient, q, k)` | Ranked patient results |
 | `q=<text>` | `search(q, k)` | Ranked cross-patient results |
 
-- **Privilege:** `Get Patients`.
+- **Privilege:** `Get Patients`. Records of a type the caller cannot read through core are
+  omitted: obs need `Get Observations`, conditions `Get Conditions`, orders `Get Orders`, and so
+  on for each core type ([ADR Decision 14](adr.md#decision-14-authorization-and-consumer-api-surface)).
+  The full chart's `totalCount` counts the records returned, and a ranked read can return fewer
+  than `limit`.
 - **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`. A `limit` above the
   configured absolute maximum (`webservices.rest.maxResultsAbsolute`, default `100`) is clamped
   to that maximum silently, where framework-backed resources reject it; the response's `links`
