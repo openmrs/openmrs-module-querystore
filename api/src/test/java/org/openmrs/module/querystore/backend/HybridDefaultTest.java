@@ -84,6 +84,27 @@ public class HybridDefaultTest {
 		assertEquals("A", result.getHits().get(0).getDocument().getResourceUuid());
 	}
 
+	@Test
+	public void hybrid_overfetchesCandidateWindowBeforeRrfTruncation() {
+		// When limit=1, pre-truncating bm25 and knn to 1 before RRF would never see rank-2
+		// candidates that appear in both legs. Over-fetching candidate pools (max(limit * 3, 30))
+		// lets RRF fuse the deeper pools before slicing to req.getLimit().
+		QueryDocument a = doc("A");
+		QueryDocument b = doc("B");
+		QueryDocument c = doc("C");
+		StubBackend backend = new StubBackend(
+		    new SearchResult(Arrays.asList(new Hit(a, 0, 1), new Hit(c, 0, 2))),
+		    new SearchResult(Arrays.asList(new Hit(b, 0, 1), new Hit(c, 0, 2))));
+
+		SearchResult fused = backend.hybrid(SearchRequest.builder()
+		    .queryText("q").queryVector(new float[] { 0.1f, 0.2f }).limit(2).build());
+
+		assertEquals(30, backend.lastBm25Limit);
+		assertEquals(30, backend.lastKnnLimit);
+		assertEquals(2, fused.getHits().size());
+		assertEquals("C", fused.getHits().get(0).getDocument().getResourceUuid());
+	}
+
 	private static QueryDocument doc(String uuid) {
 		QueryDocument d = new QueryDocument();
 		d.setResourceUuid(uuid);
@@ -93,6 +114,8 @@ public class HybridDefaultTest {
 	private static final class StubBackend implements BackendStore {
 		final AtomicBoolean bm25Called = new AtomicBoolean();
 		final AtomicBoolean knnCalled = new AtomicBoolean();
+		int lastBm25Limit = -1;
+		int lastKnnLimit = -1;
 		boolean supportsKnn = true;
 		private final SearchResult bm25Result;
 		private final SearchResult knnResult;
@@ -102,8 +125,8 @@ public class HybridDefaultTest {
 			this.knnResult = knnResult;
 		}
 
-		@Override public SearchResult bm25(SearchRequest req) { bm25Called.set(true); return bm25Result; }
-		@Override public SearchResult knn(SearchRequest req) { knnCalled.set(true); return knnResult; }
+		@Override public SearchResult bm25(SearchRequest req) { bm25Called.set(true); lastBm25Limit = req.getLimit(); return bm25Result; }
+		@Override public SearchResult knn(SearchRequest req) { knnCalled.set(true); lastKnnLimit = req.getLimit(); return knnResult; }
 
 		@Override public void ensureSchema(String resourceType, SchemaSpec spec) { }
 		@Override public void deleteSchema(String resourceType) { }

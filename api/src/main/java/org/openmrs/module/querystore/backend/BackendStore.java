@@ -173,11 +173,14 @@ public interface BackendStore {
 	 * need to override {@code hybrid} or implement {@code knn}; it returns BM25 alone.
 	 */
 	default SearchResult hybrid(SearchRequest req) {
-		SearchResult bm25 = bm25(req);
 		if (req.getQueryVector() == null || !capabilities().supportsKnn()) {
-			return bm25;
+			return bm25(req);
 		}
-		SearchResult knn = knn(req);
+		SearchRequest candidateReq = req.getLimit() > 0
+		        ? req.withLimit(Math.max(req.getLimit() * 3, 30))
+		        : req;
+		SearchResult bm25 = bm25(candidateReq);
+		SearchResult knn = knn(candidateReq);
 		return RankFusion.rrf(bm25, knn, req.getLimit());
 	}
 
