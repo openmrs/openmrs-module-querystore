@@ -287,7 +287,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
-		if (resourceUuids.isEmpty() || !hasIndex(resourceType)) {
+		if (resourceUuids.isEmpty() || !schemaManager.hasIndex(resourceType)) {
 			return Collections.emptyMap();
 		}
 		IndexWriter writer = schemaManager.ensureWriter(resourceType);
@@ -306,15 +306,6 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			return Collections.emptyMap();
 		}
 		return found;
-	}
-
-	private boolean hasIndex(String resourceType) {
-		for (String indexName : allIndexNames()) {
-			if (resourceType.equals(BackendDocs.stripPrefix(indexName))) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	@Override

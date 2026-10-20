@@ -779,6 +779,17 @@ public class LuceneBackendStoreTest {
 		        backend.findLastModified("encounter", java.util.Collections.singletonList("x")).isEmpty());
 	}
 
+	/** The bootstrap asks once per page whether a type has an index; the answer must not enumerate
+	 *  the index root or open a writer for every type on disk, as the wildcard enumerator does. */
+	@Test
+	public void hasIndex_answersForOneTypeWithoutOpeningAnyIndex() {
+		try (LuceneSchemaManager inherited = new LuceneSchemaManager(indexRoot)) {
+			assertTrue("an index a previous session wrote counts", inherited.hasIndex("obs"));
+			assertFalse(inherited.hasIndex("encounter"));
+			assertTrue("no writer was opened", inherited.knownIndexNames().isEmpty());
+		}
+	}
+
 	private static QueryDocument doc(String resourceType, String patientUuid, String text, float[] embedding) {
 		QueryDocument d = new QueryDocument();
 		d.setResourceType(resourceType);
