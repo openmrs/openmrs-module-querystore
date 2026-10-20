@@ -474,38 +474,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			temporal = temporal || interpreted.temporal;
 		}
 
-
-		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (lab-panel
-		// expansion only) runs HERE, at the owner of the embedder — idempotent for callers that
-		// already expand panels. A failure degrades to the policy tiers alone —
-		// selection must never block on the ranking layer.
-		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
-		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
-			try {
-				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
-				// The chart read above already ran any cold touch; a failed one is not run twice.
-				for (QueryDocument hit : rankedPatientSearch(patientUuid, retrievalQuestion,
-				        request.getSimilarityLimit())) {
-					if (hit != null && hit.getResourceUuid() != null
-					        && !similarityRanks.containsKey(hit.getResourceUuid())) {
-						similarityRanks.put(hit.getResourceUuid(),
-						        Integer.valueOf(similarityRanks.size() + 1));
-					}
-				}
-			}
-			catch (RuntimeException e) {
-				log.warn("Context-slice ranked search failed for patient " + patientUuid
-				        + " — proceeding with policy tiers only", e);
-			}
-		}
-
 		int anchor = temporal ? request.getRecencyAnchorSize() : 0;
 		Set<String> exactSignals = exactSignals(question);
-		List<ContextSliceRecord> selected = new ArrayList<>();
-		Set<String> selectedUuids = new HashSet<>();
+		Map<String, String> policyTiers = new LinkedHashMap<>();
 		for (int i = 0; i < chart.size(); i++) {
 			QueryDocument doc = chart.get(i);
-			if (doc == null || doc.getResourceUuid() == null) {
+			if (doc == null || doc.getResourceUuid() == null || policyTiers.containsKey(doc.getResourceUuid())) {
 				continue;
 			}
 			String tier = null;
@@ -517,7 +491,43 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 				tier = QueryStoreConstants.TIER_TYPED;
 			} else if (i < anchor) {
 				tier = QueryStoreConstants.TIER_RECENCY_ANCHOR;
-			} else if (similarityRanks.containsKey(doc.getResourceUuid())) {
+			}
+			if (tier != null) {
+				policyTiers.put(doc.getResourceUuid(), tier);
+			}
+		}
+
+		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (lab-panel
+		// expansion only) runs HERE, at the owner of the embedder — idempotent for callers that
+		// already expand panels. A failure degrades to the policy tiers alone —
+		// selection must never block on the ranking layer. Over-fetch candidates so records
+		// already claimed by higher-priority policy tiers and repeated longitudinal observations
+		// of the same concept do not starve distinct concepts of similarity slots.
+		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
+		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
+			try {
+				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
+				int candidateLimit = Math.max(request.getSimilarityLimit() * 3, 36);
+				// The chart read above already ran any cold touch; a failed one is not run twice.
+				List<QueryDocument> hits = rankedPatientSearch(patientUuid, retrievalQuestion, candidateLimit);
+				similarityRanks = selectDiversifiedSimilarityRanks(
+				        hits, policyTiers.keySet(), request.getSimilarityLimit());
+			}
+			catch (RuntimeException e) {
+				log.warn("Context-slice ranked search failed for patient " + patientUuid
+				        + " — proceeding with policy tiers only", e);
+			}
+		}
+
+		List<ContextSliceRecord> selected = new ArrayList<>();
+		Set<String> selectedUuids = new HashSet<>();
+		for (int i = 0; i < chart.size(); i++) {
+			QueryDocument doc = chart.get(i);
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			String tier = policyTiers.get(doc.getResourceUuid());
+			if (tier == null && similarityRanks.containsKey(doc.getResourceUuid())) {
 				tier = QueryStoreConstants.TIER_SIMILARITY;
 			}
 			if (tier != null && selectedUuids.add(doc.getResourceUuid())) {
@@ -532,6 +542,56 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		        chartRead.isProjectionComplete(), effectiveTypes, temporal,
 		        PatientChartFingerprint.snapshotId(chart, chartRead.isTruncated(),
 		                chartRead.isProjectionComplete()));
+	}
+
+	private static Map<String, Integer> selectDiversifiedSimilarityRanks(List<QueryDocument> hits,
+	        Set<String> policyClaimedUuids, int limit) {
+		Map<String, List<String>> buckets = new LinkedHashMap<>();
+		Set<String> seenUuids = new HashSet<>(policyClaimedUuids);
+		for (QueryDocument hit : hits) {
+			if (hit == null || hit.getResourceUuid() == null || !seenUuids.add(hit.getResourceUuid())) {
+				continue;
+			}
+			String key = conceptKey(hit);
+			List<String> bucket = buckets.get(key);
+			if (bucket == null) {
+				bucket = new ArrayList<>();
+				buckets.put(key, bucket);
+			}
+			bucket.add(hit.getResourceUuid());
+		}
+		Map<String, Integer> ranks = new LinkedHashMap<>();
+		int depth = 0;
+		boolean addedInPass = true;
+		while (ranks.size() < limit && addedInPass) {
+			addedInPass = false;
+			for (List<String> bucket : buckets.values()) {
+				if (depth < bucket.size()) {
+					ranks.put(bucket.get(depth), Integer.valueOf(ranks.size() + 1));
+					addedInPass = true;
+					if (ranks.size() >= limit) {
+						break;
+					}
+				}
+			}
+			depth++;
+		}
+		return ranks;
+	}
+
+	private static String conceptKey(QueryDocument doc) {
+		Object conceptUuid = doc.getMetadata().get(QueryStoreConstants.FIELD_CONCEPT_UUID);
+		if (conceptUuid != null) {
+			String key = conceptUuid.toString().trim();
+			if (!key.isEmpty()) {
+				Object valueCodedUuid = doc.getMetadata().get(QueryStoreConstants.FIELD_VALUE_CODED_UUID);
+				if (valueCodedUuid != null && !valueCodedUuid.toString().trim().isEmpty()) {
+					return "concept:" + key + ":coded:" + valueCodedUuid.toString().trim();
+				}
+				return "concept:" + key;
+			}
+		}
+		return "resource:" + doc.getResourceUuid();
 	}
 
 	private static Set<String> exactSignals(String question) {

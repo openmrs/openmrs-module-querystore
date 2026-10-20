@@ -637,6 +637,43 @@ public class ContextSliceTest {
 		assertEquals("Does have any kidney problems?", backend.lastQueryText);
 	}
 
+	@Test
+	public void similarityLeg_diversifiesRepeatedConceptsAndSkipsPolicyClaimedRecords() {
+		// Longitudinal repeats of a single concept (e.g. Pregnancy status: No x 3) and records
+		// already claimed by higher-priority policy tiers must not crowd out distinct concepts
+		// (e.g. Serum creatinine) from the similarity budget.
+		QueryDocument preg1 = doc("obs", "preg-1", "Pregnancy status: No", LocalDate.of(2026, 6, 1));
+		preg1.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		preg1.putMetadata(QueryStoreConstants.FIELD_VALUE_CODED_UUID, "coded-no");
+		QueryDocument preg2 = doc("obs", "preg-2", "Pregnancy status: No", LocalDate.of(2026, 5, 1));
+		preg2.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		preg2.putMetadata(QueryStoreConstants.FIELD_VALUE_CODED_UUID, "coded-no");
+		QueryDocument preg3 = doc("obs", "preg-3", "Pregnancy status: No", LocalDate.of(2026, 4, 1));
+		preg3.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		preg3.putMetadata(QueryStoreConstants.FIELD_VALUE_CODED_UUID, "coded-no");
+		QueryDocument creat = doc("obs", "creat-1", "Serum creatinine (umol/L): 193.7 umol/L",
+		        LocalDate.of(2026, 3, 1));
+		creat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+
+		backend.chart.addAll(Arrays.asList(preg1, preg2, preg3, creat));
+		// Ranked hits: mandatory record first (already claimed by mandatory tier), then 3
+		// repeats of pregnancy status, then serum creatinine. With similarityLimit=2,
+		// mandatory is skipped, preg-1 takes rank 1, and creat-1 takes rank 2 ahead of preg-2/3.
+		backend.hits = Arrays.asList(backend.chart.get(0), preg1, preg2, preg3, creat);
+
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(2);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "Does the patient have any kidney issues?", request);
+
+		Map<String, String> tiers = tiersByUuid(slice);
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("preg-1"));
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-1"),
+		        "distinct concept must not be starved by repeated longitudinal observations; got " + tiers);
+		assertFalse(tiers.containsKey("preg-2"));
+		assertFalse(tiers.containsKey("preg-3"));
+	}
+
 	/** Scripted backend: canned chart + canned similarity hits, everything else inert. */
 	private static final class FakeBackendStore implements BackendStore {
 
