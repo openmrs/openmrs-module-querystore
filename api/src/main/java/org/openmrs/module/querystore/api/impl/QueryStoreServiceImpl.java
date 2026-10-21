@@ -520,9 +520,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		effectiveTypes.removeAll(withheldTypes);
 
 
-		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (lab-panel
-		// expansion only) runs HERE, at the owner of the embedder — idempotent for callers that
-		// already expand panels. A failure degrades to the policy tiers alone —
+		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (the patient
+		// left out, lab panels expanded; Decision 18) runs HERE on every slice, interpretation or
+		// not, at the owner of the embedder — idempotent for callers that already expand panels. A
+		// failure degrades to the policy tiers alone —
 		// selection must never block on the ranking layer.
 		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
 		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {

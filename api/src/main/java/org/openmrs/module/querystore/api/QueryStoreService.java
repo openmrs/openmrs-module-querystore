@@ -200,8 +200,9 @@ public interface QueryStoreService extends OpenmrsService {
 	 * once under its highest tier.
 	 *
 	 * <p>When {@link ContextSliceRequest#isInterpretQuestion()} is enabled, QueryStore derives
-	 * typed scope, temporal intent, and retrieval preprocessing from the raw question and unions
-	 * them with the caller's explicit additions (ADR Decision 18). Prompt composition and token
+	 * typed scope and temporal intent from the raw question and unions them with the caller's
+	 * explicit additions. Either way, the similarity leg searches the question with the patient
+	 * left out and lab panels expanded (ADR Decision 18). Prompt composition and token
 	 * budgeting stay in the consumer; {@code mandatory}, {@code exact}, {@code typed}, and
 	 * {@code panel} records are protected there. A ranked-search
 	 * failure or blank question degrades to the policy tiers alone; cold-patient lazy bootstrap
