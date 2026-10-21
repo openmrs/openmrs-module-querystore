@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.6.0
+version: 0.7.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -59,7 +59,8 @@ declined and why; and the rounds or cycles each cost.
 
 `python3 <this dir>/skill-lint.py [roots…]` — defaults to `~/.claude/skills`. It checks only what a
 script can decide: a count stated over a list of a different length, a state field documented but read
-by no gate script, missing frontmatter, and a SKILL.md, or a role file beside one (any other top-level
+by no gate script, missing frontmatter, a `$` followed by a digit in a SKILL.md, which the Skill tool
+replaces with an argument, and a SKILL.md, or a role file beside one (any other top-level
 `*.md` but `evidence.md`), whose word count differs from its budget in
 `<this dir>/skill-budgets.json`, or that has none. Exit 1 if it reports anything, 2 if it found no
 skill to check. With `--against <ref>`, run from the source repo, it also fails a budget that rose since
@@ -181,7 +182,7 @@ or PR `PRS` lists moves under `confidential/` first, and its copy in the repo, i
 one, goes with `git rm -f`; say in the report that the repo's history still holds that copy. Before `git commit -F <message-file>`, with the message already in that file,
 this lists what the message and the staged diff, deletions left out, name of one — no output, or `awk`'s *can't open file*, for an empty or missing `PRS`, which the test
 skips because this shell's `grep` reads an empty pattern list as matching everything:
-`[ -n "$(awk NF ~/.claude/skill-lessons/confidential/PRS)" ] && { cat <message-file>; git diff --cached --diff-filter=d; } | grep -anwiF -f <(awk 'NF {print $2; split($1, p, "/"); print "pull/" p[7]; print "pulls/" p[7]; print "#" p[7]; print "PR " p[7]; print p[5] "#" p[7]; s = p[5]; sub(/^openmrs-(module-)?/, "", s); print s "#" p[7]; print "pr" p[7]; print "pr-" p[7]}' ~/.claude/skill-lessons/confidential/PRS)`
+`[ -n "$(awk NF ~/.claude/skill-lessons/confidential/PRS)" ] && { cat <message-file>; git diff --cached --diff-filter=d; } | grep -anwiF -f <(awk 'NF {print $NF; split($(NF-1), p, "/"); print "pull/" p[7]; print "pulls/" p[7]; print "#" p[7]; print "PR " p[7]; print p[5] "#" p[7]; s = p[5]; sub(/^openmrs-(module-)?/, "", s); print s "#" p[7]; print "pr" p[7]; print "pr-" p[7]}' ~/.claude/skill-lessons/confidential/PRS)`
 — `awk` spelling each PR the ways records name one. Resolve every line it prints, a hit's record
 being the nearest `diff --git` line above it, and a hit with none above it the message's; one naming another repository's issue or PR
 of the same number neither moves a record nor blocks the commit.

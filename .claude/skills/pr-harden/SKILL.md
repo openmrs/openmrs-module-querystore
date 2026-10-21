@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.40.0
+version: 0.40.1
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -60,7 +60,7 @@ Refuse the run, with the reason, if any of these fails:
 
 - **Note whether the PR is private**: a key printed means private, and no output, or `awk`'s
   *can't open file*, a public PR; a `gh` failure is a lookup to retry, never a public PR.
-  `u=$(gh pr view <n> --json url -q .url) && awk -v u="$u" '$1 == u {print $2}' ~/.claude/skill-lessons/confidential/PRS`
+  `u=$(gh pr view <n> --json url -q .url) && awk -v u="$u" '$(NF-1) == u {print $NF}' ~/.claude/skill-lessons/confidential/PRS`
   A PR the user says is a private ticket's, or whose title or branch carries a key that only
   `getJiraIssue` reads (`resolve-ticket` Step 1), is private too: record its pairing (*A private
   ticket's PR*) before any other guard here can refuse the run. A private PR that is not a draft

@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.43.1
+version: 0.43.2
 ---
 
 # Harden
@@ -410,7 +410,7 @@ After stopping, summarize:
   stop relying on noticing:**
 
   ```sh
-  git diff -U1 <base>..HEAD -- '*.java' | awk '/^\+\+\+ /{f=substr($0,7); p=""; next} /^ /{p=$0; next} /^\+/{if (p ~ /\*\/[ \t]*$/) print f; p=""; next} {p=""}'
+  git diff -U1 <base>..HEAD -- '*.java' | awk '/^\+\+\+ /{f=substr($(NF-NF),7); p=""; next} /^ /{p=$(NF-NF); next} /^\+/{if (p ~ /\*\/[ \t]*$/) print f; p=""; next} {p=""}'
   ```
 
   It names every file where an insertion landed directly below a doc comment's `*/`. Give it a

@@ -3,9 +3,9 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2532,
-      "to": 2806,
-      "why": "Step 1 draws nothing from ~/.claude/skill-lessons/confidential/ but its PRS, read only so that no public proposal, commit or file names a key, PR or session path it lists, and Step 6's mirror leaves the directory out, moves a top-level record naming a listed key or PR into it, and before the commit greps the staged diff for every listed key and URL, because it holds the records of runs on private tickets and the mirror publishes into a public repo; the staged-diff grep spells each listed PR the ways records name one and skips an empty PRS; the guard lists rather than counts, reads the commit message too, spells a PR as its pr- and pull/ refs as well, lets another repository's same number pass, and Step 1 brings nothing down whose name confidential/ holds; the commit message is checked from the file it is committed with, so nothing in it runs, and the guard also spells pulls/<n> and a short repo#<n>; a moved record's repo copy goes with git rm, the guard runs before git commit -F, and a hit names its record by the nearest +++ b/ line; the guard reads the message first and the staged diff without deletions, so a moved record's git rm -f does not list itself, and the report says the repo's history still holds a moved copy"
+      "from": 2806,
+      "to": 2823,
+      "why": "Step 2 names the linter's new check, a `$` followed by a digit in a SKILL.md, which the Skill tool replaces with an argument when the skill loads: on 2026-10-21 harden's awk `$0` loaded as the first argument word, and a `{print $1}` in resolve-ticket's PRS lookup loaded as `{print --plan-only}`, so the five awk programs now use $NF, $(NF-1) and $(NF-NF)"
     },
     "pr-harden": {
       "from": 9535,
@@ -60,7 +60,7 @@
     "pr-review/posting.md": 2030,
     "resolve-ticket": 7709,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2806,
+    "skill-retro": 2823,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1859,
     "ticket-pool/pausing.md": 1612,

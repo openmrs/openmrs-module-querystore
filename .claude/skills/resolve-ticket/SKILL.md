@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready (a private ticket's stays a draft). Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.27.0
+version: 0.27.1
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -197,7 +197,7 @@ proceeds.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs
-`awk -v k=<KEY> '$2 == k {print $1}' ~/.claude/skill-lessons/confidential/PRS` prints, counting one
+`awk -v k=<KEY> '$NF == k {print $(NF-1)}' ~/.claude/skill-lessons/confidential/PRS` prints, counting one
 only if it is in this repository and `gh pr view <url> --json state -q .state` calls it `OPEN`. If a PR exists, this is
 the wrong entry point — run `pr-harden <that PR>` on it instead, and say so; for a private ticket,
 record that PR's pairing first, unless the lookup already prints it, as `pr-harden`'s *A private

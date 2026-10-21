@@ -95,6 +95,19 @@ def state_fields_vs_gate(skill_dir, text):
     return [(0, f'state field "{f}" is documented but no gate script reads it')
             for f in sorted(fields - ignore) if f and f'.{f}' not in blob]
 
+def positional_args(text):
+    """A `$` followed by a digit in a SKILL.md, which the Skill tool replaces before a run reads it.
+
+    Claude Code substitutes `$0`, `$1`, ... in a skill's body with the arguments it was invoked with,
+    counting from `$0`. Measured 2026-10-21: harden's `awk '... substr($0,7) ...'` loaded as
+    `substr(the,7)` for a run whose arguments began "the", and a `{print $1}` loaded as
+    `{print --plan-only}` for one invoked with two arguments, while `$(...)` and `$PPID` loaded intact.
+    So an awk field, a shell positional or any other `$<digit>` there is a different program at load
+    time: write awk fields as `$NF`, `$(NF-1)`, and `$(NF-NF)` for the whole line. Role files are read,
+    not loaded, so only SKILL.md is checked."""
+    return [(i + 1, f"`{m.group(0)}` is replaced by the skill's argument when it loads; write awk fields as $NF or $(NF-1)")
+            for i, line in enumerate(text.split("\n")) for m in re.finditer(r"\$\d", line)]
+
 def frontmatter(text, path):
     out = []
     if not text.startswith("---"):
@@ -237,7 +250,7 @@ def main(argv):
         for md in sorted(root.glob("*/SKILL.md")) or single:
             checked += 1
             text = md.read_text()
-            got = (frontmatter(text, md) + stated_counts(text)
+            got = (frontmatter(text, md) + stated_counts(text) + positional_args(text)
                    + state_fields_vs_gate(md.parent, text)
                    + size_budget(md.resolve().parent.name, text, budgets, why_none))
             if got:

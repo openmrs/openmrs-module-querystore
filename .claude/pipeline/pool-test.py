@@ -1384,6 +1384,17 @@ def test_a_retro_that_raises_a_budget_unrecorded_is_a_problem(tmp: Path) -> None
     got = pool.lint_problems(src, before)
     check("lint ratchet: a SKILL.md over its budget still fails, as it did before",
           any("over its budget" in q for q in got), str(got))
+    # A `$<digit>` in a skill's body is replaced by the skill's argument when it loads, so the
+    # linter flags one; the raise is recorded so that the ratchet has nothing to say here.
+    for line, flagged in (("awk '{print $1}'", True), ("awk '{print $NF}'", False)):
+        grown = body + line + "\n"
+        m = len(grown.encode().split())
+        (skill / "SKILL.md").write_text(grown)
+        budgets.write_text(json.dumps({"words": {"s": m},
+                                       "raises": {"s": {"from": n, "to": m, "why": "an awk line"}}}))
+        got = pool.lint_problems(src, before)
+        check(f"lint: {line} {'is' if flagged else 'is not'} flagged as an argument placeholder",
+              any("replaced by the skill's argument" in q for q in got) == flagged, str(got))
     live = tmp / "live"
     (live / "skill-retro").mkdir(parents=True)
     (live / "s").mkdir()
