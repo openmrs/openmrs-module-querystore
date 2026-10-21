@@ -9,8 +9,11 @@
  */
 package org.openmrs.module.querystore.api;
 
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.openmrs.annotation.Authorized;
 import org.openmrs.api.OpenmrsService;
@@ -101,6 +104,15 @@ public interface QueryStoreService extends OpenmrsService {
 	 * the discovery contract of {@code searchByPatient} and {@code existsByPatient}.
 	 */
 	void bulkDeleteByPatient(String patientUuid);
+
+	/**
+	 * The stored {@code last_modified} of each given record of one type, keyed by resource uuid; a
+	 * record not stored is absent. Used by the sync pipeline's bootstrap, like {@link #index}, and so
+	 * not {@code @Authorized}. The default reports none, which makes a caller re-project every record.
+	 */
+	default Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+		return Collections.emptyMap();
+	}
 
 	/**
 	 * Hybrid (BM25 + semantic) search within a patient's chart.

@@ -726,6 +726,21 @@ public class ElasticsearchBackendStoreIntegrationTest {
 
 	// ---------- helpers ----------
 
+	@Test
+	public void findLastModified_reportsEachStoredRecordsVersionAndOmitsTheRest() {
+		QueryDocument versioned = doc("obs", "patient-A", "Weight: 70 kg", null);
+		versioned.setLastModified(java.time.Instant.parse("2026-01-02T03:04:05.678Z"));
+		QueryDocument unversioned = doc("obs", "patient-A", "Pulse: 80", null);
+		backend.bulkUpsert(java.util.Arrays.asList(versioned, unversioned));
+
+		java.util.Map<String, java.time.Instant> found = backend.findLastModified("obs",
+		        java.util.Arrays.asList(versioned.getResourceUuid(), unversioned.getResourceUuid(), "never-stored"));
+
+		assertEquals(java.util.Collections.singletonMap(versioned.getResourceUuid(), versioned.getLastModified()), found);
+		assertTrue("a type never written reports nothing",
+		        backend.findLastModified("medication_dispense", java.util.Collections.singletonList("x")).isEmpty());
+	}
+
 	private static QueryDocument doc(String resourceType, String patientUuid, String text, float[] embedding) {
 		QueryDocument d = new QueryDocument();
 		d.setResourceType(resourceType);

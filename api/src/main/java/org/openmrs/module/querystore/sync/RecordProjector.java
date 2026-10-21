@@ -37,8 +37,10 @@ import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
  * PurgeServiceEvent}; every other event passes {@code false} and lets the entity's own state decide.
  *
  * <p><b>Synchronous serialize, asynchronous write.</b> Serialization runs on the caller's thread
- * (inside the originating transaction, so lazy navigations resolve against an open session); the
- * embed + index/delete is handed to {@code dispatcher} to run after commit. Per-node failures inside
+ * (inside the originating transaction, so lazy navigations resolve against an open session and the
+ * associations the serializer reads are initialized); the embed + index/delete is handed to
+ * {@code dispatcher} to run after commit, which serializes the same nodes again so the write holds
+ * what the save committed (see {@link #committedDocument}). Per-node failures inside
  * the dispatched task are caught so one poison record cannot skip its siblings.
  */
 public final class RecordProjector {
@@ -48,10 +50,63 @@ public final class RecordProjector {
 	private RecordProjector() {
 	}
 
+	/**
+	 * The document to write after commit. The save event publishes before the save stamps the audit
+	 * dates and runs its save handlers, so the event-time serialization holds pre-save content: a new
+	 * condition, diagnosis, allergy or patient has no {@code record_date}, and a new record has no
+	 * version. The saved node is the same instance and now holds what was committed, so it is
+	 * serialized again. If that fails (a lazy association outside its session), the event-time
+	 * document is written as it is, without a version stamped onto pre-save content, so the
+	 * bootstrap top-up does not skip it and rewrites it from core. Returns {@code null} when the
+	 * committed node has nothing to index or was voided since the event.
+	 */
+	static <T extends BaseOpenmrsData> QueryDocument committedDocument(ClinicalRecordSerializer<T> serializer,
+	        T node, QueryDocument eventTime) {
+		try {
+			if (Boolean.TRUE.equals(node.getVoided())) {
+				return null;
+			}
+			return serializer.serialize(node);
+		}
+		catch (RuntimeException e) {
+			log.debug("Could not serialize the committed " + serializer.getResourceType() + "/" + node.getUuid()
+			        + "; writing the event-time document without a version", e);
+			return eventTime;
+		}
+	}
+
+	/**
+	 * The save voided the node its event carried: delete its document (Decision 10) and index whatever
+	 * the save wrote in its place ({@link ClinicalRecordSerializer#replacementsOf}), which no event of
+	 * its own will announce.
+	 */
+	private static <T extends BaseOpenmrsData> void replaceVoided(ClinicalRecordSerializer<T> serializer, T node,
+	        RecordIndexer indexer) {
+		String resourceType = serializer.getResourceType();
+		try {
+			indexer.delete(resourceType, node.getUuid());
+		}
+		catch (RuntimeException e) {
+			log.warn("Skipping delete for " + resourceType + "/" + node.getUuid() + " due to failure", e);
+		}
+		try {
+			for (T replacement : serializer.replacementsOf(node)) {
+				QueryDocument doc = serializer.serialize(replacement);
+				if (doc != null) {
+					indexer.index(doc);
+				}
+			}
+		}
+		catch (RuntimeException e) {
+			log.warn("Skipping the replacement of " + resourceType + "/" + node.getUuid() + " due to failure", e);
+		}
+	}
+
 	public static <T extends BaseOpenmrsData> void project(ClinicalRecordSerializer<T> serializer, T root,
 	        boolean purge, RecordIndexer indexer, AfterCommitDispatcher dispatcher) {
 		List<T> tree = serializer.collectTree(root);
 		List<QueryDocument> toIndex = new ArrayList<>(tree.size());
+		List<T> indexedNodes = new ArrayList<>(tree.size());
 		List<String> toDelete = new ArrayList<>(purge ? tree.size() : 0);
 		for (T node : tree) {
 			if (purge || node.getVoided()) {
@@ -60,6 +115,7 @@ public final class RecordProjector {
 				QueryDocument doc = serializer.serialize(node);
 				if (doc != null) {
 					toIndex.add(doc);
+					indexedNodes.add(node);
 				}
 			}
 		}
@@ -74,7 +130,15 @@ public final class RecordProjector {
 			// Per-entity failure isolation: a single poison document (e.g., embedder throws on a
 			// pathological text) must not skip its sibling members. The dispatcher's outer guard
 			// remains as a last-resort catch for anything that escapes here.
-			for (QueryDocument doc : toIndex) {
+			for (int i = 0; i < toIndex.size(); i++) {
+				T node = indexedNodes.get(i);
+				QueryDocument doc = committedDocument(serializer, node, toIndex.get(i));
+				if (doc == null) {
+					if (Boolean.TRUE.equals(node.getVoided())) {
+						replaceVoided(serializer, node, indexer);
+					}
+					continue;
+				}
 				try {
 					indexer.index(doc);
 				}
