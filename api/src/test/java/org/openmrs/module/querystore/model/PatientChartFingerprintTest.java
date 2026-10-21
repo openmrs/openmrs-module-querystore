@@ -7,6 +7,7 @@
 package org.openmrs.module.querystore.model;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,6 +24,19 @@ public class PatientChartFingerprintTest {
 
 		assertEquals(PatientChartFingerprint.snapshotId(Collections.singletonList(first), false, true),
 		        PatientChartFingerprint.snapshotId(Collections.singletonList(second), false, true));
+	}
+
+	@Test
+	public void snapshotId_tellsANumberFromItsStringForm() {
+		// A re-projection that changes a value's type changes what a client receives, so it must change
+		// the snapshot an ETag is built from.
+		QueryDocument number = documentWithAliases(new LinkedHashSet<String>());
+		number.putMetadata("rank", 1);
+		QueryDocument text = documentWithAliases(new LinkedHashSet<String>());
+		text.putMetadata("rank", "1");
+
+		assertNotEquals(PatientChartFingerprint.snapshotId(Collections.singletonList(number), false, true),
+		        PatientChartFingerprint.snapshotId(Collections.singletonList(text), false, true));
 	}
 
 	private static QueryDocument documentWithAliases(LinkedHashSet<String> aliases) {
