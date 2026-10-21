@@ -112,7 +112,10 @@ public final class PatientChartFingerprint {
 			out.append("]");
 			return;
 		}
+		// The scalar's kind is part of the value: a number and its string form reach a client as
+		// different JSON, so they must not share a snapshot.
+		String kind = value instanceof Number ? "n" : value instanceof Boolean ? "b" : "s";
 		String stringValue = String.valueOf(value);
-		out.append(stringValue.length()).append(':').append(stringValue);
+		out.append(kind).append(stringValue.length()).append(':').append(stringValue);
 	}
 }
