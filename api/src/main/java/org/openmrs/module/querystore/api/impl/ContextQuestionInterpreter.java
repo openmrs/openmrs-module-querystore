@@ -49,7 +49,12 @@ final class ContextQuestionInterpreter {
 	private static final Map<Pattern, String[]> TYPE_CUES;
 	static {
 		Map<Pattern, String[]> m = new LinkedHashMap<Pattern, String[]>();
-		m.put(cues("medications?", "medicines?", "meds", "drugs?", "prescriptions?", "prescribed"),
+		// Kept entry for entry with ChartSearchAI's QueryScopeRouter, the one caller that sends
+		// interpret=true: "regimen" and "what she takes" are how a clinician words the question
+		// (its Decision 180), and a cue read there and not here answers a long ART history from
+		// whichever orders similarity ranks.
+		m.put(cues("medications?", "medicines?", "meds", "drugs?", "prescriptions?", "prescribed", "regimens?",
+		        "(?:she|he|they|the patient|this patient) (?:takes|is taking|are taking)"),
 		        new String[] { "drug_order", "medication_dispense" });
 		m.put(cues("allerg(?:y|ies|ic|en|ens)", "adverse", "reactions?", "intoleran(?:t|ce|ces)"),
 		        new String[] { "allergy" });
