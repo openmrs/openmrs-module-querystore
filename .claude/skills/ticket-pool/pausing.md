@@ -45,7 +45,8 @@ script — unidentifiable whatever it puts in the envelope. So `--work` passes
 `crossSessionInbound: accept` on the launch, scoped to that session: it lets any local process put
 a turn into a pool worktree that is already bypassing prompts, and deliberately does not enrol the
 operator's other sessions, which are not inside that boundary. A session started by hand will have
-its nudge held, and will say so in its own transcript.
+its nudge held, and will say so in its own transcript. Besides Claude Code's own wait, what carries
+one is `CLAUDE_CODE_RETRY_WATCHDOG`, which `resolve-ticket`'s Step 1 checks for and says how to set.
 
 **The account is asked per quiet SPELL, not per watcher.** A session that has been writing and goes
 quiet again is looked at at once; only repeats within one spell back off, at

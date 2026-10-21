@@ -197,16 +197,17 @@ proceeds.
 
 **Pre-flight the usage limit too.** A claude.ai usage limit ends the turn on an API error, which
 runs `StopFailure` hooks instead of `Stop`, so no gate sees it, and nothing in this skill runs again
-until something outside it sends the session a turn: Claude Code, or `pool-run` in a session it
-started. With `CLAUDE_CODE_RETRY_WATCHDOG` on, a request at the limit waits for the reset and
-retries, so the turn never ends. Without it a session started by hand depends on Claude Code's own
-continue-at-reset, which can be switched off for an account and skips Remote Control sessions,
-resets more than a day out and repeated hits in a row. So where `$CLAUDE_PIPELINE_SESSION` is unset,
-run `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"`, and unless it prints `1`, `true`, `yes` or `on`,
-say so NOW and carry on. The remedy is for the sessions after this one, never a reason to relaunch
-this one mid-run: start them with it on and with
-`CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000`, which waits out any five-hour window
-and no weekly one, from a shell alias for `claude`, which no `pool-run` session goes through.
+until something outside it sends the session a turn: a person, Claude Code, or `pool-run` in a
+session it started. With `CLAUDE_CODE_RETRY_WATCHDOG` on, a request at the limit waits for the reset
+and retries instead of ending the turn, and an agent's requests do the same. Without it a session
+started by hand depends on Claude Code's own continue-at-reset, which can be switched off for an
+account and skips Remote Control sessions, resets more than a day out and repeated hits in a row.
+So where `$CLAUDE_PIPELINE_SESSION` is unset, run `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"`, and
+unless it prints `1`, `true`, `yes` or `on`, in any case, say so NOW and carry on; a session
+`pool-run --work` launched is carried by its nudge regardless. The remedy is for the
+sessions after this one, never a reason to relaunch this one mid-run: start them with it on and
+with `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000`, which waits out any five-hour
+window and no weekly one, from a shell alias for `claude`, which no `pool-run` session goes through.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs

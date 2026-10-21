@@ -169,13 +169,22 @@ What Claude Code does, from its documentation (code.claude.com: `hooks`, `intera
   Control's bridge connected, `CLAUDE_CODE_SESSION_KIND=bg`, or a teammate.
 - `CLAUDE_CODE_RETRY_WATCHDOG` is "unattended retry mode", documented for unattended sessions such as
   CI jobs: it retries 429 and 529 errors indefinitely. In the binary, a 429 whose
-  `anthropic-ratelimit-unified-status` is `rejected` waits until the window resets and then retries,
-  bounded by `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` (unset: no bound; added in 2.1.301
-  "so unattended retry mode ends a request at a usage limit that resets too far away instead of
-  waiting"). A spend cap or exhausted usage credits is the exception, refused at once. The wait
-  happens inside the request, so the turn does not end. Whether an agent's requests wait the same
-  way was not checked. The variable is read as a boolean, true for `1`, `true`, `yes` or `on`
-  whatever their case, which is why the check accepts all four.
+  `anthropic-ratelimit-unified-status` is `rejected` waits until the
+  `anthropic-ratelimit-unified-reset` it names and then retries, bounded by
+  `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` (unset: no bound). That variable was added in
+  2.1.301 "so unattended retry mode ends a request at a usage limit that resets too far away instead
+  of waiting", so an older Claude Code does not read it and waits out a weekly limit too. A spend cap
+  or exhausted usage credits is the exception, refused at once. The variable is read as a boolean,
+  true for `1`, `true`, `yes` or `on` whatever their case.
+
+Measured on 2026-10-21 (`~/.claude/skill-lessons/artifacts/2026-10-21-retry-watchdog-limit/`), with
+`claude -p` against a stub that answers like a claude.ai limit. Without the variable the first 429
+ended the run at once. With it the request slept until the reset the stub named, retried, and the
+run finished normally, and in the run that had spawned an agent first, the agent's requests did the
+same. A reset beyond the cap was refused at once, and `TRUE` counted as on. The controls: the stub
+serving from the start (one request, exit 0), and each limit case run again without the variable.
+The artifact names what this leaves open: a real limit under a subscription login, an interactive
+session, a foreground agent, and a wait of hours.
 
 Why the skill does not carry the run itself. A skill acts only inside a turn, and the turn a limit
 ends leaves nothing of the skill running. The one in-session way to start a later turn is a
@@ -186,7 +195,7 @@ the stop through. Lifting a user's stop re-asserted its override. An attended wa
 an hour read as a cut-off, and the phase was re-dispatched beside the live agent. And in a plain
 terminal its prompt waits behind the usage-limit menu: while a dialog is open, the binary's queue
 processor holds every prompt addressed to the main session that is neither passive nor Claude Code's
-own continuation. The watchdog has none of these, because the turn never stops.
+own continuation. The watchdog has none of these, because the turn does not stop at the limit.
 
 **What the paragraph does not ask for, and why.** A second fresh review, of the paragraph's first
 draft, found the relaunch it then advised unsafe. Exiting a `pool-run --work` session releases its
@@ -203,8 +212,8 @@ Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any w
 window, which resets less than five hours after the request that meets it, and refuses a weekly one.
 It stays under the gates' six-hour expiry, but the wait does not restamp the entry: one that began
 hours after the last transition write can carry the entry past six hours, and the gates then fail
-open until the run's next write. Not measured either: no run has met a limit with the watchdog set.
-The first that does is the measurement, and its transcript shows the wait.
+open until the run's next write. No pipeline run has met a real limit with the watchdog on; the first
+that does is the measurement the stub stands in for, and its transcript shows the wait.
 
 *Cut down, A-07 — the rule it supports:* “which an inline read-modify-write cannot, and under a parallel pool cannot safely be retyped”
 

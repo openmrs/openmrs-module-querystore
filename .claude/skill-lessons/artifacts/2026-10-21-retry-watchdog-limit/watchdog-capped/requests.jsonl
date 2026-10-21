@@ -1,0 +1,1 @@
+{"t": 1792617210.7997453, "method": "POST", "path": "/v1/messages", "status": 429, "stream": true, "max_tokens": 128000, "n_messages": 2, "last": "text:# Environment\nYou have been invoked in t", "has_agent_tool": true}

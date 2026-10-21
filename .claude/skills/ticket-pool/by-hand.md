@@ -3,8 +3,8 @@
 This is `SKILL.md`'s *Two sessions by hand*. Read the whole file before you start a `--work` or
 `--claim` session, release a slot, or act on a hand-launched run's ledger row. Where it names a
 section or a rule it does not contain, that is in `SKILL.md`, beside this file. What a `--work`
-session opens to any local process so that a usage limit cannot strand it, and why a session started
-any other way is not carried past one, is in `pausing.md`, beside it too.
+session opens to any local process so that a usage limit cannot strand it, and what carries a session
+started any other way past one, is in `pausing.md`, beside it too.
 
 **What a hand-launched run does NOT get, and what it now does.** `ticket.timeout_seconds` and
 `ticket.quiet_seconds` are enforced by `Session`, which only the driven path and the retro use; a
