@@ -656,12 +656,45 @@ public class BootstrapServiceImplTest {
 			}
 		});
 		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneStoredRecordBootstrapper()));
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setBackend("test-backend");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		dao.save(completed);
 
 		service.bootstrap("obs");
 		assertEquals("a top-up leaves a record stored at its version alone", 0, writes.get());
 
 		service.resyncType("obs");
 		assertEquals("a resync re-projects it", 1, writes.get());
+	}
+
+	@Test
+	public void anInterruptedResyncResumedByABootstrapKeepsRewriting() {
+		// Nothing but the row records that a resync was under way when it stopped: the next bootstrap()
+		// resumes it from the cursor, and must not skip the records the resync had left to rewrite.
+		AtomicInteger writes = new AtomicInteger();
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				writes.incrementAndGet();
+				return org.openmrs.module.querystore.backend.WriteResult.success();
+			}
+
+			@Override
+			public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+				return Collections.singletonMap("obs-1", OneStoredRecordBootstrapper.VERSION);
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneStoredRecordBootstrapper()));
+		BootstrapProgress interrupted = new BootstrapProgress("obs");
+		interrupted.setBackend("test-backend");
+		interrupted.setStatus(BootstrapStatus.FAILED);
+		dao.save(interrupted);
+
+		service.bootstrap("obs");
+
+		assertEquals("the resumed walk rewrites the record stored at its version", 1, writes.get());
+		assertEquals(BootstrapStatus.COMPLETED, dao.find("obs").getStatus());
 	}
 
 	@Test
