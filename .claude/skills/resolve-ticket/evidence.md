@@ -238,7 +238,8 @@ with nothing paused; with a 200 s timeout it outlasted the wait and finished. A 
 `timeout` and spends an attempt, where the driver's own carry would have suspended the session at no
 cost. An alias reaches only the sessions a person starts, and `pool-run --work`'s, which inherit the
 environment of the command that launched them, take the variables only when they are put in front of
-that command.
+that command. Run in an interactive bash (the artifact's `alias-probe.sh`), the alias started a probe
+`claude` with both variables set and left the shell itself without them.
 
 Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
 window, which resets less than five hours after the request that meets it, and refuses any reset

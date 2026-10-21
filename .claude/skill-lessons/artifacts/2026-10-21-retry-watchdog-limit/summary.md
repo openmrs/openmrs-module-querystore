@@ -71,6 +71,11 @@ so the allow is the await's and not the rest of the write's. The script stops on
 one that exits non-zero, because a gate that does not run prints nothing, which is what an allow
 prints: run from the wrong directory before that guard, it printed "allow" for all three.
 
+`alias-probe.sh` (output in `alias-probe.out`) defines `resolve-ticket`'s alias in an interactive
+bash 5.2 with a probe `claude` first on the `PATH`: `claude --version` through it ran the probe with
+both variables set, `1` and `18000000`, and the shell itself was left without them. The control, the
+same probe with no alias, saw neither.
+
 What this does NOT show:
 - a real claude.ai limit: the stub stands in for it, under an API key rather than a subscription
   login. The binary's watchdog branch (`h5() && Mmn(e)`, then `Kfr` reading
@@ -79,4 +84,5 @@ What this does NOT show:
 - a wait of hours: the longest here is eleven minutes, so whether a long wait is one sleep or
   several is not shown, though the stream shows one retry line every 30s while it lasts;
 - a foreground agent: the `Agent` call here ran in the background, the default in this version;
-- any Claude Code version other than 2.1.306 and 2.1.42.
+- any Claude Code version other than 2.1.306 and 2.1.42;
+- the alias in zsh or any shell but bash: zsh is not installed here.
