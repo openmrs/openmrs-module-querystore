@@ -31,6 +31,7 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 | `patient=<uuid>` | `getPatientChart(patient)` | Full materialized patient chart, newest first |
 | `patient=<uuid>&q=<text>` | `searchByPatient(patient, q, k)` | Ranked patient results |
 | `q=<text>` | `search(q, k)` | Ranked cross-patient results |
+| `patient=<uuid>&mode=context&q=<text>` | `getContextSlice(patient, q, request)` | Tiered question context in chart order |
 
 - **Privilege:** `Get Patients`. Records of a type the caller cannot read through core are
   omitted: obs need `Get Observations`, conditions `Get Conditions`, orders `Get Orders`, and so
@@ -64,6 +65,19 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   `clinical_event`. Ranked records also carry a 1-based `rank`.
 - **Excluded:** embeddings and backend scores are never returned.
 
+Context mode adds a `tier` to every record. A record selected by the similarity tier carries its
+original 1-based search `rank`, and keeps it when panel completion promotes it to the protected
+`panel` tier, even though the slice itself remains in chart order. A search hit that a higher tier
+already selected carries no `rank`. The
+response returns `chartSize`, `chartTruncated`,
+`effectiveTypes`, `temporalApplied`, `chartSnapshotId`, and `sliceId`. The `chartSnapshotId`
+fingerprints the complete chart materialization from which the selection was made. Consumers that
+combine a full-chart ledger with a later context slice must require matching snapshot IDs and retry
+or fail when they differ. The `sliceId` fingerprints the complete ordered
+selection and its effective interpretation, so an external client can reject pages from different
+context slices. It is not a full-chart snapshot, an HTTP cache validator, or a promise that the
+underlying chart is complete. Context pages are question-dependent and are not cached.
+
 For a full-chart page, the response has a strong page-specific `ETag` and
 `Cache-Control: private, no-cache, must-revalidate`. Send that token as `If-None-Match` on the
 same page request: an unchanged page returns `304 Not Modified` with no clinical payload. The
@@ -78,10 +92,17 @@ not trigger a full patient rebuild.
 ```bash
 curl -s -u patient-reader:secret \
   'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&limit=500'
+
+curl -s -u patient-reader:secret \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&mode=context&q=current%20medications&limit=100'
 ```
 
 **Errors:** missing `patient` and `q`, a blank `patient`, invalid paging, or malformed parameters return `400`; an
 unknown patient returns `404`; failed authentication/authorization returns `401`/`403`.
+The `types` and `temporal` parameters require `mode=context`; supplying
+them on a full-chart or ranked read returns `400` instead of silently ignoring them.
+Explicit context `types` must name registered serializers; unknown names return
+`400`. Registered module types are accepted even if they have no bootstrapper.
 
 ---
 
