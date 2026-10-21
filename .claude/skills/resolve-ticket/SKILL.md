@@ -204,10 +204,11 @@ started by hand depends on Claude Code's own continue-at-reset, which can be swi
 account and skips Remote Control sessions, resets more than a day out and repeated hits in a row.
 So where `$CLAUDE_PIPELINE_SESSION` is unset, run `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"`, and
 unless it prints `1`, `true`, `yes` or `on`, in any case, say so NOW and carry on; a session
-`pool-run --work` launched is carried by its nudge regardless. The remedy is for the
-sessions after this one, never a reason to relaunch this one mid-run: start them with it on and
-with `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000`, which waits out any five-hour
-window and no weekly one, from a shell alias for `claude`, which no `pool-run` session goes through.
+`pool-run --work` launched may also have its launcher's nudge (`ticket-pool`'s `pausing.md`). The
+remedy is for the sessions after this one, never a reason to relaunch this one mid-run: start them
+with it on and with `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000`, which from Claude
+Code 2.1.301 waits out a reset up to five hours away, every five-hour window's but not a weekly
+limit's days off, from a shell alias for `claude`, which no `pool-run` session goes through.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs

@@ -143,11 +143,12 @@ mistake — both ports busy at pre-flight, both by our own standalones, and neit
 
 Usage limits have stopped runs on this pipeline before: #412 (2026-09-14) lost 3 of 4 Phase 2
 agents to one, #421 all four of a cycle's, #310 a confirming agent. #421 lost nothing because
-`pool-run` re-entered it after the reset, and every carry past a limit so far has been `pool-run`'s:
-the driver suspends and re-enters its headless sessions, and `--work` nudges the sessions it
-launched over their peer socket (`ticket-pool`'s `pausing.md`). A run typed into a session by hand,
-the case 0.27.0's worktree step exists for, had nothing, and on 2026-09-11 three `--work` sessions
-sat idle 4h14m past a 07:10 reset with no continuation prompt from Claude Code in their transcripts.
+`pool-run` re-entered it after the reset. The pipeline's own carries are `pool-run`'s: the driver
+suspends and re-enters its headless sessions, and `--work` nudges the sessions it launched over their
+peer socket (`ticket-pool`'s `pausing.md`). A run typed into a session by hand, the case 0.27.0's
+worktree step exists for, had only Claude Code's own continue, and that did not fire for the three
+`--work` sessions that sat idle 4h14m past a 07:10 reset on 2026-09-11, no continuation prompt from
+Claude Code in their transcripts.
 On 2026-10-21 the owner asked for the skill to resume by itself once the limit resets.
 
 What Claude Code does, from its documentation (code.claude.com: `hooks`, `interactive-mode`,
@@ -182,20 +183,21 @@ Measured on 2026-10-21 (`~/.claude/skill-lessons/artifacts/2026-10-21-retry-watc
 ended the run at once. With it the request slept until the reset the stub named, retried, and the
 run finished normally, and in the run that had spawned an agent first, the agent's requests did the
 same. A reset beyond the cap was refused at once, and `TRUE` counted as on. The controls: the stub
-serving from the start (one request, exit 0), and each limit case run again without the variable.
+serving from the start (one request, exit 0), and the plain and the agent limit case run again
+without the variable.
 The artifact names what this leaves open: a real limit under a subscription login, an interactive
 session, a foreground agent, and a wait of hours.
 
 Why the skill does not carry the run itself. A skill acts only inside a turn, and the turn a limit
-ends leaves nothing of the skill running. The one in-session way to start a later turn is a
-scheduled prompt (`CronCreate`), and a keepalive built on one was drafted for 0.29.0 and dropped
-before it shipped. A fresh reviewer's findings against it included these. It read a run mid-FINISH,
+ends leaves nothing of the skill running. A scheduled prompt (`CronCreate`) is one in-session way
+to start a later turn, and a keepalive built on one was drafted for 0.29.0 and dropped before it
+shipped. A fresh reviewer's findings against it included these. It read a run mid-FINISH,
 whose entry already says `reviewed`, `blocking: 0`, as finished, retired itself, and the gate let
 the stop through. Lifting a user's stop re-asserted its override. An attended wait on an agent past
 an hour read as a cut-off, and the phase was re-dispatched beside the live agent. And in a plain
-terminal its prompt waits behind the usage-limit menu: while a dialog is open, the binary's queue
-processor holds every prompt addressed to the main session that is neither passive nor Claude Code's
-own continuation. The watchdog has none of these, because the turn does not stop at the limit.
+terminal its prompt waits behind the usage-limit menu: by a reading of the binary, not a run, while a
+dialog is open its queue processor holds every prompt addressed to the main session that is neither
+passive nor Claude Code's own continuation. The watchdog has none of these, because the turn does not stop at the limit.
 
 **What the paragraph does not ask for, and why.** A second fresh review, of the paragraph's first
 draft, found the relaunch it then advised unsafe. Exiting a `pool-run --work` session releases its
@@ -209,7 +211,8 @@ headless session waiting inside a request writes anything the driver's quiet win
 measured.
 
 Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
-window, which resets less than five hours after the request that meets it, and refuses a weekly one.
+window, which resets less than five hours after the request that meets it, and refuses any reset
+further off, which a weekly limit's is unless it lands in the week's last five hours.
 It stays under the gates' six-hour expiry, but the wait does not restamp the entry: one that began
 hours after the last transition write can carry the entry past six hours, and the gates then fail
 open until the run's next write. No pipeline run has met a real limit with the watchdog on; the first
