@@ -626,6 +626,17 @@ public class ContextSliceTest {
 		        "natural language context must be preserved for dense embeddings; got " + backend.lastQueryText);
 	}
 
+	@Test
+	public void similarityLeg_leavesOutThePatientTheWholeChartIsAbout() {
+		// Records saying "Patient reported ..." matched the word itself and filled the similarity tier
+		// ahead of the kidney-function labs a kidney question needs.
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		service.getContextSlice(PATIENT, "Does the patient have any kidney problems?", request);
+
+		assertEquals("Does have any kidney problems?", backend.lastQueryText);
+	}
+
 	/** Scripted backend: canned chart + canned similarity hits, everything else inert. */
 	private static final class FakeBackendStore implements BackendStore {
 

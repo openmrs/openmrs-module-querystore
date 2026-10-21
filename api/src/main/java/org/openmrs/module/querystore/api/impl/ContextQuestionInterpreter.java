@@ -122,17 +122,26 @@ final class ContextQuestionInterpreter {
 		        Pattern.CASE_INSENSITIVE);
 	}
 
+	// The chart's own subject. Every record in a per-patient slice is about the patient, so the word
+	// tells no record from another, while records that say "Patient reported ..." match it and fill
+	// the similarity tier ahead of what the question asks about (Decision 18). Only the English article
+	// forms and the possessive, so a question in another language keeps its own words.
+	private static final Pattern THE_PATIENT = Pattern.compile(
+	        "\\b(?:the|this|that)\\s+patient(?:'s|s'|s)?\\b|\\bpatient's\\b", Pattern.CASE_INSENSITIVE);
+
 	/**
-	 * Retrieval preprocessing for the slice's similarity leg: expand lab-panel abbreviations so
-	 * both the abbreviation and the full clinical surface form reach the embedding and BM25 index.
-	 * Preserves full natural-language sentence structure for the transformer embedder and
-	 * multilingual queries. Idempotent for callers that already expand panels. Null/blank pass through unchanged.
+	 * Retrieval preprocessing for the slice's similarity leg: leave out the patient the whole chart is
+	 * about, and expand lab-panel abbreviations so both the abbreviation and the full clinical surface
+	 * form reach the embedding and BM25 index. Everything else keeps its sentence structure for the
+	 * transformer embedder and multilingual queries. Idempotent. Null/blank pass through unchanged, as
+	 * does a question that is only the patient.
 	 */
 	static String preprocess(String question) {
 		if (question == null || question.trim().isEmpty()) {
 			return question;
 		}
-		return expandLabPanels(question.trim());
+		String withoutSubject = THE_PATIENT.matcher(question).replaceAll(" ").replaceAll("\\s{2,}", " ").trim();
+		return expandLabPanels(withoutSubject.isEmpty() ? question.trim() : withoutSubject);
 	}
 
 	private static String expandLabPanels(String question) {

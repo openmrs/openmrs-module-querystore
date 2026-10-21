@@ -1480,12 +1480,19 @@ questions. Query normalization is retrieval quality, which this module owns.
    Explicit caller parameters remain fully supported. Interpretation is opt-in and additive:
    derived types only add to the caller's, so a caller cannot remove one; a caller that wants only
    its own scope leaves `interpretQuestion` unset.
-2. **The slice's similarity leg preprocesses the question server-side** (lab-panel abbreviation
-   expansion only) — always and idempotently for callers that already expand panels. A caller
-   sending the raw question gets the same expanded retrieval text. Clients must not strip
-   stopwords: QueryStore cannot restore text removed before the request. Stopword stripping
-   has been explicitly removed: it destroys the grammatical context required by
-   `multilingual-e5`'s self-attention (Decision 8) and is unnecessary for BM25 (which applies IDF naturally).
+2. **The slice's similarity leg preprocesses the question server-side**: it leaves out the
+   patient the whole chart is about ("the patient", "this patient", "patient's") and expands
+   lab-panel abbreviations, always and idempotently. A caller sending the raw question gets the
+   same retrieval text. Clients must not strip stopwords: QueryStore cannot restore text removed
+   before the request. General stopword stripping is not done: it destroys the grammatical
+   context required by `multilingual-e5`'s self-attention (Decision 8), drops qualifiers such as
+   "well" and "poorly", and is unnecessary for BM25 (which applies IDF naturally). The patient is
+   the one exception because every record in a per-patient slice is about it, so the word tells
+   no record from another, while records that say "Patient reported ..." match it: on the HIV
+   dataset, "Does the patient have any kidney problems?" ranked twelve "Patient reported current
+   ... treatment: None" records first and none of the patient's three creatinine records, which
+   ranked first to third once the patient was left out (four patients checked). Only the English
+   article forms and the possessive are removed, so other languages keep their words.
 3. **`ContextSlice` traces the effective interpretation** (`effectiveTypes`, `temporalApplied`)
    so consumers can log and audit what the selection actually used. The REST envelope repeats
    those fields on every page together with `sliceId`, `chartSize`, and `chartTruncated`.

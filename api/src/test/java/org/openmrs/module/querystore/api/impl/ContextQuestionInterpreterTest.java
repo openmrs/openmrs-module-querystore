@@ -77,11 +77,24 @@ public class ContextQuestionInterpreterTest {
 	}
 
 	@Test
-	public void preprocess_preservesFullSentenceContextAndClinicalQualifiers() {
-		assertEquals("is the patient well controlled on metformin?",
+	public void preprocess_preservesSentenceContextAndClinicalQualifiers() {
+		assertEquals("is well controlled on metformin?",
 		        ContextQuestionInterpreter.preprocess("is the patient well controlled on metformin?"));
-		assertEquals("is the patient poorly controlled on metformin?",
+		assertEquals("is poorly controlled on metformin?",
 		        ContextQuestionInterpreter.preprocess("is the patient poorly controlled on metformin?"));
+	}
+
+	@Test
+	public void preprocess_dropsThePatientEverySliceRecordIsAbout() {
+		assertEquals("Does have any kidney problems?",
+		        ContextQuestionInterpreter.preprocess("Does the patient have any kidney problems?"));
+		assertEquals("What is latest CD4 count?",
+		        ContextQuestionInterpreter.preprocess("What is the patient's latest CD4 count?"));
+		assertEquals("Has been admitted before?",
+		        ContextQuestionInterpreter.preprocess("Has this patient been admitted before?"));
+		assertEquals("outpatient follow-up plan",
+		        ContextQuestionInterpreter.preprocess("outpatient follow-up plan"));
+		assertEquals("patient", ContextQuestionInterpreter.preprocess("patient"));
 	}
 
 	@Test
@@ -112,7 +125,7 @@ public class ContextQuestionInterpreterTest {
 		assertEquals("pain in the left knee", ContextQuestionInterpreter.preprocess("pain in the left knee"));
 		assertEquals("neither aspirin nor warfarin",
 		        ContextQuestionInterpreter.preprocess("neither aspirin nor warfarin"));
-		assertEquals("is the patient off metformin?", ContextQuestionInterpreter.preprocess("is the patient off metformin?"));
+		assertEquals("is off metformin?", ContextQuestionInterpreter.preprocess("is the patient off metformin?"));
 		assertEquals("chronic back pain management plan",
 		        ContextQuestionInterpreter.preprocess("chronic back pain management plan"));
 		assertEquals("history of low back pain and sciatica",
