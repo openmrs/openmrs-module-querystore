@@ -236,8 +236,13 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		for (int start = 0; start < resourceUuids.size(); start += BATCH_SIZE) {
 			int end = Math.min(start + BATCH_SIZE, resourceUuids.size());
 			List<String> chunk = resourceUuids.subList(start, end);
+			// The ids whose outcome is not counted yet: the whole chunk until the read answers, then only
+			// the ids the read found and the bulk request still has to delete. A failure of either call
+			// is reported for these alone, so an id the read already settled is counted once.
+			List<String> pending = chunk;
 			try {
 				List<BulkOperation> ops = new ArrayList<>(chunk.size());
+				List<String> awaitingDelete = new ArrayList<>(chunk.size());
 				MgetResponse<Void> current = client().mget(m -> m.index(index).ids(chunk).source(src -> src.fetch(false)),
 				    Void.class);
 				for (MultiGetResponseItem<Void> item : current.docs()) {
@@ -260,7 +265,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 					Long version = item.result().version();
 					ops.add(BulkOperation.of(b -> b.delete(d -> d.index(index).id(item.result().id())
 					        .versionType(VersionType.ExternalGte).version(version))));
+					awaitingDelete.add(item.result().id());
 				}
+				pending = awaitingDelete;
 				if (!ops.isEmpty()) {
 					BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
 					succeeded += countBulkSuccess(resp, resourceType, failures, false);
@@ -268,17 +275,17 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			}
 			catch (ElasticsearchException e) {
 				if (e.status() == 404 || "index_not_found_exception".equals(e.error().type())) {
-					succeeded += chunk.size();
+					succeeded += pending.size();
 					continue;
 				}
 				log.warn("bulkDelete chunk failed for " + resourceType, e);
-				for (String uuid : chunk) {
+				for (String uuid : pending) {
 					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
 				}
 			}
 			catch (IOException e) {
 				log.warn("bulkDelete chunk failed for " + resourceType, e);
-				for (String uuid : chunk) {
+				for (String uuid : pending) {
 					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
 				}
 			}
