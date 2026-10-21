@@ -535,6 +535,27 @@ public class ContextSliceTest {
 		}
 	}
 
+	/** A value-less group parent is never indexed (ObsRecordSerializer), so in production the hit
+	 *  that opens a family is a member, and the parent is not in the chart at all. */
+	@Test
+	public void obsGroupFamilies_completeFromAMemberHit_whenTheParentIsNotIndexed() {
+		QueryDocument sodium = doc("obs", "bmp-sodium", "Serum sodium: 140 mmol/L", LocalDate.of(2026, 6, 15));
+		QueryDocument potassium = doc("obs", "bmp-potassium", "Serum potassium: 4.1 mmol/L",
+		        LocalDate.of(2026, 6, 15));
+		sodium.putMetadata(QueryStoreConstants.FIELD_OBS_GROUP_UUID, "bmp-parent");
+		potassium.putMetadata(QueryStoreConstants.FIELD_OBS_GROUP_UUID, "bmp-parent");
+		backend.chart.add(sodium);
+		backend.chart.add(potassium);
+		backend.hits = Collections.singletonList(sodium);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "results of the BMP?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+		Map<String, String> tiers = tiersByUuid(slice);
+
+		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("bmp-sodium"), "the member hit opens its family: " + tiers);
+		assertEquals(QueryStoreConstants.TIER_PANEL, tiers.get("bmp-potassium"), "the sibling joins: " + tiers);
+	}
+
 	@Test
 	public void obsGroupCompletionProtectsTheRecordThatTriggeredTheFamily() {
 		QueryDocument parent = doc("obs", "panel-parent", "Basic metabolic panel",
