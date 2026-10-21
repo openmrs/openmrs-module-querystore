@@ -161,20 +161,41 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 	}
 
+	/** The stored document's version, or {@code null} when the index holds no such document. */
+	Long currentVersion(String index, String id) throws IOException {
+		GetResponse<Void> current = client().get(g -> g.index(index).id(id).source(src -> src.fetch(false)), Void.class);
+		return current.found() ? current.version() : null;
+	}
+
 	@Override
 	public WriteResult delete(String resourceType, String resourceUuid) {
 		String index = ElasticsearchSchemaManager.indexName(resourceType);
 		try {
-			GetResponse<Void> current = client().get(g -> g.index(index).id(resourceUuid).source(src -> src.fetch(false)),
-			    Void.class);
-			if (!current.found()) {
-				// Idempotent delete: a missing doc is the second-call no-op outcome.
-				return WriteResult.success();
+			while (true) {
+				Long version = currentVersion(index, resourceUuid);
+				if (version == null) {
+					// Idempotent delete: a missing doc is the second-call no-op outcome.
+					return WriteResult.success();
+				}
+				try {
+					client().delete(d -> d.index(index).id(resourceUuid).refresh(Refresh.WaitFor)
+					        .versionType(VersionType.ExternalGte).version(version));
+					return WriteResult.success();
+				}
+				catch (ElasticsearchException e) {
+					// A write landed between the version read and the delete: the document now carries a
+					// newer version, so read it again and delete at that one. Nothing above retries a
+					// failed delete, so the retry lives here.
+					if (!isVersionConflict(e)) {
+						throw e;
+					}
+				}
+				catch (IOException e) {
+					if (!isVersionConflict(e)) {
+						throw e;
+					}
+				}
 			}
-			Long version = current.version();
-			client().delete(d -> d.index(index).id(resourceUuid).refresh(Refresh.WaitFor)
-			        .versionType(VersionType.ExternalGte).version(version));
-			return WriteResult.success();
 		}
 		catch (ElasticsearchException e) {
 			if (e.status() == 404 || "index_not_found_exception".equals(e.error().type())) {
@@ -182,8 +203,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				return WriteResult.success();
 			}
 			log.warn("delete failed for " + resourceType + "/" + resourceUuid, e);
-			return WriteResult.failed(new DocFailure(resourceType, resourceUuid, e.getMessage(),
-			        isVersionConflict(e) || isRetryable(e)));
+			return WriteResult.failed(new DocFailure(resourceType, resourceUuid, e.getMessage(), isRetryable(e)));
 		}
 		catch (IOException e) {
 			log.warn("delete failed for " + resourceType + "/" + resourceUuid, e);
@@ -276,6 +296,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				        .index(ALL_INDICES_PATTERN)
 				        .allowNoIndices(true)
 				        .ignoreUnavailable(true)
+				        // A search some shards did not answer would delete the readable records and then
+				        // report the patient's chart gone; such a search fails instead.
+				        .allowPartialSearchResults(false)
 				        .size(FULL_CHART_MAX_HITS)
 				        .trackTotalHits(t -> t.enabled(false))
 				        .version(true)
