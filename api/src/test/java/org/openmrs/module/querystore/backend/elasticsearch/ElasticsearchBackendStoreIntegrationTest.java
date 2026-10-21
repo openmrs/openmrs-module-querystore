@@ -258,8 +258,9 @@ public class ElasticsearchBackendStoreIntegrationTest {
 	 * The reindex contract: {@code reindexPatient} clears a patient and re-projects the same records
 	 * straight away, and a record whose audit dates did not change comes back with the same
 	 * {@code last_modified}. Elasticsearch keeps a tombstone for a deleted document (60 s by default)
-	 * and a versioned rewrite at or below the tombstone's version is a conflict, so the delete must
-	 * leave the tombstone at the document's own version for the rewrite to apply.
+	 * and, while it is retained, a versioned rewrite strictly below the tombstone's version is a
+	 * conflict (external_gte accepts an equal one), so the delete must leave the tombstone at the
+	 * document's own version for the rewrite to apply.
 	 */
 	@Test
 	public void bulkDeleteByPatientThenSameVersionRewriteRestoresTheChart() {
@@ -370,7 +371,10 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		}
 	}
 
-	/** The conditional-upsert guard survives a delete: a strictly older write still does not resurrect the record. */
+	/**
+	 * The conditional-upsert guard survives a delete: while the tombstone is retained, a strictly older
+	 * write still does not resurrect the record.
+	 */
 	@Test
 	public void deleteStillBlocksAnOlderRewrite() {
 		Instant t1 = Instant.parse("2025-03-15T09:00:00Z");
