@@ -140,6 +140,27 @@ public class ObsRecordSerializerTest {
 	}
 
 	@Test
+	public void serialize_codedObs_keepsBothConceptsDescriptionsInOrder() {
+		Concept question = concept("Tests ordered");
+		ConceptDescription asked = new ConceptDescription();
+		asked.setDescription("Laboratory tests requested for the patient.");
+		asked.setLocale(Locale.ENGLISH);
+		question.addDescription(asked);
+		Concept answer = concept("Serum creatinine (umol/L)");
+		ConceptDescription answered = new ConceptDescription();
+		answered.setDescription("Often used with BUN to assess kidney function.");
+		answered.setLocale(Locale.ENGLISH);
+		answer.addDescription(answered);
+		Obs obs = obs(question);
+		obs.setValueCoded(answer);
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals("Laboratory tests requested for the patient. Often used with BUN to assess kidney function.",
+				doc.getMetadata().get("description"));
+	}
+
+	@Test
 	public void serialize_textObs_populatesValueText() {
 		Obs obs = obs(concept("Clinical notes"));
 		obs.setValueText("Patient reports improvement");
