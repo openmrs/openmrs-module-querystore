@@ -251,6 +251,81 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		assertEquals("patient-B", remaining.getHits().get(0).getDocument().getPatientUuid());
 	}
 
+	/**
+	 * The reindex contract: {@code reindexPatient} clears a patient and re-projects the same records
+	 * straight away, and a record whose audit dates did not change comes back with the same
+	 * {@code last_modified}. Elasticsearch keeps a tombstone for a deleted document (60 s by default)
+	 * and a versioned rewrite at or below the tombstone's version is a conflict, so the delete must
+	 * leave the tombstone at the document's own version for the rewrite to apply.
+	 */
+	@Test
+	public void bulkDeleteByPatientThenSameVersionRewriteRestoresTheChart() {
+		Instant t = Instant.parse("2025-03-15T09:00:00Z");
+		QueryDocument obs = doc("obs", "patient-A", "Weight: 71 kg", null);
+		obs.setLastModified(t);
+		QueryDocument condition = doc("condition", "patient-A", "Asthma", null);
+		condition.setLastModified(t);
+		assertFalse(backend.bulkUpsert(Arrays.asList(obs, condition)).hasFailures());
+
+		assertEquals(2, backend.bulkDeleteByPatient("patient-A").getSucceeded());
+		BulkWriteResult rewrite = backend.bulkUpsert(Arrays.asList(obs, condition));
+
+		assertFalse(rewrite.hasFailures());
+		assertEquals(2, rewrite.getSucceeded());
+		List<QueryDocument> chart = backend.findAllByPatient("patient-A");
+		assertEquals("the same-version rewrite must be applied, not dropped as stale", 2, chart.size());
+		for (QueryDocument d : chart) {
+			assertEquals(t, d.getLastModified());
+		}
+	}
+
+	/** A void then an unvoid of a record whose audit dates did not change. */
+	@Test
+	public void deleteThenSameVersionUpsertRestoresTheDocument() {
+		Instant t = Instant.parse("2025-03-15T09:00:00Z");
+		QueryDocument d = doc("obs", "patient-A", "Pulse: 72", null);
+		d.setLastModified(t);
+		assertTrue(backend.upsert(d).isSucceeded());
+
+		assertTrue(backend.delete("obs", d.getResourceUuid()).isSucceeded());
+		assertTrue(backend.upsert(d).isSucceeded());
+
+		assertEquals(1, backend.findAllByPatient("patient-A").size());
+	}
+
+	@Test
+	public void bulkDeleteThenSameVersionRewriteRestoresTheDocuments() {
+		Instant t = Instant.parse("2025-03-15T09:00:00Z");
+		QueryDocument a = doc("obs", "patient-A", "Pulse: 72", null);
+		a.setLastModified(t);
+		QueryDocument b = doc("obs", "patient-A", "Temperature: 37.0", null);
+		b.setLastModified(t);
+		assertFalse(backend.bulkUpsert(Arrays.asList(a, b)).hasFailures());
+
+		assertEquals(2, backend.bulkDelete("obs", Arrays.asList(a.getResourceUuid(), b.getResourceUuid())).getSucceeded());
+		assertEquals(2, backend.bulkUpsert(Arrays.asList(a, b)).getSucceeded());
+
+		assertEquals(2, backend.findAllByPatient("patient-A").size());
+	}
+
+	/** The conditional-upsert guard survives a delete: a strictly older write still does not resurrect the record. */
+	@Test
+	public void deleteStillBlocksAnOlderRewrite() {
+		Instant t1 = Instant.parse("2025-03-15T09:00:00Z");
+		Instant t2 = t1.plus(1, ChronoUnit.HOURS);
+		QueryDocument fresh = doc("obs", "patient-A", "Glucose: 8.1 mmol/L (10:00)", null);
+		fresh.setLastModified(t2);
+		assertTrue(backend.upsert(fresh).isSucceeded());
+		assertTrue(backend.delete("obs", fresh.getResourceUuid()).isSucceeded());
+
+		QueryDocument stale = doc("obs", "patient-A", "Glucose: 5.4 mmol/L (09:00)", null);
+		stale.setResourceUuid(fresh.getResourceUuid());
+		stale.setLastModified(t1);
+		assertTrue("a dropped stale write still reports success", backend.upsert(stale).isSucceeded());
+
+		assertEquals(0, backend.findAllByPatient("patient-A").size());
+	}
+
 	@Test
 	public void knnReturnsResultsRankedByCosineSimilarity() {
 		QueryDocument near = doc("obs", "patient-A", "near", new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f });
