@@ -120,12 +120,16 @@ run_case "no cycle number -> still blocks" block \
 # early repair that omitted the flag when there was no number swapped an unparseable argument for a
 # missing one; the hook resolves the cycle to 1 instead and always emits the flag. A case asserting
 # only `block` could not tell the two apart, so these read the text.
-run_cmd_case() { # name expected_substring entry_json
-  local name="$1" want="$2" entry="$3" work="$TMP/work"
+run_cmd_case() { # name expected_substring entry_json -- a `^` before it: the reason must OPEN with it
+  local name="$1" want="$2" entry="$3" work="$TMP/work" ok=0
   mkdir -p "$work"; rm -rf "$TMP/.claude/pipeline/unattended"
   jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
   local got; got=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null | jq -r '.reason // ""')
-  if [[ "$got" == *"$want"* ]]; then PASS=$((PASS+1)); echo "  ok   $name"
+  case "$want" in
+    ^*) [[ "$got" == "${want#^}"* ]] && ok=1 ;;
+    *)  [[ "$got" == *"$want"* ]] && ok=1 ;;
+  esac
+  if [ "$ok" = 1 ]; then PASS=$((PASS+1)); echo "  ok   $name"
   else FAIL=$((FAIL+1)); echo "  FAIL $name: no '$want' in: ${got:0:160}"; fi
 }
 run_cmd_case "the emitted command names a cycle even when the entry has none" \
@@ -142,12 +146,14 @@ run_cmd_case "and uses the entry's cycle when it has one" \
 # beside a live one, and only the hook knows the await's age. So every block reached there leads
 # with it, and one that never had an await says nothing of one: it must still BLOCK, so an allow
 # cannot pass the absence.
-run_cmd_case "a block past the await bound names the await first" \
+run_cmd_case "a block past the await bound names the await" \
   "past the one-hour bound (awaiting: phase2 quality)" \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_cmd_case "and opens on it, ahead of the contract's own text" "^The newest await recorded here is " \
   "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
 run_cmd_case "and still states the termination contract" "harden termination contract" \
   "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
-run_cmd_case "the legacy zero-edit block names it too" "past the one-hour bound" \
+run_cmd_case "the legacy zero-edit block opens on it too" "^The newest await recorded here is " \
   "{\"edits\":2,\"ts\":$NOW,\"awaiting\":$STALE_AW}"
 run_no_note_case() { # name entry_json
   local name="$1" entry="$2" work="$TMP/work"
@@ -159,6 +165,8 @@ run_no_note_case() { # name entry_json
 }
 run_no_note_case "a block with no await says nothing of one" \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW}"
+run_no_note_case "an await with no time recorded gets no note" \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":[{\"agent\":\"phase2 quality\"}]}"
 
 # A run that has STAMPED this entry and stated no verdict owes one. Chosen by the absence of
 # `phase1` alone, this fell to the legacy branch — and at `edits: 0`, the ordinary reading on a

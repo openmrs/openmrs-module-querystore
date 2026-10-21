@@ -998,15 +998,19 @@ agent case the main thread's three requests carried the same five messages acros
 the bound each gate's block handed back its phase's own text, "spawn a fresh reviewer agent", "Run
 Phase 2 once", "Continue the phases", which is the re-dispatch this rule forbids; two Phase 2
 reviewers found it. So every block reached past the bound now opens on the await, its age and its
-agents (both `gate-test.sh`, each case calibrated against the gate without it). The command that
-recorded the await is the one that records it again, because `--only` decides which gate's entry
-gets it and `--run` which harden run's. `await` appends, so a name listed twice is the record of the
-once, and past it the agent is stopped before the retry, which would otherwise start beside an agent
-waiting at a second limit. Once, because an agent that hung where the harness cannot see it would
-otherwise be re-recorded for as long as the run lasted, and the bound is the backstop for exactly
-that agent. Only where the variable is on, because without it the stub's first 429 ended every run
-at once, the one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which
-now points to it. No run has met it yet: it comes from the measurement, not an incident.
+agents (both `gate-test.sh`, each case calibrated against the gate without it; a Phase 1 reviewer
+found the first cases passed a note appended at the end too, so they now check that it opens the
+reason). The command that recorded the await is the one that records it again, because `--only`
+decides which gate's entry gets it and `--run` which harden run's. `await` appends, so with one
+await per agent a name listed twice is the record of the once, and past it the agent is stopped
+before the retry, which would otherwise start beside an agent waiting at a second limit.
+`resolve-ticket`'s Step 7 example had recorded Phase 2's four agents under one name, which the same
+reviewer found listed four times before any of them had had its once; it now records one await per
+agent. Once, because an agent that hung where the harness cannot see it would otherwise be
+re-recorded for as long as the run lasted, and the bound is the backstop for exactly that agent.
+Only where the variable is on, because without it the stub's first 429 ended every run at once, the
+one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which now points to
+it. No run has met it yet: it comes from the measurement, not an incident.
 
 *Cut down, R4-14 — the rule it supports:* “And this session must not busy-wait either”
 

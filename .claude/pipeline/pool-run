@@ -2647,9 +2647,10 @@ class Session:
         # And never under CLAUDE_CODE_RETRY_WATCHDOG, which an operator may have exported as Claude
         # Code's "unattended retry mode". A session waiting at a usage limit under it streams a retry
         # line every 30 s and no rate_limit_event, so this driver never sees the limit and cannot
-        # suspend it; the ticket timeout, or a limit probe's, ends the wait instead (measured against
-        # a stub: resolve-ticket's evidence, 0.29.0). Carrying a headless session past a limit is
-        # this driver's job, and `ticket.limit_wait_max_seconds` is how far it goes.
+        # suspend it: the wait ends on its own or at the ticket timeout, or a limit probe's, whichever
+        # comes first (measured against a stub: resolve-ticket's evidence, 0.29.0). Carrying a
+        # headless session past a limit is this driver's job, and `ticket.limit_wait_max_seconds` is
+        # how far it goes.
         for name in ("CLAUDE_CODE_RETRY_WATCHDOG", "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS"):
             self.env.pop(name, None)
         self.jsonl = log_stem.with_suffix(".jsonl")

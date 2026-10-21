@@ -457,10 +457,10 @@ a pile of nits and spends a whole round on them.
 to `~/.claude/harden-state.json`. So a harden cycle blocked on its Phase 2 agents is invisible to
 the armed gate, which then refuses the yield the cycle needs in order to wait. That is what
 `gate-state`'s default scope is for — **omit `--only` and one command writes both**, so the pair
-cannot come apart the way two commands could:
+cannot come apart the way two commands could. One await per agent, under its own name:
 
 ```bash
-~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 await "harden phase 2"
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 await "phase2 quality"
 ~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 clear-await
 ```
 

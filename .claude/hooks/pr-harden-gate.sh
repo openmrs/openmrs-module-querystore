@@ -58,7 +58,8 @@
 # awaiting non-empty, fresh -> a background agent this run delegated to is outstanding; ALLOW the
 #                              yield, whatever the phase says. Bounded by AWAIT_TTL.
 # awaiting past AWAIT_TTL   -> no allow from it; whichever block below fires leads with the awaits and
-#                              their age (STALE_NOTE), since a usage-limit wait can hold a live one.
+#                              their age (STALE_NOTE) where the newest has a `since`, since a
+#                              usage-limit wait can hold a live one.
 # phase "building"      -> a resolve-ticket run is in flight and has not opened its PR yet; block.
 # phase "init"/"fixing" -> a run is in flight and the head it will hand over is not reviewed yet; block.
 # phase "reviewed", blocking > 0  -> another round is required; block.

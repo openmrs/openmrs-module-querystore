@@ -42,8 +42,8 @@
 # turns and $76.72 with committed work, no PR and ten orphaned worktrees. The allow is therefore
 # scoped to attended sessions; see the marker check below.
 # Same field, same semantics as pr-harden-gate.sh, which solved this first -- including that a block
-# reached past AWAIT_TTL leads with the awaits and their age (STALE_NOTE), since a usage-limit wait
-# can hold a live agent that long.
+# reached past AWAIT_TTL leads with the awaits and their age (STALE_NOTE) where the newest has a
+# `since`, since a usage-limit wait can hold a live agent that long.
 #
 # run stamped, no phase1 -> a run is in flight and has stated no verdict. Block.
 # phase1 == open        -> another Phase 1 pass is required; this hook blocks the turn from ending.
