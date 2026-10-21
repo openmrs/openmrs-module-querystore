@@ -89,9 +89,9 @@ public final class ContextSlice {
 		return effectiveTypes;
 	}
 
-	/** The requested typed-complete types the caller holds no core read privilege for. They are
-	 *  left out of {@link #getEffectiveTypes()}, so a consumer does not take the empty result for a
-	 *  patient with no such records (Decision 14 point 4). */
+	/** Every core type the caller holds no core read privilege for, requested or not. They are left
+	 *  out of {@link #getEffectiveTypes()} and of the mandatory tier, so a consumer does not take the
+	 *  empty result for a patient with no such records (Decision 14 point 4). */
 	public Set<String> getWithheldTypes() {
 		return withheldTypes;
 	}
