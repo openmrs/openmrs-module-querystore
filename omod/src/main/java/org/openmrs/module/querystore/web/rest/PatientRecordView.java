@@ -145,6 +145,9 @@ final class PatientRecordView {
 		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
 		Collections.sort(effectiveTypes);
 		env.put("effectiveTypes", effectiveTypes);
+		List<String> withheldTypes = new ArrayList<String>(slice.getWithheldTypes());
+		Collections.sort(withheldTypes);
+		env.put("withheldTypes", withheldTypes);
 		env.put("temporalApplied", Boolean.valueOf(slice.isTemporalApplied()));
 		env.put("chartSnapshotId", slice.getChartSnapshotId());
 		env.put("sliceId", PatientChartFingerprint.sliceId(slice));

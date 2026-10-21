@@ -42,6 +42,9 @@ public final class PatientChartFingerprint {
 		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
 		Collections.sort(effectiveTypes);
 		appendValue(canonical, effectiveTypes);
+		List<String> withheldTypes = new ArrayList<String>(slice.getWithheldTypes());
+		Collections.sort(withheldTypes);
+		appendValue(canonical, withheldTypes);
 		appendValue(canonical, Boolean.valueOf(slice.isTemporalApplied()));
 		for (ContextSliceRecord record : slice.getRecords()) {
 			appendValue(canonical, record.getTier());
