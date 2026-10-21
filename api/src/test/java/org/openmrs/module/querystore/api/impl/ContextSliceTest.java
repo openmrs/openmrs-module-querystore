@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.api.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -279,6 +280,38 @@ public class ContextSliceTest {
 
 		assertFalse(tiersByUuid(slice).containsKey("incidental-1"),
 		        "the word after an unlabeled natural-language 'code' question is not an identifier");
+	}
+
+	@Test
+	public void aOneCharacterNamespacedCodeIsExactEvidence() {
+		QueryDocument coded = doc("obs", "code-6", "Mapping codes: CIEL:6", LocalDate.of(2022, 1, 1));
+		backend.chart.add(coded);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "Compare CIEL:6",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(slice).get("code-6"));
+	}
+
+	@Test
+	public void anIdentifierDoesNotMatchALongerIdentifierItBegins() {
+		QueryDocument exact = doc("patient_identifier", "identifier-1", "Patient identifier: ABC-123",
+		        LocalDate.of(2022, 1, 1));
+		QueryDocument longer = doc("patient_identifier", "identifier-2", "Accession: ABC-123-4",
+		        LocalDate.of(2022, 1, 1));
+		QueryDocument code = doc("obs", "code-60", "Mapping codes: CIEL:60", LocalDate.of(2022, 1, 1));
+		QueryDocument longerCode = doc("obs", "code-60-1", "Mapping codes: CIEL:60-1", LocalDate.of(2022, 1, 1));
+		backend.chart.addAll(Arrays.asList(exact, longer, code, longerCode));
+
+		ContextSlice identifiers = service.getContextSlice(PATIENT, "Find MRN: ABC-123",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+		ContextSlice codes = service.getContextSlice(PATIENT, "Compare CIEL:60",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(identifiers).get("identifier-1"));
+		assertNotEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(identifiers).get("identifier-2"));
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(codes).get("code-60"));
+		assertNotEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(codes).get("code-60-1"));
 	}
 
 	@Test
