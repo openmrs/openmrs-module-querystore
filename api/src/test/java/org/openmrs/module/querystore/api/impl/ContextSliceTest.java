@@ -983,6 +983,24 @@ public class ContextSliceTest {
 	}
 
 	/** A diversified pick keeps each record's own search rank, so budgeting by rank drops by relevance. */
+	/** A hit past the Elasticsearch chart cap is in the index but not in the chart the slice is
+	 *  built from, so it could never fill the slot it took; the next candidate gets it. */
+	@Test
+	public void similarityLeg_skipsAHitTheChartDoesNotHold() {
+		QueryDocument beyondTheCap = doc("obs", "ghost-1", "Serum creatinine (umol/L): 180 umol/L",
+		        LocalDate.of(2016, 1, 1));
+		QueryDocument held = doc("obs", "creat-1", "Serum creatinine (umol/L): 193.7 umol/L", LocalDate.of(2026, 3, 1));
+		backend.chart.add(held);
+		backend.hits = Arrays.asList(beyondTheCap, held);
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(1);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "kidney issues?", request));
+
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-1"), "got " + tiers);
+		assertFalse(tiers.containsKey("ghost-1"));
+	}
+
 	@Test
 	public void similarityLeg_aDiversifiedPickCarriesTheRecordsOwnSearchRank() {
 		QueryDocument first = doc("obs", "preg-1", "Pregnancy status: No", LocalDate.of(2026, 6, 1));

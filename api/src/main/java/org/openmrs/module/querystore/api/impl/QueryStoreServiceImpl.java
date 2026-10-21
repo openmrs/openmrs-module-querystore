@@ -608,10 +608,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 * Picks up to {@code limit} similarity records one repeat-group at a time, so identical repeats
 	 * of one value share a slot instead of starving other records of slots. A group is a concept and
 	 * its rendered value: identical repeats ("Pregnancy status: No" three times) share one slot, while
-	 * distinct values of one concept stay separate, so a trend question keeps its series. Within a
+	 * distinct values of one concept stay separate, so a trend keeps one record per value. Within a
 	 * group the newest record comes first, since rankers never see dates (Decision 7) and a repeat's
-	 * slot must report its latest date. Records a policy tier already claimed are skipped. Each pick
-	 * keeps its own 1-based search rank.
+	 * slot must report its latest date. Records a policy tier already claimed are skipped, as is a
+	 * hit the chart does not hold (past the Elasticsearch cap): it could never fill the slot it took,
+	 * and the next candidate can. Each pick keeps its own 1-based search rank.
 	 */
 	private static Map<String, Integer> selectDiversifiedSimilarityRanks(List<QueryDocument> hits,
 	        Set<String> policyClaimedUuids, Map<String, Integer> chartPositions, int limit) {
@@ -620,7 +621,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		Set<String> seenUuids = new HashSet<>(policyClaimedUuids);
 		for (int i = 0; i < hits.size(); i++) {
 			QueryDocument hit = hits.get(i);
-			if (hit == null || hit.getResourceUuid() == null || !seenUuids.add(hit.getResourceUuid())) {
+			if (hit == null || hit.getResourceUuid() == null || !chartPositions.containsKey(hit.getResourceUuid())
+			        || !seenUuids.add(hit.getResourceUuid())) {
 				continue;
 			}
 			searchRanks.put(hit.getResourceUuid(), Integer.valueOf(i + 1));
