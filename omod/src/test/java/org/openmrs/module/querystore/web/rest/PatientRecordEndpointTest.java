@@ -746,6 +746,28 @@ public class PatientRecordEndpointTest {
 	}
 
 	@Test
+	public void contextPageNamesTheTypesWithheldFromTheCaller() {
+		List<org.openmrs.module.querystore.model.ContextSliceRecord> records = Arrays.asList(
+		        new org.openmrs.module.querystore.model.ContextSliceRecord(
+		                doc("drug_order", "m-1", LocalDate.of(2026, 6, 20), "Drug order: Lisinopril"),
+		                org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED));
+		org.openmrs.module.querystore.model.ContextSlice restricted =
+		        new org.openmrs.module.querystore.model.ContextSlice(records, 1, false, true,
+		                java.util.Collections.singleton("drug_order"), false, "chart-snapshot-3",
+		                java.util.Collections.singleton("allergy"));
+		org.openmrs.module.querystore.model.ContextSlice unrestricted =
+		        new org.openmrs.module.querystore.model.ContextSlice(records, 1, false, true,
+		                java.util.Collections.singleton("drug_order"), false, "chart-snapshot-3");
+
+		Map<String, Object> page = PatientRecordView.contextPage(restricted, 0, 10);
+
+		assertEquals(Arrays.asList("allergy"), page.get("withheldTypes"));
+		assertEquals(Arrays.asList("drug_order"), page.get("effectiveTypes"));
+		assertNotEquals("a withheld type is part of the slice's identity", page.get("sliceId"),
+		        PatientRecordView.contextPage(unrestricted, 0, 10).get("sliceId"));
+	}
+
+	@Test
 	public void contextSliceIdentityChangesWhenSimilarityRanksChange() {
 		QueryDocument first = doc("obs", "s-1", LocalDate.of(2025, 1, 1), "First semantic hit");
 		QueryDocument second = doc("obs", "s-2", LocalDate.of(2024, 1, 1), "Second semantic hit");

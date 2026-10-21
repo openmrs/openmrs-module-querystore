@@ -1421,10 +1421,14 @@ budgeting, and question interpretation.
    `tier`. Every context page carries `chartSnapshotId`, the same stable complete-chart snapshot
    the full-chart read publishes (`PatientChartFingerprint.snapshotId(chart, truncated,
    projectionComplete)` over the complete chart the slice was selected from), plus a
-   deterministic `sliceId` over the complete ordered selection and effective interpretation.
+   deterministic `sliceId` over the complete ordered selection and effective interpretation,
+   built by `PatientChartFingerprint` with the snapshot's canonical form.
    A consumer that combines a full-chart ledger with a later slice must require matching
    `chartSnapshotId` values and retry or fail when they differ; `sliceId` lets it reject mixed
-   pages and is neither a chart snapshot nor a cache validator.
+   pages and is neither a chart snapshot nor a cache validator. A requested type the caller
+   holds no core read privilege for (Decision 14 point 4) is left out of `effectiveTypes` and
+   named in `withheldTypes`, so a consumer that marks every effective type complete does not
+   take the empty tier for a patient without such records.
 
 ### Rationale
 1. **Selection is retrieval.** The tiers are query semantics over fields this store owns

@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -401,6 +402,24 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	/**
+	 * The types among {@code types} the calling user may not read through core, in a stable order.
+	 * With no user context bound nothing is withheld, as {@link #readableByCaller} refuses nothing.
+	 */
+	private static Set<String> typesWithheldFromCaller(Set<String> types) {
+		Set<String> withheld = new TreeSet<String>();
+		if (types.isEmpty() || !Context.isSessionOpen()) {
+			return withheld;
+		}
+		for (String type : types) {
+			String privilege = CORE_READ_PRIVILEGES.get(type);
+			if (privilege != null && !Context.hasPrivilege(privilege)) {
+				withheld.add(type);
+			}
+		}
+		return withheld;
+	}
+
+	/**
 	 * The documents whose type the calling user may read through core. With no user context bound
 	 * there is no caller to check, and nothing reaches one: a call through the service proxy is refused
 	 * by its {@code @Authorized} gate before it gets here. Each type's privilege is asked once per read.
@@ -483,6 +502,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 		Set<String> effectiveTypes = new HashSet<>(request.getTypes());
 		boolean temporal = request.isTemporal();
+		// A type the caller cannot read through core is withheld and named, not left in the scope: in
+		// the scope it would come back as an empty typed tier, which reads as a patient without such
+		// records, down to the sliceId.
+		Set<String> withheldTypes = typesWithheldFromCaller(effectiveTypes);
+		effectiveTypes.removeAll(withheldTypes);
 
 		// Ranked-search hits are the semantic catch-all tier. A failure degrades to the policy
 		// tiers alone — selection must never block on the ranking layer.
@@ -537,7 +561,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		return new ContextSlice(selected, chart.size(), chartRead.isTruncated(),
 		        chartRead.isProjectionComplete(), effectiveTypes, temporal,
 		        PatientChartFingerprint.snapshotId(chart, chartRead.isTruncated(),
-		                chartRead.isProjectionComplete()));
+		                chartRead.isProjectionComplete()), withheldTypes);
 	}
 
 	private static Set<String> exactSignals(String question) {

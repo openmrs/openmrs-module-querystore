@@ -181,6 +181,30 @@ public class ContextSliceTest {
 		assertTrue(tiers.containsKey("med-1"), "a readable typed record must still be served: " + tiers);
 	}
 
+	/** Left in the scope, a refused type would come back as an empty typed tier, identical down to
+	 *  the sliceId to a patient with no such records; it is withheld and named instead. */
+	@Test
+	public void aTypeTheCallerCannotReadIsWithheldAndLeavesTheEffectiveScope() {
+		ContextSliceRequest request = new ContextSliceRequest(
+		        new java.util.HashSet<String>(Arrays.asList("drug_order", "allergy")), false);
+		org.openmrs.api.context.Context.setUserContext(new org.openmrs.api.context.UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !org.openmrs.util.PrivilegeConstants.GET_ALLERGIES.equals(privilege);
+			}
+		});
+		ContextSlice slice;
+		try {
+			slice = service.getContextSlice(PATIENT, "Any drug allergies or medications?", request);
+		}
+		finally {
+			org.openmrs.api.context.Context.clearUserContext();
+		}
+
+		assertEquals(Collections.singleton("allergy"), slice.getWithheldTypes());
+		assertEquals(Collections.singleton("drug_order"), slice.getEffectiveTypes());
+	}
+
 	@Test
 	public void mandatoryCore_ridesEverySlice_regardlessOfTypesAndSimilarity() {
 		JsonNode fixtureCase = fixtureCase("context_policy", "context.enumerated-medications-are-complete");

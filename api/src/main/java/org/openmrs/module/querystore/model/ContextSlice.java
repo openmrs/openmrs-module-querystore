@@ -37,6 +37,8 @@ public final class ContextSlice {
 
 	private final String chartSnapshotId;
 
+	private final Set<String> withheldTypes;
+
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated) {
 		this(records, chartSize, chartTruncated, false, Collections.<String> emptySet(), false, null);
 	}
@@ -44,6 +46,15 @@ public final class ContextSlice {
 	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
 	        boolean projectionComplete, Set<String> effectiveTypes, boolean temporalApplied,
 	        String chartSnapshotId) {
+		this(records, chartSize, chartTruncated, projectionComplete, effectiveTypes, temporalApplied,
+		        chartSnapshotId, Collections.<String> emptySet());
+	}
+
+	public ContextSlice(List<ContextSliceRecord> records, int chartSize, boolean chartTruncated,
+	        boolean projectionComplete, Set<String> effectiveTypes, boolean temporalApplied,
+	        String chartSnapshotId, Set<String> withheldTypes) {
+		this.withheldTypes = withheldTypes == null ? Collections.<String> emptySet()
+		        : Collections.unmodifiableSet(new HashSet<String>(withheldTypes));
 		this.records = records == null ? Collections.<ContextSliceRecord> emptyList()
 		        : Collections.unmodifiableList(new ArrayList<ContextSliceRecord>(records));
 		this.chartSize = chartSize;
@@ -76,6 +87,13 @@ public final class ContextSlice {
 	/** The typed-complete scope this slice was SELECTED with; the selection trace for consumers. */
 	public Set<String> getEffectiveTypes() {
 		return effectiveTypes;
+	}
+
+	/** The requested typed-complete types the caller holds no core read privilege for. They are
+	 *  left out of {@link #getEffectiveTypes()}, so a consumer does not take the empty result for a
+	 *  patient with no such records (Decision 14 point 4). */
+	public Set<String> getWithheldTypes() {
+		return withheldTypes;
 	}
 
 	/** Whether the recency anchor applied to this slice. */
