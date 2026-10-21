@@ -108,6 +108,19 @@ no MCP server and one listed Atlassian as `needs-auth`, with no tools. Called wi
 `fields`, `getJiraIssue` returned no `comment` key at all for a private ticket carrying two comments;
 with `comment` among the `fields` it returned both (2026-10-21).
 
+*Added 0.27.0 — the rule it supports:* “Give the run a worktree of its own before the state entry below, so the user never has to.”
+
+The owner asked for it on 2026-10-21, rather than remember to make one. TRUNK-6826 had done it by
+hand: its session started in `~/Projects/openmrs/openmrs-core` (transcript line 5), moved into the
+`core-6826` worktree it entered (line 291), and its transcript lives under
+`~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-core-6826/`, named after that worktree,
+which is why a private ticket's slug never carries its key. `EnterWorktree` accepts a path only
+where it is a worktree of the session's own repository or of one nested inside it, so the session
+must start in the target repository. Measured in a scratch repository on 2026-10-21: from a
+subdirectory `git rev-parse --git-dir` printed an absolute path while `--git-common-dir` printed
+`../../.git`, so only `--path-format=absolute` tells a main checkout from a linked worktree there;
+the exclude line went in once across two runs, and openmrs-core's `info/exclude` already carried it.
+
 *Cut down, A-06 — the rule it supports:* “Pre-flight the verifier here, not at the end.”
 
 **Pre-flight the verifier here, not at the end.** This pipeline's terminal state is a PR marked ready,

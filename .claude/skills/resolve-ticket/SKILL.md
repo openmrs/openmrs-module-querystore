@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready (a private ticket's stays a draft). Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.26.0
+version: 0.27.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -208,6 +208,20 @@ problem and a comment is where it was corrected, narrowed, or measured — and a
 comment outranks a claim in the body. Note anything the ticket says was already tried and rejected;
 re-proposing it is the most expensive mistake available at this stage.
 
+**Give the run a worktree of its own before the state entry below, so the user never has to.** Where
+the cwd is the repository's main checkout rather than a linked worktree, which
+`git rev-parse --path-format=absolute --git-dir --git-common-dir` shows by printing one path twice,
+make one with `<slug>` naming the change, never the ticket's key, since the session's transcript
+directory is named after the path it enters:
+
+```bash
+top=$(git rev-parse --show-toplevel); git fetch -q origin && git worktree add -b <slug> "$top/.claude/worktrees/<slug>" origin/<default>
+x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"; grep -qxF '**/.claude/worktrees/' "$x" || echo '**/.claude/worktrees/' >> "$x"
+```
+
+then call `EnterWorktree` with that path. A cwd that is already a linked worktree, the pool
+driver's or one the user made, is used as it is.
+
 Now write the opening state entry: `phase: "building"`, `round: 1`, no `pr` yet. `building` is the
 gate's pre-PR phase — it blocks the turn from ending and says so in the language of *this* skill's
 remaining steps, rather than telling you to spawn a reviewer for code that does not exist yet.
@@ -217,12 +231,11 @@ remaining steps, rather than telling you to spawn a reviewer for code that does 
 ~/.claude/pipeline/gate-state --owner $PPID pr-set --ticket 315 --round 1 --phase building --blocking 0
 ```
 
-Attended from another checkout, start in the working tree or `EnterWorktree` into it before this
-write — the cwd is the working tree (table above); `pr-harden`'s **State** says why.
-`EnterWorktree`'s isolation guard then refuses what it cannot verify, git or not: do as its message
-says, or run the steps as a script by absolute path, whose git must still target this worktree. It
-refuses `$PPID` on a `gate-state` line even unchained, so run `echo $PPID` alone and pass that pid
-to `--owner`.
+The entry follows `EnterWorktree` because the gate keys on the cwd, which is the working tree (table
+above); `pr-harden`'s **State** says why. `EnterWorktree`'s isolation guard then refuses what it
+cannot verify, git or not: do as its message says, or run the steps as a script by absolute path,
+whose git must still target this worktree. It refuses `$PPID` on a `gate-state` line even
+unchained, so run `echo $PPID` alone and pass that pid to `--owner`.
 
 `gate-state` is the only writer of either state file — it holds a lock across both and writes
 atomically, which an inline read-modify-write cannot, and under a parallel pool cannot safely be
@@ -349,7 +362,8 @@ this repo, not merely its `awaiting` list — so the next turn in this directory
 ~/.claude/pipeline/gate-state clear --only pr
 ```
 
-Then report: the plan, every assumption taken, and what the gate checked and objected to. A
+Then report: the plan, every assumption taken, what the gate checked and objected to, and the
+worktree Step 1 made, where the full run can start. A
 `--plan-only` report is not a partial version of the full one — it is complete for what it covers,
 and it says plainly that no code was written.
 
@@ -357,7 +371,8 @@ and it says plainly that no code was written.
 
 Cut from an up-to-date default branch, and match the repo's own naming rather than inventing one —
 `git log --oneline -20` and `gh pr list --state all --limit 15 --json headRefName,title` show it. In
-this module the shape is `fix/<issue>-<slug>`, `fix/<slug>` or `feat/<slug>`. A private ticket's
+this module the shape is `fix/<issue>-<slug>`, `fix/<slug>` or `feat/<slug>`. Step 1's worktree has
+already cut the branch from `origin/<default>`; rename it to that shape with `git branch -m`. A private ticket's
 branch carries no key and names what the code now does, never the vulnerability. Unsure whether the
 ticket is private? Re-run Step 1's unauthenticated call: the ticket exists, so anything but the
 ticket itself means it is.

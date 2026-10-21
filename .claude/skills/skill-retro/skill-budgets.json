@@ -28,9 +28,9 @@
       "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     },
     "resolve-ticket": {
-      "from": 6860,
-      "to": 7562,
-      "why": "a ticket the unauthenticated JIRA endpoint answers 404 but getJiraIssue reads is private, often a security report, and OpenMRS's disclosure policy asks that no public pull request describe an unpatched vulnerability, so Step 1 reads such a ticket through the MCP with its comments, stops where no getJiraIssue can settle the 404, and finds an open PR for it through the local PRS file, and a new section, When the ticket is private, keeps the key and URL off the PR, its branch, its commits and its diff, keeps the ticket's text, what the code let an attacker do and whatever the PR leaves undone out of the body, records the PR in PRS and checks every push by pr-harden's section, leaves the PR a draft, says the org's review cannot know it is private, keeps the run record local and the ticket out of ticket-pool, with a pointer at each step it changes"
+      "from": 7562,
+      "to": 7709,
+      "why": "Step 1 makes the run its own worktree from origin/<default> and enters it before the state entry, wherever the session starts in the repository's main checkout, because the owner asked not to have to remember to make one; the slug names the change, never a ticket key, since the transcript directory is named after the path; Step 4 renames that branch, and a --plan-only report names the worktree for the full run"
     },
     "pr-review": {
       "from": 8064,
@@ -58,7 +58,7 @@
     "pr-harden/verifier.md": 1736,
     "pr-review": 8172,
     "pr-review/posting.md": 2030,
-    "resolve-ticket": 7562,
+    "resolve-ticket": 7709,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2806,
     "ticket-pool": 5111,
