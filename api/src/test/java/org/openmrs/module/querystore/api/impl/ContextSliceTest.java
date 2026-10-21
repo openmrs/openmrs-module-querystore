@@ -241,6 +241,29 @@ public class ContextSliceTest {
 		assertNotEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("cond-old"), "got " + tiers);
 	}
 
+	/** A type interpretation derives is withheld like a requested one, never left as an empty tier. */
+	@Test
+	public void interpretMode_withholdsADerivedTypeTheCallerCannotRead() {
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setInterpretQuestion(true);
+		org.openmrs.api.context.Context.setUserContext(new org.openmrs.api.context.UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !org.openmrs.util.PrivilegeConstants.GET_ALLERGIES.equals(privilege);
+			}
+		});
+		ContextSlice slice;
+		try {
+			slice = service.getContextSlice(PATIENT, "Any allergies?", request);
+		}
+		finally {
+			org.openmrs.api.context.Context.clearUserContext();
+		}
+
+		assertEquals(Collections.singleton("allergy"), slice.getWithheldTypes());
+		assertTrue(slice.getEffectiveTypes().isEmpty());
+	}
+
 	@Test
 	public void mandatoryCore_ridesEverySlice_regardlessOfTypesAndSimilarity() {
 		JsonNode fixtureCase = fixtureCase("context_policy", "context.enumerated-medications-are-complete");
