@@ -59,10 +59,11 @@ public class BootstrapLauncher {
 	 * caller's intent ("a global reindex is underway") is satisfied either way, and progress is
 	 * observed out-of-band via the indexing-status endpoint.
 	 *
-	 * <p>{@code BootstrapServiceImpl.bootstrap()} catches per-type failures internally and never
-	 * rethrows; the task wraps it only to clear the in-flight flag in a {@code finally}, so an
-	 * unexpected throw (e.g. service lookup failure) still releases the flag and surfaces via the
-	 * framework's thread-exception handler.
+	 * <p>{@code BootstrapServiceImpl.bootstrap()} catches per-type failures internally and rethrows
+	 * none of them except {@code EmbeddingProviderClosedException}, which ends the run once a stop has
+	 * closed the embedding provider. The task wraps it only to clear the in-flight flag in a
+	 * {@code finally}, so that throw, or an unexpected one (e.g. service lookup failure), still
+	 * releases the flag and surfaces via the framework's thread-exception handler.
 	 *
 	 * @return {@code true} once a bootstrap is in flight (newly launched or already running);
 	 *         {@code false} only when no {@link DaemonToken} is wired yet, in which case nothing runs.

@@ -23,7 +23,9 @@ import org.openmrs.api.OpenmrsService;
 public interface BootstrapService extends OpenmrsService {
 
 	/** Runs backfill for every registered resource type sequentially. A per-type failure does not
-	 *  abort the rest; failed types stay in {@link BootstrapStatus#FAILED} and can be retried. */
+	 *  abort the rest; failed types stay in {@link BootstrapStatus#FAILED} and can be retried. A closed
+	 *  embedding provider is not a per-type failure: the run ends at the type it interrupted and
+	 *  rethrows the {@code EmbeddingProviderClosedException}. */
 	void bootstrap();
 
 	/** Runs backfill for a single resource type. Resumes from the persisted cursor if a prior

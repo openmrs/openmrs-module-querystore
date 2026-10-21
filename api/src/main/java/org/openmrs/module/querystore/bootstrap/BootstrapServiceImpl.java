@@ -29,6 +29,7 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 import org.openmrs.module.querystore.spi.ResourceTypeNames;
 import org.openmrs.module.querystore.spi.ResourceTypeProvider;
@@ -129,6 +130,11 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		for (String resourceType : allResourceTypes(providers)) {
 			try {
 				runOne(resourceType, providers, false);
+			}
+			catch (EmbeddingProviderClosedException e) {
+				// Closed by a module stop or context shutdown: every remaining type would fail the same way
+				// and be marked FAILED, so the run ends at the type it interrupted.
+				throw e;
 			}
 			catch (RuntimeException e) {
 				log.warn("Bootstrap of " + resourceType + " failed; continuing with remaining types", e);

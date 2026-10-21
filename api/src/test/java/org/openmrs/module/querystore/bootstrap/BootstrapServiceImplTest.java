@@ -32,6 +32,7 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 import org.openmrs.module.querystore.spi.ResourceTypeProvider;
@@ -111,6 +112,27 @@ public class BootstrapServiceImplTest {
 		assertEquals("non-failing bootstrapper still ran after the failure", 1, ok.fetchCount);
 		assertEquals(BootstrapStatus.FAILED, dao.find("obs").getStatus());
 		assertEquals(BootstrapStatus.COMPLETED, dao.find("encounter").getStatus());
+	}
+
+	@Test
+	public void bootstrap_closedEmbeddingProviderAbortsRemaining() {
+		// A stop closes the embedding provider under a running bootstrap. Carrying on would mark every
+		// later type with records to embed FAILED, previously COMPLETED ones included.
+		EmptyPageBootstrapper interrupted = new EmptyPageBootstrapper("obs");
+		interrupted.failure = new EmbeddingProviderClosedException();
+		EmptyPageBootstrapper next = new EmptyPageBootstrapper("encounter");
+		service.setBootstrappers(Arrays.asList(interrupted, next));
+
+		try {
+			service.bootstrap();
+			fail("expected EmbeddingProviderClosedException");
+		}
+		catch (EmbeddingProviderClosedException expected) {
+		}
+
+		assertEquals(BootstrapStatus.FAILED, dao.find("obs").getStatus());
+		assertEquals("the next type never ran", 0, next.fetchCount);
+		assertNull("and its progress row was left alone", dao.find("encounter"));
 	}
 
 	@Test
