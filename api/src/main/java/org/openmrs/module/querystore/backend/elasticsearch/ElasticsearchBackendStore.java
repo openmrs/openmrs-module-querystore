@@ -69,11 +69,12 @@ import co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem;
  * ({@code version_type=external_gte} with {@code last_modified} as the version).
  *
  * <p>Deletes are issued at the document's own version. Elasticsearch keeps a tombstone for a deleted
- * document ({@code index.gc_deletes}, 60 s by default) and rejects a versioned write at or below the
- * tombstone's version; an unversioned delete would set that version one above the document's, so the
- * same-version rewrite that a patient reindex, a merge sweep or an unvoid issues straight after the
- * delete would be dropped as stale. At the document's own version the equal-or-newer rewrite applies
- * and a strictly older write still does not resurrect the record.
+ * document ({@code index.gc_deletes}, 60 s by default) and, while it is retained, rejects a versioned
+ * write strictly below the tombstone's version; an unversioned delete would set that version one above
+ * the document's, so the same-version rewrite that a patient reindex, a merge sweep or an unvoid issues
+ * straight after the delete would be dropped as stale. At the document's own version the equal-or-newer
+ * rewrite applies, and a strictly older write does not resurrect the record for as long as the
+ * tombstone is kept.
  *
  * <p>Hybrid retrieval inherits the {@link BackendStore#hybrid(SearchRequest)} interface-default
  * RRF over {@link #bm25(SearchRequest)} and {@link #knn(SearchRequest)} the same way every tier
@@ -253,8 +254,10 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 							succeeded++;
 							continue;
 						}
-						// A per-id read failure (a shard problem, typically) is transient from the caller's view.
-						failures.add(new DocFailure(resourceType, item.failure().id(), item.failure().error().reason(), true));
+						// A per-id read failure (a shard problem, typically) is transient from the caller's view;
+						// a request Elasticsearch rejects outright (an empty id) is not.
+						boolean retryable = !"illegal_argument_exception".equals(item.failure().error().type());
+						failures.add(new DocFailure(resourceType, item.failure().id(), item.failure().error().reason(), retryable));
 						continue;
 					}
 					if (!item.result().found()) {
@@ -299,7 +302,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		// time, until a read finds none left. A document rewritten between the read and the delete
 		// conflicts and is read again at its new version on the next pass; the loop stops when a pass
 		// deletes nothing, and reports that pass's failures. Each pass that deletes something shrinks
-		// what remains, so the number of passes is bounded by the number of documents.
+		// what remains, so with no concurrent writer the passes are bounded by the number of documents;
+		// a writer that keeps reinserting the patient's records keeps the loop going, and the callers
+		// (a merge, a void cascade) run with no such writer.
 		Set<String> matched = new HashSet<>();
 		int deleted = 0;
 		List<DocFailure> failures = new ArrayList<>();
@@ -342,7 +347,8 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		catch (ElasticsearchException | IOException e) {
 			log.warn("bulkDeleteByPatient failed for " + patientUuid, e);
 			// Call-level failure: no per-doc telemetry available, so resourceType/resourceUuid stay
-			// null. totalRequested stays 0 — the call didn't get far enough to know.
+			// null. totalRequested and succeeded keep what the completed passes counted; a failure on
+			// the first read leaves them 0.
 			failures.add(new DocFailure(null, null, e.getMessage(), isRetryable(e)));
 		}
 		return new BulkWriteResult(matched.size(), deleted, failures);

@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.backend.elasticsearch;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -26,8 +27,12 @@ import org.junit.Test;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ErrorCause;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
+import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.MgetResponse;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.bulk.OperationType;
 import co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem;
 
 /** The per-id accounting of {@code bulkDelete} when the request itself fails, which needs no cluster. */
@@ -52,6 +57,47 @@ public class ElasticsearchBulkDeleteAccountingTest {
 		assertEquals("a missing index is the second-call no-op outcome, as for delete()", 2, result.getSucceeded());
 		assertTrue(result.getFailures().isEmpty());
 		verify(client, never()).bulk(any(BulkRequest.class));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void aDeleteTheDocumentOutranIsARetryableFailureNotAStaleUpsert() throws Exception {
+		ElasticsearchClientFactory factory = mock(ElasticsearchClientFactory.class);
+		ElasticsearchClient client = mock(ElasticsearchClient.class);
+		when(factory.getClient()).thenReturn(client);
+		MgetResponse<Void> read = MgetResponse.of(r -> r.docs(Arrays.asList(
+		        MultiGetResponseItem.<Void> of(i -> i.result(d -> d.index("querystore_obs").id("stored").found(true)
+		                .version(3L))))));
+		when(client.mget(any(Function.class), eq(Void.class))).thenReturn(read);
+		// The document was rewritten at version 4 between the read and the delete at version 3.
+		BulkResponse conflict = BulkResponse.of(b -> b.took(1).errors(true).items(Arrays.asList(
+		        BulkResponseItem.of(i -> i.index("querystore_obs").id("stored").operationType(OperationType.Delete)
+		                .status(409).error(ErrorCause.of(e -> e.type("version_conflict_engine_exception")
+		                        .reason("current version [4] is higher or equal to the one provided [3]")))))));
+		when(client.bulk(any(BulkRequest.class))).thenReturn(conflict);
+
+		BulkWriteResult result = new ElasticsearchBackendStore(factory).bulkDelete("obs", Arrays.asList("stored"));
+
+		assertEquals("a conflict on a delete is not the stale-upsert success", 0, result.getSucceeded());
+		assertEquals(1, result.getFailures().size());
+		assertTrue(result.getFailures().get(0).isRetryable());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void aReadElasticsearchRejectsOutrightIsNotRetryable() throws Exception {
+		ElasticsearchClientFactory factory = mock(ElasticsearchClientFactory.class);
+		ElasticsearchClient client = mock(ElasticsearchClient.class);
+		when(factory.getClient()).thenReturn(client);
+		MgetResponse<Void> read = MgetResponse.of(r -> r.docs(Arrays.asList(
+		        MultiGetResponseItem.<Void> of(i -> i.failure(f -> f.index("querystore_obs").id("")
+		                .error(e -> e.type("illegal_argument_exception").reason("Ids can't be empty")))))));
+		when(client.mget(any(Function.class), eq(Void.class))).thenReturn(read);
+
+		BulkWriteResult result = new ElasticsearchBackendStore(factory).bulkDelete("obs", Arrays.asList(""));
+
+		assertEquals(1, result.getFailures().size());
+		assertFalse("an argument Elasticsearch rejects will be rejected again", result.getFailures().get(0).isRetryable());
 	}
 
 	@Test
