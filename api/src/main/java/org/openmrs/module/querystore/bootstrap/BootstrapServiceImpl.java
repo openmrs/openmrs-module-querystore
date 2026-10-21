@@ -302,7 +302,6 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		synchronized (lock) {
 			BootstrapProgress progress = progressDao.find(resourceType);
 			String currentBackend = currentBackendName();
-			boolean walkAfresh = forceRestart;
 			if (progress == null) {
 				progress = new BootstrapProgress(resourceType);
 				progress.setBackend(currentBackend);
@@ -332,11 +331,13 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				        + ")");
 				resetProgressForBackend(progress, currentBackend);
 				progressDao.save(progress);
-				walkAfresh = true;
 			}
-			// A resync or a backend change walks the corpus afresh, so it rewrites every record; only
-			// a plain bootstrap skips records the store already holds at their current version.
-			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao, !walkAfresh);
+			// Only a top-up of a completed walk skips records the store holds at their current version.
+			// A reset leaves the row NOT_STARTED, and an unfinished row may be a resync or a backend
+			// reset that was interrupted: nothing but the row says so, and resuming it must keep
+			// rewriting every record, or the rest of the resync is skipped while the row ends COMPLETED.
+			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao,
+			        progress.getStatus() == BootstrapStatus.COMPLETED);
 		}
 	}
 
