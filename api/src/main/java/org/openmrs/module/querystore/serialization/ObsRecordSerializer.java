@@ -10,10 +10,14 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_COMMENT;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DESCRIPTION;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_INTERPRETATION;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_CODES;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_NAMES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_CONCEPT_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_STATUS;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_UNITS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VALUE_BOOLEAN;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VALUE_CODED_NAME;
@@ -28,6 +32,7 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VALUE_TEXT
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -124,9 +129,59 @@ public class ObsRecordSerializer extends AbstractRecordSerializer<Obs> {
 		doc.setText(preferredName.isEmpty() ? valueDisplay : preferredName + ": " + valueDisplay);
 
 		putConceptFields(doc, concept, preferredName);
+		putValueCodedConceptFields(doc, obs.getValueCoded(), valueDisplay);
 		putObsMetaFields(doc, obs);
 		putGroupFields(doc, obs);
 		putEncounterContext(doc, obs.getEncounter());
+	}
+
+	private void putValueCodedConceptFields(QueryDocument doc, Concept valueCoded, String codedPreferredName) {
+		if (valueCoded == null) {
+			return;
+		}
+		List<String> codedSynonyms = ConceptNameUtil.getSynonyms(valueCoded, codedPreferredName);
+		if (!codedSynonyms.isEmpty()) {
+			mergeStringListMetadata(doc, FIELD_SYNONYMS, codedSynonyms);
+		}
+		String codedDescription = ConceptNameUtil.getDescription(valueCoded);
+		if (!codedDescription.isEmpty()) {
+			Object existing = doc.getMetadata().get(FIELD_DESCRIPTION);
+			if (existing instanceof String && !((String) existing).isEmpty()) {
+				if (!existing.equals(codedDescription)) {
+					doc.putMetadata(FIELD_DESCRIPTION, existing + " " + codedDescription);
+				}
+			} else {
+				doc.putMetadata(FIELD_DESCRIPTION, codedDescription);
+			}
+		}
+		List<String> codedMappings = ConceptNameUtil.getMappingNames(valueCoded);
+		if (!codedMappings.isEmpty()) {
+			mergeStringListMetadata(doc, FIELD_MAPPING_NAMES, codedMappings);
+		}
+		// The answer's names are merged above, so a question naming the answer's code (CIEL:703)
+		// must match the record too.
+		List<String> codedCodes = ConceptNameUtil.getMappingCodes(valueCoded);
+		if (!codedCodes.isEmpty()) {
+			mergeStringListMetadata(doc, FIELD_MAPPING_CODES, codedCodes);
+		}
+	}
+
+	/** Appends the answer concept's list after the question concept's, dropping duplicates. Each part
+	 *  is already sorted and capped, so the merged list is deterministic and holds up to twice the cap. */
+	private static void mergeStringListMetadata(QueryDocument doc, String key, List<String> additions) {
+		Object existing = doc.getMetadata().get(key);
+		if (!(existing instanceof List)) {
+			doc.putMetadata(key, additions);
+			return;
+		}
+		LinkedHashSet<String> merged = new LinkedHashSet<>();
+		for (Object item : (List<?>) existing) {
+			if (item instanceof String && !((String) item).isEmpty()) {
+				merged.add((String) item);
+			}
+		}
+		merged.addAll(additions);
+		doc.putMetadata(key, new ArrayList<>(merged));
 	}
 
 	/**

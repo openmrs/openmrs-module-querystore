@@ -107,22 +107,33 @@ public final class ConceptNameUtil {
 			return "";
 		}
 		String localeLanguage = resolveLocale().getLanguage();
-		ConceptDescription fallback = null;
+		String fallback = null;
 		for (ConceptDescription cd : concept.getDescriptions()) {
 			String text = cd.getDescription();
-			if (text == null || text.trim().isEmpty()) {
+			if (text == null) {
+				continue;
+			}
+			String trimmed = text.trim();
+			if (trimmed.isEmpty() || isFormPromptBoilerplate(trimmed)) {
 				continue;
 			}
 			if (cd.getLocale() != null
 					&& cd.getLocale().getLanguage().equals(localeLanguage)) {
-				return text.trim();
+				return trimmed;
 			}
 			if (fallback == null) {
-				fallback = cd;
+				fallback = trimmed;
 			}
 		}
-		return fallback != null && fallback.getDescription() != null
-				? fallback.getDescription().trim() : "";
+		return fallback != null ? fallback : "";
+	}
+
+	/** Starts a form-prompt boilerplate description, which describes the form rather than the concept. */
+	private static final String FORM_PROMPT_DESCRIPTION_PREFIX = "Question on encounter form";
+
+	private static boolean isFormPromptBoilerplate(String description) {
+		return description.regionMatches(true, 0,
+				FORM_PROMPT_DESCRIPTION_PREFIX, 0, FORM_PROMPT_DESCRIPTION_PREFIX.length());
 	}
 
 	/**
