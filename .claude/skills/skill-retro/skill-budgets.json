@@ -29,8 +29,8 @@
     },
     "resolve-ticket": {
       "from": 7873,
-      "to": 8092,
-      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn on an API error, which runs StopFailure rather than Stop, so no gate sees it and nothing in the skill runs again until a person, Claude Code or pool-run sends a turn, so a session started by hand checks CLAUDE_CODE_RETRY_WATCHDOG, under which a request at the limit, an agent's included, waits for the reset inside the turn (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), and when it is not on in any case of 1, true, yes or on says so at once and carries on, because Claude Code's own continue can be switched off for an account and skips Remote Control sessions, resets more than a day out and repeated hits, noting that a pool-run --work session may also have its launcher's nudge, and naming the remedy for later sessions, a shell alias with a five-hour usage-limit wait cap, read from Claude Code 2.1.301, and never a mid-run relaunch, which in a pool-run --work session releases the slot and leaves any relaunched session's gate entry owned by a dead pid"
+      "to": 8103,
+      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn on an API error, which runs StopFailure rather than Stop, so no gate sees it and nothing in the skill runs again until a person, Claude Code or pool-run sends a turn, so a session started by hand checks CLAUDE_CODE_RETRY_WATCHDOG, under which a request at the limit, an agent's included, waits for the reset inside the turn (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), and unless the variable is 1, true, yes or on in any case and the running binary's version, read through CLAUDE_CODE_EXECPATH, is 2.1.301 or later (2.1.42, without the watchdog, ended the run at the first 429 with the variable set), says so at once and carries on, because Claude Code's own continue can be switched off for an account and skips Remote Control sessions, resets more than a day out and repeated hits, noting that a pool-run --work session may also have its launcher's nudge, and naming the remedy for later sessions, a shell alias with a five-hour usage-limit wait cap, read from Claude Code 2.1.301, and never a mid-run relaunch, which in a pool-run --work session releases the slot and leaves any relaunched session's gate entry owned by a dead pid"
     },
     "pr-review": {
       "from": 8064,
@@ -63,7 +63,7 @@
     "pr-harden/verifier.md": 1736,
     "pr-review": 8172,
     "pr-review/posting.md": 2030,
-    "resolve-ticket": 8092,
+    "resolve-ticket": 8103,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2823,
     "ticket-pool": 5111,

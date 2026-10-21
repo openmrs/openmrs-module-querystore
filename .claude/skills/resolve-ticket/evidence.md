@@ -184,7 +184,12 @@ ended the run at once. With it the request slept until the reset the stub named,
 run finished normally, and in the run that had spawned an agent first, the agent's requests did the
 same. A reset beyond the cap was refused at once, and `TRUE` counted as on. The controls: the stub
 serving from the start (one request, exit 0), and the plain and the agent limit case run again
-without the variable.
+without the variable. And Claude Code 2.1.42, which has no watchdog, ended the run at the first 429
+with the variable set, which is why the check reads the version as well. It reads it from
+`CLAUDE_CODE_EXECPATH`, which the 2.1.306 binary sets in a Bash tool shell to its own
+`process.execPath`, and falls back to the `claude` on the `PATH`. Under an npm install that
+executable is `node`, whose version the check reads as too old, so it errs toward saying so. Its
+floor is 2.1.301, where the cap the remedy names begins.
 The artifact names what this leaves open: a real limit under a subscription login, an interactive
 session, a foreground agent, and a wait of hours.
 
