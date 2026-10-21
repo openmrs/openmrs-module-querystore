@@ -15,16 +15,11 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.model.PatientChartFingerprint;
@@ -152,7 +147,7 @@ final class PatientRecordView {
 		env.put("effectiveTypes", effectiveTypes);
 		env.put("temporalApplied", Boolean.valueOf(slice.isTemporalApplied()));
 		env.put("chartSnapshotId", slice.getChartSnapshotId());
-		env.put("sliceId", contextSliceId(slice));
+		env.put("sliceId", PatientChartFingerprint.sliceId(slice));
 		if (baseParams != null) {
 			List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
 			if (startIndex > 0) {
@@ -168,33 +163,6 @@ final class PatientRecordView {
 		return env;
 	}
 
-	/** Fingerprint the complete ordered context selection, including every selection input/result. */
-	static String contextSliceId(org.openmrs.module.querystore.model.ContextSlice slice) {
-		StringBuilder canonical = new StringBuilder();
-		appendValue(canonical, Integer.valueOf(slice.getChartSize()));
-		appendValue(canonical, Boolean.valueOf(slice.isChartTruncated()));
-		appendValue(canonical, Boolean.valueOf(slice.isProjectionComplete()));
-		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
-		Collections.sort(effectiveTypes);
-		appendValue(canonical, effectiveTypes);
-		appendValue(canonical, Boolean.valueOf(slice.isTemporalApplied()));
-		for (org.openmrs.module.querystore.model.ContextSliceRecord record : slice.getRecords()) {
-			appendValue(canonical, record.getTier());
-			appendValue(canonical, record.getRank());
-			QueryDocument doc = record.getDocument();
-			appendValue(canonical, doc.getResourceType());
-			appendValue(canonical, doc.getResourceUuid());
-			appendValue(canonical, doc.getDate() == null ? null : doc.getDate().toString());
-			appendValue(canonical, metadataString(doc, FIELD_CLINICAL_DATE));
-			appendValue(canonical, dateKind(doc));
-			appendValue(canonical, doc.getText());
-			appendValue(canonical,
-					doc.getLastModified() == null ? null : doc.getLastModified().toString());
-			appendValue(canonical, doc.getMetadata());
-		}
-		return sha256(canonical.toString());
-	}
-
 	/** Stable identity for an entire ordered chart, including completeness and canonical metadata. */
 	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated, boolean projectionComplete) {
 		return PatientChartFingerprint.snapshotId(docs, chartTruncated, projectionComplete);
@@ -202,7 +170,7 @@ final class PatientRecordView {
 
 	/** A page-specific strong ETag, derived from the complete snapshot and paging parameters. */
 	static String pageEtag(String snapshotId, int startIndex, int limit) {
-		return "\"" + sha256(snapshotId + "|" + startIndex + "|" + limit) + "\"";
+		return "\"" + PatientChartFingerprint.sha256(snapshotId + "|" + startIndex + "|" + limit) + "\"";
 	}
 
 	private static String metadataString(QueryDocument doc, String key) {
@@ -213,64 +181,6 @@ final class PatientRecordView {
 	private static String dateKind(QueryDocument doc) {
 		String value = metadataString(doc, FIELD_DATE_KIND);
 		return value == null ? DATE_KIND_UNKNOWN : value;
-	}
-
-	private static String sha256(String value) {
-		try {
-			byte[] digest = MessageDigest.getInstance("SHA-256")
-			        .digest(value.getBytes(StandardCharsets.UTF_8));
-			StringBuilder hex = new StringBuilder(digest.length * 2);
-			for (byte b : digest) {
-				int unsignedByte = b & 0xff;
-				hex.append(Character.forDigit(unsignedByte >>> 4, 16));
-				hex.append(Character.forDigit(unsignedByte & 0x0f, 16));
-			}
-			return hex.toString();
-		}
-		catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("SHA-256 is unavailable", e);
-		}
-	}
-
-	@SuppressWarnings("unchecked")
-	private static void appendValue(StringBuilder out, Object value) {
-		if (value == null) {
-			out.append("-1:");
-			return;
-		}
-		if (value instanceof Map) {
-			out.append("{");
-			Map<String, Object> sorted = new TreeMap<String, Object>();
-			for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-				sorted.put(String.valueOf(entry.getKey()), entry.getValue());
-			}
-			for (Map.Entry<String, Object> entry : sorted.entrySet()) {
-				appendValue(out, entry.getKey());
-				appendValue(out, entry.getValue());
-			}
-			out.append("}");
-			return;
-		}
-		if (value instanceof Collection) {
-			out.append("[");
-			List<Object> items = new ArrayList<Object>((Collection<Object>) value);
-			if (!(value instanceof List)) {
-				Collections.sort(items, (left, right) -> canonicalValue(left).compareTo(canonicalValue(right)));
-			}
-			for (Object item : items) {
-				appendValue(out, item);
-			}
-			out.append("]");
-			return;
-		}
-		String text = String.valueOf(value);
-		out.append(text.length()).append(':').append(text);
-	}
-
-	private static String canonicalValue(Object value) {
-		StringBuilder out = new StringBuilder();
-		appendValue(out, value);
-		return out.toString();
 	}
 
 	private static Map<String, Object> link(String rel, String endpointUrl, String baseParams, int startIndex, int limit) {
