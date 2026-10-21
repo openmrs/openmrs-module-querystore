@@ -125,6 +125,11 @@ public class QueryStoreRestController {
 	        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
+		if (patient != null && StringUtils.isBlank(patient)) {
+			// A client whose patient variable came up empty asked for one patient's records; running the
+			// cross-patient search for it would hand it other patients' records, which carry no patientUuid.
+			return errorResponse(HttpStatus.BAD_REQUEST, "patient must not be blank");
+		}
 		String patientUuid = StringUtils.trimToNull(patient);
 		String query = StringUtils.trimToNull(q);
 		int from = startIndex == null ? 0 : startIndex.intValue();

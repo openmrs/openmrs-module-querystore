@@ -78,7 +78,7 @@ curl -s -u patient-reader:secret \
   'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&limit=500'
 ```
 
-**Errors:** missing `patient` and `q`, invalid paging, or malformed parameters return `400`; an
+**Errors:** missing `patient` and `q`, a blank `patient`, invalid paging, or malformed parameters return `400`; an
 unknown patient returns `404`; failed authentication/authorization returns `401`/`403`.
 
 ---

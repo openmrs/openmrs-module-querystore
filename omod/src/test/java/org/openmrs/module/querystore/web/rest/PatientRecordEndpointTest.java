@@ -489,6 +489,15 @@ public class PatientRecordEndpointTest {
 	}
 
 	@Test
+	public void returns400_whenPatientIsBlank_insteadOfSearchingAcrossPatients() {
+		authenticate();
+		wire();
+		ResponseEntity<Object> response = controller.getPatientRecords(request, " ", "hba1c", null, null);
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		verify(queryStore, never()).search(anyString(), anyInt());
+	}
+
+	@Test
 	public void returns400_whenLimitNonPositive() {
 		authenticate();
 		wire();
