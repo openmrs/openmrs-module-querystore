@@ -297,6 +297,15 @@ public class ElasticsearchBackendStoreIntegrationTest {
 	}
 
 	@Test
+	public void bulkDeleteOnAnIndexNeverCreatedIsANoOp() {
+		// mget reports a missing index per item rather than throwing, so the catch below the loop
+		// never sees it; each id is the second-call no-op outcome, as delete() treats it.
+		BulkWriteResult result = backend.bulkDelete("never_created", Arrays.asList("a", "b"));
+		assertEquals(2, result.getSucceeded());
+		assertFalse(result.hasFailures());
+	}
+
+	@Test
 	public void bulkDeleteThenSameVersionRewriteRestoresTheDocuments() {
 		Instant t = Instant.parse("2025-03-15T09:00:00Z");
 		QueryDocument a = doc("obs", "patient-A", "Pulse: 72", null);
@@ -311,7 +320,6 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		assertEquals(2, backend.findAllByPatient("patient-A").size());
 	}
 
-	/** The conditional-upsert guard survives a delete: a strictly older write still does not resurrect the record. */
 	@Test
 	public void deleteRetriesAtTheVersionAConcurrentWriteLeft() {
 		// A write between the version read and the delete conflicts; the delete must read the new
@@ -362,6 +370,7 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		}
 	}
 
+	/** The conditional-upsert guard survives a delete: a strictly older write still does not resurrect the record. */
 	@Test
 	public void deleteStillBlocksAnOlderRewrite() {
 		Instant t1 = Instant.parse("2025-03-15T09:00:00Z");
