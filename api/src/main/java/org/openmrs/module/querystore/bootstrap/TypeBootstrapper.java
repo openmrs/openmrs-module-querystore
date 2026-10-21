@@ -227,7 +227,9 @@ public abstract class TypeBootstrapper<T> {
 	 * Patient-scoped variant of {@link #run}: walks {@link #fetchPageForPatient} until exhausted and
 	 * batch-projects each page through the serializer + embedder + bulk write path. No progress row is
 	 * persisted — the per-patient path is invoked from the auto-index path on cold search and its
-	 * cursor lives only for the duration of the call. Per-record serialize/embed failures are isolated
+	 * cursor lives only for the duration of the call. Records the store holds at their current version
+	 * are skipped as a top-up skips them: a patient whose projection keeps failing comes back through
+	 * this walk on every read, and must not be re-embedded in full each time. Per-record serialize/embed failures are isolated
 	 * by {@link #projectBatch}; a page-fetch failure propagates (the poison-page fallback that
 	 * {@link #run} uses is scoped to the global scan for now — a per-patient orphan still surfaces).
 	 *
@@ -251,7 +253,7 @@ public abstract class TypeBootstrapper<T> {
 				throw new IllegalStateException("Per-patient fetch of " + getResourceType() + " for patient "
 				        + patientUuid + " did not advance past " + cursor + "/" + cursorUuid);
 			}
-			failed += projectBatch(page, service, embedder).failed;
+			failed += projectBatch(withoutStoredAtCurrentVersion(page, service), service, embedder).failed;
 			cursor = getDateChanged(last);
 			cursorUuid = getUuid(last);
 		}
