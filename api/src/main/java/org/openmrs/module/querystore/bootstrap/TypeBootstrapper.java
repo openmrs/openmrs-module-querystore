@@ -22,6 +22,7 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.serialization.AbstractRecordSerializer;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
@@ -256,7 +257,8 @@ public abstract class TypeBootstrapper<T> {
 
 	/** Serializes and embeds one entity into a write-ready document, or returns {@code null} to skip it:
 	 *  a null serialization (e.g. a group-obs parent) or a per-record serialize/embed failure (logged,
-	 *  never fatal to the scan). */
+	 *  never fatal to the scan). A closed embedding provider is not a per-record failure: skipping would
+	 *  checkpoint the cursor past records that were never indexed, so it ends the scan instead. */
 	private QueryDocument serializeAndEmbed(T entity, EmbeddingProvider embedder) {
 		try {
 			QueryDocument doc = getSerializer().serialize(entity);
@@ -265,6 +267,9 @@ public abstract class TypeBootstrapper<T> {
 			}
 			doc.setEmbedding(embedder.embed(doc.getEmbeddingInput()));
 			return doc;
+		}
+		catch (EmbeddingProviderClosedException e) {
+			throw e;
 		}
 		catch (RuntimeException e) {
 			// retryable=null → "unknown": a thrown exception, not a DocFailure-bearing WriteResult.
