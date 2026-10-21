@@ -169,15 +169,16 @@ What Claude Code does, from its documentation (code.claude.com: `hooks`, `intera
   off for an account"; and one predicate returns early from arming it unasked, from arming it off the
   limit notice, and from opening the menu: Remote Control's bridge connected,
   `CLAUDE_CODE_SESSION_KIND=bg`, or a teammate.
-- `CLAUDE_CODE_RETRY_WATCHDOG` is "unattended retry mode", documented for unattended sessions such as
-  CI jobs: it retries 429 and 529 errors indefinitely. In the binary, a 429 whose
+- `CLAUDE_CODE_RETRY_WATCHDOG` is "unattended retry mode", documented for unattended sessions such
+  as CI jobs: it retries 429 and 529 errors indefinitely. In the binary, a 429 whose
   `anthropic-ratelimit-unified-status` is `rejected` waits until the
   `anthropic-ratelimit-unified-reset` it names and then retries, bounded by
   `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` (unset: no bound). That variable was added in
-  2.1.301 "so unattended retry mode ends a request at a usage limit that resets too far away instead
-  of waiting", so an older Claude Code does not read it and waits out a weekly limit too. A spend cap
-  or exhausted usage credits is the exception, refused at once. The variable is read as a boolean,
-  true for `1`, `true`, `yes` or `on` whatever their case.
+  2.1.301 "so unattended retry mode (`CLAUDE_CODE_RETRY_WATCHDOG`) ends a request at a usage limit
+  that resets too far away instead of waiting", so an older Claude Code does not read it and waits
+  out a weekly limit too. A spend cap or exhausted usage credits is the exception, refused at once.
+  The variable is read as a boolean: lower-cased and trimmed, then true for `1`, `true`, `yes` or
+  `on`.
 
 Measured on 2026-10-21 (`~/.claude/skill-lessons/artifacts/2026-10-21-retry-watchdog-limit/`), with
 `claude -p` against a stub that answers like a claude.ai limit. Without the variable the first 429
@@ -195,8 +196,8 @@ limit at the first 429 with the variable set, so the variable alone can report a
 exist. The check reads the version from `CLAUDE_CODE_EXECPATH`, which the 2.1.306 binary sets in a
 Bash tool shell to its own `process.execPath`, and falls back to the `claude` on the `PATH`. It asks
 for the `(Claude Code)` suffix, which only Claude Code's `--version` prints: where a Claude Code
-still ran as `cli.js` under node, as the npm release still did at 2.1.100, that executable is `node`,
-whose bare `v22…` a comparison of numbers with 2.1.301 would pass. npm releases from 2.1.120 on ship
+still ran as `cli.js` under node, as npm releases did up to 2.1.112, that executable is `node`,
+whose bare `v22…` a comparison of numbers with 2.1.301 would pass. npm releases from 2.1.113 on ship
 a native binary (`npm view @anthropic-ai/claude-code@<version> bin`). Its floor is 2.1.301, where
 the cap the remedy names begins.
 
@@ -230,18 +231,25 @@ anywhere comes back under a new pid, while the entry's `owner` is the dead one, 
 as a stop to allow until the next `--owner` write. So the check says so and the run carries on, and
 the remedy is for the sessions after it.
 
-**Why an alias, and never an export or `settings.json`'s `env`.** Either of those reaches the
-driver's headless sessions: `pool-run` copies its own environment into every session it starts, and
-`settings.json` applies to every `claude`. Measured with the stub (the artifact's `stream.sh` and
-`drive.py`): a headless session waiting under the watchdog streams a `system/api_retry` line every
-30 s and no `rate_limit_event`, so `pool-run`'s `Session` never goes quiet and never records the
-limit. Driven with a 45 s quiet window and a 60 s ticket timeout, it was killed for the timeout,
-with nothing paused; with a 200 s timeout it outlasted the wait and finished. A kill is recorded as
-`timeout` and spends an attempt, where the driver's own carry would have suspended the session at no
-cost. An alias reaches only the sessions a person starts, and `pool-run --work`'s, which inherit the
+**Why never `settings.json`'s `env`, and why `pool-run` drops the pair.** A headless session waiting
+under the watchdog hides the limit from the driver. Measured with the stub (the artifact's
+`stream.sh` and `drive.py`): it streams a `system/api_retry` line every 30 s and no
+`rate_limit_event`, so `pool-run`'s `Session` never goes quiet and never records the limit. Driven
+with a 45 s quiet window and a 60 s ticket timeout, it was killed for the timeout, with nothing
+paused; with a 200 s timeout it outlasted the wait and finished. A kill is recorded as `timeout` and
+spends an attempt, where the driver's own carry would have suspended the session at no cost.
+`pool-run` copied its own environment into every session it started, the `--work` launcher's limit
+probe included, so an exported pair reached them all, and so did the pair this paragraph's remedy
+puts in front of `pool-run --work`: with it, the probe the stub's limit refuses in under a second
+waited out its own 300 s timeout (probe-before-vars). So `Session` now drops the pair, whichever way
+it arrives, which `pool-test` checks against the process it starts: a session handed the pair ended
+at the stub's first 429 (pool-stripped), and the probe answered in 0.8 s (probe-after-vars).
+`settings.json`'s `env` is beyond that: set there alone, the variable still had a session wait out
+the stub's limit (settings-env-watchdog), and it reaches every `claude`, the driver's included. An
+alias reaches only the sessions a person starts, and `pool-run --work`'s, which inherit the
 environment of the command that launched them, take the variables only when they are put in front of
-that command. Run in an interactive bash (the artifact's `alias-probe.sh`), the alias started a probe
-`claude` with both variables set and left the shell itself without them.
+that command. Run in an interactive bash (the artifact's `alias-probe.sh`), the alias started a
+probe `claude` with both variables set and left the shell itself without them.
 
 Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
 window, which resets less than five hours after the request that meets it, and refuses any reset

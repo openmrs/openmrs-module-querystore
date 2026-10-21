@@ -196,19 +196,18 @@ module that needs one. Say so NOW if either is missing, so the user can fix it w
 proceeds.
 
 **Pre-flight the usage limit too.** A claude.ai usage limit ends the turn on an API error, which
-runs `StopFailure` hooks instead of `Stop`, so no gate sees it. With `CLAUDE_CODE_RETRY_WATCHDOG`
-on, a request at the limit waits for the reset and retries instead of ending the turn. So where
-`$CLAUDE_PIPELINE_SESSION` is unset, run
+runs `StopFailure` hooks instead of `Stop`, so no gate sees it; `CLAUDE_CODE_RETRY_WATCHDOG` makes
+the request wait for the reset instead. So where `$CLAUDE_PIPELINE_SESSION` is unset, run
 `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"; "${CLAUDE_CODE_EXECPATH:-claude}" --version`, and
-unless the first line is `1`, `true`, `yes` or `on`, in upper or lower case, and the second
-`2.1.301 (Claude Code)` or later, say so NOW and carry on. The remedy is for later sessions, never a
-reason to relaunch this one mid-run:
+unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second
+`2.1.301 (Claude Code)` or later, its numbers compared as numbers (2.1.42 is older), say so NOW and
+carry on. The remedy is for later sessions, never a reason to relaunch this one mid-run: Claude Code
+2.1.301 or later, started through
 `alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
-whose cap waits out a reset up to five hours away, or the same two variables in front of
-`pool-run --work`, whose sessions may also have its nudge (`ticket-pool`'s `pausing.md`). Never an
-`export` or `settings.json`'s `env`: the driver's headless sessions would inherit it, and one
-waiting there streams a retry line every 30 s, so the driver never learns of the limit and its
-ticket timeout spends the attempt a pause would have kept. And a wait can hold a live agent past the
+whose cap waits out a reset up to five hours away, or with the two variables in front of
+`pool-run --work`. Never `settings.json`'s `env`: it reaches the driver's headless sessions, which
+`pool-run` otherwise keeps the pair out of, and one waiting there hides the limit from the driver, so
+a ticket timeout that ends the wait spends the attempt. And a wait can hold a live agent past the
 gates' one-hour await bound; `pr-harden`'s **State** says what its await gets then.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at

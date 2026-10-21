@@ -4,7 +4,7 @@
 # whose one await is 600 s and then 7200 s old, and prints what the gate decided each time. Then it
 # records the same await again through gate-state, as pr-harden's State has an await past the hour
 # recorded again once, and prints the awaits' ages and the gate's decision on that, and on the same
-# entry less the await just appended.
+# entry less the await just appended. A block prints its systemMessage and the opening of its reason.
 set -u
 gate="${1:?path to pr-harden-gate.sh}"; gs="${2:?path to gate-state}"
 # Absolute before anything moves the cwd, and present: a gate that cannot be run prints nothing,
@@ -19,7 +19,7 @@ decide() {
   decision=$(cd "$key" && echo '{}' | HOME="$work/home" bash "$gate"); rc=$?
   [ "$rc" -eq 0 ] || { echo "$1: the gate exited $rc" >&2; exit 3; }
   if [ -z "$decision" ]; then echo "$1: allow"
-  else echo "$1: $(printf '%s' "$decision" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["decision"], "-", d["systemMessage"])')"
+  else echo "$1: $(printf '%s' "$decision" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["decision"], "-", d["systemMessage"], "| reason opens:", d["reason"][:150])')"
   fi
 }
 for age in 600 7200; do

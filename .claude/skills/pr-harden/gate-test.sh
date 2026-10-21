@@ -58,6 +58,49 @@ run_case "awaiting fresh, UNATTENDED -> block (a yield can end the run)" block \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"refute\",\"since\":$NOW}]}"
 run_case "awaiting STALE, unattended -> block" block \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]}"
+# AWAIT_TTL on an ATTENDED session, which the case above cannot show: an unattended entry blocks a
+# yield whatever its await's age, so with the TTL made effectively infinite this suite stayed green.
+run_case "awaiting STALE, attended -> block (AWAIT_TTL)" block \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]}"
+# The State section has an await past the bound recorded again, once, where a usage-limit wait under
+# CLAUDE_CODE_RETRY_WATCHDOG can hold its agent alive. That works because the gate reads the NEWEST
+# `since`, and with `max` read as `min` this suite stayed green too.
+run_case "a stale await recorded again, attended -> allow (newest since)" allow \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"refute\",\"since\":$((NOW-7200))},{\"agent\":\"refute\",\"since\":$NOW}]}"
+
+# The block's TEXT, where allow-or-block cannot tell two blocks apart. A `want` starting with `!` must
+# be absent, and the hook must still have blocked, so an allow cannot pass an absence vacuously.
+run_reason_case() { # name want entry_json
+  local name="$1" want="$2" entry="$3" work="$TMP/work" ok=0
+  mkdir -p "$work"; rm -rf "$TMP/.claude/pipeline/unattended"
+  jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
+  local got; got=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null | jq -r '.reason // ""')
+  case "$want" in
+    !*) [ -n "$got" ] && [[ "$got" != *"${want#!}"* ]] && ok=1 ;;
+    *)  [[ "$got" == *"$want"* ]] && ok=1 ;;
+  esac
+  if [ "$ok" = 1 ]; then PASS=$((PASS+1)); echo "  ok   $name"
+  else FAIL=$((FAIL+1)); echo "  FAIL $name: want '$want' in: ${got:0:200}"; fi
+}
+# Past the bound, each block below hands back its phase's own text, which has the run dispatch the
+# phase again; where the await's agent is waiting at a usage limit that is a second agent beside a
+# live one, and only the hook knows the await's age. So every block reached there leads with it.
+STALE_REFUTE="[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]"
+run_reason_case "a block past the await bound names the await first" \
+  "past the one-hour bound (awaiting: refute)" \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":$STALE_REFUTE}"
+run_reason_case "and still says what the phase owes" "Continue the phases" \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":$STALE_REFUTE}"
+run_reason_case "fixing past the bound names it too" "past the one-hour bound (awaiting: fix r2)" \
+  "{\"phase\":\"fixing\",\"blocking\":0,\"pr\":9,\"round\":2,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"fix r2\",\"since\":$((NOW-7200))}]}"
+run_reason_case "another round owed past the bound names it too" "past the one-hour bound" \
+  "{\"phase\":\"reviewed\",\"blocking\":2,\"pr\":9,\"round\":2,\"ts\":$NOW,\"awaiting\":$STALE_REFUTE}"
+run_reason_case "a --plan-only block past the bound names it too" "past the one-hour bound (awaiting: refute)" \
+  "{\"phase\":\"building\",\"mode\":\"--plan-only\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":$STALE_REFUTE}"
+run_reason_case "a block with no await says nothing of one" "!past the one-hour bound" \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[]}"
+run_reason_case "an await with no time recorded gets no note" "!past the one-hour bound" \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"refute\"}]}"
 run_case "override -> allow" allow \
   "{\"phase\":\"building\",\"override\":true,\"pr\":null,\"round\":1,\"ts\":$NOW}"
 
@@ -124,8 +167,8 @@ run_symlink_case "cwd reached via symlink: live marker still found -> block" blo
 # These cases pin the head against the last recorded reviewed and verified sha. They need a real git
 # worktree, so they get their own directory — every `run_case` case runs in a non-repo `work`, which
 # is the fail-open path this block's last case pins.
-run_git_case() { # name expected entry_json  (@HEAD@ / @HEAD8@ are substituted with the real head)
-  local name="$1" expect="$2" entry="$3" work="$TMP/gitwork"
+run_git_case() { # name expected entry_json [reason_substring]  (@HEAD@ / @HEAD8@ are substituted with the real head)
+  local name="$1" expect="$2" entry="$3" want="${4:-}" work="$TMP/gitwork"
   rm -rf "$work" "$TMP/.claude/pipeline/unattended"; mkdir -p "$work"
   ( cd "$work" && git init -q . \
       && git -c user.email=t@example.invalid -c user.name=t commit -q --allow-empty -m one \
@@ -140,6 +183,9 @@ run_git_case() { # name expected entry_json  (@HEAD@ / @HEAD8@ are substituted w
   jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
   local out; out=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null)
   local got="allow"; grep -q '"block"' <<<"$out" && got="block"
+  if [ -n "$want" ] && [ "$got" = "block" ] && [[ "$(jq -r '.reason // ""' <<<"$out")" != *"$want"* ]]; then
+    got="block without '$want'"
+  fi
   if [ "$got" = "$expect" ]; then PASS=$((PASS+1)); echo "  ok   $name ($got)"
   else FAIL=$((FAIL+1)); echo "  FAIL $name: expected $expect, got $got"; fi
 }
@@ -164,6 +210,11 @@ run_git_case "reviewed AND verified on this head -> allow" allow \
   "{$CONV,\"reviewed_shas\":[\"@HEAD@\"],\"verified_shas\":[\"@HEAD@\"]}"
 run_git_case "verified_shas present but EMPTY -> allow (no verifier was owed)" allow \
   "{$CONV,\"reviewed_shas\":[\"@HEAD@\"],\"verified_shas\":[]}"
+# Both sha blocks lead with an await past the bound, like every other block (see run_reason_case).
+run_git_case "an unreviewed head past the await bound names the await first" block \
+  "{$CONV,\"reviewed_shas\":[\"$OTHER\"],\"awaiting\":$STALE_REFUTE}" "past the one-hour bound (awaiting: refute)"
+run_git_case "an unverified head past the await bound names it too" block \
+  "{$CONV,\"reviewed_shas\":[\"@HEAD@\"],\"verified_shas\":[\"$OTHER\"],\"awaiting\":$STALE_REFUTE}" "past the one-hour bound (awaiting: refute)"
 # A recorded value is evidence about the head only if it could BE a sha. Against the unguarded first
 # draft all three of these BLOCKED, which breaks the fail-open doctrine the hook is built on. Mutate
 # the two halves of `looks_like_sha` and read which case answers: dropping the HEX test reddens the

@@ -103,6 +103,11 @@ run_case "phase1 open but STALE -> allow" allow \
 STALE_AW="[{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7200))}]"
 run_case "awaiting STALE on an ATTENDED session -> block (AWAIT_TTL)" block \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+# pr-harden's State has an await past the bound recorded again, once, where a usage-limit wait under
+# CLAUDE_CODE_RETRY_WATCHDOG can hold its agent alive. That works because the gate reads the NEWEST
+# `since`, and with `max` read as `min` this suite stayed green.
+run_case "a stale await recorded again, attended -> allow (newest since)" allow \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":[{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7200))},{\"agent\":\"phase2 quality\",\"since\":$NOW}]}"
 run_case "awaiting stale AND converged+done -> allow (nothing owed)" allow \
   "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"done\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
 
@@ -132,6 +137,28 @@ run_cmd_case "the emitted command tells the run to stamp its id" \
   "--run <this run" "{\"phase1\":\"open\",\"ts\":$NOW}"
 run_cmd_case "and uses the entry's cycle when it has one" \
   "harden-set --cycle 7 --phase1" "{\"cycle\":7,\"phase1\":\"converged\",\"ts\":$NOW}"
+# Past the await bound the block hands back "Run Phase 2 once" or "Run another Phase 1 pass", which has
+# the run dispatch its agents again; where they are waiting at a usage limit that puts a second set
+# beside a live one, and only the hook knows the await's age. So every block reached there leads
+# with it, and one that never had an await says nothing of one: it must still BLOCK, so an allow
+# cannot pass the absence.
+run_cmd_case "a block past the await bound names the await first" \
+  "past the one-hour bound (awaiting: phase2 quality)" \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_cmd_case "and still states the termination contract" "harden termination contract" \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_cmd_case "the legacy zero-edit block names it too" "past the one-hour bound" \
+  "{\"edits\":2,\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_no_note_case() { # name entry_json
+  local name="$1" entry="$2" work="$TMP/work"
+  mkdir -p "$work"; rm -rf "$TMP/.claude/pipeline/unattended"
+  jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
+  local got; got=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null | jq -r '.reason // ""')
+  if [ -n "$got" ] && [[ "$got" != *"past the one-hour bound"* ]]; then PASS=$((PASS+1)); echo "  ok   $name"
+  else FAIL=$((FAIL+1)); echo "  FAIL $name: blocked with the note, or did not block: ${got:0:160}"; fi
+}
+run_no_note_case "a block with no await says nothing of one" \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW}"
 
 # A run that has STAMPED this entry and stated no verdict owes one. Chosen by the absence of
 # `phase1` alone, this fell to the legacy branch — and at `edits: 0`, the ordinary reading on a

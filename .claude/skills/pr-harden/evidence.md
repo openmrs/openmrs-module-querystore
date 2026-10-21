@@ -983,19 +983,30 @@ that answers like a claude.ai limit
 under it for the reset, and in a run that had spawned a background agent first, the agent's requests
 waited the same way. The harness reports a background agent stalled once it has gone
 `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress, 600 s unset in the 2.1.306 binary, and a
-waiting agent's retries, every 30 s, kept it from that: at 20 s, the control, the waiting agent was
-reported `Agent stalled: no progress for 20s` at +21 s; at 45 s it waited out a 100 s limit and
-completed; at the default it waited out an 11-minute one and completed. So an agent can be alive and
-unreported past the gates' hour, and the gate then blocks the yield as a run that stopped (the
-artifact's `gate-await-ttl.sh`, an entry in phase `building`: allowed at 600 s, blocked at 7200 s).
-Re-dispatching the phase there starts a second agent in the worktree the first is still working in;
-recorded again, the await gives the first another hour to report. The same script recorded it again
-through `gate-state await` and the gate allowed the yield, and blocked that entry with the new await
-taken out. Once, because an agent that hung where the harness cannot see it would otherwise be
-re-recorded for as long as the run lasted, and the bound is the backstop for exactly that agent.
-Only where the variable is on, because without it the stub's first 429 ended every run at once, the
-one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which now points to
-it. No run has met it yet: it comes from the measurement, not an incident.
+waiting agent was not reported: at 20 s, the control, it was reported `Agent stalled: no progress
+for 20s` at +21 s; at 45 s it waited out a 100 s limit and completed; at the default it waited out
+an 11-minute one and completed. What kept it alive is read, not seen: in the binary every message
+the agent's query yields re-arms that timer and the watchdog waits in 30 s steps, while the stream
+shows the agent's first retry line only, so the 20 s and 45 s cases bracket a 30 s step rather than
+show one. So an agent can be alive and unreported past the gates' hour, and the gate then blocks the
+yield as a run that stopped (the artifact's `gate-await-ttl.sh`, an entry in phase `building`:
+allowed at 600 s, blocked at 7200 s). Re-dispatching the phase there starts a second agent in the
+worktree the first is still working in; recorded again, the await gives the first another hour to
+report. The same script recorded it again through `gate-state await` and the gate allowed the yield,
+and blocked that entry with the new await taken out. Nothing in the session marks the hour: in the
+agent case the main thread's three requests carried the same five messages across the wait. And past
+the bound each gate's block handed back its phase's own text, "spawn a fresh reviewer agent", "Run
+Phase 2 once", "Continue the phases", which is the re-dispatch this rule forbids; two Phase 2
+reviewers found it. So every block reached past the bound now opens on the await, its age and its
+agents (both `gate-test.sh`, each case calibrated against the gate without it). The command that
+recorded the await is the one that records it again, because `--only` decides which gate's entry
+gets it and `--run` which harden run's. `await` appends, so a name listed twice is the record of the
+once, and past it the agent is stopped before the retry, which would otherwise start beside an agent
+waiting at a second limit. Once, because an agent that hung where the harness cannot see it would
+otherwise be re-recorded for as long as the run lasted, and the bound is the backstop for exactly
+that agent. Only where the variable is on, because without it the stub's first 429 ended every run
+at once, the one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which
+now points to it. No run has met it yet: it comes from the measurement, not an incident.
 
 *Cut down, R4-14 — the rule it supports:* “And this session must not busy-wait either”
 

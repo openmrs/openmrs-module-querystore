@@ -57,6 +57,8 @@
 #
 # awaiting non-empty, fresh -> a background agent this run delegated to is outstanding; ALLOW the
 #                              yield, whatever the phase says. Bounded by AWAIT_TTL.
+# awaiting past AWAIT_TTL   -> no allow from it; whichever block below fires leads with the awaits and
+#                              their age (STALE_NOTE), since a usage-limit wait can hold a live one.
 # phase "building"      -> a resolve-ticket run is in flight and has not opened its PR yet; block.
 # phase "init"/"fixing" -> a run is in flight and the head it will hand over is not reviewed yet; block.
 # phase "reviewed", blocking > 0  -> another round is required; block.
@@ -86,6 +88,17 @@ AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long
                     # past it; the skill's State section has its await recorded again, once.
 
 allow() { exit 0; }
+
+# A block reached past the await bound leads with STALE_NOTE, set where the await is read below.
+# The prefix must never cost the block itself: if rewriting it fails, it goes out as it was.
+STALE_NOTE=""
+with_note() {
+  local out; out=$(cat)
+  if [ -n "$STALE_NOTE" ] && jq -c --arg n "$STALE_NOTE" '.reason = $n + .reason' <<<"$out" 2>/dev/null; then
+    return 0
+  fi
+  printf '%s\n' "$out"
+}
 
 [ -f "$STATE" ] || allow
 command -v jq >/dev/null 2>&1 || allow
@@ -290,6 +303,16 @@ if [ "$AWAITING" -gt 0 ]; then
     }'
     exit 0
   fi
+  # Past the bound. Every block below hands back its phase's own text, which has the run dispatch
+  # that phase again -- beside a live agent, where a wait at a usage limit under
+  # CLAUDE_CODE_RETRY_WATCHDOG held it this long, and nothing in the run's context marks the hour,
+  # because that wait happened inside one request. Only this hook measures an await's age, so it
+  # says so first. An await with no `since` reads as dead and gets no note. The rule is
+  # pr-harden's State, and its measurement is pr-harden's evidence (0.41.0).
+  if [ "$NEWEST" -gt 0 ]; then
+    STALE_AGENTS=$(jq -r '[(.awaiting // [])[] | (.agent // "?")] | join(", ")' <<<"$ENTRY" 2>/dev/null) || STALE_AGENTS="?"
+    STALE_NOTE="The newest await recorded here is $(( (NOW - NEWEST) / 60 )) min old, past the one-hour bound (awaiting: ${STALE_AGENTS}). If CLAUDE_CODE_RETRY_WATCHDOG is on and the harness has reported no outcome for an agent named there, it may still be waiting at a usage limit: record its await again with the command that recorded it, once, as pr-harden's State says, rather than dispatching its phase again; one whose name is listed twice has had that once, so stop it (TaskStop) before its phase is dispatched. Otherwise: "
+  fi
 fi
 
 PHASE=$(jq -r '.phase // empty' <<<"$ENTRY" 2>/dev/null) || allow
@@ -310,7 +333,7 @@ case "$PHASE" in
           + "reach for override:true — the override records a deviation, and a partial mode reaching "
           + "its own defined terminus is not one. Do NOT hand back before the gate has returned."),
         systemMessage: "resolve-ticket (--plan-only): plan or refutation gate still owed"
-      }'
+      }' | with_note
       exit 0
     fi
     jq -n --arg r "$ROUND" '{
@@ -323,7 +346,7 @@ case "$PHASE" in
         + "abort conditions in the skill'"'"'s autonomy contract and set override:true in "
         + "~/.claude/pr-harden-state.json with its reason, so the deviation is on the record."),
       systemMessage: "resolve-ticket: mid-run, no PR opened yet — the run is not finished"
-    }'
+    }' | with_note
     exit 0
     ;;
   init|fixing)
@@ -339,7 +362,7 @@ case "$PHASE" in
         + "~/.claude/pr-harden-state.json so the deviation is on the record."),
       systemMessage: ("pr-harden: PR #" + $p + " round " + $r + " is mid-flight (" + $ph
         + ") — the head it will hand over is not reviewed yet")
-    }'
+    }' | with_note
     exit 0
     ;;
   reviewed) ;;
@@ -380,7 +403,7 @@ if [ "$BLOCKING" -eq 0 ]; then
         + "it."),
       systemMessage: ("pr-harden: PR #" + $p + " head " + $h + " was never reviewed (last review was "
         + $s + ") — one more round is owed")
-    }'
+    }' | with_note
     exit 0
   fi
 
@@ -405,7 +428,7 @@ if [ "$BLOCKING" -eq 0 ]; then
         + "reason."),
       systemMessage: ("pr-harden: PR #" + $p + " head " + $h + " is unverified (last verifier run "
         + "covered " + $s + ")")
-    }'
+    }' | with_note
     exit 0
   fi
   allow
@@ -424,5 +447,5 @@ jq -n --arg p "$PR" --arg r "$ROUND" --arg b "$BLOCKING" '{
     + "~/.claude/pr-harden-state.json so the deviation is on the record."),
   systemMessage: ("pr-harden: PR #" + $p + " round " + $r + " found " + $b
     + " blocking finding(s) — another round is required")
-}'
+}' | with_note
 exit 0

@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.43.3
+version: 0.44.0
 ---
 
 # Harden
@@ -119,8 +119,7 @@ One polish pass, run after Phase 1 has converged. A second one happens only wher
      from a file's size or mtime. Inside the gate's allow a terminal outcome is one the harness
      reports, and it is the signal *Record the verdict so the gate can enforce it* has you clear the
      `awaiting` entry on; past that allow what decides is the bound, which is a clock rather than a
-     liveness check, and which `pr-harden`'s **State** extends once where a usage-limit wait can
-     outlast it. Where you need progress sooner, watch something the agent's WORK touches — the
+     liveness check. Where you need progress sooner, watch something the agent's WORK touches — the
      worktree's own `target/`, which presupposes isolation.
      **And never read that file for the RESULT either** — it is the agent's transcript, not its
      report; `pr-harden`'s **State** section owns how a delegated agent is collected, and why a poll
@@ -272,7 +271,9 @@ a `resolve-ticket` run needs — see that skill's Step 7.
 Record it immediately before spawning and **clear it on ANY terminal outcome** — a result, or the
 harness reporting the agent died, stalled or was killed. A stale entry lets the run stop for real,
 which is what the gate exists to prevent, so the gate's allow is bounded by an hour; an agent that
-has not returned inside it is treated as dead rather than outstanding.
+has not returned inside it is treated as dead rather than outstanding, except where a usage-limit
+wait can have held it: the gate's block then opens on that await, and `pr-harden`'s **State** says
+what it gets.
 
 ```bash
 # ONCE, at the top of the run: pick an id for it — any string unique to this run — and use the same

@@ -3791,6 +3791,49 @@ def test_a_rejection_covered_by_overage_is_not_a_pause(tmp: Path) -> None:
     check("an overage rejection is not slept on", results == [("o/r#266", "error")], str(results))
 
 
+def test_a_headless_session_never_waits_out_a_limit_under_the_retry_watchdog(tmp: Path) -> None:
+    """An operator may export CLAUDE_CODE_RETRY_WATCHDOG, which Claude Code documents as "unattended
+    retry mode", and every headless session would inherit it. Under it a session at a usage limit
+    waits for the reset instead of stopping, streaming a retry line every 30 s and no
+    rate_limit_event, so the driver never sees the limit and its ticket timeout ends the wait
+    (resolve-ticket's evidence, 0.29.0). So `Session` drops the pair, whichever way its environment
+    arrives, and nothing else: the stub reports what its process was actually started with.
+    """
+    with isolated(tmp):
+        stub = tmp / "claude"
+        stub.write_text(
+            "#!/bin/bash\n"
+            "printf '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,"
+            "\"result\":\"W=%s C=%s P=%s K=%s\",\"total_cost_usd\":0}\\n' "
+            "\"${CLAUDE_CODE_RETRY_WATCHDOG:-unset}\" "
+            "\"${CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS:-unset}\" "
+            "\"${CLAUDE_PIPELINE_SESSION:-unset}\" \"${KEEP_ME:-unset}\"\n")
+        stub.chmod(0o755)
+        cfg = pool.merge(pool.DEFAULTS, {"claude": {"binary": str(stub)}})
+        pair = {"CLAUDE_CODE_RETRY_WATCHDOG": "1",
+                "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS": "18000000"}
+        saved = {k: os.environ.get(k) for k in [*pair, "KEEP_ME"]}
+        os.environ.update(pair)
+        os.environ["KEEP_ME"] = "kept"
+        try:
+            inherited = pool.Session("p", tmp, cfg, tmp / "a", 300, 300,
+                                     lambda *a, **k: None).run()
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        given = pool.Session("p", tmp, cfg, tmp / "b", 300, 300, lambda *a, **k: None,
+                             env={**pair, "KEEP_ME": "kept", "PATH": os.environ.get("PATH", "")}).run()
+        for how, run in (("inherited", inherited), ("passed in", given)):
+            got = run.get("summary") or ""
+            check(f"the watchdog pair, {how}, never reaches a headless session",
+                  "W=unset C=unset" in got, got)
+            check(f"and the rest of an environment {how} still does",
+                  "P=1" in got and "K=kept" in got, got)
+
+
 def test_a_session_silent_under_a_limit_is_suspended_not_killed(tmp: Path) -> None:
     """The quiet watchdog must not spend a ticket that is only blocked on quota.
 
@@ -4622,6 +4665,7 @@ def main() -> int:
                          ("status staleness", test_status_names_a_running_row_no_session_holds),
                          ("work reaps the dead", test_the_next_hand_launch_closes_out_what_died),
                          ("limit suspends", test_a_usage_limit_suspends_the_ticket_rather_than_spending_it),
+                         ("limit watchdog dropped", test_a_headless_session_never_waits_out_a_limit_under_the_retry_watchdog),
                          ("limit recovered", test_a_limit_the_session_got_past_is_not_a_pause),
                          ("limit stale reset", test_a_reset_that_has_already_passed_did_not_stop_this_run),
                          ("limit overage", test_a_rejection_covered_by_overage_is_not_a_pause),

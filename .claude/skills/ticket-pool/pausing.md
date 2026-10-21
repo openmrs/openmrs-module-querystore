@@ -18,7 +18,10 @@ mid-attempt. It hands back to you instead in three cases, each named in the log 
 `wait_for_limit_reset`: a suspended ticket with no reset time on it (an operator's own pause, in the
 same wave), a reset further out than `ticket.limit_wait_max_seconds` — 6h by default, so a five-hour
 window is waited out and a weekly one is not — and a ticket suspended this way before that did
-nothing with the last reset, which is a session spinning rather than a big ticket.
+nothing with the last reset, which is a session spinning rather than a big ticket. `Session` drops
+`CLAUDE_CODE_RETRY_WATCHDOG` and its cap from every session it starts, limit probes included: one
+waiting under them streams a retry line every 30 s and never shows the driver its limit. Set in
+`settings.json`'s `env`, they still reach those sessions, so keep them out of it.
 
 **A `--work` session is carried past it too, by a third mechanism.** Neither of the other two
 reaches a hand-launched session: Claude Code's own wait belongs to the SESSION and can be gated off
@@ -45,8 +48,8 @@ script — unidentifiable whatever it puts in the envelope. So `--work` passes
 `crossSessionInbound: accept` on the launch, scoped to that session: it lets any local process put
 a turn into a pool worktree that is already bypassing prompts, and deliberately does not enrol the
 operator's other sessions, which are not inside that boundary. A session started by hand will have
-its nudge held, and will say so in its own transcript. Besides Claude Code's own wait, what carries
-one is `CLAUDE_CODE_RETRY_WATCHDOG`, which `resolve-ticket`'s Step 1 checks for and says how to set.
+its nudge held, and will say so in its own transcript. Besides Claude Code's own wait,
+`CLAUDE_CODE_RETRY_WATCHDOG` carries one; `resolve-ticket`'s Step 1 says how to set it.
 
 **The account is asked per quiet SPELL, not per watcher.** A session that has been writing and goes
 quiet again is looked at at once; only repeats within one spell back off, at

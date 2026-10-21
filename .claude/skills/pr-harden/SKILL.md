@@ -729,10 +729,13 @@ turn to wait*, in `verifier.md`.
 harness reports the death, so there is no excuse for waiting out a timeout. The one-hour bound and
 the no-`since`-reads-as-dead rule are backstops, not the mechanism.
 
-**And where `CLAUDE_CODE_RETRY_WATCHDOG` is on, a live agent can outlast the bound.** A request at a
-usage limit waits there for the reset, an agent's included, and the harness does not report a
-waiting agent stalled. So in such a session, an await past the hour whose agent has no terminal
-outcome from the harness is recorded again, once, rather than its phase re-dispatched.
+**And where `CLAUDE_CODE_RETRY_WATCHDOG` is on, a live agent can outlast the bound.** Its requests
+wait at a usage limit for the reset, and the harness does not report it stalled. Nothing in this
+session marks that hour, so the gate does: a block that opens on an await past the bound names it.
+Where the harness has reported no outcome for that agent, record the await again with the command
+that recorded it, `--only` and `--run` included, rather than re-dispatching its phase. Once: a name
+listed twice has had it, and that agent is stopped (`TaskStop`) before the contract below retries
+its phase.
 
 **And this session must not busy-wait either.** *Wait on a CONDITION, never on a clock* is written into
 `verifier.md`, but the orchestrator is where a blind `sleep` loop costs the most, because its
