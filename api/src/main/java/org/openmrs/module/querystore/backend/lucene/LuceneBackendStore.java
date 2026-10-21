@@ -344,10 +344,12 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 		if (StringUtils.isBlank(patientUuid)) {
 			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
-		Set<String> indexNames = allIndexNames();
 		// An index the enumerator found but could not open never enters indexNames, so the
-		// per-index loop below cannot see it; only the enumerator knows it was dropped.
-		boolean incomplete = !schemaManager.skippedIndexNames().isEmpty();
+		// per-index loop below cannot see it; only the enumeration this read is built from knows.
+		LuceneSchemaManager.Enumeration enumeration = schemaManager.enumerateIndexes();
+		Set<String> indexNames = new HashSet<>(enumeration.names);
+		indexNames.addAll(schemaManager.knownIndexNames());
+		boolean incomplete = !enumeration.skipped.isEmpty();
 		if (indexNames.isEmpty() && !incomplete) {
 			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
