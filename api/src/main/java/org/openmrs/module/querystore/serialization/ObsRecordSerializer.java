@@ -166,8 +166,10 @@ public class ObsRecordSerializer extends AbstractRecordSerializer<Obs> {
 		}
 	}
 
-	/** Appends the answer concept's list after the question concept's, dropping duplicates. Each part
-	 *  is already sorted and capped, so the merged list is deterministic and holds up to twice the cap. */
+	/** Appends the answer concept's list after the question concept's, dropping duplicates: the
+	 *  question's entries first, then the answer's, each in the order its own lookup returns. That
+	 *  order is deterministic, and for synonyms it is sorted within each name bucket with only the
+	 *  non-SHORT synonyms capped, so the merged list has no overall bound or single sort order. */
 	private static void mergeStringListMetadata(QueryDocument doc, String key, List<String> additions) {
 		Object existing = doc.getMetadata().get(key);
 		if (!(existing instanceof List)) {

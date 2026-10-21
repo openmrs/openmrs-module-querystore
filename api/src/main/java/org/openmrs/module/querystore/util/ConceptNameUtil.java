@@ -93,6 +93,9 @@ public final class ConceptNameUtil {
 	 * it is NOT included in {@link QueryDocument#getEmbeddingInput()} to avoid the asymmetric-bias
 	 * concern documented in chartsearchai's {@code ChartSearchAiUtils.extractCategoryHints}.
 	 *
+	 * <p><b>Exclusion first:</b> a description beginning "Question on encounter form" (case
+	 * insensitive) describes the form, not the concept, and is skipped before either rule below.
+	 *
 	 * <p><b>Precedence:</b> (1) first description whose locale language matches the active
 	 * locale's language; (2) otherwise first non-empty description encountered in
 	 * {@code concept.getDescriptions()} iteration order. The fallback's iteration order is
