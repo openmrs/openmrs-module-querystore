@@ -86,6 +86,17 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void findStoredVersions_reportsWhatTheBackendStores() {
+		// The bootstrap skips a record only on the versions this returns; an empty answer from here
+		// would disable the skip everywhere while every bootstrap test, which fakes the service, passed.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		backend.lastModifiedReturn = Collections.singletonMap("u1", java.time.Instant.parse("2026-01-02T03:04:05Z"));
+		service.setBackend(backend);
+
+		assertEquals(backend.lastModifiedReturn, service.findStoredVersions("obs", Arrays.asList("u1", "u2")));
+	}
+
+	@Test
 	public void bulkIndex_emptyOrNull_returnsEmptyWithoutTouchingBackend() {
 		FakeBackendStore backend = new FakeBackendStore(false);
 		service.setBackend(backend);
@@ -510,8 +521,15 @@ public class QueryStoreServiceImplTest {
 
 		List<QueryDocument> findAllByPatientReturn = Collections.emptyList();
 
+		java.util.Map<String, java.time.Instant> lastModifiedReturn = Collections.emptyMap();
+
 		FakeBackendStore(boolean existsByPatientReturn) {
 			this.existsByPatientReturn = existsByPatientReturn;
+		}
+
+		@Override public java.util.Map<String, java.time.Instant> findLastModified(String resourceType,
+		        List<String> resourceUuids) {
+			return lastModifiedReturn;
 		}
 
 		@Override public boolean existsByPatient(String patientUuid) {

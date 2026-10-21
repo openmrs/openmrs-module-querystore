@@ -724,8 +724,6 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		assertTrue("patient-scoped query took " + elapsedMs + "ms; expected <5000ms", elapsedMs < 5000);
 	}
 
-	// ---------- helpers ----------
-
 	@Test
 	public void findLastModified_reportsEachStoredRecordsVersionAndOmitsTheRest() {
 		QueryDocument versioned = doc("obs", "patient-A", "Weight: 70 kg", null);
@@ -740,6 +738,8 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		assertTrue("a type never written reports nothing",
 		        backend.findLastModified("medication_dispense", java.util.Collections.singletonList("x")).isEmpty());
 	}
+
+	// ---------- helpers ----------
 
 	private static QueryDocument doc(String resourceType, String patientUuid, String text, float[] embedding) {
 		QueryDocument d = new QueryDocument();

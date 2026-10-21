@@ -757,13 +757,6 @@ public class LuceneBackendStoreTest {
 		assertFalse("deleteSchema must remove the directory", Files.exists(dir));
 	}
 
-	// ---------- helpers ----------
-
-	private int bm25Count(String resourceType, String text, String patientUuid) {
-		return backend.bm25(SearchRequest.builder().resourceType(resourceType).queryText(text)
-		        .filter(Filter.patientScope(patientUuid)).limit(10).build()).getHits().size();
-	}
-
 	@Test
 	public void findLastModified_reportsEachStoredRecordsVersionAndOmitsTheRest() {
 		QueryDocument versioned = doc("obs", "patient-A", "Weight: 70 kg", new float[] { 1f, 0f, 0f });
@@ -788,6 +781,13 @@ public class LuceneBackendStoreTest {
 			assertFalse(inherited.hasIndex("encounter"));
 			assertTrue("no writer was opened", inherited.knownIndexNames().isEmpty());
 		}
+	}
+
+	// ---------- helpers ----------
+
+	private int bm25Count(String resourceType, String text, String patientUuid) {
+		return backend.bm25(SearchRequest.builder().resourceType(resourceType).queryText(text)
+		        .filter(Filter.patientScope(patientUuid)).limit(10).build()).getHits().size();
 	}
 
 	private static QueryDocument doc(String resourceType, String patientUuid, String text, float[] embedding) {
