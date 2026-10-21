@@ -196,21 +196,21 @@ module that needs one. Say so NOW if either is missing, so the user can fix it w
 proceeds.
 
 **Pre-flight the usage limit too.** A claude.ai usage limit ends the turn on an API error, which
-runs `StopFailure` hooks instead of `Stop`, so no gate sees it, and nothing in this skill runs again
-until something outside it sends the session a turn: a person, Claude Code, or `pool-run` in a
-session it started. With `CLAUDE_CODE_RETRY_WATCHDOG` on, a request at the limit waits for the reset
-and retries instead of ending the turn, and an agent's requests do the same. Without it a session
-started by hand depends on Claude Code's own continue-at-reset, which can be switched off for an
-account and skips Remote Control sessions, resets more than a day out and repeated hits in a row.
-So where `$CLAUDE_PIPELINE_SESSION` is unset, run
+runs `StopFailure` hooks instead of `Stop`, so no gate sees it. With `CLAUDE_CODE_RETRY_WATCHDOG`
+on, a request at the limit waits for the reset and retries instead of ending the turn. So where
+`$CLAUDE_PIPELINE_SESSION` is unset, run
 `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"; "${CLAUDE_CODE_EXECPATH:-claude}" --version`, and
-unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second
-`2.1.301 (Claude Code)` or later, say so NOW and carry on; a session
-`pool-run --work` launched may also have its launcher's nudge (`ticket-pool`'s `pausing.md`). The
-remedy is for the sessions after this one, never a reason to relaunch this one mid-run: start them
-with it on and with `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000`, which from Claude
-Code 2.1.301 waits out a reset up to five hours away, every five-hour window's but not a weekly
-limit's days off, from a shell alias for `claude`, which no `pool-run` session goes through.
+unless the first line is `1`, `true`, `yes` or `on`, in upper or lower case, and the second
+`2.1.301 (Claude Code)` or later, say so NOW and carry on. The remedy is for later sessions, never a
+reason to relaunch this one mid-run:
+`alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
+whose cap waits out a reset up to five hours away, or the same two variables in front of
+`pool-run --work`, whose sessions may also have its nudge (`ticket-pool`'s `pausing.md`). Never an
+`export` or `settings.json`'s `env`: the driver's headless sessions would inherit it, and one
+waiting there streams a retry line every 30 s, so the driver never learns of the limit and its
+ticket timeout spends the attempt a pause would have kept. And a wait can outlast the gates'
+one-hour await bound: an agent the harness has not reported finished or dead is still running, so
+record its await again rather than re-dispatching its phase.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs

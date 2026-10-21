@@ -1,0 +1,12 @@
+{
+  "exit": 0,
+  "seconds": 101,
+  "killed_for": null,
+  "paused_for": null,
+  "rate_limit": null,
+  "start": 1792620179.3741143,
+  "reset": 1792620279.3741143,
+  "quiet_s": 45,
+  "timeout_s": 200,
+  "watchdog": true
+}

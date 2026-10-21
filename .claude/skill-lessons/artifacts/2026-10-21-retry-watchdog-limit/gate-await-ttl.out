@@ -1,0 +1,2 @@
+await 600s old: allow
+await 7200s old: block - resolve-ticket: mid-run, no PR opened yet — the run is not finished

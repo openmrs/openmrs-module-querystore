@@ -141,15 +141,15 @@ mistake — both ports busy at pre-flight, both by our own standalones, and neit
 
 *Added 0.29.0 — the rule it supports:* “Pre-flight the usage limit too.”
 
-Usage limits have stopped runs on this pipeline before: #412 (2026-09-14) lost 3 of 4 Phase 2
-agents to one, #421 all four of a cycle's, #310 a confirming agent. #421 lost nothing because
+Usage limits have killed agents mid-run on this pipeline before: 3 of 4 Phase 2 agents in #412
+(2026-09-14), all four of a cycle's in #421, a confirming agent in #310. #421 lost no work, because
 `pool-run` re-entered it after the reset. The pipeline's own carries are `pool-run`'s: the driver
 suspends and re-enters its headless sessions, and `--work` nudges the sessions it launched over their
 peer socket (`ticket-pool`'s `pausing.md`). A run typed into a session by hand, the case 0.27.0's
-worktree step exists for, had only Claude Code's own continue, and that did not fire for the three
+worktree step exists for, had only Claude Code's own wait, and that did not fire for the three
 `--work` sessions that sat idle 4h14m past a 07:10 reset on 2026-09-11, no continuation prompt from
-Claude Code in their transcripts.
-On 2026-10-21 the owner asked for the skill to resume by itself once the limit resets.
+Claude Code in their transcripts. On 2026-10-21 the owner asked for the skill to resume by itself
+once the limit resets.
 
 What Claude Code does, from its documentation (code.claude.com: `hooks`, `interactive-mode`,
 `errors`, `scheduled-tasks`) and its 2.1.306 binary, read on 2026-10-21 and not run:
@@ -157,17 +157,18 @@ What Claude Code does, from its documentation (code.claude.com: `hooks`, `intera
 - A turn ended by an API error runs `StopFailure` hooks instead of `Stop`: "StopFailure hooks have
   no decision control", and Claude Code ignores their output. No gate sees the stop and no hook can
   answer it, and no documented hook starts a turn in an interactive session.
-- Its own continue (`autoContinueAtUsageLimit`, on by default from 2.1.234 in interactive sessions
-  signed in to claude.ai) waits in the open session and continues the task after the reset. The
-  documented exceptions: no automatic wait for a reset more than 24 hours away, or for Remote Control
-  and agent-team teammate sessions; none at all in background sessions or `-p`; at most two re-arms
-  in a row; a wait ends if Claude Code exits; and a machine that slept more than about half an hour
-  across the reset asks for Enter. Where it does not arm, the usage-limit menu opens once per reset
-  window. In the binary, arming it unasked also needs server-side flags (`tengu_marble_heron`, with
-  `tengu_linked_clover` as a killswitch) and a plan that is not usage-billed, which is how
-  `pausing.md` can say it "can be gated off for an account"; and one predicate returns early from
-  arming it unasked, from arming it off the limit notice, and from opening the menu: Remote
-  Control's bridge connected, `CLAUDE_CODE_SESSION_KIND=bg`, or a teammate.
+- Its own wait — the setting `autoContinueAtUsageLimit`, *Continue automatically at usage limit* in
+  `/config`, on by default from 2.1.234 in interactive sessions signed in to claude.ai — waits in the
+  open session and continues the task after the reset. The documented exceptions: no automatic wait
+  for a reset more than 24 hours away, or for Remote Control and agent-team teammate sessions; none
+  at all in background sessions or `-p`; at most two re-arms in a row; a wait ends if Claude Code
+  exits; and a machine that slept more than about half an hour across the reset asks for Enter.
+  Where it does not arm, the usage-limit menu opens once per reset window. In the binary, arming it
+  unasked also needs server-side flags (`tengu_marble_heron`, with `tengu_linked_clover` as a
+  killswitch) and a plan that is not usage-billed, which is how `pausing.md` can say it "can be gated
+  off for an account"; and one predicate returns early from arming it unasked, from arming it off the
+  limit notice, and from opening the menu: Remote Control's bridge connected,
+  `CLAUDE_CODE_SESSION_KIND=bg`, or a teammate.
 - `CLAUDE_CODE_RETRY_WATCHDOG` is "unattended retry mode", documented for unattended sessions such as
   CI jobs: it retries 429 and 529 errors indefinitely. In the binary, a 429 whose
   `anthropic-ratelimit-unified-status` is `rejected` waits until the
@@ -184,45 +185,69 @@ ended the run at once. With it the request slept until the reset the stub named,
 run finished normally, and in the run that had spawned an agent first, the agent's requests did the
 same. A reset beyond the cap was refused at once, and `TRUE` counted as on. The controls: the stub
 serving from the start (one request, exit 0), and the plain and the agent limit case run again
-without the variable. And Claude Code 2.1.42, which has no watchdog, ended the run at the first 429
-with the variable set, which is why the check reads the version as well. It reads it from
-`CLAUDE_CODE_EXECPATH`, which the 2.1.306 binary sets in a Bash tool shell to its own
-`process.execPath`, and falls back to the `claude` on the `PATH`. Under an npm install that
-executable is `node`, which prints its own version (`v22…`) with no `(Claude Code)` after it, so the
-check asks for that suffix: a bare number compared with 2.1.301 would pass node's. Its floor is
-2.1.301, where the cap the remedy names begins.
-The artifact names what this leaves open: a real limit under a subscription login, an interactive
-session, a foreground agent, and a wait of hours.
+without the variable. The artifact names what this leaves open: a real limit under a subscription
+login, an interactive session, a foreground agent, and a wait of hours.
 
-Why the skill does not carry the run itself. A skill acts only inside a turn, and the turn a limit
-ends leaves nothing of the skill running. A scheduled prompt (`CronCreate`) is one in-session way
-to start a later turn, and a keepalive built on one was drafted for 0.29.0 and dropped before it
-shipped. A fresh reviewer's findings against it included these. It read a run mid-FINISH,
-whose entry already says `reviewed`, `blocking: 0`, as finished, retired itself, and the gate let
-the stop through. Lifting a user's stop re-asserted its override. An attended wait on an agent past
-an hour read as a cut-off, and the phase was re-dispatched beside the live agent. And in a plain
-terminal its prompt waits behind the usage-limit menu: by a reading of the binary, not a run, while a
-dialog is open its queue processor holds every prompt addressed to the main session that is neither
-passive nor Claude Code's own continuation. The watchdog has none of these, because the turn does not stop at the limit.
+**Why the check reads the version too.** Claude Code 2.1.42, which has no watchdog, ended the stub's
+limit at the first 429 with the variable set, so the variable alone can report a carry that does not
+exist. The check reads the version from `CLAUDE_CODE_EXECPATH`, which the 2.1.306 binary sets in a
+Bash tool shell to its own `process.execPath`, and falls back to the `claude` on the `PATH`. It asks
+for the `(Claude Code)` suffix, which only Claude Code's `--version` prints: where a Claude Code
+still ran as `cli.js` under node, as the npm release still did at 2.1.100, that executable is `node`,
+whose bare `v22…` a comparison of numbers with 2.1.301 would pass. npm releases from 2.1.120 on ship
+a native binary (`npm view @anthropic-ai/claude-code@<version> bin`). Its floor is 2.1.301, where
+the cap the remedy names begins.
+
+**Why the skill does not carry the run itself.** A skill acts only inside a turn, and the turn a
+limit ends leaves nothing of the skill running. A scheduled prompt (`CronCreate`) is one in-session
+way to start a later turn, and a keepalive built on one was drafted for 0.29.0 and dropped before it
+shipped. A fresh reviewer's findings against it included these. It read a run mid-FINISH, whose
+entry already says `reviewed`, `blocking: 0`, as finished, retired itself, and the gate let the
+stop through. Lifting a user's stop re-asserted its override. It read an attended wait on an agent
+past an hour as a cut-off and re-dispatched the phase beside the live agent. And in a plain terminal
+its prompt waits behind the usage-limit menu: by a reading of the binary, not a run, while a dialog
+is open its queue processor holds every prompt addressed to the main session that is neither passive
+nor Claude Code's own continuation. The watchdog has the first, second and fourth of these out of
+the way, because the turn does not stop at the limit. It shares the third.
+
+**The third is the gates', and the watchdog meets it too.** Both gates treat an await older than
+`AWAIT_TTL`, an hour, as an agent that died (`pr-harden-gate.sh`, `harden-cycle-gate.sh`). Run
+against a resolve-ticket entry in phase `building` (the artifact's `gate-await-ttl.sh`), the pr gate
+allowed a yield on an await 600 s old and blocked one 7200 s old as a run that had stopped. A wait at
+a limit holds a live agent past that hour: its requests wait like the orchestrator's. So after one,
+an attended run that yields with agents still out meets awaits the gates read as dead, and the
+paragraph's last sentence says what the harness says instead: an agent it has not reported finished
+or dead is running, so its await is recorded again rather than its phase re-dispatched, as
+`pr-harden`'s **State** already ranks the harness above the bound.
 
 **What the paragraph does not ask for, and why.** A second fresh review, of the paragraph's first
 draft, found the relaunch it then advised unsafe. Exiting a `pool-run --work` session releases its
-claim and removes a worktree still clean at Step 1 (`ticket-pool`'s `by-hand.md`), so the resumed
-session has no slot, no worktree and no nudge. A session relaunched anywhere comes back under a new
-pid, while the entry's `owner` is the dead one, which both gates read as a stop to allow until the
-next `--owner` write. So the check says so and the run carries on, and the remedy is for the
-sessions after it. A shell alias carries the variable into the sessions a person starts and into
-none of `pool-run`'s, which start `claude` themselves, so those keep their own carry. Whether a
-headless session waiting inside a request writes anything the driver's quiet window counts is not
-measured.
+claim and removes a worktree still clean at Step 1 (`pool-run`'s `release_claim` and
+`drop_worktree`), so the resumed session has no slot, no worktree and no nudge. A session relaunched
+anywhere comes back under a new pid, while the entry's `owner` is the dead one, which both gates read
+as a stop to allow until the next `--owner` write. So the check says so and the run carries on, and
+the remedy is for the sessions after it.
+
+**Why an alias, and never an export or `settings.json`'s `env`.** Either of those reaches the
+driver's headless sessions: `pool-run` copies its own environment into every session it starts, and
+`settings.json` applies to every `claude`. Measured with the stub (the artifact's `stream.sh` and
+`drive.py`): a headless session waiting under the watchdog streams a `system/api_retry` line every
+30 s and no `rate_limit_event`, so `pool-run`'s `Session` never goes quiet and never records the
+limit. Driven with a 45 s quiet window and a 60 s ticket timeout, it was killed for the timeout,
+with nothing paused; with a 200 s timeout it outlasted the wait and finished. A kill is recorded as
+`timeout` and spends an attempt, where the driver's own carry would have suspended the session at no
+cost. An alias reaches only the sessions a person starts, and `pool-run --work`'s, which inherit the
+environment of the command that launched them, take the variables only when they are put in front of
+that command.
 
 Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
 window, which resets less than five hours after the request that meets it, and refuses any reset
-further off, which a weekly limit's is unless it lands in the week's last five hours.
-It stays under the gates' six-hour expiry, but the wait does not restamp the entry: one that began
-hours after the last transition write can carry the entry past six hours, and the gates then fail
-open until the run's next write. No pipeline run has met a real limit with the watchdog on; the first
-that does is the measurement the stub stands in for, and its transcript shows the wait.
+further off, which a weekly limit's is unless it lands in the week's last five hours. The driver
+makes the same cut at six hours with `ticket.limit_wait_max_seconds` (`pausing.md`). Neither wait
+restamps a gate entry: one that began hours after the last transition write can carry the entry past
+the gates' six-hour expiry, and they then fail open until the run's next write. No pipeline run has
+met a real limit with the watchdog on; the first that does is the measurement the stub stands in
+for, and its transcript shows the wait.
 
 *Cut down, A-07 — the rule it supports:* “which an inline read-modify-write cannot, and under a parallel pool cannot safely be retyped”
 
