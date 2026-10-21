@@ -96,17 +96,23 @@ final class LuceneSchemaManager implements AutoCloseable {
 	}
 
 	/**
-	 * Index directories the most recent {@link #listAllIndexes()} found on disk but could not
-	 * open (typically a stale {@code write.lock} from a previous JVM). They never reach
-	 * {@code writers}, so {@link #knownIndexNames()} cannot report them; a cross-type read that
-	 * claims completeness has to consult this instead. Reflects filesystem state, so a snapshot
-	 * from a concurrent enumeration is an equally valid answer.
+	 * One enumeration of the on-disk indexes: the names opened, and the directories found but not
+	 * opened (typically a stale {@code write.lock} from a previous JVM). The skipped names never
+	 * reach {@code writers}, so {@link #knownIndexNames()} cannot report them; a cross-type read
+	 * that claims completeness reads them from the enumeration it built its list from, so another
+	 * reader's enumeration, after the lock was released, cannot clear the gap in this one.
 	 */
-	Set<String> skippedIndexNames() {
-		return lastSkippedIndexNames;
-	}
+	static final class Enumeration {
 
-	private volatile Set<String> lastSkippedIndexNames = Collections.emptySet();
+		final Set<String> names;
+
+		final Set<String> skipped;
+
+		Enumeration(Set<String> names, Set<String> skipped) {
+			this.names = Collections.unmodifiableSet(names);
+			this.skipped = Collections.unmodifiableSet(skipped);
+		}
+	}
 
 	/**
 	 * Enumerates {@code querystore_*} index directories on disk. Used by cross-type operations
@@ -131,11 +137,15 @@ final class LuceneSchemaManager implements AutoCloseable {
 	 * just primes it.
 	 */
 	Set<String> listAllIndexes() {
+		return enumerateIndexes().names;
+	}
+
+	/** {@link #listAllIndexes()} with the directories it could not open, for a read that discloses them. */
+	Enumeration enumerateIndexes() {
 		Set<String> names = new HashSet<>();
 		Set<String> skipped = new HashSet<>();
 		if (!Files.isDirectory(indexRoot)) {
-			lastSkippedIndexNames = Collections.emptySet();
-			return names;
+			return new Enumeration(names, skipped);
 		}
 		try (DirectoryStream<Path> stream = Files.newDirectoryStream(indexRoot,
 		    QueryStoreConstants.INDEX_PREFIX + "*")) {
@@ -161,7 +171,7 @@ final class LuceneSchemaManager implements AutoCloseable {
 				// the entire cross-type read path (bulkDeleteByPatient, existsByPatient, bm25/knn).
 				// Swallow per-dir with a WARN so one bad index doesn't become a global outage; the
 				// next ensureWriter(resourceType) call from a specific code path can still surface
-				// the failure to that caller. The skipped name is kept in skippedIndexNames() so a
+				// the failure to that caller. The skipped name is returned with the enumeration so a
 				// read that claims completeness can disclose the gap instead of serving the
 				// patient's chart with a whole resource type silently missing.
 				try {
@@ -179,8 +189,7 @@ final class LuceneSchemaManager implements AutoCloseable {
 		catch (IOException e) {
 			throw new IllegalStateException("Could not enumerate Lucene indexes under " + indexRoot, e);
 		}
-		lastSkippedIndexNames = Collections.unmodifiableSet(skipped);
-		return names;
+		return new Enumeration(names, skipped);
 	}
 
 	@Override
