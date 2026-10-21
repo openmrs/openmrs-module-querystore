@@ -178,11 +178,12 @@ public class QueryStoreRestController {
 				        .build();
 			}
 		} else {
-			// Ranked top-K: the service has no offset, so fetch from+size and drop the prefix. A ranked
+			// Ranked top-K: the service has no offset, so fetch the whole window at one fixed depth (a
+			// depth that grew with startIndex would re-fuse and re-filter per page) and slice it. A ranked
 			// query is top-K, not a browseable collection — there is no true total, so totalCount is null.
 			List<QueryDocument> top = (patientUuid != null)
-			        ? queryStoreService().searchByPatient(patientUuid, query, from + size)
-			        : queryStoreService().search(query, from + size);
+			        ? queryStoreService().searchByPatient(patientUuid, query, maximum)
+			        : queryStoreService().search(query, maximum);
 			page = slice(top, from, size);
 			totalCount = null;
 		}

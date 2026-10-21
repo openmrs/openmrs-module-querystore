@@ -16,6 +16,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -284,7 +285,7 @@ public class PatientRecordEndpointTest {
 		authenticate();
 		wire();
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
-		when(queryStore.searchByPatient(PATIENT, "glucose", 50)).thenReturn(Arrays.asList(
+		when(queryStore.searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE)).thenReturn(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L"),
 		        doc("obs", "r2", LocalDate.of(2025, 6, 1), "Random glucose: 9.0 mmol/L")));
 
@@ -296,6 +297,34 @@ public class PatientRecordEndpointTest {
 		List<?> results = (List<?>) body.get("results");
 		assertEquals(Integer.valueOf(1), ((Map<?, ?>) results.get(0)).get("rank"));
 		assertEquals(Integer.valueOf(2), ((Map<?, ?>) results.get(1)).get("rank"));
+	}
+
+	@Test
+	public void rankedPages_areSlicesOfOneRankingWhateverDepthTheFusionWouldReorderAt() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument p = doc("obs", "P", LocalDate.of(2026, 1, 1), "P");
+		QueryDocument q = doc("obs", "Q", LocalDate.of(2026, 1, 2), "Q");
+		QueryDocument r = doc("obs", "R", LocalDate.of(2026, 1, 3), "R");
+		QueryDocument a = doc("obs", "A", LocalDate.of(2026, 1, 4), "A");
+		// Reciprocal-rank fusion reorders with the depth it fuses at: two deep it ranks [P, Q], four deep
+		// R overtakes both. Pages cut from different depths then repeat Q and never serve R.
+		when(queryStore.searchByPatient(eq(PATIENT), eq("glucose"), anyInt())).thenAnswer(call -> {
+			int depth = call.getArgument(2);
+			return depth <= 2 ? Arrays.asList(p, q) : Arrays.asList(r, p, q, a);
+		});
+
+		List<Object> served = new ArrayList<>();
+		for (int start = 0; start < 4; start += 2) {
+			Map<?, ?> body = body(controller.getPatientRecords(request, PATIENT, "glucose", Integer.valueOf(2),
+			        Integer.valueOf(start)));
+			for (Object result : (List<?>) body.get("results")) {
+				served.add(((Map<?, ?>) result).get("resourceUuid"));
+			}
+		}
+
+		assertEquals(Arrays.asList("R", "P", "Q", "A"), served);
 	}
 
 	@Test
@@ -325,14 +354,14 @@ public class PatientRecordEndpointTest {
 		installAdministrationService(admin);
 		when(admin.getGlobalProperty(RestConstants.MAX_RESULTS_ABSOLUTE_GLOBAL_PROPERTY_NAME)).thenReturn("250");
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
-		when(queryStore.searchByPatient(PATIENT, "glucose", 170)).thenReturn(new ArrayList<QueryDocument>());
+		when(queryStore.searchByPatient(PATIENT, "glucose", 250)).thenReturn(new ArrayList<QueryDocument>());
 
 		// startIndex 120 + limit 50 fits inside the configured 250 and not inside the framework default of 100.
 		ResponseEntity<Object> response = controller.getPatientRecords(request, PATIENT, "glucose", Integer.valueOf(50),
 		        Integer.valueOf(120));
 
 		assertEquals(HttpStatus.OK, response.getStatusCode());
-		verify(queryStore).searchByPatient(PATIENT, "glucose", 170);
+		verify(queryStore).searchByPatient(PATIENT, "glucose", 250);
 	}
 
 	@Test
@@ -340,7 +369,7 @@ public class PatientRecordEndpointTest {
 		authenticate();
 		wire();
 		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
-		when(queryStore.searchByPatient(PATIENT, "glucose", 50)).thenReturn(new ArrayList<QueryDocument>());
+		when(queryStore.searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE)).thenReturn(new ArrayList<QueryDocument>());
 
 		ResponseEntity<Object> ranked = controller.getPatientRecords(request, PATIENT, "glucose", null, null);
 
@@ -382,7 +411,7 @@ public class PatientRecordEndpointTest {
 	public void queryOnly_dispatchesToCrossPatientSearch() {
 		authenticate();
 		wire();
-		when(queryStore.search("glucose", 50)).thenReturn(Arrays.asList(
+		when(queryStore.search("glucose", TEST_MAXIMUM_PAGE_SIZE)).thenReturn(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L")));
 
 		ResponseEntity<Object> response = controller.getPatientRecords(request, null, "glucose", null, null);
