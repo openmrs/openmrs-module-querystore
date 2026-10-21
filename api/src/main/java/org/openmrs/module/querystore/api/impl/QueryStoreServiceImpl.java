@@ -567,7 +567,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
 			try {
 				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
-				int candidateLimit = Math.max(request.getSimilarityLimit() * 3, 36);
+				// Tripled in long arithmetic: a limit above a third of Integer.MAX_VALUE would wrap.
+				int candidateLimit = (int) Math.max(Math.min(request.getSimilarityLimit() * 3L, Integer.MAX_VALUE), 36);
 				// The chart read above already ran any cold touch; a failed one is not run twice.
 				List<QueryDocument> hits = rankedPatientSearch(patientUuid, retrievalQuestion, candidateLimit);
 				similarityRanks = selectDiversifiedSimilarityRanks(
@@ -609,8 +610,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 * of one value share a slot instead of starving other records of slots. A group is a concept and
 	 * its rendered value: identical repeats ("Pregnancy status: No" three times) share one slot, while
 	 * distinct values of one concept stay separate, so a trend keeps one record per value. Within a
-	 * group the newest record comes first, since rankers never see dates (Decision 7) and a repeat's
-	 * slot must report its latest date. Records a policy tier already claimed are skipped, as is a
+	 * group the newest of the fetched candidates comes first, since rankers never see dates
+	 * (Decision 7) and a repeat's slot must report its latest date; a newer repeat ranked below the
+	 * candidate pool is not seen. Records a policy tier already claimed are skipped, as is a
 	 * hit the chart does not hold (past the Elasticsearch cap): it could never fill the slot it took,
 	 * and the next candidate can. Each pick keeps its own 1-based search rank.
 	 */
