@@ -1408,8 +1408,8 @@ budgeting, and question interpretation.
    type ∈ `types`) → `recency_anchor` (the first `recencyAnchorSize` chart documents, only when
    `temporal`) → `similarity` (up to `similarityLimit` of the `searchByPatient` hits, over-fetched
    threefold, at least 36, and taken one repeat group at a time: a group is a concept with its
-   rendered value, so identical repeats share one slot and its newest record takes it, while a
-   series of distinct values stays whole; records a higher tier claimed are skipped, and each pick
+   rendered value, so identical repeats share one slot and the newest of the fetched candidates
+   takes it, while each distinct value of a series is a group of its own; records a higher tier claimed are skipped, and each pick
    keeps its own search `rank`) → `panel` (obs-group family completion: when a group parent or any member is selected,
    the whole family joins and any budget-droppable triggering record is promoted to `panel`).
    Output preserves Decision 15's `record_date`-desc chart order. A panel-promoted similarity

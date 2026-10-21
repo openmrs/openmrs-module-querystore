@@ -107,6 +107,19 @@ public class HybridDefaultTest {
 		assertEquals("C", fused.getHits().get(0).getDocument().getResourceUuid());
 	}
 
+	@Test
+	public void hybrid_capsTheCandidateWindowInsteadOfWrappingALargeLimit() {
+		// Tripled as an int, 715827883 wraps negative and the floor of 30 would take over.
+		StubBackend backend = new StubBackend(new SearchResult(Collections.emptyList()),
+		    new SearchResult(Collections.emptyList()));
+
+		backend.hybrid(SearchRequest.builder().queryText("q").queryVector(new float[] { 0.1f, 0.2f })
+		    .limit(715827883).build());
+
+		assertEquals(Integer.MAX_VALUE, backend.lastBm25Limit);
+		assertEquals(Integer.MAX_VALUE, backend.lastKnnLimit);
+	}
+
 	private static QueryDocument doc(String uuid) {
 		QueryDocument d = new QueryDocument();
 		d.setResourceUuid(uuid);

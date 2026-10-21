@@ -190,7 +190,7 @@ public interface BackendStore {
 			return bm25(req);
 		}
 		SearchRequest candidateReq = req.getLimit() > 0
-		        ? req.withLimit(Math.max(req.getLimit() * 3, 30))
+		        ? req.withLimit((int) Math.max(Math.min(req.getLimit() * 3L, Integer.MAX_VALUE), 30))
 		        : req;
 		SearchResult bm25 = bm25(candidateReq);
 		SearchResult knn = knn(candidateReq);

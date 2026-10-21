@@ -858,6 +858,27 @@ public class ContextSliceTest {
 		assertFalse(tiers.containsKey("creat-old"), "got " + tiers);
 	}
 
+	/** A limit whose tripling wraps an int still fetches every candidate rather than the floor. */
+	@Test
+	public void similarityLeg_fetchesEveryCandidateWhenTheLimitIsTooLargeToTriple() {
+		List<QueryDocument> hits = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 40; i++) {
+			QueryDocument record = doc("obs", "record-" + i, "Finding " + i + ": " + i, LocalDate.of(2026, 1, 1).plusDays(i));
+			record.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-" + i);
+			hits.add(record);
+		}
+		backend.chart.addAll(hits);
+		backend.hits = hits;
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(715827883);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "Any findings?", request));
+
+		for (int i = 0; i < 40; i++) {
+			assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("record-" + i), "got " + tiers);
+		}
+	}
+
 	/** Distinct values of one concept are a series, not repeats: a trend question keeps them. */
 	@Test
 	public void similarityLeg_keepsANumericSeriesWhenConceptsOutnumberSlots() {
