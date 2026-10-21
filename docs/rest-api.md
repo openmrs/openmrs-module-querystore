@@ -31,7 +31,7 @@ Returns query-store records through the existing `QueryStoreService` behavior:
 | `patient=<uuid>` | `getPatientChart(patient)` | Full materialized patient chart, newest first |
 | `patient=<uuid>&q=<text>` | `searchByPatient(patient, q, k)` | Ranked patient results |
 | `q=<text>` | `search(q, k)` | Ranked cross-patient results |
-| `patient=<uuid>&mode=context&q=<text>` | `getContextSlice(patient, q, request)` | Tiered question context in chart order |
+| `patient=<uuid>&mode=context&q=<text>&interpret=true` | `getContextSlice(patient, q, request)` | Tiered question context in chart order |
 
 - **Privilege:** `Get Patients`. Records of a type the caller cannot read through core are
   omitted: obs need `Get Observations`, conditions `Get Conditions`, orders `Get Orders`, and so
@@ -98,12 +98,12 @@ curl -s -u patient-reader:secret \
   'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&limit=500'
 
 curl -s -u patient-reader:secret \
-  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&mode=context&q=current%20medications&limit=100'
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&mode=context&q=current%20medications&interpret=true&limit=100'
 ```
 
 **Errors:** missing `patient` and `q`, a blank `patient`, invalid paging, or malformed parameters return `400`; an
 unknown patient returns `404`; failed authentication/authorization returns `401`/`403`.
-The `types` and `temporal` parameters require `mode=context`; supplying
+The `types`, `temporal`, and `interpret` parameters require `mode=context`; supplying
 them on a full-chart or ranked read returns `400` instead of silently ignoring them.
 Explicit context `types` must name registered serializers; unknown names return
 `400`. Registered module types are accepted even if they have no bootstrapper.

@@ -84,7 +84,8 @@ public final class ContextSlice {
 		return projectionComplete;
 	}
 
-	/** The typed-complete scope this slice was SELECTED with; the selection trace for consumers. */
+	/** The typed-complete scope this slice was SELECTED with — caller types unioned with any
+	 *  server-derived interpretation (ADR Decision 18); the selection trace for consumers. */
 	public Set<String> getEffectiveTypes() {
 		return effectiveTypes;
 	}
@@ -96,7 +97,7 @@ public final class ContextSlice {
 		return withheldTypes;
 	}
 
-	/** Whether the recency anchor applied to this slice. */
+	/** Whether the recency anchor applied to this slice (caller flag OR derived interpretation). */
 	public boolean isTemporalApplied() {
 		return temporalApplied;
 	}
