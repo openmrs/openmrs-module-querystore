@@ -147,11 +147,9 @@ public class RecordProjectorTest {
 
 	@Test
 	public void project_leavesTheVersionUnsetWhenTheCommittedRecordCannotBeSerialized() {
-		// The event-time content predates the save, so it must not carry a version, neither the
-		// committed one nor the previous save's that an edited record carries at event time: without
-		// one, the restart top-up rewrites the document from core instead of skipping it.
+		// The event-time content predates the save, so it must not carry the committed version:
+		// without one, the restart top-up rewrites the document from core instead of skipping it.
 		Encounter enc = encounter("enc-new", false);
-		enc.setDateChanged(new Date(1792479801000L));
 		java.util.List<Runnable> pending = new java.util.ArrayList<>();
 		EncounterRecordSerializer failsAfterCommit = new EncounterRecordSerializer() {
 			private int calls;
@@ -171,6 +169,33 @@ public class RecordProjectorTest {
 
 		assertEquals(1, service.indexed.size());
 		assertNull(service.indexed.get(0).getLastModified());
+	}
+
+	@Test
+	public void project_keepsTheEventTimeVersionOfAnEditedRecordItCannotSerializeAgain() {
+		// Cleared, the version would make the Elasticsearch write unversioned, which moves the stored
+		// version past the previous save's second and refuses the rewrite a resync issues at it.
+		Encounter enc = encounter("enc-edited", false);
+		Date previousSave = new Date(1792479801000L);
+		enc.setDateChanged(previousSave);
+		java.util.List<Runnable> pending = new java.util.ArrayList<>();
+		EncounterRecordSerializer failsAfterCommit = new EncounterRecordSerializer() {
+			private int calls;
+
+			@Override
+			protected void populate(Encounter encounter, QueryDocument doc) {
+				if (++calls > 1) {
+					throw new IllegalStateException("lazy association outside its session");
+				}
+				super.populate(encounter, doc);
+			}
+		};
+
+		RecordProjector.project(failsAfterCommit, enc, false, indexer, deferred(pending));
+		pending.forEach(Runnable::run);
+
+		assertEquals(1, service.indexed.size());
+		assertEquals(previousSave.toInstant(), service.indexed.get(0).getLastModified());
 	}
 
 	@Test

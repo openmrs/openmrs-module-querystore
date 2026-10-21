@@ -56,9 +56,12 @@ public final class RecordProjector {
 	 * condition, diagnosis, allergy or patient has no {@code record_date}, and a new record has no
 	 * version. The saved node is the same instance and now holds what was committed, so it is
 	 * serialized again. If that fails (a lazy association outside its session), the event-time
-	 * document is written as it is, without a version stamped onto pre-save content, so the
-	 * bootstrap top-up does not skip it and rewrites it from core. Returns {@code null} when the
-	 * committed node has nothing to index or was voided since the event.
+	 * document is written as it is. A new record's has no version, so the bootstrap top-up rewrites
+	 * it from core. An edited record's keeps the previous save's version, which the top-up rewrites
+	 * unless the edit fell in that save's second, the case a {@code resyncType} repairs; clearing it
+	 * would make the Elasticsearch write unversioned, which moves the stored version past that
+	 * second and refuses even the resync's rewrite. Returns {@code null} when the committed node has
+	 * nothing to index or was voided since the event.
 	 */
 	static <T extends BaseOpenmrsData> QueryDocument committedDocument(ClinicalRecordSerializer<T> serializer,
 	        T node, QueryDocument eventTime) {
@@ -70,11 +73,7 @@ public final class RecordProjector {
 		}
 		catch (RuntimeException e) {
 			log.debug("Could not serialize the committed " + serializer.getResourceType() + "/" + node.getUuid()
-			        + "; writing the event-time document without a version", e);
-			// An edited record's event-time document carries the version of the save before this one;
-			// stamped on pre-save content it would let the top-up skip the document when both saves
-			// fall in the same second.
-			eventTime.setLastModified(null);
+			        + "; writing the event-time document", e);
 			return eventTime;
 		}
 	}
