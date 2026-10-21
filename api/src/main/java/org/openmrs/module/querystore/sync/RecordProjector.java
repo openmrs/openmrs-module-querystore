@@ -75,6 +75,33 @@ public final class RecordProjector {
 		}
 	}
 
+	/**
+	 * The save voided the node its event carried: delete its document (Decision 10) and index whatever
+	 * the save wrote in its place ({@link ClinicalRecordSerializer#replacementsOf}), which no event of
+	 * its own will announce.
+	 */
+	private static <T extends BaseOpenmrsData> void replaceVoided(ClinicalRecordSerializer<T> serializer, T node,
+	        RecordIndexer indexer) {
+		String resourceType = serializer.getResourceType();
+		try {
+			indexer.delete(resourceType, node.getUuid());
+		}
+		catch (RuntimeException e) {
+			log.warn("Skipping delete for " + resourceType + "/" + node.getUuid() + " due to failure", e);
+		}
+		try {
+			for (T replacement : serializer.replacementsOf(node)) {
+				QueryDocument doc = serializer.serialize(replacement);
+				if (doc != null) {
+					indexer.index(doc);
+				}
+			}
+		}
+		catch (RuntimeException e) {
+			log.warn("Skipping the replacement of " + resourceType + "/" + node.getUuid() + " due to failure", e);
+		}
+	}
+
 	public static <T extends BaseOpenmrsData> void project(ClinicalRecordSerializer<T> serializer, T root,
 	        boolean purge, RecordIndexer indexer, AfterCommitDispatcher dispatcher) {
 		List<T> tree = serializer.collectTree(root);
@@ -104,8 +131,12 @@ public final class RecordProjector {
 			// pathological text) must not skip its sibling members. The dispatcher's outer guard
 			// remains as a last-resort catch for anything that escapes here.
 			for (int i = 0; i < toIndex.size(); i++) {
-				QueryDocument doc = committedDocument(serializer, indexedNodes.get(i), toIndex.get(i));
+				T node = indexedNodes.get(i);
+				QueryDocument doc = committedDocument(serializer, node, toIndex.get(i));
 				if (doc == null) {
+					if (Boolean.TRUE.equals(node.getVoided())) {
+						replaceVoided(serializer, node, indexer);
+					}
 					continue;
 				}
 				try {
