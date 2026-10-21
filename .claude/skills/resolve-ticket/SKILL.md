@@ -206,8 +206,8 @@ carry on. The remedy is for later sessions, never a reason to relaunch this one 
 `alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
 whose cap waits out a reset up to five hours away, or with the two variables in front of
 `pool-run --work`. Never `settings.json`'s `env`: it reaches the driver's headless sessions, which
-`pool-run` otherwise keeps the pair out of, and one waiting there hides the limit from the driver, so
-a ticket timeout that ends the wait spends the attempt. And a wait can hold a live agent past the
+`pool-run` otherwise keeps the pair out of, and a session waiting under it hides the limit from the
+driver, so a ticket timeout that ends the wait spends the attempt. And a wait can hold a live agent past the
 gates' one-hour await bound; `pr-harden`'s **State** says what its await gets then.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at

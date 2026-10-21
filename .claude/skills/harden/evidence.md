@@ -335,7 +335,7 @@ this first and its **State** section carries the reasoning; the field and the se
 the gate cannot tell your entry from one a co-located run left in the same directory; `pr-harden`'s
 **State** section carries that reasoning as well:
 
-*Added 0.44.0 — the rule it supports:* “except where a usage-limit wait can have held it: the gate's block then opens on that await, and `pr-harden`'s **State** says what it gets”
+*Added 0.44.0 — the rule it supports:* “except where a usage-limit wait can have held it: the gate's block past the bound opens on that await, and `pr-harden`'s **State** says what it gets”
 
 Under `CLAUDE_CODE_RETRY_WATCHDOG`, which `resolve-ticket`'s Step 1 recommends through an alias, an
 agent waiting at a usage limit is alive and is not reported stalled, so the bound can pass with it

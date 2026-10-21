@@ -272,8 +272,8 @@ Record it immediately before spawning and **clear it on ANY terminal outcome** �
 harness reporting the agent died, stalled or was killed. A stale entry lets the run stop for real,
 which is what the gate exists to prevent, so the gate's allow is bounded by an hour; an agent that
 has not returned inside it is treated as dead rather than outstanding, except where a usage-limit
-wait can have held it: the gate's block then opens on that await, and `pr-harden`'s **State** says
-what it gets.
+wait can have held it: the gate's block past the bound opens on that await, and `pr-harden`'s
+**State** says what it gets.
 
 ```bash
 # ONCE, at the top of the run: pick an id for it — any string unique to this run — and use the same
