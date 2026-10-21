@@ -53,4 +53,28 @@ public class ElasticsearchBulkDeleteAccountingTest {
 		assertTrue(result.getFailures().isEmpty());
 		verify(client, never()).bulk(any(BulkRequest.class));
 	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void aFailedBulkRequestIsReportedForTheIdsItStillHadToDelete() throws Exception {
+		ElasticsearchClientFactory factory = mock(ElasticsearchClientFactory.class);
+		ElasticsearchClient client = mock(ElasticsearchClient.class);
+		when(factory.getClient()).thenReturn(client);
+		// The read settles "missing" as the no-op success; only "stored" goes on to the bulk request.
+		MgetResponse<Void> read = MgetResponse.of(r -> r.docs(Arrays.asList(
+		        MultiGetResponseItem.<Void> of(i -> i.result(d -> d.index("querystore_obs").id("missing").found(false))),
+		        MultiGetResponseItem.<Void> of(i -> i.result(d -> d.index("querystore_obs").id("stored").found(true)
+		                .version(3L))))));
+		when(client.mget(any(Function.class), eq(Void.class))).thenReturn(read);
+		when(client.bulk(any(BulkRequest.class))).thenThrow(new IOException("connection reset"));
+
+		BulkWriteResult result = new ElasticsearchBackendStore(factory).bulkDelete("obs",
+		    Arrays.asList("missing", "stored"));
+
+		assertEquals(2, result.getTotalRequested());
+		assertEquals("the id the read settled stays a success", 1, result.getSucceeded());
+		assertEquals("the id awaiting deletion is the one failure", 1, result.getFailures().size());
+		assertEquals("stored", result.getFailures().get(0).getResourceUuid());
+		assertTrue(result.getFailures().get(0).isRetryable());
+	}
 }
