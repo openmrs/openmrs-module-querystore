@@ -1425,10 +1425,11 @@ budgeting, and question interpretation.
    built by `PatientChartFingerprint` with the snapshot's canonical form.
    A consumer that combines a full-chart ledger with a later slice must require matching
    `chartSnapshotId` values and retry or fail when they differ; `sliceId` lets it reject mixed
-   pages and is neither a chart snapshot nor a cache validator. A requested type the caller
-   holds no core read privilege for (Decision 14 point 4) is left out of `effectiveTypes` and
-   named in `withheldTypes`, so a consumer that marks every effective type complete does not
-   take the empty tier for a patient without such records.
+   pages and is neither a chart snapshot nor a cache validator. Every core type the caller
+   holds no core read privilege for (Decision 14 point 4), requested or not, is left out of
+   `effectiveTypes` and named in `withheldTypes`, so a consumer that marks every effective type
+   complete, or reads the mandatory tier's allergies as all of them, does not take an empty tier
+   for a patient without such records.
 
 ### Rationale
 1. **Selection is retrieval.** The tiers are query semantics over fields this store owns

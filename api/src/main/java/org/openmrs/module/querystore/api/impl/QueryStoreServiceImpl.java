@@ -371,7 +371,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 		PatientChartRead chartRead = backend.findPatientChart(patientUuid);
 		return new PatientChartRead(readableByCaller(chartRead.getDocuments()),
-		        chartRead.isTruncated() || coldTouchFailed, isProjectionComplete());
+		        chartRead.isTruncated() || coldTouchFailed, isProjectionComplete(),
+		        typesWithheldFromCaller(CORE_READ_PRIVILEGES.keySet()));
 	}
 
 	/**
@@ -500,10 +501,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 		Set<String> effectiveTypes = new HashSet<>(request.getTypes());
 		boolean temporal = request.isTemporal();
-		// A type the caller cannot read through core is withheld and named, not left in the scope: in
-		// the scope it would come back as an empty typed tier, which reads as a patient without such
+		// Every type the caller cannot read through core is withheld and named, requested or not: in the
+		// scope it would come back as an empty typed tier, and in the mandatory tier (which carries
+		// every allergy unasked) as no records, either of which reads as a patient without such
 		// records, down to the sliceId.
-		Set<String> withheldTypes = typesWithheldFromCaller(effectiveTypes);
+		Set<String> withheldTypes = chartRead.getWithheldTypes();
 		effectiveTypes.removeAll(withheldTypes);
 
 		// Ranked-search hits are the semantic catch-all tier. A failure degrades to the policy
@@ -664,16 +666,20 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	/**
-	 * Whether the character at {@code at} continues an identifier beyond the signal: a letter or digit,
-	 * or a connector such as {@code -} or {@code .} with a letter or digit beyond it, so that
-	 * {@code ABC-123} is not found inside {@code ABC-123-4} while {@code CIEL:60.} at a sentence end
-	 * still matches.
+	 * Whether the character at {@code at} continues the signal: for an identifier, as
+	 * {@link #continuesIdentifier} says; for a quoted phrase, a letter or digit.
 	 */
 	private static boolean continues(String searchable, int at, int step, boolean identifier) {
 		return identifier ? continuesIdentifier(searchable, at, step)
 		        : Character.isLetterOrDigit(searchable.charAt(at));
 	}
 
+	/**
+	 * Whether the character at {@code at} continues an identifier beyond the signal: a letter or digit,
+	 * or a connector such as {@code -} or {@code .} with a letter or digit beyond it, so that
+	 * {@code ABC-123} is not found inside {@code ABC-123-4} while {@code CIEL:60.} at a sentence end
+	 * still matches.
+	 */
 	private static boolean continuesIdentifier(String searchable, int at, int step) {
 		char c = searchable.charAt(at);
 		if (Character.isLetterOrDigit(c)) {

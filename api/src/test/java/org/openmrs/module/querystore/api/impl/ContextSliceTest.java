@@ -205,6 +205,28 @@ public class ContextSliceTest {
 		assertEquals(Collections.singleton("drug_order"), slice.getEffectiveTypes());
 	}
 
+	/** The mandatory tier carries every allergy unasked, so a refused type must be named even when no
+	 *  type was requested, or the slice reads as a patient with no allergies. */
+	@Test
+	public void aTypeTheCallerCannotReadIsNamedEvenWhenItWasNotRequested() {
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		org.openmrs.api.context.Context.setUserContext(new org.openmrs.api.context.UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !org.openmrs.util.PrivilegeConstants.GET_ALLERGIES.equals(privilege);
+			}
+		});
+		ContextSlice slice;
+		try {
+			slice = service.getContextSlice(PATIENT, "What medications is she on?", request);
+		}
+		finally {
+			org.openmrs.api.context.Context.clearUserContext();
+		}
+
+		assertEquals(Collections.singleton("allergy"), slice.getWithheldTypes());
+	}
+
 	@Test
 	public void mandatoryCore_ridesEverySlice_regardlessOfTypesAndSimilarity() {
 		JsonNode fixtureCase = fixtureCase("context_policy", "context.enumerated-medications-are-complete");

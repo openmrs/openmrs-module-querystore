@@ -9,6 +9,8 @@ package org.openmrs.module.querystore.backend;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import org.openmrs.module.querystore.model.QueryDocument;
 
@@ -25,16 +27,25 @@ public final class PatientChartRead {
 
 	private final boolean projectionComplete;
 
+	private final Set<String> withheldTypes;
+
 	/** A backend read cannot certify deployment-wide projection completeness. */
 	public PatientChartRead(List<QueryDocument> documents, boolean truncated) {
 		this(documents, truncated, false);
 	}
 
 	public PatientChartRead(List<QueryDocument> documents, boolean truncated, boolean projectionComplete) {
+		this(documents, truncated, projectionComplete, null);
+	}
+
+	public PatientChartRead(List<QueryDocument> documents, boolean truncated, boolean projectionComplete,
+	    Set<String> withheldTypes) {
 		this.documents = documents == null ? Collections.<QueryDocument> emptyList()
 		        : Collections.unmodifiableList(new ArrayList<QueryDocument>(documents));
 		this.truncated = truncated;
 		this.projectionComplete = projectionComplete;
+		this.withheldTypes = withheldTypes == null ? Collections.<String> emptySet()
+		        : Collections.unmodifiableSet(new TreeSet<String>(withheldTypes));
 	}
 
 	/** An untruncated backend read; projection completeness still requires explicit evidence. */
@@ -57,5 +68,14 @@ public final class PatientChartRead {
 	 */
 	public boolean isProjectionComplete() {
 		return projectionComplete;
+	}
+
+	/**
+	 * The resource types whose records this read left out because the caller holds no core read
+	 * privilege for them, whether or not the patient has any (Decision 14 point 4). Naming them lets a
+	 * consumer tell a refused type from a patient without such records.
+	 */
+	public Set<String> getWithheldTypes() {
+		return withheldTypes;
 	}
 }

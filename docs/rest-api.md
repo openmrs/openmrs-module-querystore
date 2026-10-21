@@ -71,8 +71,9 @@ original 1-based search `rank`, and keeps it when panel completion promotes it t
 already selected carries no `rank`. The
 response returns `chartSize`, `chartTruncated`,
 `effectiveTypes`, `withheldTypes`, `temporalApplied`, `chartSnapshotId`, and `sliceId`.
-`withheldTypes` names the requested types the caller holds no core read privilege for; they are
-left out of `effectiveTypes`, so an empty typed tier is never a type the caller was refused. The `chartSnapshotId`
+`withheldTypes` names every core type the caller holds no core read privilege for, whether or not
+it was requested; those types are left out of `effectiveTypes` and the mandatory tier, so an empty
+tier is never a type the caller was refused. The `chartSnapshotId`
 fingerprints the complete chart materialization from which the selection was made. Consumers that
 combine a full-chart ledger with a later context slice must require matching snapshot IDs and retry
 or fail when they differ. The `sliceId` fingerprints the complete ordered
