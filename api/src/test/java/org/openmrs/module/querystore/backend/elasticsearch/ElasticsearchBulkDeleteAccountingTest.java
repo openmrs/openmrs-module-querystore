@@ -31,6 +31,8 @@ import co.elastic.clients.elasticsearch._types.ErrorCause;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.MgetResponse;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.core.bulk.OperationType;
 import co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem;
@@ -80,7 +82,45 @@ public class ElasticsearchBulkDeleteAccountingTest {
 
 		assertEquals("a conflict on a delete is not the stale-upsert success", 0, result.getSucceeded());
 		assertEquals(1, result.getFailures().size());
+		assertEquals("stored", result.getFailures().get(0).getResourceUuid());
 		assertTrue(result.getFailures().get(0).isRetryable());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void aPatientSweepReportsADeleteTheDocumentOutranAsARetryableFailure() throws Exception {
+		ElasticsearchFactoryAndClient es = mockedClient();
+		SearchResponse<Void> found = SearchResponse.of(r -> r.took(1).timedOut(false)
+		        .shards(sh -> sh.total(1).successful(1).failed(0))
+		        .hits(h -> h.hits(Arrays.asList(Hit.<Void> of(hit -> hit.index("querystore_obs").id("stored").version(3L))))));
+		SearchResponse<Void> none = SearchResponse.of(r -> r.took(1).timedOut(false)
+		        .shards(sh -> sh.total(1).successful(1).failed(0)).hits(h -> h.hits(java.util.Collections.emptyList())));
+		when(es.client.search(any(Function.class), eq(Void.class))).thenReturn(found, none);
+		when(es.client.bulk(any(BulkRequest.class))).thenReturn(BulkResponse.of(b -> b.took(1).errors(true)
+		        .items(Arrays.asList(BulkResponseItem.of(i -> i.index("querystore_obs").id("stored")
+		                .operationType(OperationType.Delete).status(409)
+		                .error(ErrorCause.of(e -> e.type("version_conflict_engine_exception").reason("rewritten"))))))));
+
+		BulkWriteResult result = new ElasticsearchBackendStore(es.factory).bulkDeleteByPatient("patient-A");
+
+		assertEquals(1, result.getTotalRequested());
+		assertEquals("a conflict on the sweep's delete is not a deletion", 0, result.getSucceeded());
+		assertEquals(1, result.getFailures().size());
+		assertEquals("stored", result.getFailures().get(0).getResourceUuid());
+		assertTrue(result.getFailures().get(0).isRetryable());
+	}
+
+	private static final class ElasticsearchFactoryAndClient {
+
+		final ElasticsearchClientFactory factory = mock(ElasticsearchClientFactory.class);
+
+		final ElasticsearchClient client = mock(ElasticsearchClient.class);
+	}
+
+	private static ElasticsearchFactoryAndClient mockedClient() {
+		ElasticsearchFactoryAndClient es = new ElasticsearchFactoryAndClient();
+		when(es.factory.getClient()).thenReturn(es.client);
+		return es;
 	}
 
 	@Test
