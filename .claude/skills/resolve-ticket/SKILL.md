@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready (a private ticket's stays a draft). Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.28.0
+version: 0.29.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -194,6 +194,19 @@ a busy port is the normal state, and the verifier simply takes and restarts the 
 What would actually block the run is having no standalone on disk at all, or no LLM endpoint for a
 module that needs one. Say so NOW if either is missing, so the user can fix it while the work
 proceeds.
+
+**Pre-flight the usage limit too.** A claude.ai usage limit ends the turn on an API error, which
+runs `StopFailure` hooks instead of `Stop`, so no gate sees it, and nothing in this skill runs again
+until something outside it sends the session a turn: Claude Code, or `pool-run` in a session it
+started. With `CLAUDE_CODE_RETRY_WATCHDOG` on, a request at the limit waits for the reset and
+retries, so the turn never ends. Without it a session started by hand depends on Claude Code's own
+continue-at-reset, which can be switched off for an account and skips Remote Control sessions,
+resets more than a day out and repeated hits in a row. So where `$CLAUDE_PIPELINE_SESSION` is unset,
+run `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"`, and unless it prints `1`, `true`, `yes` or `on`,
+say so NOW and carry on. The remedy is for the sessions after this one, never a reason to relaunch
+this one mid-run: start them with it on and with
+`CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000`, which waits out any five-hour window
+and no weekly one, from a shell alias for `claude`, which no `pool-run` session goes through.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs

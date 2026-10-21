@@ -139,6 +139,73 @@ pre-existing processes, discovered at round 2, and the run reached its final rou
 PR ready for a reason that had nothing to do with the code. Measured on the sixth, the opposite
 mistake — both ports busy at pre-flight, both by our own standalones, and neither a blocker.
 
+*Added 0.29.0 — the rule it supports:* “Pre-flight the usage limit too.”
+
+Usage limits have stopped runs on this pipeline before: #412 (2026-09-14) lost 3 of 4 Phase 2
+agents to one, #421 all four of a cycle's, #310 a confirming agent. #421 lost nothing because
+`pool-run` re-entered it after the reset, and every carry past a limit so far has been `pool-run`'s:
+the driver suspends and re-enters its headless sessions, and `--work` nudges the sessions it
+launched over their peer socket (`ticket-pool`'s `pausing.md`). A run typed into a session by hand,
+the case 0.27.0's worktree step exists for, had nothing, and on 2026-09-11 three `--work` sessions
+sat idle 4h14m past a 07:10 reset with no continuation prompt from Claude Code in their transcripts.
+On 2026-10-21 the owner asked for the skill to resume by itself once the limit resets.
+
+What Claude Code does, from its documentation (code.claude.com: `hooks`, `interactive-mode`,
+`errors`, `scheduled-tasks`) and its 2.1.306 binary, read on 2026-10-21 and not run:
+
+- A turn ended by an API error runs `StopFailure` hooks instead of `Stop`: "StopFailure hooks have
+  no decision control", and Claude Code ignores their output. No gate sees the stop and no hook can
+  answer it, and no documented hook starts a turn in an interactive session.
+- Its own continue (`autoContinueAtUsageLimit`, on by default from 2.1.234 in interactive sessions
+  signed in to claude.ai) waits in the open session and continues the task after the reset. The
+  documented exceptions: no automatic wait for a reset more than 24 hours away, or for Remote Control
+  and agent-team teammate sessions; none at all in background sessions or `-p`; at most two re-arms
+  in a row; a wait ends if Claude Code exits; and a machine that slept more than about half an hour
+  across the reset asks for Enter. Where it does not arm, the usage-limit menu opens once per reset
+  window. In the binary, arming it unasked also needs server-side flags (`tengu_marble_heron`, with
+  `tengu_linked_clover` as a killswitch) and a plan that is not usage-billed, which is how
+  `pausing.md` can say it "can be gated off for an account"; and one predicate returns early from
+  arming it unasked, from arming it off the limit notice, and from opening the menu: Remote
+  Control's bridge connected, `CLAUDE_CODE_SESSION_KIND=bg`, or a teammate.
+- `CLAUDE_CODE_RETRY_WATCHDOG` is "unattended retry mode", documented for unattended sessions such as
+  CI jobs: it retries 429 and 529 errors indefinitely. In the binary, a 429 whose
+  `anthropic-ratelimit-unified-status` is `rejected` waits until the window resets and then retries,
+  bounded by `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` (unset: no bound; added in 2.1.301
+  "so unattended retry mode ends a request at a usage limit that resets too far away instead of
+  waiting"). A spend cap or exhausted usage credits is the exception, refused at once. The wait
+  happens inside the request, so the turn does not end. Whether an agent's requests wait the same
+  way was not checked. The variable is read as a boolean, true for `1`, `true`, `yes` or `on`
+  whatever their case, which is why the check accepts all four.
+
+Why the skill does not carry the run itself. A skill acts only inside a turn, and the turn a limit
+ends leaves nothing of the skill running. The one in-session way to start a later turn is a
+scheduled prompt (`CronCreate`), and a keepalive built on one was drafted for 0.29.0 and dropped
+before it shipped. A fresh reviewer's findings against it included these. It read a run mid-FINISH,
+whose entry already says `reviewed`, `blocking: 0`, as finished, retired itself, and the gate let
+the stop through. Lifting a user's stop re-asserted its override. An attended wait on an agent past
+an hour read as a cut-off, and the phase was re-dispatched beside the live agent. And in a plain
+terminal its prompt waits behind the usage-limit menu: while a dialog is open, the binary's queue
+processor holds every prompt addressed to the main session that is neither passive nor Claude Code's
+own continuation. The watchdog has none of these, because the turn never stops.
+
+**What the paragraph does not ask for, and why.** A second fresh review, of the paragraph's first
+draft, found the relaunch it then advised unsafe. Exiting a `pool-run --work` session releases its
+claim and removes a worktree still clean at Step 1 (`ticket-pool`'s `by-hand.md`), so the resumed
+session has no slot, no worktree and no nudge. A session relaunched anywhere comes back under a new
+pid, while the entry's `owner` is the dead one, which both gates read as a stop to allow until the
+next `--owner` write. So the check says so and the run carries on, and the remedy is for the
+sessions after it. A shell alias carries the variable into the sessions a person starts and into
+none of `pool-run`'s, which start `claude` themselves, so those keep their own carry. Whether a
+headless session waiting inside a request writes anything the driver's quiet window counts is not
+measured.
+
+Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
+window, which resets less than five hours after the request that meets it, and refuses a weekly one.
+It stays under the gates' six-hour expiry, but the wait does not restamp the entry: one that began
+hours after the last transition write can carry the entry past six hours, and the gates then fail
+open until the run's next write. Not measured either: no run has met a limit with the watchdog set.
+The first that does is the measurement, and its transcript shows the wait.
+
 *Cut down, A-07 — the rule it supports:* “which an inline read-modify-write cannot, and under a parallel pool cannot safely be retyped”
 
 `gate-state` is the only writer of either state file — it holds a lock across both and writes
