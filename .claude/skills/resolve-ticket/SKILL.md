@@ -209,8 +209,8 @@ whose cap waits out a reset up to five hours away, or the same two variables in 
 `export` or `settings.json`'s `env`: the driver's headless sessions would inherit it, and one
 waiting there streams a retry line every 30 s, so the driver never learns of the limit and its
 ticket timeout spends the attempt a pause would have kept. And a wait can outlast the gates'
-one-hour await bound: an agent the harness has not reported finished or dead is still running, so
-record its await again rather than re-dispatching its phase.
+one-hour await bound, so after one, an agent the harness has not reported finished, stalled or dead
+has its await recorded again, once, rather than its phase re-dispatched.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs
