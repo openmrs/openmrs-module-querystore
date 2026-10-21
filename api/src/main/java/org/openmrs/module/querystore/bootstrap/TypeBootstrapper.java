@@ -179,8 +179,15 @@ public abstract class TypeBootstrapper<T> {
 			if (page.isEmpty()) {
 				break;
 			}
-			failed += projectBatch(page, service, embedder).failed;
 			T last = page.get(page.size() - 1);
+			if (cursor != null && cursor.equals(getDateChanged(last))
+			        && java.util.Objects.equals(cursorUuid, getUuid(last))) {
+				// The page did not advance past the cursor: rows a failed fetch left half-loaded in the
+				// session come back unhydrated (null dates), and walking on would loop forever.
+				throw new IllegalStateException("Per-patient fetch of " + getResourceType() + " for patient "
+				        + patientUuid + " did not advance past " + cursor + "/" + cursorUuid);
+			}
+			failed += projectBatch(page, service, embedder).failed;
 			cursor = getDateChanged(last);
 			cursorUuid = getUuid(last);
 		}

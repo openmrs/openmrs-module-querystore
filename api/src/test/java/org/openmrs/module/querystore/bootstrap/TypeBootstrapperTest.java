@@ -11,6 +11,7 @@ package org.openmrs.module.querystore.bootstrap;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_CONCEPT_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
@@ -319,6 +320,23 @@ public class TypeBootstrapperTest {
 		}
 	}
 
+	@Test
+	public void runForPatient_stopsWhenAPageDoesNotAdvancePastTheCursor() {
+		FakeBootstrapper b = new FakeBootstrapper();
+		// A failed fetch leaves half-loaded rows in the session; they come back unhydrated, at the same
+		// epoch cursor, on every later fetch.
+		b.stuckPatientPage = Arrays.asList(new TestEntity("cond-1", Instant.EPOCH));
+
+		try {
+			b.runForPatient("patient-A", service, embedder);
+			fail("a page that never advances must stop the walk");
+		}
+		catch (IllegalStateException expected) {
+			assertEquals(2, b.patientFetches);
+			assertTrue(expected.getMessage(), expected.getMessage().contains("patient-A"));
+		}
+	}
+
 	private static final class FakeBootstrapper extends TypeBootstrapper<TestEntity> {
 		private final Deque<List<TestEntity>> pages = new ArrayDeque<>();
 		private int pageNumber = 0;
@@ -326,6 +344,8 @@ public class TypeBootstrapperTest {
 		private RuntimeException failureCause;
 		String poisonUuid;
 		private final List<FetchCall> fetchCalls = new ArrayList<>();
+		List<TestEntity> stuckPatientPage;
+		int patientFetches;
 		private final TestSerializer serializer = new TestSerializer() {
 			@Override
 			public org.openmrs.module.querystore.model.QueryDocument serialize(TestEntity record) {
@@ -373,6 +393,15 @@ public class TypeBootstrapperTest {
 				throw failureCause;
 			}
 			return pages.isEmpty() ? Collections.emptyList() : pages.poll();
+		}
+
+		@Override
+		protected List<TestEntity> fetchPageForPatient(String patientUuid, Instant afterDateChanged, String afterUuid,
+		        int pageSize) {
+			if (++patientFetches > 2) {
+				throw new AssertionError("the per-patient walk fetched the same page " + patientFetches + " times");
+			}
+			return stuckPatientPage;
 		}
 
 		@Override
