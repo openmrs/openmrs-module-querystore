@@ -11,6 +11,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -68,10 +70,28 @@ public class ContextQuestionInterpreterTest {
 	}
 
 	@Test
+	public void interpret_readsAStandaloneRecentAsRecency() {
+		assertTrue(ContextQuestionInterpreter.interpret("Any recent labs?").temporal);
+		assertTrue(ContextQuestionInterpreter.interpret("Recent vitals").temporal);
+	}
+
+	@Test
 	public void preprocess_expandsEverySupportedPanelOnlyOnce() {
-		for (String abbreviation : Arrays.asList("BMP", "CMP", "CBC", "LFT", "LFTs", "RFT", "RFTs", "ABG", "ESR", "CRP")) {
-			String once = ContextQuestionInterpreter.preprocess("latest " + abbreviation + " results");
-			assertEquals("preprocessing must be idempotent for " + abbreviation, once,
+		Map<String, String> expansions = new LinkedHashMap<String, String>();
+		expansions.put("BMP", "basic metabolic panel");
+		expansions.put("CMP", "comprehensive metabolic panel");
+		expansions.put("CBC", "complete blood count");
+		expansions.put("LFT", "liver function tests");
+		expansions.put("LFTs", "liver function tests");
+		expansions.put("RFT", "renal function tests");
+		expansions.put("RFTs", "renal function tests");
+		expansions.put("ABG", "arterial blood gas");
+		expansions.put("ESR", "erythrocyte sedimentation rate");
+		expansions.put("CRP", "C-reactive protein");
+		for (Map.Entry<String, String> panel : expansions.entrySet()) {
+			String once = ContextQuestionInterpreter.preprocess("latest " + panel.getKey() + " results");
+			assertEquals("latest " + panel.getKey() + " " + panel.getValue() + " results", once);
+			assertEquals("preprocessing must be idempotent for " + panel.getKey(), once,
 			        ContextQuestionInterpreter.preprocess(once));
 		}
 	}

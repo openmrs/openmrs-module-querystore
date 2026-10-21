@@ -64,7 +64,7 @@ final class ContextQuestionInterpreter {
 
 	/** Recency cues: the newest value/event or the recent past — these need the recency anchor. */
 	private static final Pattern TEMPORAL_CUES = cues(
-	        "most recent", "latest", "newest", "last", "current", "currently", "now", "today",
+	        "most recent", "recent", "latest", "newest", "last", "current", "currently", "now", "today",
 	        "when was", "when did", "lately", "recently", "since",
 	        "(?:over |in |during )?(?:the )?past (?:few )?(?:\\d+ )?(?:days?|weeks?|months?|years?)",
 	        "this (?:week|month|year)");
