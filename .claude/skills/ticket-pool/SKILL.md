@@ -2,7 +2,7 @@
 name: ticket-pool
 description: Work a pool of tickets to reviewed pull requests unattended, one fresh session per ticket, with a skill-retro between them so later tickets are worked by improved skills. Use when asked to work a queue or pool of issues rather than a single one, to check what the pipeline has done, or to queue work for it. Trigger phrases include "work the pool", "work through these tickets", "run the pipeline", "what has the pipeline done", "queue this issue for the pipeline".
 argument-hint: "[--once] [--limit N] [--workers N] [--work N] [--claim N] [--release N] [--claims] [--ticket N[,N,…]] [--pause [--now]] [--resume] [--dry-run] [--status] [--retro-now] [--no-retro] [--init]"
-version: 0.25.0
+version: 0.26.0
 ---
 
 # Ticket pool — the loop that learns
@@ -100,8 +100,10 @@ conversation, use the read-only forms below and hand over the command for the re
 | `pool-watch 310 --results` | that ticket's session, tool results included |
 
 Wherever a table row above shows a ticket number, the same command takes a `#266`, a JIRA key
-(`O3-1234`, `TRUNK-6429`), or the URL of the issue — including the one your address bar
-carries after you scroll to a comment. All of them reduce to the same identifier, so a
+(`O3-1234`, `TRUNK-6429` — never a private ticket's: the pool cannot tell one from a missing key, so
+do not queue one; `resolve-ticket`'s *When the ticket is private* says why), or the URL of the
+issue — including the one your address bar carries after you scroll to a comment. All of them
+reduce to the same identifier, so a
 ticket named two ways is still one worktree, one lease and one ledger row.
 
 **Most of these refuse to run beside a live pool, and that is the design.** `--outcomes` takes the

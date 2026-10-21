@@ -3,24 +3,24 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2462,
-      "to": 2532,
-      "why": "Steps 2, 4 and 6 now name the `raises` entry, the `--against` run that holds it, and that a new file's budget rises from 0, which the linter and pool-run both check"
+      "from": 2532,
+      "to": 2806,
+      "why": "Step 1 draws nothing from ~/.claude/skill-lessons/confidential/ but its PRS, read only so that no public proposal, commit or file names a key, PR or session path it lists, and Step 6's mirror leaves the directory out, moves a top-level record naming a listed key or PR into it, and before the commit greps the staged diff for every listed key and URL, because it holds the records of runs on private tickets and the mirror publishes into a public repo; the staged-diff grep spells each listed PR the ways records name one and skips an empty PRS; the guard lists rather than counts, reads the commit message too, spells a PR as its pr- and pull/ refs as well, lets another repository's same number pass, and Step 1 brings nothing down whose name confidential/ holds; the commit message is checked from the file it is committed with, so nothing in it runs, and the guard also spells pulls/<n> and a short repo#<n>; a moved record's repo copy goes with git rm, the guard runs before git commit -F, and a hit names its record by the nearest +++ b/ line; the guard reads the message first and the staged diff without deletions, so a moved record's git rm -f does not list itself, and the report says the repo's history still holds a moved copy"
     },
     "pr-harden": {
-      "from": 9506,
-      "to": 9535,
-      "why": "State told a session running elsewhere to EnterWorktree into the checkout, and in #607 and PR 3787 the tool refused a checkout outside the session's git repository. State now says that there the gate, run in the session's directory, reads no entry keyed on the checkout, so each write is still keyed --cwd on the checkout and the report says so (+32), and Step 0's 'the Stop gate will not let the turn end' is scoped to where it reads the entry (+5). That is guidance, not enforcement. The paragraph's 'anticipated from KEY=\"$(pwd -P)\" and not yet observed' moves to evidence.md beside the 2026-10-14 gate measurement (-8)"
+      "from": 9535,
+      "to": 10532,
+      "why": "Step 0 looks a PR's URL up in the local PRS file, a gh failure being a lookup to retry, to learn it resolves a private ticket the PR no longer names, and adopts one whose key only getJiraIssue reads; a new section, A private ticket's PR, has such a run re-check that before every brief, body edit and push, tell its reviewers and fixers so with the key (their role files carry what follows), count the key with grep -a in what each push publishes and rewrite unpushed commits that carry it, the one amend it allows, report what GitHub already shows, record pairings in a directory it chmods 700, send FINISH's list of what the loop did not implement and a blocking-only reviewer's notes to the report and the run record while still applying a finding that names the body, leave the PR a draft and keep its record local, with a pointer at each site that marks ready or writes to the PR description; and the State section's documented declined command now sits on one line, so pool-test's every-documented-invocation check runs it whole; the pre-push check counts from the merge-base of the PR head it fetches, so an unresolvable ref prints no count rather than 0 and a squash never reverts a moved base, rebuilds and re-verifies after a rewrite that changes a file, reads the title and body raw, and Step 0 records an adopted PR's pairing before any guard can refuse the run and refuses a private PR that is not a draft; the check fetches the PR head itself, since every fetch rewrites FETCH_HEAD, says to read its number rather than chain a push on grep's exit status, and refuses to squash over a merge, Step 0's already-public count joins its parts with && so a failure prints no number, the privacy bullet heads Step 0, and the fixer's brief carries the PR number; a rewrite runs in the same shell call as the check, a merge is made with a message naming no key, a tree-identical rewrite carries its verified sha over, and the already-public read includes comments and reviews; the count is a regex on the key's two halves so KEY_x and hyphenless test names count, the squash is one chained call with its merge test, a merge-blocked squash stops under the override pushing nothing, and the already-public read adds line comments, and before the PR exists the squash runs from the base's merge-base without the merge test, with its message file kept outside the worktree"
     },
     "pr-harden/fixer.md": {
-      "from": 1102,
-      "to": 1134,
-      "why": "the fixer runs its mutation probes before the build green reports on, because in #407 and #607 a probe run after that build left a failures=\"1\" surefire report that the orchestrator's step-5 spot-check read, each time costing a re-run"
+      "from": 1134,
+      "to": 1264,
+      "why": "the header says that on a private PR the brief gives the fixer the key, nothing it commits names it or the ticket's URL, in the message, a comment, a test name or a changeSet id, the message describes what the code now does in its own words, and it runs the pre-push check before reporting its sha, so the sha the verifier runs is the one pushed; it rewrites rather than only amends, building again if that changed a file; and the brief gives it the PR's number to fetch with, keeping any message file outside the worktree, and reporting a squash a merge stops instead of looping on it"
     },
     "pr-harden/reviewer.md": {
-      "from": 0,
-      "to": 510,
-      "why": "the reviewer's two standing rules, the JSON it returns and what makes a finding blocking move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, as pr-harden 0.36.0 moved the fixer's and the verifier's, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so pr-harden grows by both, for a reviewer that reads these rules as written instead of the orchestrator's paraphrase of them, which is what wave 1's briefs carried"
+      "from": 510,
+      "to": 542,
+      "why": "the header says that on a private PR the brief gives the ticket's key, and that the PR's silence about the ticket, and a body without the loop's declines, is deliberate and not a finding"
     },
     "resolve-ticket/refuter.md": {
       "from": 0,
@@ -28,35 +28,40 @@
       "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     },
     "resolve-ticket": {
-      "from": 6832,
-      "to": 6860,
-      "why": "Step 5: after a mutation probe, rebuild the module it compiled before anything runs the restored code from target/ or cites its reports, because in #250 and TRUNK-6826 a restored probe's mutant, still compiled in target/classes, was run: by two probe runs and by a Jetty start"
+      "from": 6860,
+      "to": 7562,
+      "why": "a ticket the unauthenticated JIRA endpoint answers 404 but getJiraIssue reads is private, often a security report, and OpenMRS's disclosure policy asks that no public pull request describe an unpatched vulnerability, so Step 1 reads such a ticket through the MCP with its comments, stops where no getJiraIssue can settle the 404, and finds an open PR for it through the local PRS file, and a new section, When the ticket is private, keeps the key and URL off the PR, its branch, its commits and its diff, keeps the ticket's text, what the code let an attacker do and whatever the PR leaves undone out of the body, records the PR in PRS and checks every push by pr-harden's section, leaves the PR a draft, says the org's review cannot know it is private, keeps the run record local and the ticket out of ticket-pool, with a pointer at each step it changes"
     },
     "pr-review": {
-      "from": 8037,
-      "to": 8064,
-      "why": "Step 4's length rule gains one sentence: a finding that rests on something outside the PR links it where it is named, and the link is not counted, because on openmrs-core PR #6693 (2026-10-19) an inline comment cited '34 of sihsalus's ranges' with no link, taking the name as known from an earlier round, and the author searched, landed on sihsalus/sihsalus-core, which returns 404, and had to ask what it was, though the data was public in sihsalus/sihsalus-content; leaving the link uncounted keeps the 60-word cap from being a reason to drop one"
+      "from": 8064,
+      "to": 8172,
+      "why": "Step 1 gains two sentences: a 404 from the JIRA endpoint can be a private ticket, so it is read with getJiraIssue, asking for the comment field it leaves out by default; and a ticket only that reads, or a PR the local PRS file lists, is private, so nothing posted on the PR names, quotes or links its ticket or says what the code let an attacker do; and where nothing settles a 404, as in CI, it says only that the tracker was unreachable"
     },
     "pr-review/posting.md": {
-      "from": 1984,
-      "to": 2000,
-      "why": "the third gate line states that link rule beside the length it amends, so a local run checks it before posting; the rule itself lives in SKILL.md because the @claude review Action loads that file alone"
+      "from": 2000,
+      "to": 2030,
+      "why": "the first gate line says that on a private PR nothing posted names, quotes or links its ticket, whatever the third line's link rule asks, or says what the code let an attacker do, so a local run recites it before it posts or stages; the rule itself lives in SKILL.md, which the @claude review Action loads alone"
+    },
+    "ticket-pool": {
+      "from": 5084,
+      "to": 5111,
+      "why": "the sentence listing what a ticket argument may be says a private ticket's JIRA key is never one and not to queue one, because the pool cannot tell it from a missing key, its headless sessions cannot read it, and its driver writes a record named for the key into the store skill-retro publishes"
     }
   },
   "words": {
     "harden": 7403,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 9535,
-    "pr-harden/fixer.md": 1134,
-    "pr-harden/reviewer.md": 510,
+    "pr-harden": 10532,
+    "pr-harden/fixer.md": 1264,
+    "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8064,
-    "pr-review/posting.md": 2000,
-    "resolve-ticket": 6860,
+    "pr-review": 8172,
+    "pr-review/posting.md": 2030,
+    "resolve-ticket": 7562,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2532,
-    "ticket-pool": 5084,
+    "skill-retro": 2806,
+    "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1859,
     "ticket-pool/pausing.md": 1612,
     "verify": 658,

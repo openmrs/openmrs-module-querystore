@@ -59,6 +59,56 @@ measured rule is not deleted without the measurement that retires it (`skill-ret
   notes, and on round 2's recorded count of 0 the run would have ended there, before its rounds 4 and
   5 found r4-1 and r5-1, false reports round 2's reviewer had not raised.
 
+## A private ticket's PR
+
+*Added 0.40.0 — the rule it supports:* “Brief every reviewer and every fixer that the PR is private”
+
+The policy and the measurements are in `resolve-ticket`'s evidence.md, under *When the ticket is
+private* and *Step 1*, the lookup's included. What is this skill's own: once a PR names no ticket, the
+brief's key "carried in the PR title or branch name" finds nothing, so the key has to come from
+somewhere the public PR does not show, and `PRS`, kept on this machine, is that place. The amend or
+squash it allows touches only commits no reviewer has seen, so the chain of rounds *COMMIT* protects is
+intact; the commits are the fixer's (`fixer.md`), which is why the rule reaches it through its own
+file and the brief rather than through the orchestrator's memory.
+
+*Added 0.40.0 — the rule it supports:* “Before every push, count the key in what the push publishes, and rewrite whatever it counts first”
+
+Measured in scratch repositories on 2026-10-21. A first form, over commit messages and the net diff,
+printed 0 for a clean branch and 1 for each of a key in a commit message, in a changeSet id in the
+diff and in a lowercased branch name (`sec-…`, hence `-i`), and `-w` kept a longer key that merely
+starts with the same characters from counting. It missed two cases the published form catches: a key
+one commit adds and a later one removes, which `git log -p` counts (2), and any input carrying one
+non-UTF-8 byte, a Latin-1 `.properties` file among them, where the Bash tool's `grep`, a shell
+function, printed no count at all, where a clean branch prints 0, until `-a`. Counted from `@{u}`,
+the form printed 0 for a fork checkout whose upstream is a URL rather than a remote-tracking branch
+(`@{u}` does not resolve, as after `gh pr checkout` of a fork PR), and a `reset --soft` onto a base
+that a sibling's fetch had moved wrote a commit deleting another author's file; counting from
+`git merge-base` of the fetched PR head prints nothing at all when the ref does not resolve, and its
+squash held only the branch's own change where the range held no merge; across a local merge of the
+base it carried another author's file as the PR's own, which `git rev-list --merges` detects. A later
+fetch rewrites `FETCH_HEAD`: a base fetch after the PR head's, and `pr-review`'s base-first fetch,
+each left it at the base tip (measured), which is why the check fetches for itself. The count is a
+regex on the key's two halves, `<P>[-_]?<N>([^0-9]|$)`, because `-w` cannot see `KEY_suffix`, `_`
+being a word character, nor a hyphenless key in a test name (legacyui's `DWRConceptServiceTest`
+carries `…RegressionTestForTRUNK…`); on scratch input it counted seven spellings and none of five
+near-misses. The squash is one chained call with its merge test because `$from` does not outlive a
+call, and an empty `$from` makes `git rev-list --merges` print nothing, the no-merge answer; with a
+merge in range the chained call exited 1 and left HEAD alone (measured). The already-public read
+adds `pulls/<n>/comments`, since `gh pr view --json comments,reviews` returns no line comments: a
+word found only in one counted 0 there and 1 through `gh api` (querystore PR 88). A clean round counted that way printed 0 even where the
+pushed history already named the key, which is why what GitHub already shows is reported at Step 0
+rather than rewritten. It is a check rather than a memory because
+a run can lose the fact that its ticket is private before anything records it: one run compacted
+mid-`/harden`, before its first push (`2026-09-17-openmrs-module-chartsearchai-445.md`:4).
+
+*Added 0.40.0 — the rule it supports:* “Record a pairing”
+
+The lookup is keyed on the PR's URL, which `gh pr view --json url` returns as the base repository's
+even for a cross-repository PR (`resolve-ticket`'s evidence.md, *When the ticket is private*). A `gh`
+failure, measured with a bad token, stops the `&&` chain with exit 1 instead of handing `awk` an
+empty URL that would read as public. `chmod`, because `mkdir -p -m 700` left an existing directory
+at `drwxr-xr-x` (measured), and a run record can create `confidential/` before a pairing does.
+
 ## The round
 
 ### 1 — REVIEW

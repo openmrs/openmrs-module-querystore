@@ -32,3 +32,7 @@ Thumbs.db
 # Evidence logs under the skill-lessons artifact store are records, not build noise:
 # mutation runs here ground published figures and must stay verifiable.
 !.claude/skill-lessons/artifacts/**/*.log
+
+# Run records of private tickets, and the PR pairings beside them, stay on the machine that ran
+# them. skill-retro never mirrors confidential/; this keeps a recursive copy out of git anyway.
+.claude/skill-lessons/confidential/

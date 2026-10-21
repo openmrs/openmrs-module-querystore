@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.39.0
+version: 0.40.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -58,6 +58,14 @@ own homework, which is the failure this whole design removes.
 
 Refuse the run, with the reason, if any of these fails:
 
+- **Note whether the PR is private**: a key printed means private, and no output, or `awk`'s
+  *can't open file*, a public PR; a `gh` failure is a lookup to retry, never a public PR.
+  `u=$(gh pr view <n> --json url -q .url) && awk -v u="$u" '$1 == u {print $2}' ~/.claude/skill-lessons/confidential/PRS`
+  A PR the user says is a private ticket's, or whose title or branch carries a key that only
+  `getJiraIssue` reads (`resolve-ticket` Step 1), is private too: record its pairing (*A private
+  ticket's PR*) before any other guard here can refuse the run. A private PR that is not a draft
+  is refused: every push to it starts the org's automatic review, which cannot know it is private,
+  so say the user can return it to draft (`gh pr ready --undo <n>`) and run again.
 - `gh pr view <n> --json state,headRefName,headRepositoryOwner,maintainerCanModify,isCrossRepository`
   — the loop **commits and pushes**, so a cross-repository PR is only viable when
   `maintainerCanModify` is true. Otherwise stop: no amount of rounds helps if the fix cannot land.
@@ -65,8 +73,8 @@ Refuse the run, with the reason, if any of these fails:
   branch, tracking the remote. Uncommitted work of yours would be swept into a round's commit.
 - `gh auth status` succeeds.
 - Note whether the PR is a **draft**. A run entered from `resolve-ticket` opens it as one, because it
-  is about to take N rounds of commits; on convergence, mark it ready (`gh pr ready <n>`). A PR that
-  was already ready stays ready — never move it back to draft.
+  is about to take N rounds of commits; on convergence, mark it ready (`gh pr ready <n>`) unless it
+  is private. A PR that was already ready stays ready — never move it back to draft.
 - An entry for this repo in `~/.claude/pr-harden-state.json` is **this run's own** when its `pr`
   matches the PR being hardened, or when it has no `pr` yet — that is the handoff `resolve-ticket`
   writes, and you adopt it and carry its `round`, `declined` and `reviewed_shas` forward. An entry
@@ -85,12 +93,62 @@ Refuse the run, with the reason, if any of these fails:
 - **A PR with rounds from an earlier run can arrive with no entry to adopt.** `pool-run` clears the
   entry when it makes a worktree, so a PR worked again in a worktree it has just made starts with
   none. Count its earlier rounds, from its description and the run records whose header names this
-  PR, toward *1 — REVIEW*'s round 4; the cap stays this run's budget.
+  PR (under `confidential/`, for a private PR), toward *1 — REVIEW*'s round 4; the cap stays this
+  run's budget.
 
 Then write the opening state entry (`phase: "init"`, and `round: 1` unless you adopted an entry, whose
 `round` you keep) — see **State**. From this point the Stop gate, where it reads this entry, will not
 let the turn end until the head being handed over has been reviewed with zero blocking findings — and
 verified, where any verifier ran — or the override is taken.
+
+## A private ticket's PR
+
+A **private PR** is one Step 0's lookup finds in `PRS`: its ticket is private, often a security
+report, and the PR, which is public, should name neither the ticket nor the fact that it is
+private. So re-run the lookup before every brief you write, every edit to the body, every push and
+the run record. On a private PR:
+
+- **Brief every reviewer and every fixer that the PR is private**, with the key the lookup printed
+  and the PR's number; `reviewer.md` and `fixer.md` say what follows for each.
+- **No ticket key or URL in any commit, the title, the body or the diff.** A commit says in its own
+  words what the code now does, never in the ticket's, never what it let an attacker do, and the
+  body says what the change does and how it was verified in the same terms, never what the ticket
+  says.
+- **Before every push, count the key in what the push publishes, and rewrite whatever it counts
+  first.** `<P>` and `<N>` are the key's two halves (`ABC`, `12`), so `ABC_12` and a test named
+  `…ForABC12` count too. On an open PR the check fetches what GitHub holds itself, since every fetch
+  in the worktree rewrites `FETCH_HEAD`:
+  `git fetch -q origin pull/<n>/head && from=$(git merge-base FETCH_HEAD HEAD) && { git log -p $from..HEAD; git diff $from HEAD; } | grep -aciE '<P>[-_]?<N>([^0-9]|$)'`
+  Before the PR exists, take `from=$(git merge-base origin/<base> HEAD)` instead, and
+  `git branch --show-current` must name no key either. Read the number, which must be 0: no number
+  means the check failed, and the exit status is `grep`'s, 0 on a hit, so never chain a push on it.
+  `-a` is not optional, since without it the shell's `grep` prints no count for text carrying one
+  non-UTF-8 byte. A title or body passes the same `grep` before `gh pr create` or `gh pr edit`.
+- **Rewrite in one shell call that computes its own `$from`**, which does not outlive a call:
+  `git commit --amend` for the newest commit, and for more, on an open PR,
+  `git fetch -q origin pull/<n>/head && from=$(git merge-base FETCH_HEAD HEAD) && [ -z "$(git rev-list --merges $from..HEAD)" ] && git reset --soft $from && git commit -F <message-file>`
+  — or before the PR exists, with no merge test, since a merge of the base stays out of that diff,
+  `git reset --soft $(git merge-base origin/<base> HEAD) && git commit -F <message-file>`. Keep
+  `<message-file>` outside the worktree, whose clean-tree guard it would trip. Never
+  `git reset --soft` onto a ref by name, which reverts what that ref holds beyond the merge-base.
+  Make a merge with `-m` and a message naming no key, and amend a merge's own message if it names
+  one; where the open-PR squash stops because the range holds a merge, stop the run with the
+  labelled override, naming that cause and the unpushed commits that carry the key, and push nothing
+  as it stands. A rewrite that changes no file keeps the tree, so where the old sha was
+  verified, record the new one with the `verified-sha` subcommand (*State*); one that changes a file
+  is built again (step 5, or `resolve-ticket` Step 6) and verified again where a verifier ran, before
+  the push.
+- **What GitHub already shows cannot be taken back.** At Step 0, on an open PR, this counts it, no
+  number meaning the check failed; report any count, leave what is published as it stands, and carry
+  on:
+  `git fetch -q origin pull/<n>/head && l=$(git log -p origin/<base>..FETCH_HEAD) && t=$(gh pr view <n> --json title,body,headRefName,comments,reviews -q '.title, .body, .headRefName, .comments[].body, .reviews[].body') && r=$(gh api 'repos/{owner}/{repo}/pulls/<n>/comments' --paginate --jq '.[].body') && printf '%s\n' "$l" "$t" "$r" | grep -aciE '<P>[-_]?<N>([^0-9]|$)'`
+- **Record a pairing** this way, and create `confidential/` this way before any other write under it:
+  `mkdir -p ~/.claude/skill-lessons/confidential && chmod 700 ~/.claude/skill-lessons/confidential`,
+  then append `<url> <KEY>` to `PRS` there, `<url>` being what `gh pr view <n> --json url -q .url`
+  prints, and re-run Step 0's lookup to see the key.
+- **FINISH's list of what the loop did not implement, and a blocking-only reviewer's notes, go to the
+  report and the run record, not the body.** A finding that names the body is still applied (step 4).
+- **FINISH does not mark it ready.** The rest of FINISH stands.
 
 ## The round
 
@@ -106,7 +164,7 @@ verified, where any verifier ran — or the override is taken.
 6  VERIFY?   runtime-visible change → fresh verifier on the standalone
    COMMIT    one commit, push · round++ → step 1
 7  FINISH    do NOT edit the cleared sha · file NO issue · re-derive the body ·
-             VERIFY the merging head if nothing has · mark ready.
+             VERIFY the merging head if nothing has · mark ready, unless private.
              An edit here owes a BLOCKING-ONLY round
 ```
 
@@ -118,8 +176,8 @@ rounds 1 to 3 are full rounds: the reviewer reports everything and the fixer imp
 non-blocking findings too, which is how polish happens.
 A blocking-only reviewer's findings are its blockers; anything else it notices it returns as `notes`,
 which the orchestrator copies into the run record's *Raised by a fresh agent*, marked unfixed, and
-FINISH names in the PR description — never to a fixer, never to an issue. A finding the
-orchestrator downgrades in such a round is a note too.
+FINISH names in the PR description (not on a private PR: *A private ticket's PR*) — never to a
+fixer, never to an issue. A finding the orchestrator downgrades in such a round is a note too.
 
 This is FINISH's own rule — *"a round that implements nits and then re-reviews can never
 converge, because a review is expected to produce nits"* — applied before FINISH rather than
@@ -202,8 +260,9 @@ What the reviewer is given, and nothing more:
   `--comments`, which drops the body off a terminal, see `resolve-ticket` Step 1; a JIRA key (`O3-1234`, `TRUNK-6429`,
   carried in the PR title or branch name) via
   `https://openmrs.atlassian.net/rest/api/2/issue/<KEY>?fields=summary,description,status,comment`,
-  which serves unauthenticated. The `issues.openmrs.org` link people paste redirects to a dashboard
-  and will not serve REST.
+  which serves unauthenticated — or, on a private PR, the key Step 0's lookup printed, read through
+  `getJiraIssue` as `resolve-ticket` Step 1 reads it. The `issues.openmrs.org` link people paste redirects to a dashboard and will not
+  serve REST.
 - **the declined ledger** — every finding earlier rounds did not implement, with the reason. Frame it
   exactly as `pr-review` Step 1 frames prior review threads: do not re-raise what is settled. Do
   **not** tell it what was implemented, and do **not** reassure it that any area is closed — that
@@ -338,8 +397,10 @@ this worktree and one of them running `git checkout` silently redirects everythi
 fast-forward the head ref onto the work (append only — never reset, never force) rather than
 committing where you stand.
 
-One commit per round, in the repo's existing voice (see `git log`), pushed to the PR head branch.
-**Append only — never amend, never force-push.** A reviewer must be able to see the chain of rounds,
+One commit per round, in the repo's existing voice (see `git log`) less any ticket key on a private
+PR (re-run Step 0's lookup), pushed to the PR head branch.
+**Append only — never amend, never force-push** (a private PR's unpushed commits excepted: *A
+private ticket's PR*). A reviewer must be able to see the chain of rounds,
 and rewriting history under one that is mid-flight is how a round reviews a sha that no longer
 exists. **A protective commit taken mid-round does not violate this, and the commit rule in *State*
 outranks it.** The convention guards the chain of rounds, which such a commit only ever appends to.
@@ -349,7 +410,8 @@ outranks it.** The convention guards the chain of rounds, which such a commit on
 The reviewer found nothing blocking, so this is the sha you are handing over — and **FINISH does not
 edit it.** Nor does it file an issue, or offer to: step 3 has already had a clean full round's
 non-blocking findings fixed or declined, a blocking-only round hands a fixer nothing but blockers,
-and what the loop did not implement goes into the PR description this step re-derives.
+and what the loop did not implement goes into the PR description this step re-derives (not on a
+private PR: *A private ticket's PR*).
 
 Re-deriving the PR description is still owed and is not an exception, because the body is not in the
 tree and does not move the head.
@@ -367,7 +429,8 @@ those patches as the final text is not. Rewrite it whole here, re-measuring ever
 rather than carrying one forward. Name in it, one line each, every finding the loop did not
 implement — each decline with its failure-mode sentence, each note a blocking-only reviewer
 returned, and any non-blocking observation the verifier made on the merging head — since with no
-issue filed, the PR is where it stays visible.
+issue filed, the PR is where it stays visible. On a private PR that list goes in the report and the
+run record instead.
 
 **A runtime-visible change is not ready until a verifier has run against the head that will merge.**
 Step 6 sits on the fix path, so without this a PR whose round 1 found nothing blocking would reach
@@ -395,8 +458,9 @@ deploy-identity hash, in `verifier.md`'s *Confirm you are testing this build*: t
 LOADED is the one you built, which is an identity question a hash answers and a disassembly does
 not.
 
-Then mark the PR ready for review if this run opened it as a draft (`gh pr ready <n>`), and say in the
-report that it is now ready, naming the sha the verifier covered.
+Then mark the PR ready for review if this run opened it as a draft and Step 0's lookup, re-run,
+finds no key (`gh pr ready <n>`), and say in the report that it is now ready, or left a draft,
+naming the sha the verifier covered.
 
 **Marking ready is the LAST action of the run, after the last push — never before one.** It is not a
 status update, it is a trigger: the Claude Code GitHub App reviews every push to a NON-draft PR and
@@ -420,7 +484,8 @@ the merging head reports one. Implement it, and run one more round.
 implements nits and then re-reviews can never converge, because a review is expected to produce nits;
 a round that may only *report* blockers converges as soon as there are none. So brief the confirming
 reviewer to return blocking findings alone, and anything else it notices as `notes`, which reach
-the run record and the PR description; nothing in them is implemented or filed.
+the run record and the PR description (not on a private PR: *A private ticket's PR*); nothing in
+them is implemented or filed.
 
 ## Editing by script, which is how edits get silently lost
 
@@ -696,9 +761,10 @@ Write it at every transition:
 ```
 
 Add `--override --reason "…"` only when taking the labelled override. `declined`, `reviewed_shas`
-and `verified_shas` have their own subcommands — `gate-state declined --round 1 --id r1-2 --finding
-"…" --reason "…"`, `gate-state reviewed-sha 3085ff02` and `gate-state verified-sha 3085ff02` — so a
-transition write never has to restate them and cannot drop them.
+and `verified_shas` have their own subcommands —
+`gate-state declined --round 1 --id r1-2 --finding "…" --reason "…"`, `gate-state reviewed-sha 3085ff02`
+and `gate-state verified-sha 3085ff02` — so a transition write never has to restate them and cannot
+drop them.
 
 `gate-state` holds an exclusive `flock` across both state files and
 writes atomically. Do not retype the mechanism.
@@ -746,15 +812,16 @@ at the two ends instead:
 - Every declined finding with its failure-mode sentence. A decline without one is not a decline.
 - Every verifier repair, with its cause — even the ones that worked.
 - Offer to run `pr-review --post` or `--stage` once, at the end, if the user wants the review record
-  public.
+  public. Not on a private PR.
 
 ## Write the run record — always, before you finish
 
 Append a record to `~/.claude/skill-lessons/<UTC-date>-<repo>-<ticket-or-pr>.md` (create the
-directory if needed). This is **capture, not derivation**: it records what happened, never a proposed
-rule. `skill-retro` turns accumulated records into skill edits, because a lesson needs corroboration
-across runs and an adversarial pass before it changes how every future run behaves — neither of which
-this run can supply about itself.
+directory if needed), or, for a private PR, to that name under `confidential/`, made as *A
+private ticket's PR* makes it. This is **capture, not derivation**: it records what happened, never
+a proposed rule. `skill-retro` turns accumulated records into skill edits, because a lesson needs
+corroboration across runs and an adversarial pass before it
+changes how every future run behaves — neither of which this run can supply about itself.
 
 **Append means `>>`, never `>` or the Write tool.** The name is keyed on date and ticket, so a second
 record for one ticket and day (a second run, or this run's pr-harden record after its resolve-ticket

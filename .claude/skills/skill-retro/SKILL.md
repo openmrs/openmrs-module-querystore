@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.5.0
+version: 0.6.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -32,10 +32,12 @@ So: capture is automatic and belongs to the pipeline skills. Derivation and comm
 Records live in `~/.claude/skill-lessons/*.md`, one per finished run, or several where a later run on
 the same ticket and date appended to it, each opening with its own `# ` header — a file newer than
 `LAST` can carry records an earlier window already counted, so count only the records `REJECTED.md`
-does not already name. Each is written by the skill that ran
-— or, for a run that ended without writing one, by the `ticket-pool` driver, which marks its own file
-as driver capture and says which sections nobody observed. Read those as evidence that a run ended
-that way, and corroborate nothing else from them. **The store also holds measurement notes, defect
+does not already name. **Draw nothing from `confidential/`**: it holds the records of runs on
+private tickets. Read only its `PRS` and its file names, and only so that no proposal, commit or file in the public repo
+names a key or PR it lists, or a session path that carries one. Each top-level record is written by
+the skill that ran — or, for a run that ended without writing one, by the `ticket-pool` driver,
+which marks its own file as driver capture and says which sections nobody observed. Read those as
+evidence that a run ended that way, and corroborate nothing else from them. **The store also holds measurement notes, defect
 notes and hand-written captures, so a file count is not a run count** — read each file's own header
 for what it is and for which skill, if any, wrote it. A `/harden` invoked on its own writes none.
 Read every record since the last retro (the last one is recorded in `~/.claude/skill-lessons/LAST`,
@@ -43,7 +45,7 @@ if present; `--since <date>` overrides). **Step 6's comparison is owed BEFORE th
 after the push** — this step depends on the store being in sync and Step 6 is where that is checked,
 so a pass that reads first reads a store nothing has verified. Measured 2026-09-20: `origin/main`
 held three 2026-09-17 files this machine did not, two of them notes about the very window being read
-and one a proposal marked as never refuted. Bring anything missing down before reading.
+and one a proposal marked as never refuted. Bring anything missing down before reading, but nothing whose name `confidential/` holds.
 Say how many records you read and which runs they cover — a
 retro over one record is a retro that cannot corroborate anything, and should say so rather than
 proceed as if it could.
@@ -173,10 +175,19 @@ Apply the surviving proposals. Then, per skill touched:
 - push, then write today's date into `~/.claude/skill-lessons/LAST`.
 
 **And mirror the evidence, in the same commit, whether or not a skill changed.** `~/.claude/skill-lessons/`
-— every run record, `REJECTED.md` and `LAST` — belongs in the source repo's `.claude/skill-lessons/`,
-`cmp`-verified like the skills. It is the corroboration itself: the counts that decide the Step 3 bar,
-and the killed proposals with the evidence that would reopen each. Left on one machine it is lost with
-that machine, and unavailable to anyone else running these skills. **A retro that applies NOTHING still
+— every run record, `REJECTED.md` and `LAST`, but never `confidential/` — belongs in the source
+repo's `.claude/skill-lessons/`, `cmp`-verified like the skills. A top-level record that names a key
+or PR `PRS` lists moves under `confidential/` first, and its copy in the repo, if the repo holds
+one, goes with `git rm -f`; say in the report that the repo's history still holds that copy. Before `git commit -F <message-file>`, with the message already in that file,
+this lists what the message and the staged diff, deletions left out, name of one — no output, or `awk`'s *can't open file*, for an empty or missing `PRS`, which the test
+skips because this shell's `grep` reads an empty pattern list as matching everything:
+`[ -n "$(awk NF ~/.claude/skill-lessons/confidential/PRS)" ] && { cat <message-file>; git diff --cached --diff-filter=d; } | grep -anwiF -f <(awk 'NF {print $2; split($1, p, "/"); print "pull/" p[7]; print "pulls/" p[7]; print "#" p[7]; print "PR " p[7]; print p[5] "#" p[7]; s = p[5]; sub(/^openmrs-(module-)?/, "", s); print s "#" p[7]; print "pr" p[7]; print "pr-" p[7]}' ~/.claude/skill-lessons/confidential/PRS)`
+— `awk` spelling each PR the ways records name one. Resolve every line it prints, a hit's record
+being the nearest `diff --git` line above it, and a hit with none above it the message's; one naming another repository's issue or PR
+of the same number neither moves a record nor blocks the commit.
+The store is the corroboration itself: the counts that decide the Step 3 bar, and the killed
+proposals with the evidence that would reopen each. Left on one machine it is lost with that machine, and
+unavailable to anyone else running these skills. **A retro that applies NOTHING still
 commits here**, because the parked counts and the new records are its whole output — that is the pass
 most likely to skip this step and the one whose evidence is easiest to lose.
 

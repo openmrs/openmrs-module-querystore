@@ -1,8 +1,8 @@
 ---
 name: resolve-ticket
-description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready. Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
+description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready (a private ticket's stays a draft). Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.25.0
+version: 0.26.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -12,8 +12,9 @@ Arguments: `$ARGUMENTS` — a GitHub issue URL or number, or a JIRA ticket URL o
 caps the review rounds (default 4). `--no-verify` skips the standalone verifier for the whole run.
 
 You are handed a ticket and you deliver a pull request that a fresh reviewer found nothing blocking
-in, marked ready for review. **This runs to the end without checking in.** Every phase is in this one
-skill: the loop is `pr-harden`, and Step 9 *invokes* it rather than handing it back to the user.
+in, marked ready for review, or, for a private ticket, left a draft. **This runs to the end without
+checking in.** Every phase is in this one skill: the loop is `pr-harden`, and Step 9 *invokes* it
+rather than handing it back to the user.
 
 The one asymmetry the whole design rests on: **implementation happens in this session, where the user
 can steer it if they choose to watch — and every review happens in a fresh agent that has never seen
@@ -120,6 +121,34 @@ holding a port you did not resolve, a `java` you cannot attribute, the shared in
 co-tenant may be mid-query against any of them. Killing by symptom is correct alone and destructive
 beside a sibling, and only this variable tells you which you are.
 
+## When the ticket is private
+
+A ticket that `getJiraIssue` reads but Step 1's unauthenticated endpoint will not serve is
+**private**, and often a security report. OpenMRS's disclosure policy asks that no public pull
+request describe an unpatched vulnerability, and the PR and everything pushed to it are public. So:
+
+- **No ticket key or URL reaches GitHub** — not the PR title, the body, the branch name, any commit
+  message, or the diff, its comments, javadoc, test names and changeSet ids included. Where the
+  repo's voice carries a key (`TRUNK-1234: …`, `See TRUNK-1234`), keep the sentence and drop the key,
+  and let each such sentence, and the branch name, say in your own words what the code now does —
+  never in the ticket's, and never what it let an attacker do.
+- **Check it before every push**, and the title and body before `gh pr create`, with the check in
+  `pr-harden`'s *A private ticket's PR*.
+- **The PR body says what the change does and how it was verified, in what the code now does — never
+  what it let an attacker do, nor what the ticket says**, whose background describes the
+  vulnerability even without its key. Whatever the PR leaves undone goes in the report and the run
+  record.
+- **Record the pairing on this machine**, right after `gh pr create`, as `pr-harden`'s *A private
+  ticket's PR* records one:
+  it is how `pr-harden` learns the PR is private and which ticket its reviewers read, and a PR
+  missing from `PRS` is treated as public.
+- **The PR stays a draft**, for the user to mark ready. Marking it ready, like asking `@claude
+  review` on it, hands it to the org's automatic review, which cannot know it is private.
+- **The run record goes to `~/.claude/skill-lessons/confidential/<UTC-date>-<repo>-<ticket-or-pr>.md`**,
+  which `skill-retro` neither reads nor copies into its public repo.
+- **Never through `ticket-pool`.** Its headless sessions have no `getJiraIssue`, and its driver,
+  finding no record of the run at the top of the store, writes one there named for the key.
+
 ## Step 1 — Resolve the ticket, and read it
 
 Parse the argument:
@@ -140,14 +169,22 @@ the body. `--json` carries both and paginates comments.
 That endpoint serves **unauthenticated**. The `issues.openmrs.org`
 link people paste redirects to a dashboard and will not serve REST, so never reach for it.
 
+**A 404 from it does not mean the ticket is missing** — it answers a private ticket with the same
+*"does not exist or you do not have permission"*. Read the key then with the Atlassian MCP's
+`getJiraIssue`, loaded through ToolSearch — cloudId `openmrs.atlassian.net`, and `comment` among its
+`fields`, which it leaves out by default. If that reads it, *When the ticket is private* binds the
+whole run. If no `getJiraIssue` is there to settle the 404, as in a headless session, this run cannot
+work the ticket: say so and stop before the state entry, writing the record under `confidential/`.
+
 **Guard, before anything else:** a GitHub issue URL names its repository. If that is not the repo this
 session is in, abort (condition 1) — say which repo the ticket belongs to and stop. A JIRA URL names
 no repo, so it is assumed to be this one; if the ticket's text plainly describes another module, that
 is also condition 1.
 
-**Pre-flight the verifier here, not at the end.** This pipeline's terminal state is a PR marked ready,
-and `pr-harden` will not mark one ready that no verifier could run — so an unavailable standalone blocks
-the whole run's finish line, and finding that out in the last round wastes the chance to fix it. One
+**Pre-flight the verifier here, not at the end.** This pipeline's terminal state is a PR marked ready
+(a private ticket's: converged, but a draft), and `pr-harden` will not mark one ready that no
+verifier could run — so an unavailable standalone blocks the whole run's finish line, and finding
+that out in the last round wastes the chance to fix it. One
 command: confirm a standalone exists (`$OPENMRS_STANDALONE_HOME` if it is set — the pool driver sets it
 whenever it has an instance to assign, and then it is an assignment rather than a hint — else a
 directory holding
@@ -159,8 +196,12 @@ module that needs one. Say so NOW if either is missing, so the user can fix it w
 proceeds.
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
-open branch names. If a PR exists, this is the wrong entry point — run `pr-harden <that PR>` on it
-instead, and say so.
+open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs
+`awk -v k=<KEY> '$2 == k {print $1}' ~/.claude/skill-lessons/confidential/PRS` prints, counting one
+only if it is in this repository and `gh pr view <url> --json state -q .state` calls it `OPEN`. If a PR exists, this is
+the wrong entry point — run `pr-harden <that PR>` on it instead, and say so; for a private ticket,
+record that PR's pairing first, unless the lookup already prints it, as `pr-harden`'s *A private
+ticket's PR* records one.
 
 Read the **comments**, always. On this module the ticket body is frequently the first draft of the
 problem and a comment is where it was corrected, narrowed, or measured — and a measurement in a
@@ -316,7 +357,10 @@ and it says plainly that no code was written.
 
 Cut from an up-to-date default branch, and match the repo's own naming rather than inventing one —
 `git log --oneline -20` and `gh pr list --state all --limit 15 --json headRefName,title` show it. In
-this module the shape is `fix/<issue>-<slug>`, `fix/<slug>` or `feat/<slug>`.
+this module the shape is `fix/<issue>-<slug>`, `fix/<slug>` or `feat/<slug>`. A private ticket's
+branch carries no key and names what the code now does, never the vulnerability. Unsure whether the
+ticket is private? Re-run Step 1's unauthenticated call: the ticket exists, so anything but the
+ticket itself means it is.
 
 ## Step 5 — Test first, then the fix
 
@@ -399,8 +443,10 @@ here, where it is one line, rather than discovering it after the loop.
 
 ## Step 8 — Draft PR
 
-Commit and push, then open the PR **as a draft** — it is about to take several rounds of commits, and
-a draft says that honestly to anyone watching the repo.
+Commit and push — a private ticket's only once the pre-push check in `pr-harden`'s *A private
+ticket's PR* prints 0, Step 1's unauthenticated call, re-run, saying whether it is one — then open
+the PR **as a draft**: it is about to take several rounds of commits, and a draft says that
+honestly to anyone watching the repo.
 
 **Draft is also what keeps the automatic reviewer off the rounds.** The Claude Code GitHub App
 reviews every push to a NON-draft PR and skips drafts entirely, so opening ready — or marking ready
@@ -416,7 +462,8 @@ Link the ticket so it is machine-readable, because every round's reviewer resolv
 
 - **GitHub issue** — `Fixes #123` in the body, which populates `closingIssuesReferences`.
 - **JIRA** — no auto-close exists, so put the key in the **title** and the browse URL in the body.
-  `pr-review` and `pr-harden` both look for a key in the title or branch name.
+  `pr-review` and `pr-harden` both look for a key in the title or branch name. A private ticket
+  gets neither, and its pairing goes to `PRS` (*When the ticket is private*).
 
 **`Fixes` only if the PR actually closes the ticket. Otherwise `Refs`, and say why in the body.**
 GitHub acts on the keyword, so a PR that delivers something SHORT of the ticket — an instrument for
@@ -437,8 +484,9 @@ on #317 rewording changed nothing while separating the two references onto their
 the non-closing one without a `#` did.
 
 The body says what the ticket asked, what the change does, and how it was verified — and, once
-`pr-harden`'s FINISH re-derives it, what the loop left unimplemented, one line each. It does not grade
-the design or tour the alternatives.
+`pr-harden`'s FINISH re-derives it, what the loop left unimplemented, one line each. On a private
+ticket, the PR body says only what the change does and how it was verified. It does not grade the
+design or tour the alternatives.
 
 **Write it once here, and RE-DERIVE IT WHOLE before the PR is marked ready — never patch it across
 rounds.** The body describes code the review loop is about to change under it, so an incremental
@@ -468,8 +516,9 @@ Anything you can already see belongs in Step 7, before the PR existed.
 
 When it converges, `pr-harden` verifies the merging head if no round already did — a runtime-visible
 change is not ready until something has run it, and the loop's per-round verifier sits on the fix
-path, which the exit path skips. Then the PR is marked ready (`gh pr ready`) and the run is done. A
-head that cannot be verified ends the run as converged-but-unverified, not as ready.
+path, which the exit path skips. Then the PR is marked ready (`gh pr ready`) — a private ticket's
+stays a draft — and the run is done. A head that cannot be verified ends the run as
+converged-but-unverified, not as ready.
 
 **What it hands over is the sha a reviewer cleared, not merely a branch that once had a clean
 round.** `pr-harden`'s FINISH does not edit that sha, and an edit that is genuinely owed there costs
@@ -493,19 +542,20 @@ One report for the whole run, in this order:
   declined with their failure-mode sentences, whether the verifier ran and every repair it made.
 - **The terminating round's blocking count, as measured**, quoted from the reviewer's JSON. The report
   is not complete without that line or an abort line, and neither may be replaced by a question.
-- **The PR**, and that it is marked ready.
+- **The PR**, and that it is marked ready, or, for a private ticket, left a draft.
 - **Anything the ticket asked for that you did not do,** and why. Scope left on the table belongs in
   the report, not in a silence.
 - Offer `pr-review <n> --post` or `--stage` once, at the end, if the user wants the review record
-  public — offer it, do not wait for an answer.
+  public — offer it, do not wait for an answer. Not on a private ticket.
 
 ## Write the run record — always, before you finish
 
 Append a record to `~/.claude/skill-lessons/<UTC-date>-<repo>-<ticket-or-pr>.md` (create the
-directory if needed). This is **capture, not derivation**: it records what happened, never a proposed
-rule. `skill-retro` turns accumulated records into skill edits, because a lesson needs corroboration
-across runs and an adversarial pass before it changes how every future run behaves — neither of which
-this run can supply about itself.
+directory if needed), or, for a private ticket, to that name under `confidential/`, made as
+`pr-harden`'s *A private ticket's PR* makes it. This is **capture, not derivation**: it records
+what happened, never a proposed rule. `skill-retro` turns accumulated records into skill edits,
+because a lesson needs corroboration across runs and an adversarial pass before it
+changes how every future run behaves — neither of which this run can supply about itself.
 
 **Append means `>>`, never `>` or the Write tool.** The name is keyed on date and ticket, so a
 second record for one ticket and day (a second run, or this run's pr-harden record after its
@@ -578,7 +628,8 @@ can settle it about itself.
 - **Don't skip the failing test** because the fix is obvious. Never-executed code is unverified code,
   and a test written after the fix tends to assert what the code does.
 - **Don't widen scope.** An adjacent defect you noticed, or an item `/harden` deferred as outside the
-  ticket, goes in the report and the PR description rather than into this PR's diff — and not into a
+  ticket, goes in the report and the PR description (on a private ticket, the report and the run
+  record) rather than into this PR's diff — and not into a
   new issue: file none, as `pr-harden` files none. A PR that does two things gets reviewed as neither.
 - **Don't change production to create observability without ruling out a structural pin first.** A
   plan that says "this is behaviour-neutral, so I must change X to make it testable" is one move
@@ -597,5 +648,6 @@ can settle it about itself.
 - When the ticket needs discussion rather than code. Answer it on the ticket.
 - When a PR for the ticket already exists — run `pr-harden` on it.
 - When the ticket belongs to another repository. Open that repo and run it there.
+- When the ticket is private and the session headless, as under `ticket-pool`. Run it attended.
 - For exploratory work you intend to throw away. The whole pipeline assumes the change is meant to
   land.

@@ -44,6 +44,45 @@ which lost three configurations to it) — do not add `-Dmaven.repo.local` of yo
 point — it is the jar `omod` unpacks over `omod/target/classes`, so two runs sharing it means one
 run's classes silently under the other's tests.
 
+## When the ticket is private
+
+*Added 0.26.0 — the rule it supports:* “No ticket key or URL reaches GitHub”
+
+`openmrs/security-docs` `cvd-policy.md` §3.1, as it stood on 2026-10-21: *"Please do not open public
+GitHub issues, public forum posts, or public pull requests describing an unpatched vulnerability."*
+Before this rule Step 8 put a JIRA key in the title and its URL in the body, and on openmrs-core the
+repo's voice puts the key on the branch and on every round's commit too (PR 6680: branch `TRUNK-6826`,
+four `TRUNK-6826: …` commits), and its code does too: on openmrs-core master at `085d24ca28`, 62
+Java lines match `TRUNK-[0-9]+` (`See TRUNK-…` comments among them) and 213 of its 12,329 liquibase
+changeSet id lines match `<changeSet[^>]*id="[^"]*TRUNK-[0-9]+`
+(`<changeSet id="TRUNK-3422-20160216-1700"`), so a fix written in the repo's voice puts the key in
+the diff as readily as in a commit. Keeping the key off the PR, leaving it a draft and keeping its
+records on this machine are the owner's decisions (2026-10-21). The record would leak otherwise: until 0.6.0,
+`skill-retro` Step 6 copied every record into `.claude/skill-lessons/` of
+`openmrs/openmrs-module-querystore`, which is public, even in a retro that changed no skill.
+
+*Added 0.26.0 — the rule it supports:* “Check it before every push”
+
+The check itself is `pr-harden`'s, in *A private ticket's PR*, and so are its measurements, in that
+skill's evidence.md under the same heading.
+
+*Added 0.26.0 — the rule it supports:* “Record the pairing on this machine”
+
+Keyed on the PR's URL because `<owner>/<repo>` is ambiguous on this repo's own pattern: openmrs-core
+PR 6680 is cross-repository, its head `dkayiwa/openmrs-core` and its URL
+`https://github.com/openmrs/openmrs-core/pull/6680`, which is what `gh pr view --json url` returns for
+it. Measured with that PR, the lookup printed its key, printed nothing for another PR on the same
+repository, and a `#70` line did not answer for `#700` or `#7000`. A missing `PRS` makes `awk` exit
+2 with an error, which is why no file reads as a public PR rather than as a failed guard.
+
+*Added 0.26.0 — the rule it supports:* “Never through `ticket-pool`.”
+
+`pool-run` builds a JIRA job from the key alone, titled `JIRA <key>`, without reading the ticket.
+Its `lesson_files` lists only the top-level `*.md` of the store, so a record under `confidential/`
+is not found, and `capture_record` then writes `<date>-<repo>-<ticket>-driver.md` at the top level,
+headed with the key, where `skill-retro` Step 6 copies it into this public repo. Its headless
+sessions load no Atlassian tools (*Step 1*).
+
 ## Step 1 — Resolve the ticket, and read it
 
 *Cut down, A-04 — the rule it supports:* “Never `--comments` for the ticket itself.”
@@ -56,6 +95,18 @@ and #480's with one comment read as that comment alone. `--json` carries both an
 
 That endpoint serves **unauthenticated** (verified: `TRUNK-6429` → 200). The `issues.openmrs.org`
 link people paste redirects to a dashboard and will not serve REST, so never reach for it.
+
+*Added 0.26.0 — the rule it supports:* “A 404 from it does not mean the ticket is missing”
+
+Measured 2026-10-21: the endpoint returned HTTP 404 with one byte-identical body, *"Issue does not
+exist or you do not have permission to see it."*, for an existing ticket in a private project, for a
+missing key in that project and for a missing `TRUNK` key. `getJiraIssue` read the private ticket with
+its comments, from the session and from a fresh general-purpose subagent once ToolSearch had loaded
+the tool, and returned the same message as a 404 for the missing key. A headless pool session has no
+such route: of the last 400 session logs under `~/.claude/pipeline/logs/` (to 2026-09-29), 399 loaded
+no MCP server and one listed Atlassian as `needs-auth`, with no tools. Called with its default
+`fields`, `getJiraIssue` returned no `comment` key at all for a private ticket carrying two comments;
+with `comment` among the `fields` it returned both (2026-10-21).
 
 *Cut down, A-06 — the rule it supports:* “Pre-flight the verifier here, not at the end.”
 

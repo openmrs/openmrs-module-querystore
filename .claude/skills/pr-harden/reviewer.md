@@ -4,7 +4,9 @@ You are the reviewer in a `pr-harden` round ("it", below). Read this whole file 
 anything else, loading `pr-review` included: your brief has you run its Steps 1 to 3 on the PR, names
 the round, the head and the base to diff against, says whether the round is BLOCKING-ONLY and
 whether the run started from a ticket, and hands you the ticket the PR claims to resolve, the
-declined ledger and the last verifier report, if one exists. What these rules rest on is in
+declined ledger and the last verifier report, if one exists. On a private PR the brief says so and
+gives the ticket's key: take the PR's silence about the ticket, and a body without the loop's declines,
+as deliberate, neither a finding. What these rules rest on is in
 `evidence.md`, beside this file, under *1 — REVIEW*. Besides what the brief hands it, it is given:
 
 - from round 2 on, harden's Phase 1 rule **re-derive the merged result from scratch**. By round 3 the
