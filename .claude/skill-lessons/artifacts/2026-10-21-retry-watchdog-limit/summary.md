@@ -64,6 +64,13 @@ scratch `HOME` against a resolve-ticket entry in phase `building` whose one awai
 — the run is not finished"). That is the gates' one-hour `AWAIT_TTL`, which a wait at a limit can
 outlast while the awaited agent is still alive.
 
+It then records the same await again with `.claude/pipeline/gate-state await "an agent" --only pr`,
+as `pr-harden`'s **State** has it done once for such an agent: the entry holds the 7200s await and a
+fresh one, and the yield is allowed. The control, that entry less the fresh await, is blocked again,
+so the allow is the await's and not the rest of the write's. The script stops on a missing gate or
+one that exits non-zero, because a gate that does not run prints nothing, which is what an allow
+prints: run from the wrong directory before that guard, it printed "allow" for all three.
+
 What this does NOT show:
 - a real claude.ai limit: the stub stands in for it, under an API key rather than a subscription
   login. The binary's watchdog branch (`h5() && Mmn(e)`, then `Kfr` reading

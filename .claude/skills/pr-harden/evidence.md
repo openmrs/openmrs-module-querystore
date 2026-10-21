@@ -989,12 +989,13 @@ completed; at the default it waited out an 11-minute one and completed. So an ag
 unreported past the gates' hour, and the gate then blocks the yield as a run that stopped (the
 artifact's `gate-await-ttl.sh`, an entry in phase `building`: allowed at 600 s, blocked at 7200 s).
 Re-dispatching the phase there starts a second agent in the worktree the first is still working in;
-recorded again, the await gives the first another hour to report. Once, because an agent that hung
-where the harness cannot see it would otherwise be re-recorded for as long as the run lasted, and
-the bound is the backstop for exactly that agent. Only where the variable is on, because without it
-the stub's first 429 ended every run at once, the one with an agent included. The rule moved here
-from `resolve-ticket`'s Step 1, which now points to it. No run has met it yet: it comes from the
-measurement, not an incident.
+recorded again, the await gives the first another hour to report. The same script recorded it again
+through `gate-state await` and the gate allowed the yield, and blocked that entry with the new await
+taken out. Once, because an agent that hung where the harness cannot see it would otherwise be
+re-recorded for as long as the run lasted, and the bound is the backstop for exactly that agent.
+Only where the variable is on, because without it the stub's first 429 ended every run at once, the
+one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which now points to
+it. No run has met it yet: it comes from the measurement, not an incident.
 
 *Cut down, R4-14 — the rule it supports:* “And this session must not busy-wait either”
 
