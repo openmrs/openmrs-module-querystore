@@ -127,6 +127,11 @@ public class ContextQuestionInterpreterTest {
 		assertEquals("outpatient follow-up plan",
 		        ContextQuestionInterpreter.preprocess("outpatient follow-up plan"));
 		assertEquals("patient", ContextQuestionInterpreter.preprocess("patient"));
+		// A hyphenated qualifier tells the patient-reported score from the nurse-reported one.
+		assertEquals("What is the patient-reported pain score?",
+		        ContextQuestionInterpreter.preprocess("What is the patient-reported pain score?"));
+		assertEquals("What is reported pain score?",
+		        ContextQuestionInterpreter.preprocess("What is the patient\u2019s reported pain score?"));
 	}
 
 	@Test
