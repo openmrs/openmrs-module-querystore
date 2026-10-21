@@ -48,6 +48,9 @@ public final class ConceptNameUtil {
 	 */
 	public static final int MAX_MAPPING_NAMES = 10;
 
+	/** Cap on {@link #getMappingCodes}, the same as on names: one per mapping is the norm. */
+	public static final int MAX_MAPPING_CODES = 10;
+
 	private ConceptNameUtil() {
 	}
 
@@ -239,6 +242,45 @@ public final class ConceptNameUtil {
 				break;
 			}
 			result.add(n);
+		}
+		return result;
+	}
+
+	/**
+	 * The concept's live reference-term codes, each namespaced by its source as {@code SOURCE:CODE}
+	 * ({@code CIEL:857}, {@code LOINC:14937-7}, {@code SNOMED-CT:72341003}, whitespace in a source
+	 * name written as a hyphen), so a question naming a code can match the record
+	 * exactly (ADR Decision 17 §2). A code is kept whether or not its term carries a name: SNOMED
+	 * terms on demo deployments carry codes alone. Retired terms, terms without a source, and blank
+	 * sources or codes are skipped; the result is de-duplicated, sorted and capped at
+	 * {@link #MAX_MAPPING_CODES}. Not embedded, as {@link #getMappingNames} is not.
+	 */
+	public static List<String> getMappingCodes(Concept concept) {
+		if (concept == null || concept.getConceptMappings() == null
+				|| concept.getConceptMappings().isEmpty()) {
+			return Collections.emptyList();
+		}
+		TreeSet<String> sorted = new TreeSet<>();
+		for (ConceptMap m : concept.getConceptMappings()) {
+			ConceptReferenceTerm term = m == null ? null : m.getConceptReferenceTerm();
+			if (term == null || Boolean.TRUE.equals(term.getRetired()) || term.getConceptSource() == null) {
+				continue;
+			}
+			String source = term.getConceptSource().getName();
+			String code = term.getCode();
+			if (source == null || source.trim().isEmpty() || code == null || code.trim().isEmpty()) {
+				continue;
+			}
+			// A question names a code as one token, so whitespace inside a source name becomes a
+			// hyphen: CIEL's "SNOMED CT" is stored, and matched, as SNOMED-CT.
+			sorted.add(source.trim().replaceAll("\\s+", "-") + ":" + code.trim());
+		}
+		List<String> result = new ArrayList<>(Math.min(sorted.size(), MAX_MAPPING_CODES));
+		for (String c : sorted) {
+			if (result.size() >= MAX_MAPPING_CODES) {
+				break;
+			}
+			result.add(c);
 		}
 		return result;
 	}

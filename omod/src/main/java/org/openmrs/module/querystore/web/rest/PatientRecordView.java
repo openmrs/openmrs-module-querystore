@@ -114,6 +114,87 @@ final class PatientRecordView {
 		return env;
 	}
 
+	/**
+	 * The context-slice envelope (ADR Decision 17 §4): {@code {results (each with tier),
+	 * totalCount, chartSize, chartTruncated, projectionComplete, effectiveTypes, temporalApplied, chartSnapshotId,
+	 * sliceId}}, paged
+	 * in memory. {@code sliceId} fingerprints the complete ordered selection so an external
+	 * client can reject mixed pages. {@code chartSnapshotId} identifies the complete source-chart
+	 * materialization; context pages themselves do not use it as an HTTP ETag.
+	 */
+	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
+	        int startIndex, int limit) {
+		return contextPage(slice, startIndex, limit, null, null);
+	}
+
+	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
+	        int startIndex, int limit, String endpointUrl, String baseParams) {
+		List<org.openmrs.module.querystore.model.ContextSliceRecord> all = slice.getRecords();
+		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
+		int pageSize = startIndex >= all.size() ? 0 : Math.min(limit, all.size() - startIndex);
+		for (int i = startIndex; i < startIndex + pageSize; i++) {
+			org.openmrs.module.querystore.model.ContextSliceRecord record = all.get(i);
+			Map<String, Object> m = toMap(record.getDocument(), null);
+			m.put("tier", record.getTier());
+			if (record.getRank() != null) {
+				m.put("rank", record.getRank());
+			}
+			results.add(m);
+		}
+		Map<String, Object> env = new LinkedHashMap<String, Object>();
+		env.put("results", results);
+		env.put("totalCount", Integer.valueOf(all.size()));
+		env.put("chartSize", Integer.valueOf(slice.getChartSize()));
+		env.put("chartTruncated", Boolean.valueOf(slice.isChartTruncated()));
+		env.put("projectionComplete", Boolean.valueOf(slice.isProjectionComplete()));
+		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
+		Collections.sort(effectiveTypes);
+		env.put("effectiveTypes", effectiveTypes);
+		env.put("temporalApplied", Boolean.valueOf(slice.isTemporalApplied()));
+		env.put("chartSnapshotId", slice.getChartSnapshotId());
+		env.put("sliceId", contextSliceId(slice));
+		if (baseParams != null) {
+			List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
+			if (startIndex > 0) {
+				links.add(link("prev", endpointUrl, baseParams, Math.max(0, startIndex - limit), limit));
+			}
+			if (startIndex <= Integer.MAX_VALUE - limit && startIndex + pageSize < all.size()) {
+				links.add(link("next", endpointUrl, baseParams, startIndex + limit, limit));
+			}
+			if (!links.isEmpty()) {
+				env.put("links", links);
+			}
+		}
+		return env;
+	}
+
+	/** Fingerprint the complete ordered context selection, including every selection input/result. */
+	static String contextSliceId(org.openmrs.module.querystore.model.ContextSlice slice) {
+		StringBuilder canonical = new StringBuilder();
+		appendValue(canonical, Integer.valueOf(slice.getChartSize()));
+		appendValue(canonical, Boolean.valueOf(slice.isChartTruncated()));
+		appendValue(canonical, Boolean.valueOf(slice.isProjectionComplete()));
+		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
+		Collections.sort(effectiveTypes);
+		appendValue(canonical, effectiveTypes);
+		appendValue(canonical, Boolean.valueOf(slice.isTemporalApplied()));
+		for (org.openmrs.module.querystore.model.ContextSliceRecord record : slice.getRecords()) {
+			appendValue(canonical, record.getTier());
+			appendValue(canonical, record.getRank());
+			QueryDocument doc = record.getDocument();
+			appendValue(canonical, doc.getResourceType());
+			appendValue(canonical, doc.getResourceUuid());
+			appendValue(canonical, doc.getDate() == null ? null : doc.getDate().toString());
+			appendValue(canonical, metadataString(doc, FIELD_CLINICAL_DATE));
+			appendValue(canonical, dateKind(doc));
+			appendValue(canonical, doc.getText());
+			appendValue(canonical,
+					doc.getLastModified() == null ? null : doc.getLastModified().toString());
+			appendValue(canonical, doc.getMetadata());
+		}
+		return sha256(canonical.toString());
+	}
+
 	/** Stable identity for an entire ordered chart, including completeness and canonical metadata. */
 	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated, boolean projectionComplete) {
 		return PatientChartFingerprint.snapshotId(docs, chartTruncated, projectionComplete);
@@ -149,6 +230,47 @@ final class PatientRecordView {
 		catch (NoSuchAlgorithmException e) {
 			throw new IllegalStateException("SHA-256 is unavailable", e);
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void appendValue(StringBuilder out, Object value) {
+		if (value == null) {
+			out.append("-1:");
+			return;
+		}
+		if (value instanceof Map) {
+			out.append("{");
+			Map<String, Object> sorted = new TreeMap<String, Object>();
+			for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+				sorted.put(String.valueOf(entry.getKey()), entry.getValue());
+			}
+			for (Map.Entry<String, Object> entry : sorted.entrySet()) {
+				appendValue(out, entry.getKey());
+				appendValue(out, entry.getValue());
+			}
+			out.append("}");
+			return;
+		}
+		if (value instanceof Collection) {
+			out.append("[");
+			List<Object> items = new ArrayList<Object>((Collection<Object>) value);
+			if (!(value instanceof List)) {
+				Collections.sort(items, (left, right) -> canonicalValue(left).compareTo(canonicalValue(right)));
+			}
+			for (Object item : items) {
+				appendValue(out, item);
+			}
+			out.append("]");
+			return;
+		}
+		String text = String.valueOf(value);
+		out.append(text.length()).append(':').append(text);
+	}
+
+	private static String canonicalValue(Object value) {
+		StringBuilder out = new StringBuilder();
+		appendValue(out, value);
+		return out.toString();
 	}
 
 	private static Map<String, Object> link(String rel, String endpointUrl, String baseParams, int startIndex, int limit) {

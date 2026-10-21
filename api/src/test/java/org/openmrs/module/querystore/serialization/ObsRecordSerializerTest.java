@@ -338,6 +338,32 @@ public class ObsRecordSerializerTest {
 				doc.getMetadata().get("mapping_names"));
 	}
 
+	@Test
+	public void serialize_mappingCodes_namespacedBySource() {
+		// The code is what a question names ("CIEL:12345"), and a SNOMED term on the demo carries
+		// a code and no name, so the codes channel is written even where the names one is empty.
+		Concept c = new Concept();
+		c.addName(preferredName("Blood urea nitrogen"));
+		ConceptReferenceTerm term = new ConceptReferenceTerm();
+		term.setCode("72341003");
+		org.openmrs.ConceptSource source = new org.openmrs.ConceptSource();
+		source.setName("SNOMED-CT");
+		term.setConceptSource(source);
+		ConceptMap mapping = new ConceptMap();
+		mapping.setConceptReferenceTerm(term);
+		LinkedHashSet<ConceptMap> mappings = new LinkedHashSet<>();
+		mappings.add(mapping);
+		c.setConceptMappings(mappings);
+
+		Obs obs = obs(c);
+		obs.setValueText("noted");
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals(Arrays.asList("SNOMED-CT:72341003"), doc.getMetadata().get("mapping_codes"));
+		assertEquals(null, doc.getMetadata().get("mapping_names"));
+	}
+
 	private static ConceptMap termMapping(String name) {
 		ConceptReferenceTerm t = new ConceptReferenceTerm();
 		t.setName(name);
