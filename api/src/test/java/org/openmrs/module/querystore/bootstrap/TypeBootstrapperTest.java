@@ -435,6 +435,25 @@ public class TypeBootstrapperTest {
 	}
 
 	@Test
+	public void runForPatient_skipsRecordsStoredAtTheirCurrentVersion() {
+		// A patient whose projection keeps failing is sent back through this walk on every read, so
+		// the records already stored at their version must not be embedded again each time.
+		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
+		Instant later = Instant.parse("2025-01-02T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.patientPages = new ArrayList<>(Arrays.asList(
+		    Arrays.asList(new TestEntity("same", earlier), new TestEntity("changed", later))));
+		service.storedVersions.put("same", earlier);
+		service.storedVersions.put("changed", earlier);
+
+		int failed = b.runForPatient("patient-A", service, embedder);
+
+		assertEquals(0, failed);
+		assertEquals(Collections.singletonList("changed"), indexedUuids());
+		assertEquals(1, embedder.inputs.size());
+	}
+
+	@Test
 	public void runForPatient_stopsWhenAPageDoesNotAdvancePastTheCursor() {
 		FakeBootstrapper b = new FakeBootstrapper();
 		// A failed fetch leaves half-loaded rows in the session; they come back unhydrated, at the same
@@ -478,6 +497,8 @@ public class TypeBootstrapperTest {
 		private final List<FetchCall> fetchCalls = new ArrayList<>();
 		List<TestEntity> stuckPatientPage;
 		List<List<TestEntity>> cyclingPatientPages;
+		/** Pages served in order to a per-patient walk; an empty page follows the last. */
+		List<List<TestEntity>> patientPages;
 		int patientFetches;
 		private final TestSerializer serializer = new TestSerializer() {
 			@Override
@@ -538,6 +559,9 @@ public class TypeBootstrapperTest {
 			}
 			if (cyclingPatientPages != null) {
 				return cyclingPatientPages.get((patientFetches - 1) % cyclingPatientPages.size());
+			}
+			if (patientPages != null) {
+				return patientPages.isEmpty() ? Collections.<TestEntity> emptyList() : patientPages.remove(0);
 			}
 			return stuckPatientPage;
 		}
