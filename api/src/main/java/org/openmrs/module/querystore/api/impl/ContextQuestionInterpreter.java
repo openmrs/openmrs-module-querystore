@@ -131,9 +131,12 @@ final class ContextQuestionInterpreter {
 	// The chart's own subject. Every record in a per-patient slice is about the patient, so the word
 	// tells no record from another, while records that say "Patient reported ..." match it and fill
 	// the similarity tier ahead of what the question asks about (Decision 18). Only the English article
-	// forms and the possessive, so a question in another language keeps its own words.
+	// forms and the possessive, with a straight or curly apostrophe, so a question in another language
+	// keeps its own words; not a hyphenated qualifier, which tells records apart ("the patient-reported
+	// pain score" against the nurse-reported one).
 	private static final Pattern THE_PATIENT = Pattern.compile(
-	        "\\b(?:the|this|that)\\s+patient(?:'s|s'|s)?\\b|\\bpatient's\\b", Pattern.CASE_INSENSITIVE);
+	        "\\b(?:the|this|that)\\s+patient(?:['\u2019]s|s['\u2019]|s)?\\b(?!-)|\\bpatient['\u2019]s\\b",
+	        Pattern.CASE_INSENSITIVE);
 
 	/**
 	 * Retrieval preprocessing for the slice's similarity leg: leave out the patient the whole chart is
