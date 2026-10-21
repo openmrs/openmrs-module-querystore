@@ -951,8 +951,10 @@ public class ContextSliceTest {
 			if (throwOnSearch) {
 				throw new RuntimeException("simulated backend search failure");
 			}
+			// Honour the requested limit as a real backend would, so a slice that stops fetching
+			// the deeper candidate pool loses the records it needs and the tests see it.
 			List<Hit> out = new ArrayList<Hit>();
-			for (int i = 0; i < hits.size(); i++) {
+			for (int i = 0; i < Math.min(hits.size(), req.getLimit()); i++) {
 				out.add(new Hit(hits.get(i), 1.0 - i * 0.1, i + 1));
 			}
 			return new SearchResult(out);
