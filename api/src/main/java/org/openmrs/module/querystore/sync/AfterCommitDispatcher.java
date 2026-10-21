@@ -59,15 +59,16 @@ public class AfterCommitDispatcher {
 	}
 
 	public void dispatch(Runnable task) {
+		Runnable guarded = wrap(task);
 		if (TransactionSynchronizationManager.isSynchronizationActive()) {
 			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 				@Override
 				public void afterCommit() {
-					executor.submit(wrap(task));
+					executor.submit(guarded);
 				}
 			});
 		} else {
-			executor.submit(wrap(task));
+			executor.submit(guarded);
 		}
 	}
 
