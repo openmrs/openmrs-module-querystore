@@ -78,14 +78,15 @@ final class ContextQuestionInterpreter {
 	 * Everyday idioms that share a word with a cue but name no records ("in order to", "under what
 	 * conditions", "last name"). They are blanked before the cues run, so each false cue does not pull
 	 * whole types into the typed tier or add a recency anchor. A cue elsewhere in the question still
-	 * applies.
+	 * applies. "At last" is the idiom only with nothing after it: "Viral load at last test?" asks for
+	 * the newest reading, as ChartSearchAI's router reads it, and keeps its recency anchor.
 	 */
 	private static final Pattern IDIOMS = cues(
 	        "in order (?:to|that|for|of)", "out of order", "order of",
 	        "under (?:what|which|these|those|such|certain|normal|the same) conditions?",
 	        "on (?:the )?condition that", "condition of",
 	        "in (?:good|poor|fair|stable|critical|serious|bad|satisfactory) condition",
-	        "last names?", "at last", "last resort");
+	        "last names?", "at last(?!\\s+[\\p{L}\\p{N}])", "last resort");
 
 	private static Pattern cues(String... words) {
 		return Pattern.compile("\\b(?:" + String.join("|", words) + ")\\b", Pattern.CASE_INSENSITIVE);

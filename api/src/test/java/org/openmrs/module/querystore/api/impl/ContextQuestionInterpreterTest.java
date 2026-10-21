@@ -55,6 +55,15 @@ public class ContextQuestionInterpreterTest {
 		}
 	}
 
+	/** "At last" with a noun after it is not the idiom: it asks for the newest reading, as
+	 *  ChartSearchAI's router reads it, and the anchor must follow. */
+	@Test
+	public void interpret_readsAtLastBeforeANounAsRecency() {
+		for (String question : Arrays.asList("Viral load at last test?", "CD4 at last check?")) {
+			assertTrue(question + " asks for the newest reading", ContextQuestionInterpreter.interpret(question).temporal);
+		}
+	}
+
 	@Test
 	public void interpret_stillReadsTheCueBesideAnIdiom() {
 		assertTypes("Which orders were placed in order to treat the infection?",
