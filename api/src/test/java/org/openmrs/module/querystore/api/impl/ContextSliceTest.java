@@ -317,6 +317,21 @@ public class ContextSliceTest {
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiersByUuid(slice).get("code-6"));
 	}
 
+	/** The identifier boundary is for identifiers and codes: a quoted phrase is prose, and prose
+	 *  joins words with slashes and hyphens ("nausea/vomiting", "COVID-19 vaccination"). */
+	@Test
+	public void aQuotedPhraseIsExactBesideAConnector() {
+		backend.chart.add(doc("obs", "symptoms-1", "Symptoms: nausea/vomiting", LocalDate.of(2026, 3, 1)));
+		backend.chart.add(doc("obs", "vaccine-1", "Immunization: COVID-19 vaccination", LocalDate.of(2026, 2, 1)));
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT,
+		        "Was \"vomiting\" or \"COVID\" recorded?", request));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("symptoms-1"), "got " + tiers);
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("vaccine-1"), "got " + tiers);
+	}
+
 	@Test
 	public void anIdentifierDoesNotMatchALongerIdentifierItBegins() {
 		QueryDocument exact = doc("patient_identifier", "identifier-1", "Patient identifier: ABC-123",

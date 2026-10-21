@@ -530,7 +530,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 
 		int anchor = temporal ? request.getRecencyAnchorSize() : 0;
-		Set<String> exactSignals = exactSignals(question);
+		Map<String, Boolean> exactSignals = exactSignals(question);
 		List<ContextSliceRecord> selected = new ArrayList<>();
 		Set<String> selectedUuids = new HashSet<>();
 		for (int i = 0; i < chart.size(); i++) {
@@ -564,21 +564,27 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		                chartRead.isProjectionComplete()), withheldTypes);
 	}
 
-	private static Set<String> exactSignals(String question) {
-		Set<String> signals = new HashSet<>();
+	/**
+	 * The exact signals in {@code question}, each with whether it is an identifier: an identifier or
+	 * code is bounded by {@link #continuesIdentifier}, so {@code ABC-123} is not found inside
+	 * {@code ABC-123-4}, while a quoted phrase or a date is bounded by letters and digits alone, so
+	 * {@code "vomiting"} is found in {@code nausea/vomiting} and {@code "COVID"} in {@code COVID-19}.
+	 */
+	private static Map<String, Boolean> exactSignals(String question) {
+		Map<String, Boolean> signals = new HashMap<>();
 		if (StringUtils.isBlank(question)) {
 			return signals;
 		}
-		collectMatches(QUOTED_PHRASE, question, signals, true);
-		collectMatches(ISO_DATE, question, signals, false);
-		collectMatches(UUID, question, signals, false);
-		collectMatches(LABELED_IDENTIFIER, question, signals, true);
-		collectMatches(NAMESPACE_CODE, question, signals, false);
+		collectMatches(QUOTED_PHRASE, question, signals, true, false);
+		collectMatches(ISO_DATE, question, signals, false, false);
+		collectMatches(UUID, question, signals, false, true);
+		collectMatches(LABELED_IDENTIFIER, question, signals, true, true);
+		collectMatches(NAMESPACE_CODE, question, signals, false, true);
 		return signals;
 	}
 
-	private static void collectMatches(Pattern pattern, String question, Set<String> sink,
-	        boolean firstNonEmptyGroup) {
+	private static void collectMatches(Pattern pattern, String question, Map<String, Boolean> sink,
+	        boolean firstNonEmptyGroup, boolean identifier) {
 		Matcher matcher = pattern.matcher(question);
 		while (matcher.find()) {
 			String value = matcher.group();
@@ -592,12 +598,13 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 				}
 			}
 			if (StringUtils.isNotBlank(value)) {
-				sink.add(value.trim().toLowerCase(Locale.ROOT));
+				String signal = value.trim().toLowerCase(Locale.ROOT);
+				sink.put(signal, Boolean.valueOf(identifier || Boolean.TRUE.equals(sink.get(signal))));
 			}
 		}
 	}
 
-	private static boolean matchesExactSignal(QueryDocument doc, Set<String> signals) {
+	private static boolean matchesExactSignal(QueryDocument doc, Map<String, Boolean> signals) {
 		if (signals.isEmpty()) {
 			return false;
 		}
@@ -607,8 +614,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		appendValue(values, doc.getText());
 		appendValue(values, doc.getMetadata());
 		String searchable = values.toString().toLowerCase(Locale.ROOT);
-		for (String signal : signals) {
-			if (containsBounded(searchable, signal)) {
+		for (Map.Entry<String, Boolean> signal : signals.entrySet()) {
+			if (containsBounded(searchable, signal.getKey(), signal.getValue().booleanValue())) {
 				return true;
 			}
 		}
@@ -630,11 +637,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	/**
-	 * Whether {@code signal} occurs in {@code searchable} with no letter or digit on either side.
+	 * Whether {@code signal} occurs in {@code searchable} with no letter or digit on either side,
+	 * nor, for an identifier, a connector that continues it ({@link #continuesIdentifier}).
 	 * A date signal is also bounded by the {@code t} of an ISO date-time ({@code 2024-03-05t10:15}),
 	 * so a question naming the day a visit ended matches its {@code end_date_time}.
 	 */
-	private static boolean containsBounded(String searchable, String signal) {
+	private static boolean containsBounded(String searchable, String signal, boolean identifier) {
 		boolean dateSignal = ISO_DATE.matcher(signal).matches();
 		int from = 0;
 
@@ -644,9 +652,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 				return false;
 			}
 			int end = index + signal.length();
-			boolean leftBounded = index == 0 || !continuesIdentifier(searchable, index - 1, -1);
+			boolean leftBounded = index == 0 || !continues(searchable, index - 1, -1, identifier);
 			boolean rightBounded = end == searchable.length()
-					|| !continuesIdentifier(searchable, end, 1)
+					|| !continues(searchable, end, 1, identifier)
 					|| (dateSignal && searchable.charAt(end) == 't' && end + 1 < searchable.length()
 					        && Character.isDigit(searchable.charAt(end + 1)));
 			if (leftBounded && rightBounded) {
@@ -663,6 +671,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 * {@code ABC-123} is not found inside {@code ABC-123-4} while {@code CIEL:60.} at a sentence end
 	 * still matches.
 	 */
+	private static boolean continues(String searchable, int at, int step, boolean identifier) {
+		return identifier ? continuesIdentifier(searchable, at, step)
+		        : Character.isLetterOrDigit(searchable.charAt(at));
+	}
+
 	private static boolean continuesIdentifier(String searchable, int at, int step) {
 		char c = searchable.charAt(at);
 		if (Character.isLetterOrDigit(c)) {
