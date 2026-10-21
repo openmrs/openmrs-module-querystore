@@ -147,9 +147,11 @@ public class RecordProjectorTest {
 
 	@Test
 	public void project_leavesTheVersionUnsetWhenTheCommittedRecordCannotBeSerialized() {
-		// The event-time content predates the save, so it must not carry the committed version:
-		// without one, the restart top-up rewrites the document from core instead of skipping it.
+		// The event-time content predates the save, so it must not carry a version, neither the
+		// committed one nor the previous save's that an edited record carries at event time: without
+		// one, the restart top-up rewrites the document from core instead of skipping it.
 		Encounter enc = encounter("enc-new", false);
+		enc.setDateChanged(new Date(1792479801000L));
 		java.util.List<Runnable> pending = new java.util.ArrayList<>();
 		EncounterRecordSerializer failsAfterCommit = new EncounterRecordSerializer() {
 			private int calls;

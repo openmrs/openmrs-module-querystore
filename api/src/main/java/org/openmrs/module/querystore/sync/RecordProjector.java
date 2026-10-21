@@ -71,6 +71,10 @@ public final class RecordProjector {
 		catch (RuntimeException e) {
 			log.debug("Could not serialize the committed " + serializer.getResourceType() + "/" + node.getUuid()
 			        + "; writing the event-time document without a version", e);
+			// An edited record's event-time document carries the version of the save before this one;
+			// stamped on pre-save content it would let the top-up skip the document when both saves
+			// fall in the same second.
+			eventTime.setLastModified(null);
 			return eventTime;
 		}
 	}
