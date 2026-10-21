@@ -242,6 +242,12 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				    Void.class);
 				for (MultiGetResponseItem<Void> item : current.docs()) {
 					if (item.isFailure()) {
+						if ("index_not_found_exception".equals(item.failure().error().type())) {
+							// Idempotent delete: a missing index is the second-call no-op outcome, as delete()
+							// treats it. mget reports it per item rather than throwing.
+							succeeded++;
+							continue;
+						}
 						// A per-id read failure (a shard problem, typically) is transient from the caller's view.
 						failures.add(new DocFailure(resourceType, item.failure().id(), item.failure().error().reason(), true));
 						continue;
