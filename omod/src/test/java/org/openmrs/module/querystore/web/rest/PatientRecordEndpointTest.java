@@ -447,7 +447,7 @@ public class PatientRecordEndpointTest {
 		        org.mockito.ArgumentMatchers.any(org.openmrs.module.querystore.model.ContextSliceRequest.class))).thenReturn(slice);
 
 		ResponseEntity<Object> context = controller.getPatientRecords(request, PATIENT, "glucose", null, null, "context", null,
-		        null, null);
+		        null, null, null);
 
 		assertEquals(HttpStatus.OK, context.getStatusCode());
 		assertEquals("a context page is question-dependent and must not be reused by a shared cache",
@@ -647,13 +647,14 @@ public class PatientRecordEndpointTest {
 		        org.mockito.ArgumentMatchers.eq("current meds?"), captor.capture())).thenReturn(slice);
 
 		ResponseEntity<Object> response = controller.getPatientRecords(request, PATIENT, "current meds?", null, null,
-		        "context", "drug_order,allergy", Boolean.TRUE, null);
+		        "context", "drug_order,allergy", Boolean.TRUE, Boolean.TRUE, null);
 
 		assertEquals(HttpStatus.OK, response.getStatusCode());
 		org.openmrs.module.querystore.model.ContextSliceRequest sent = captor.getValue();
 		assertTrue("caller types parsed", sent.getTypes().contains("drug_order"));
 		assertTrue("caller types parsed", sent.getTypes().contains("allergy"));
 		assertTrue("temporal flag parsed", sent.isTemporal());
+		assertTrue("interpret flag reaches the service", sent.isInterpretQuestion());
 		Map<?, ?> body = body(response);
 		List<?> results = (List<?>) body.get("results");
 		assertEquals(2, results.size());
@@ -719,17 +720,17 @@ public class PatientRecordEndpointTest {
 		        .thenReturn(slice);
 
 		ResponseEntity<Object> firstResponse = controller.getPatientRecords(request, PATIENT, "current meds?", 1, 0,
-		        "context", "drug_order,allergy", Boolean.TRUE, null);
+		        "context", "drug_order,allergy", Boolean.TRUE, Boolean.TRUE, null);
 		Map<?, ?> firstBody = body(firstResponse);
 		List<?> firstLinks = (List<?>) firstBody.get("links");
 		assertNotNull("a partial context page must advertise its next page", firstLinks);
 		assertEquals(RECORDS_URL + "?patient=" + PATIENT
 		        + "&q=current+meds%3F&mode=context&types=drug_order%2Callergy"
-		        + "&temporal=true&startIndex=1&limit=1",
+		        + "&temporal=true&interpret=true&startIndex=1&limit=1",
 		        ((Map<?, ?>) firstLinks.get(0)).get("uri"));
 
 		ResponseEntity<Object> secondResponse = controller.getPatientRecords(request, PATIENT, "current meds?", 1, 1,
-		        "context", "drug_order,allergy", Boolean.TRUE, null);
+		        "context", "drug_order,allergy", Boolean.TRUE, Boolean.TRUE, null);
 		List<?> secondLinks = (List<?>) body(secondResponse).get("links");
 		assertNotNull("a later context page must advertise its previous page", secondLinks);
 		assertEquals("prev", ((Map<?, ?>) secondLinks.get(0)).get("rel"));
