@@ -917,8 +917,9 @@ public class ContextSliceTest {
 
 		backend.chart.addAll(Arrays.asList(preg1, preg2, preg3, creat));
 		// Ranked hits: mandatory record first (already claimed by mandatory tier), then 3
-		// repeats of pregnancy status, then serum creatinine. With similarityLimit=2,
-		// mandatory is skipped, preg-1 takes rank 1, and creat-1 takes rank 2 ahead of preg-2/3.
+		// repeats of pregnancy status, then serum creatinine. With similarityLimit=2, mandatory is
+		// skipped and preg-1 and creat-1 are selected first and second, ahead of preg-2/3, while
+		// keeping their own search ranks 2 and 5.
 		backend.hits = Arrays.asList(backend.chart.get(0), preg1, preg2, preg3, creat);
 
 		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
@@ -974,6 +975,31 @@ public class ContextSliceTest {
 		}
 	}
 
+	/** The newest repeat is the newest of the fetched candidates: one ranked below the pool is not seen. */
+	@Test
+	public void similarityLeg_givesARepeatsSlotToTheNewestFetchedCandidate() {
+		List<QueryDocument> hits = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 37; i++) {
+			// The 37th hit, outside the 36-candidate pool, is the newest reading of all.
+			LocalDate date = i == 36 ? LocalDate.of(2026, 6, 30) : LocalDate.of(2025, 1, 1).plusDays(i);
+			QueryDocument reading = doc("obs", "repeat-" + i, "Weight (kg): 70 kg", date);
+			reading.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-weight");
+			hits.add(reading);
+		}
+		// The chart is newest first, as the backend reads it.
+		List<QueryDocument> newestFirst = new ArrayList<QueryDocument>(hits);
+		newestFirst.sort((a, b) -> b.getDate().compareTo(a.getDate()));
+		backend.chart.addAll(newestFirst);
+		backend.hits = hits;
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(1);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "What is her weight?", request));
+
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("repeat-35"), "got " + tiers);
+		assertFalse(tiers.containsKey("repeat-36"), "got " + tiers);
+	}
+
 	/** Distinct values of one concept are a series, not repeats: a trend question keeps them. */
 	@Test
 	public void similarityLeg_keepsANumericSeriesWhenConceptsOutnumberSlots() {
@@ -1003,7 +1029,6 @@ public class ContextSliceTest {
 		}
 	}
 
-	/** A diversified pick keeps each record's own search rank, so budgeting by rank drops by relevance. */
 	/** A hit past the Elasticsearch chart cap is in the index but not in the chart the slice is
 	 *  built from, so it could never fill the slot it took; the next candidate gets it. */
 	@Test
@@ -1022,6 +1047,7 @@ public class ContextSliceTest {
 		assertFalse(tiers.containsKey("ghost-1"));
 	}
 
+	/** A diversified pick keeps each record's own search rank, so budgeting by rank drops by relevance. */
 	@Test
 	public void similarityLeg_aDiversifiedPickCarriesTheRecordsOwnSearchRank() {
 		QueryDocument first = doc("obs", "preg-1", "Pregnancy status: No", LocalDate.of(2026, 6, 1));
