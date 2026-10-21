@@ -484,6 +484,22 @@ public class ConceptNameUtilTest {
 		assertEquals(Arrays.asList("IMO-ProblemIT:10000", "SNOMED-CT:38341003"), ConceptNameUtil.getMappingCodes(c));
 	}
 
+	@Test
+	public void getMappingCodes_keepsEveryLiveCodeHoweverManyMappingsAConceptHas() {
+		// Only exact matching reads codes, and an alphabetical cap of ten cost Cough (13 live mappings)
+		// its SNOMED CT code on a refapp standalone, so a question naming it found no exact match.
+		ConceptMap[] mappings = new ConceptMap[13];
+		for (int i = 0; i < 12; i++) {
+			mappings[i] = mappingTo(sourcedTerm("CIEL", String.valueOf(100 + i), null));
+		}
+		mappings[12] = mappingTo(sourcedTerm("SNOMED CT", "49727002", null));
+
+		java.util.List<String> codes = ConceptNameUtil.getMappingCodes(conceptWithMappings("Cough", mappings));
+
+		assertEquals(13, codes.size());
+		assertTrue(codes.contains("SNOMED-CT:49727002"));
+	}
+
 	private static ConceptReferenceTerm sourcedTerm(String source, String code, String name) {
 		ConceptReferenceTerm t = term(name, code);
 		if (source != null) {
