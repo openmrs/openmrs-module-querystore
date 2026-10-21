@@ -81,7 +81,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	        Pattern.CASE_INSENSITIVE);
 
 	private static final Pattern NAMESPACE_CODE = Pattern.compile(
-	        "\\b[a-z][a-z0-9_-]{1,15}:[a-z0-9][a-z0-9._-]{1,31}\\b", Pattern.CASE_INSENSITIVE);
+	        "\\b[a-z][a-z0-9_-]{1,15}:[a-z0-9][a-z0-9._-]{0,31}\\b", Pattern.CASE_INSENSITIVE);
 
 	private BackendStore backend;
 
@@ -618,9 +618,9 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 				return false;
 			}
 			int end = index + signal.length();
-			boolean leftBounded = index == 0 || !Character.isLetterOrDigit(searchable.charAt(index - 1));
+			boolean leftBounded = index == 0 || !continuesIdentifier(searchable, index - 1, -1);
 			boolean rightBounded = end == searchable.length()
-					|| !Character.isLetterOrDigit(searchable.charAt(end))
+					|| !continuesIdentifier(searchable, end, 1)
 					|| (dateSignal && searchable.charAt(end) == 't' && end + 1 < searchable.length()
 					        && Character.isDigit(searchable.charAt(end + 1)));
 			if (leftBounded && rightBounded) {
@@ -629,6 +629,22 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			from = index + 1;
 		}
 		return false;
+	}
+
+	/**
+	 * Whether the character at {@code at} continues an identifier beyond the signal: a letter or digit,
+	 * or a connector such as {@code -} or {@code .} with a letter or digit beyond it, so that
+	 * {@code ABC-123} is not found inside {@code ABC-123-4} while {@code CIEL:60.} at a sentence end
+	 * still matches.
+	 */
+	private static boolean continuesIdentifier(String searchable, int at, int step) {
+		char c = searchable.charAt(at);
+		if (Character.isLetterOrDigit(c)) {
+			return true;
+		}
+		int beyond = at + step;
+		return (c == '-' || c == '.' || c == '_' || c == '/' || c == ':') && beyond >= 0
+		        && beyond < searchable.length() && Character.isLetterOrDigit(searchable.charAt(beyond));
 	}
 
 	/**
