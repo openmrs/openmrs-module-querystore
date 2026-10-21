@@ -107,8 +107,8 @@ public class RecordProjectorTest {
 		java.util.List<Runnable> pending = new java.util.ArrayList<>();
 		AfterCommitDispatcher afterCommit = new AfterCommitDispatcher(new SyncExecutor()) {
 			@Override
-			public void dispatch(Runnable task) {
-				pending.add(task);
+			public void dispatchPrepared(java.util.function.Supplier<Runnable> prepare) {
+				pending.add(() -> prepare.get().run());
 			}
 		};
 
@@ -171,11 +171,36 @@ public class RecordProjectorTest {
 		assertNull(service.indexed.get(0).getLastModified());
 	}
 
+	@Test
+	public void project_indexesTheCommittedStateEvenWhenTheEntityChangesBeforeTheWorkerRuns() {
+		// The committing thread prepares the document right after commit; the pool worker that embeds
+		// and writes may run after a later transaction changed the same instance and rolled back.
+		Encounter enc = encounter("enc-committed", false);
+		java.util.List<java.util.function.Supplier<Runnable>> afterCommit = new java.util.ArrayList<>();
+		AfterCommitDispatcher twoPhase = new AfterCommitDispatcher(new SyncExecutor()) {
+			@Override
+			public void dispatchPrepared(java.util.function.Supplier<Runnable> prepare) {
+				afterCommit.add(prepare);
+			}
+		};
+
+		RecordProjector.project(new EncounterRecordSerializer(), enc, false, indexer, twoPhase);
+		Date committed = new Date(1792479801000L);
+		enc.setDateCreated(committed);
+		Runnable worker = afterCommit.get(0).get();
+		enc.setDateCreated(new Date(1792566201000L));
+		enc.setVoided(true);
+		worker.run();
+
+		assertEquals(1, service.indexed.size());
+		assertEquals(committed.toInstant(), service.indexed.get(0).getLastModified());
+	}
+
 	private static AfterCommitDispatcher deferred(java.util.List<Runnable> pending) {
 		return new AfterCommitDispatcher(new SyncExecutor()) {
 			@Override
-			public void dispatch(Runnable task) {
-				pending.add(task);
+			public void dispatchPrepared(java.util.function.Supplier<Runnable> prepare) {
+				pending.add(() -> prepare.get().run());
 			}
 		};
 	}
