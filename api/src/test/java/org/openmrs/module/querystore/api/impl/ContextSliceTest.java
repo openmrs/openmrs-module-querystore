@@ -821,6 +821,18 @@ public class ContextSliceTest {
 	}
 
 	@Test
+	public void interpretMode_keepsTheCallersTemporalFlag() {
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), true);
+		request.setInterpretQuestion(true);
+		request.setRecencyAnchorSize(3);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "Any eye problems?", request);
+
+		assertTrue(slice.isTemporalApplied());
+		assertEquals(QueryStoreConstants.TIER_RECENCY_ANCHOR, tiersByUuid(slice).get("recent-1"));
+	}
+
+	@Test
 	public void interpretMode_unionsCallerTypes_withDerivedOnes() {
 		// Module-contributed scopes (chartsearchai QueryScopeContributor SPI) remain caller
 		// additions — unioned with the derived types, never replaced.
