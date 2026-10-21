@@ -11,7 +11,9 @@ package org.openmrs.module.querystore.bootstrap;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +27,9 @@ import java.util.Map;
  * projection cannot repair an already-partially-indexed patient. This report exists so operators
  * (and deploy pipelines that seed via SQL dump, which bypasses the live indexing path) can verify
  * completion instead of guessing. The derivation lives in the api layer so it is unit-testable and
- * reusable; the omod REST controller is a thin adapter over {@link #from(List)}.
+ * reusable; deployment-completeness callers pass the registered resource types to
+ * {@link #from(List, Collection)} so a type that never acquired a progress row cannot be
+ * mistaken for complete.
  */
 public class BootstrapStatusReport {
 
@@ -44,20 +48,48 @@ public class BootstrapStatusReport {
 	 * progress table (nothing indexed yet) or any RUNNING/FAILED/NOT_STARTED type makes it false.
 	 */
 	public static BootstrapStatusReport from(List<BootstrapProgress> progress) {
-		List<TypeStatus> types = new ArrayList<TypeStatus>();
-		boolean complete = progress != null && !progress.isEmpty();
+		List<String> trackedTypes = new ArrayList<String>();
 		if (progress != null) {
 			for (BootstrapProgress p : progress) {
-				if (p.getStatus() != BootstrapStatus.COMPLETED) {
+				trackedTypes.add(p.getResourceType());
+			}
+		}
+		return from(progress, trackedTypes);
+	}
+
+	/**
+	 * Builds a deployment-completeness report. Completion requires every currently registered
+	 * resource type to have a {@link BootstrapStatus#COMPLETED} progress row. This closes the
+	 * interrupted-bootstrap gap where the worker had completed one type but had not yet created
+	 * rows for the remaining types.
+	 */
+	public static BootstrapStatusReport from(List<BootstrapProgress> progress,
+	        Collection<String> expectedResourceTypes) {
+		List<TypeStatus> types = new ArrayList<TypeStatus>();
+		Map<String, BootstrapStatus> statusByType = new HashMap<String, BootstrapStatus>();
+		if (progress != null) {
+			for (BootstrapProgress p : progress) {
+				statusByType.put(p.getResourceType(), p.getStatus());
+				types.add(new TypeStatus(p));
+			}
+		}
+		boolean complete = expectedResourceTypes != null && !expectedResourceTypes.isEmpty();
+		if (complete) {
+			for (String expected : expectedResourceTypes) {
+				if (statusByType.get(expected) != BootstrapStatus.COMPLETED) {
 					complete = false;
 				}
-				types.add(new TypeStatus(p));
+				if (!statusByType.containsKey(expected)) {
+					BootstrapProgress missing = new BootstrapProgress(expected);
+					types.add(new TypeStatus(missing));
+					statusByType.put(expected, missing.getStatus());
+				}
 			}
 		}
 		return new BootstrapStatusReport(complete, types);
 	}
 
-	/** True only when every tracked resource type has finished — i.e. the deployment is fully indexed. */
+	/** True only when every expected resource type has finished — i.e. the deployment is fully indexed. */
 	public boolean isComplete() {
 		return complete;
 	}

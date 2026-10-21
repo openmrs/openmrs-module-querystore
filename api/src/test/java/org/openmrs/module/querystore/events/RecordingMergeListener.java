@@ -118,6 +118,11 @@ public class RecordingMergeListener extends CoreServiceEventListener {
 		}
 
 		@Override
+		public boolean isPatientProjectionIncomplete(String patientUuid) {
+			return false;
+		}
+
+		@Override
 		public List<BootstrapProgress> getStatus() {
 			return Collections.emptyList();
 		}

@@ -51,6 +51,13 @@ public class QueryStoreServiceAuthorizationTest extends BaseModuleContextSensiti
 		Context.getService(QueryStoreService.class).search("fever", 10);
 	}
 
+	@Test(expected = APIAuthenticationException.class)
+	public void getPatientChartRead_shouldEnforceGetPatientsPrivilege() {
+		dropPrivileges();
+		Context.getService(QueryStoreService.class)
+		        .getPatientChartRead("00000000-0000-0000-0000-000000000000");
+	}
+
 	/**
 	 * BaseModuleContextSensitiveTest authenticates as a super-user in setUp; drop that so the
 	 * {@code @Authorized(GET_PATIENTS)} gate is exercised by a caller that lacks the privilege.

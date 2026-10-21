@@ -29,14 +29,19 @@ import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.HealthStatus;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapProgress;
+import org.openmrs.module.querystore.bootstrap.BootstrapStatus;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.openmrs.api.context.Context;
+import org.openmrs.api.context.UserContext;
+import org.openmrs.util.PrivilegeConstants;
 
 public class QueryStoreServiceImplTest {
 
@@ -171,6 +176,91 @@ public class QueryStoreServiceImplTest {
 		// A backend (or test double) that doesn't implement countByType degrades to -1 ("unknown"), so
 		// drift detection reports "not computable" for that tier rather than a false zero.
 		assertEquals(-1L, new FakeBackendStore(false).countByType("obs"));
+	}
+
+	/**
+	 * Decision 14 point 4: no record a core API would refuse. A caller holding Get Patients but not a
+	 * type's own read privilege is refused that type's records by core, so the read path omits them,
+	 * on the full chart and on ranked and cross-patient search alike.
+	 */
+	@Test
+	public void getPatientChartRead_omitsRecordsOfATypeTheCallerCannotReadThroughCore() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Arrays.asList(doc("obs", "obs-1"), doc("condition", "cond-1"),
+		        doc("patient", "patient-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> chart = asCallerWithout(PrivilegeConstants.GET_OBS,
+		        () -> service.getPatientChartRead("patient-uuid").getDocuments());
+
+		assertEquals(Arrays.asList("cond-1", "patient-1"), uuids(chart));
+	}
+
+	@Test
+	public void searchByPatient_omitsRankedRecordsOfATypeTheCallerCannotReadThroughCore() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.hybridReturn = hits(doc("obs", "obs-1"), doc("condition", "cond-1"), doc("drug_order", "order-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> ranked = asCallerWithout(PrivilegeConstants.GET_CONDITIONS,
+		        () -> service.searchByPatient("patient-uuid", "blood pressure", 10));
+
+		assertEquals(Arrays.asList("obs-1", "order-1"), uuids(ranked));
+	}
+
+	@Test
+	public void search_acrossPatientsOmitsRecordsOfATypeTheCallerCannotReadThroughCore() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.hybridReturn = hits(doc("obs", "obs-1"), doc("encounter", "enc-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> found = asCallerWithout(PrivilegeConstants.GET_ENCOUNTERS,
+		        () -> service.search("blood pressure", 10));
+
+		assertEquals(Collections.singletonList("obs-1"), uuids(found));
+	}
+
+	@Test
+	public void aCallerHoldingEveryTypesPrivilegeReadsEveryRecord() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Arrays.asList(doc("obs", "obs-1"), doc("appointments_appointment", "appt-1"));
+		service.setBackend(backend);
+
+		List<QueryDocument> chart = asCallerWithout("No Such Privilege",
+		        () -> service.getPatientChartRead("patient-uuid").getDocuments());
+
+		assertEquals(Arrays.asList("obs-1", "appt-1"), uuids(chart));
+	}
+
+	private static <T> T asCallerWithout(String deniedPrivilege, java.util.function.Supplier<T> read) {
+		Context.setUserContext(new UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !deniedPrivilege.equals(privilege);
+			}
+		});
+		try {
+			return read.get();
+		}
+		finally {
+			Context.clearUserContext();
+		}
+	}
+
+	private static SearchResult hits(QueryDocument... docs) {
+		List<org.openmrs.module.querystore.backend.Hit> hits = new java.util.ArrayList<>();
+		for (int i = 0; i < docs.length; i++) {
+			hits.add(new org.openmrs.module.querystore.backend.Hit(docs[i], 1.0 - i * 0.1, i + 1));
+		}
+		return new SearchResult(hits);
+	}
+
+	private static List<String> uuids(List<QueryDocument> docs) {
+		List<String> uuids = new java.util.ArrayList<>();
+		for (QueryDocument d : docs) {
+			uuids.add(d.getResourceUuid());
+		}
+		return uuids;
 	}
 
 	private static QueryDocument doc(String resourceType, String resourceUuid) {
@@ -339,6 +429,17 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void completenessAwareChartReadFailsWhenBackendIsUnavailable() {
+		try {
+			service.getPatientChartRead("patient-uuid");
+			fail("expected an explicit failure because completeness cannot be established");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue(expected.getMessage().contains("cannot determine whether the patient chart is complete"));
+		}
+	}
+
+	@Test
 	public void getPatientChart_returnsEmptyForNullPatientUuid() {
 		FakeBackendStore backend = new FakeBackendStore(true);
 		service.setBackend(backend);
@@ -415,6 +516,64 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void getPatientChartRead_marksAFailedColdTouchIncomplete() {
+		// The backfill missed this patient and the lazy projection fails mid-outage. The backend's
+		// read-side truncated bit and the deployment-wide projection state both stay clean, so
+		// without the cold-touch result folded in the caller gets an empty chart that claims to
+		// be complete and cannot tell it from a patient who has no records.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.onEnsureIndexed = uuid -> { throw new RuntimeException("embedder unavailable"); };
+		bootstrap.resourceTypes = Collections.singletonList("obs");
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		bootstrap.status = Collections.singletonList(completed);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		PatientChartRead chart = service.getPatientChartRead("patient-uuid");
+
+		assertTrue(chart.getDocuments().isEmpty());
+		assertTrue("a failed cold touch must be disclosed on the read", chart.isTruncated());
+		assertTrue("the deployment-wide projection state is a different fact and stays as reported",
+		        chart.isProjectionComplete());
+		assertEquals("the read must still run after the failed cold touch", 1, backend.findAllByPatientCount.get());
+	}
+
+	@Test
+	public void getPatientChartRead_keepsReportingATouchThatLeftRecordsOut() {
+		// The first touch projected obs but failed on a condition. The patient now has documents,
+		// so the existence probe alone would read the chart as complete from the second read on,
+		// with the condition still missing. The patient stays cold until a projection completes.
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Collections.singletonList(doc("obs", "obs-1"));
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.incompletePatients.add("patient-uuid");
+		bootstrap.onEnsureIndexed = uuid -> { throw new IllegalStateException("1 type(s) failed"); };
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		PatientChartRead chart = service.getPatientChartRead("patient-uuid");
+
+		assertEquals("the incomplete patient is projected again", 1, bootstrap.ensureIndexedCalls.size());
+		assertTrue("a read after a partial touch must still disclose the gap", chart.isTruncated());
+		assertEquals(1, chart.getDocuments().size());
+	}
+
+	@Test
+	public void searchByPatient_projectsAPatientWhoseTouchLeftRecordsOutAgain() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.incompletePatients.add("patient-uuid");
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		service.searchByPatient("patient-uuid", "weight", 5);
+
+		assertEquals(Collections.singletonList("patient-uuid"), bootstrap.ensureIndexedCalls);
+	}
+
+	@Test
 	public void getPatientChart_bootstrapServiceUnavailable_skipsAutoIndexQuietly() {
 		// No override and no OpenMRS Context: Context.getService throws, the ensureIndexedSafely
 		// catch absorbs the failure, and the chart enumeration still runs against whatever is
@@ -454,7 +613,62 @@ public class QueryStoreServiceImplTest {
 		assertEquals(1, backend.findAllByPatientCount.get());
 	}
 
+	@Test
+	public void getPatientChartRead_marksExistingPartialProjectionIncomplete() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		backend.findAllByPatientReturn = Collections.singletonList(doc("obs", "obs-1"));
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		BootstrapProgress running = new BootstrapProgress("obs");
+		running.setStatus(BootstrapStatus.RUNNING);
+		bootstrap.status = Collections.singletonList(running);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		PatientChartRead chart = service.getPatientChartRead("patient-uuid");
+
+		assertEquals(1, chart.getDocuments().size());
+		assertFalse("a fully paged partial projection is not a complete patient ledger",
+		        chart.isProjectionComplete());
+	}
+
+	@Test
+	public void getPatientChartRead_marksCompletedProjectionComplete() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.resourceTypes = Collections.singletonList("obs");
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		bootstrap.status = Collections.singletonList(completed);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		assertTrue(service.getPatientChartRead("patient-uuid").isProjectionComplete());
+	}
+
+	@Test
+	public void getPatientChartRead_doesNotReportCompleteWhenAnExpectedTypeHasNoStatusRow() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.resourceTypes = Arrays.asList("obs", "condition");
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		bootstrap.status = Collections.singletonList(completed);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		assertFalse("a bootstrap interrupted before condition starts is not complete",
+		        service.getPatientChartRead("patient-uuid").isProjectionComplete());
+	}
+
 	// ---------- query-embedding cache ----------
+
+	@Test
+	public void chartRead_requiresExplicitProjectionCompletenessEvidence() {
+		assertFalse(new PatientChartRead(Collections.<QueryDocument>emptyList(), false).isProjectionComplete());
+		assertFalse(PatientChartRead.complete(Collections.<QueryDocument>emptyList()).isProjectionComplete());
+		assertFalse(service.getPatientChartRead(null).isProjectionComplete());
+		assertTrue(new PatientChartRead(Collections.<QueryDocument>emptyList(), false, true).isProjectionComplete());
+	}
 
 	@Test
 	public void searchByPatient_repeatedQuery_reusesCachedEmbedding() {
@@ -571,7 +785,8 @@ public class QueryStoreServiceImplTest {
 		}
 		@Override public SearchResult bm25(SearchRequest req) { bm25Count.incrementAndGet(); return SearchResult.empty(); }
 		@Override public SearchResult knn(SearchRequest req) { knnCount.incrementAndGet(); return SearchResult.empty(); }
-		@Override public SearchResult hybrid(SearchRequest req) { hybridCount.incrementAndGet(); return SearchResult.empty(); }
+		SearchResult hybridReturn = SearchResult.empty();
+		@Override public SearchResult hybrid(SearchRequest req) { hybridCount.incrementAndGet(); return hybridReturn; }
 		// Non-null capabilities even though this fake currently overrides hybrid(): the
 		// BackendStore.hybrid default-method (post-Decision-3 SPI reshape) dereferences
 		// capabilities().supportsKnn(), so a future test that forgets to override hybrid()
@@ -610,11 +825,17 @@ public class QueryStoreServiceImplTest {
 		final java.util.List<String> ensureIndexedCalls = new java.util.ArrayList<>();
 
 		java.util.function.Consumer<String> onEnsureIndexed;
+		List<BootstrapProgress> status = Collections.emptyList();
+		List<String> resourceTypes = Collections.emptyList();
+		final java.util.Set<String> incompletePatients = new java.util.HashSet<>();
 
+		@Override public boolean isPatientProjectionIncomplete(String patientUuid) {
+			return incompletePatients.contains(patientUuid);
+		}
 		@Override public void bootstrap() { }
 		@Override public void bootstrap(String resourceType) { }
 		@Override public void resyncType(String resourceType) { }
-		@Override public List<String> getResourceTypeNames() { return Collections.emptyList(); }
+		@Override public List<String> getResourceTypeNames() { return resourceTypes; }
 		@Override public void ensureIndexed(String patientUuid) {
 			ensureIndexedCalls.add(patientUuid);
 			if (onEnsureIndexed != null) {
@@ -622,7 +843,7 @@ public class QueryStoreServiceImplTest {
 			}
 		}
 		@Override public void reindexPatient(String patientUuid) { }
-		@Override public List<BootstrapProgress> getStatus() { return Collections.emptyList(); }
+		@Override public List<BootstrapProgress> getStatus() { return status; }
 		@Override public BootstrapProgress getStatus(String resourceType) { return null; }
 		@Override public org.openmrs.module.querystore.bootstrap.DriftReport getDrift() { return null; }
 		@Override public void onStartup() { }
