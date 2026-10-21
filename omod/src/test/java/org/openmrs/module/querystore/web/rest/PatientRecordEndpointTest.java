@@ -727,6 +727,25 @@ public class PatientRecordEndpointTest {
 	}
 
 	@Test
+	public void contextSliceIdentityTellsANumberFromItsStringForm() {
+		// The client receives different JSON for 140.0 and "140.0", so the two must not share a sliceId:
+		// the slice id uses the chart fingerprint's canonical form, which keeps a scalar's kind.
+		QueryDocument numeric = doc("obs", "w-1", LocalDate.of(2026, 1, 1), "Weight");
+		numeric.putMetadata("value", Double.valueOf(140.0));
+		QueryDocument textual = doc("obs", "w-1", LocalDate.of(2026, 1, 1), "Weight");
+		textual.putMetadata("value", "140.0");
+
+		Object numericId = PatientRecordView.contextPage(new org.openmrs.module.querystore.model.ContextSlice(
+		        Arrays.asList(new org.openmrs.module.querystore.model.ContextSliceRecord(numeric,
+		                org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)), 1, false), 0, 1).get("sliceId");
+		Object textualId = PatientRecordView.contextPage(new org.openmrs.module.querystore.model.ContextSlice(
+		        Arrays.asList(new org.openmrs.module.querystore.model.ContextSliceRecord(textual,
+		                org.openmrs.module.querystore.QueryStoreConstants.TIER_TYPED)), 1, false), 0, 1).get("sliceId");
+
+		assertNotEquals(numericId, textualId);
+	}
+
+	@Test
 	public void contextSliceIdentityChangesWhenSimilarityRanksChange() {
 		QueryDocument first = doc("obs", "s-1", LocalDate.of(2025, 1, 1), "First semantic hit");
 		QueryDocument second = doc("obs", "s-2", LocalDate.of(2024, 1, 1), "Second semantic hit");
