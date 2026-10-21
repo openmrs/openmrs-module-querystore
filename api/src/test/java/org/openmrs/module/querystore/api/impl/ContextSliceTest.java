@@ -850,8 +850,9 @@ public class ContextSliceTest {
 
 	@Test
 	public void similarityLeg_preprocessesTheQuestion_ownedByTheRetrievalStore() {
-		// Retrieval-quality preprocessing (lab-panel expansion only, natural language preserved)
-		// runs HERE, at the owner of the index and embedder — callers send the raw question.
+		// Retrieval-quality preprocessing (the patient left out, lab panels expanded, natural language
+		// preserved) runs HERE on every slice, at the owner of the index and embedder — callers send
+		// the raw question.
 		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
 
 		service.getContextSlice(PATIENT, "results of the last BMP?", request);
