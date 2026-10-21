@@ -6,7 +6,7 @@ rejected`, `anthropic-ratelimit-unified-reset: <epoch>` and `x-should-retry: fal
 and with the text `STUB-OK` after it. In agent mode (`STUB_MODE=agent`) it serves the FIRST request
 before any limit, with a call to the `Agent` tool, so the limit then meets the agent's own request.
 
-Three drivers, each writing its case to `<case>/`:
+Four drivers, each writing its case to `<case>/`:
 - `run.sh <case> <seconds to reset> [env…]` — one `claude -p --output-format text` in a clean
   environment (`env -i`, a throwaway `HOME`, a dummy API key, `ANTHROPIC_BASE_URL` at the stub).
   `meta` holds the launch, reset and end as epoch seconds, the exit code and the `claude --version`
@@ -16,6 +16,9 @@ Three drivers, each writing its case to `<case>/`:
   in `run.sh`, and `RUN_TIMEOUT` (default 400) for the seconds `timeout` allows the session.
 - `drive.py` — `pool-run`'s real `Session` (loaded read-only from `.claude/pipeline/pool-run`) driven
   against the stub; `result.json` holds its verdict, `session.jsonl` its stream.
+- `hooks-probe.sh` — as `run.sh`, with stdin from `/dev/null`, and with a `Stop` and a `StopFailure`
+  hook in the throwaway `HOME`'s `settings.json`, each appending its name and the JSON it was handed to
+  `hooks.log`.
 
 `+Ns` below is seconds from launch: a request's `t` in `requests.jsonl` less `START` in `meta` (or
 `start` in `result.json`).
@@ -34,6 +37,9 @@ Three drivers, each writing its case to `<case>/`:
 | agent-stall-20s (`stream.sh`, `STUB_MODE=agent`) | `CLAUDE_CODE_RETRY_WATCHDOG=1`, `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS=20000` | +100s | the control: the background agent was reported `failed`, "Agent stalled: no progress for 20s (stream watchdog did not recover)", at +21s, and sent no request after its first; the main thread waited on, 200 at +100.0s, result `success` |
 | agent-stall-45s (`stream.sh`, `STUB_MODE=agent`) | the same, `…_STALL_TIMEOUT_MS=45000` | +100s | the agent waited it out: its request and the main thread's 200 at +100.0s, the agent reported `completed` ("STUB-OK") at +100s |
 | agent-stall-default (`stream.sh`, `STUB_MODE=agent`, `RUN_TIMEOUT=900`) | `CLAUDE_CODE_RETRY_WATCHDOG=1` alone, so the stall timeout is its default, 600s | +660s | the agent waited past the default: 429 at +1.2s, 200 at +660.0s, reported `completed` ("STUB-OK") at +660s; 23 `api_retry` lines, one every 30s after the first second |
+| hooks-control (`hooks-probe.sh`) | none | already passed | one request, 200 at +0.5s; `STUB-OK`, exit 0; `Stop` ran, `StopFailure` did not |
+| hooks-limit (`hooks-probe.sh`) | none | +120s | one request, 429 at +0.6s; the API error, exit 1; `StopFailure` ran, with `"error": "rate_limit"`, and `Stop` did not |
+| hooks-watchdog-on (`hooks-probe.sh`) | `CLAUDE_CODE_RETRY_WATCHDOG=1` | +20s | 429 at +0.5s and +19.2s, 200 at +20.4s; `STUB-OK`, exit 0; `Stop` ran, `StopFailure` did not |
 | pool-timeout (`drive.py`) | the same, both watchdog variables | +100s | quiet window 45s, timeout 60s: three `api_retry` lines, never quiet for 45s; `killed_for` "exceeded the ticket timeout of 1m00s", `paused_for` null, `rate_limit` null |
 | pool-outlasts (`drive.py`) | the same | +100s | quiet window 45s, timeout 200s: five `api_retry` lines; 429 at +0.5s and +99.7s, 200 at +100.9s; exit 0 at 101s, never paused or killed |
 
@@ -45,6 +51,10 @@ here; its `cli.js` never names the variable) setting it changes nothing. A headl
 this way writes a stream line every 30s and no `rate_limit_event`, so `pool-run`'s `Session` neither
 goes quiet nor learns of the limit: it cannot suspend the session, and its ticket timeout is what
 ends it.
+
+A turn the limit ends runs the `StopFailure` hooks and not the `Stop` ones (hooks-limit), so a gate,
+which is a `Stop` hook, never sees it; under the watchdog the same limit ends nothing, and the turn
+that ends after the wait runs `Stop` as a normal one does (hooks-watchdog-on, against the control).
 
 The harness reports a background agent `failed` as stalled once it has gone
 `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress; unset, the 2.1.306 binary takes the larger

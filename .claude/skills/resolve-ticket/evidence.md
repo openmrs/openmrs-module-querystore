@@ -185,7 +185,9 @@ ended the run at once. With it the request slept until the reset the stub named,
 run finished normally, and in the run that had spawned an agent first, the agent's requests did the
 same. A reset beyond the cap was refused at once, and `TRUE` counted as on. The controls: the stub
 serving from the start (one request, exit 0), and the plain and the agent limit case run again
-without the variable. The artifact names what this leaves open: a real limit under a subscription
+without the variable. With a `Stop` and a `StopFailure` hook configured, the turn the stub's limit
+ended ran `StopFailure` alone, with `"error": "rate_limit"`; a normal end, and the end of a turn that
+had waited under the variable, ran `Stop` alone. The artifact names what this leaves open: a real limit under a subscription
 login, an interactive session, a foreground agent, and a wait of hours.
 
 **Why the check reads the version too.** Claude Code 2.1.42, which has no watchdog, ended the stub's
