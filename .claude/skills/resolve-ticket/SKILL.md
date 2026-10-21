@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready (a private ticket's stays a draft). Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.27.1
+version: 0.28.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -246,6 +246,13 @@ retyped. `pr-harden`'s **State** section has the rest of the subcommands.
 `CLAUDE.md` requires it, and this is where the run is most often lost: the ticket names a symptom and
 the plan is where you decide whether you have found the cause. Read the relevant code first.
 
+**Start from the plan a `--plan-only` run left in this worktree, if there is one.** If the directory
+`git rev-parse --path-format=absolute --git-dir` prints holds a `resolve-ticket-plan.md` whose first
+line names this ticket, that plan has already survived Step 3: read it instead of planning afresh,
+revise it only for what the user asks, for comments Step 1 read that are newer than it, and for what
+`git log <its base>..origin/<default>` has added since, and carry its assumptions into the report.
+Step 3 refutes it again only if this step changed it, and the report says the plan was carried over.
+
 Delegate the *searching* only when the question is **broad and of unknown shape** — "where does X
 live, across conventions I cannot guess", "every call site of Y". When it is narrow and the target is
 named — what does this class expose, where is this global property read — grep it yourself.
@@ -355,6 +362,12 @@ search before adopting the design it implies, rather than from a grep of the fil
 It binds the RUN and not the gate, because the gate is read-only by instruction above and a
 call-site count from the compiler means changing a signature and building.
 
+**Save the plan the gate passed before `--plan-only` ends**, as `resolve-ticket-plan.md` in the
+directory `git rev-parse --path-format=absolute --git-dir` prints, its first line
+`ticket: <number-or-key> · written <UTC time> · base <sha>`. That is the worktree's own git
+directory, which nothing commits, pushes or mirrors and which goes with the worktree, and the full
+run started there begins from it (Step 2).
+
 **`--plan-only` ends here**, and ending means clearing the entry this run wrote — the whole entry for
 this repo, not merely its `awaiting` list — so the next turn in this directory is ungated:
 
@@ -363,7 +376,7 @@ this repo, not merely its `awaiting` list — so the next turn in this directory
 ```
 
 Then report: the plan, every assumption taken, what the gate checked and objected to, and the
-worktree Step 1 made, where the full run can start. A
+worktree Step 1 made, where the full run can start from that plan. A
 `--plan-only` report is not a partial version of the full one — it is complete for what it covers,
 and it says plainly that no code was written.
 

@@ -182,6 +182,16 @@ Either way the judgement stays here. Then write down:
   record it here; do not stop to ask. This list goes into the final report verbatim, which is what
   makes an unattended run auditable rather than merely finished.
 
+*Added 0.28.0 — the rule it supports:* “Start from the plan a `--plan-only` run left in this worktree, if there is one.”
+
+On 2026-10-21 a `--plan-only` run's plan converged on the refutation gate's second pass, after the
+first had raised two blocking objections, and the full run had no way to reach it: Step 2 always
+wrote a fresh plan, so the run would have planned and been refuted again from nothing, free to
+reintroduce what the first pass caught, unless the owner pointed it at the old plan by hand. The
+owner asked for the full run to pick it up itself. The run had saved a copy beside its run record on
+its own initiative, but a top-level file in `~/.claude/skill-lessons/` is what `skill-retro` reads
+as a record and mirrors into the public repo, so the plan lives in the worktree's git directory.
+
 ## Step 3 — Refute the plan, before any code
 
 *Cut down, B-04 — the rule it supports:* “One fresh subagent, one pass, read-only. Its only job is to try to break the plan.”
@@ -309,6 +319,14 @@ citing three existing tests, and in doing so named the answer — the original c
 grounds. Two blocking objections, no deadlock, and a third pass would have re-gated a settled
 question. Four false justifications died before any code existed, one of them on its way into a PR
 body.
+
+*Added 0.28.0 — the rule it supports:* “Save the plan the gate passed before `--plan-only` ends”
+
+Measured in a scratch repository on 2026-10-21: from a linked worktree's root and from a
+subdirectory, `git rev-parse --path-format=absolute --git-dir` printed `<main>/.git/worktrees/<name>`,
+and from the main checkout `<main>/.git`. A `resolve-ticket-plan.md` written there left
+`git status --porcelain` empty in the worktree, survived `git branch -m`, `git worktree prune` and
+`git gc`, and went with `git worktree remove`; the Write tool wrote it without a prompt.
 
 ## Step 5 — Test first, then the fix
 

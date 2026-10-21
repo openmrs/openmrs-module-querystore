@@ -28,9 +28,9 @@
       "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     },
     "resolve-ticket": {
-      "from": 7562,
-      "to": 7709,
-      "why": "Step 1 makes the run its own worktree from origin/<default> and enters it before the state entry, wherever the session starts in the repository's main checkout, because the owner asked not to have to remember to make one; the slug names the change, never a ticket key, since the transcript directory is named after the path; Step 4 renames that branch, and a --plan-only report names the worktree for the full run"
+      "from": 7709,
+      "to": 7873,
+      "why": "a --plan-only run saves the plan its gate passed, first line naming the ticket, time and base, in the worktree's git directory, where nothing commits, pushes or mirrors it, and Step 2 of the full run in that worktree starts from it, revising it only for what the user asks, newer comments and new commits on the default branch, with Step 3 refuting it again only if it changed, because the owner asked that the full run not plan again from nothing"
     },
     "pr-review": {
       "from": 8064,
@@ -58,7 +58,7 @@
     "pr-harden/verifier.md": 1736,
     "pr-review": 8172,
     "pr-review/posting.md": 2030,
-    "resolve-ticket": 7709,
+    "resolve-ticket": 7873,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2823,
     "ticket-pool": 5111,
