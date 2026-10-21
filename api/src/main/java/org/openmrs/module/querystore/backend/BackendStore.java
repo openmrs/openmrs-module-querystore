@@ -9,7 +9,10 @@
  */
 package org.openmrs.module.querystore.backend;
 
+import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.openmrs.module.querystore.model.QueryDocument;
 
@@ -85,6 +88,16 @@ public interface BackendStore {
 	 * same result whether the backend was empty or transiently unhealthy.
 	 */
 	boolean existsByPatient(String patientUuid);
+
+	/**
+	 * The stored {@code last_modified} of each given record of {@code resourceType} this backend holds,
+	 * keyed by resource uuid; a record not stored, or stored without one, is absent. Lets a bootstrap
+	 * top-up skip records already indexed at their current version. The default reports none, so a
+	 * backend without an implementation re-projects every record, as before.
+	 */
+	default Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		return Collections.emptyMap();
+	}
 
 	/**
 	 * Returns the number of documents in the per-type store for {@code resourceType}, or {@code -1} if

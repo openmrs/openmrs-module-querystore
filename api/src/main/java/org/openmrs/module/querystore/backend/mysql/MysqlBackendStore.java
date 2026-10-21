@@ -16,11 +16,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -219,6 +221,49 @@ public class MysqlBackendStore implements BackendStore {
 		// document UUID); use the post-hoc total of deletes + per-table failures so callers can
 		// reason about coverage.
 		return new BulkWriteResult(totalDeleted + failures.size(), totalDeleted, failures);
+	}
+
+	@Override
+	public Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		if (resourceUuids.isEmpty() || !allTables().contains(MysqlSchemaManager.tableName(resourceType))) {
+			return Collections.emptyMap();
+		}
+		String table = MysqlSchemaManager.tableName(resourceType);
+		try {
+			return JdbcSupport.inTransaction(sessionFactory, conn -> {
+				Map<String, Instant> found = new HashMap<>();
+				for (List<String> chunk : ListUtils.partition(resourceUuids, BATCH_SIZE)) {
+					StringBuilder sql = new StringBuilder("SELECT resource_uuid, last_modified FROM ").append(table)
+					        .append(" WHERE resource_uuid IN (");
+					for (int i = 0; i < chunk.size(); i++) {
+						sql.append(i == 0 ? "?" : ", ?");
+					}
+					sql.append(')');
+					try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+						for (int i = 0; i < chunk.size(); i++) {
+							ps.setString(i + 1, chunk.get(i));
+						}
+						try (ResultSet rs = ps.executeQuery()) {
+							while (rs.next()) {
+								Timestamp ts = rs.getTimestamp("last_modified", Calendar.getInstance(UTC));
+								if (ts != null) {
+									found.put(rs.getString("resource_uuid"), ts.toInstant());
+								}
+							}
+						}
+					}
+					catch (SQLException e) {
+						log.warn("findLastModified failed for " + resourceType, e);
+						return Collections.<String, Instant> emptyMap();
+					}
+				}
+				return found;
+			});
+		}
+		catch (RuntimeException e) {
+			log.warn("findLastModified could not acquire a session for " + resourceType, e);
+			return Collections.emptyMap();
+		}
 	}
 
 	@Override

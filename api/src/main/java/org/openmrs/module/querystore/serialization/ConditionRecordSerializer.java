@@ -18,10 +18,13 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PREVIOUS_V
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VERIFICATION_STATUS;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.openmrs.CodedOrFreeText;
 import org.openmrs.Concept;
 import org.openmrs.Condition;
+import org.openmrs.api.context.Context;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.util.ConceptNameUtil;
 import org.openmrs.module.querystore.util.DateFormatUtil;
@@ -43,6 +46,19 @@ public class ConditionRecordSerializer extends AbstractRecordSerializer<Conditio
 	@Override
 	public Class<Condition> getSupportedType() {
 		return Condition.class;
+	}
+
+	/** The conditions core saved with {@code previousVersion} pointing at the voided one. */
+	@Override
+	public List<Condition> replacementsOf(Condition voided) {
+		List<Condition> replacements = new ArrayList<>();
+		for (Condition candidate : Context.getConditionService().getAllConditions(voided.getPatient())) {
+			Condition previous = candidate.getPreviousVersion();
+			if (previous != null && voided.getUuid().equals(previous.getUuid())) {
+				replacements.add(candidate);
+			}
+		}
+		return replacements;
 	}
 
 	@Override
