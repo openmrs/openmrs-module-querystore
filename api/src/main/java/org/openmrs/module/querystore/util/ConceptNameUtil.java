@@ -48,9 +48,6 @@ public final class ConceptNameUtil {
 	 */
 	public static final int MAX_MAPPING_NAMES = 10;
 
-	/** Cap on {@link #getMappingCodes}, the same as on names: one per mapping is the norm. */
-	public static final int MAX_MAPPING_CODES = 10;
-
 	private ConceptNameUtil() {
 	}
 
@@ -252,8 +249,10 @@ public final class ConceptNameUtil {
 	 * name written as a hyphen), so a question naming a code can match the record
 	 * exactly (ADR Decision 17 §2). A code is kept whether or not its term carries a name: SNOMED
 	 * terms on demo deployments carry codes alone. Retired terms, terms without a source, and blank
-	 * sources or codes are skipped; the result is de-duplicated, sorted and capped at
-	 * {@link #MAX_MAPPING_CODES}. Not embedded, as {@link #getMappingNames} is not.
+	 * sources or codes are skipped; the result is de-duplicated and sorted, and not capped: only exact
+	 * matching reads codes, so the index-size reason for capping names does not carry over, and an
+	 * alphabetical cut cost a concept with many mappings its later-sorting codes (Cough's SNOMED CT
+	 * code, behind twelve others). Not embedded, as {@link #getMappingNames} is not.
 	 */
 	public static List<String> getMappingCodes(Concept concept) {
 		if (concept == null || concept.getConceptMappings() == null
@@ -275,14 +274,7 @@ public final class ConceptNameUtil {
 			// hyphen: CIEL's "SNOMED CT" is stored, and matched, as SNOMED-CT.
 			sorted.add(source.trim().replaceAll("\\s+", "-") + ":" + code.trim());
 		}
-		List<String> result = new ArrayList<>(Math.min(sorted.size(), MAX_MAPPING_CODES));
-		for (String c : sorted) {
-			if (result.size() >= MAX_MAPPING_CODES) {
-				break;
-			}
-			result.add(c);
-		}
-		return result;
+		return new ArrayList<>(sorted);
 	}
 
 	private static Locale resolveLocale() {
