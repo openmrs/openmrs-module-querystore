@@ -52,8 +52,8 @@ public class ConditionEditProjectionTest extends BaseModuleContextSensitiveTest 
 		List<Runnable> afterCommit = new ArrayList<>();
 		AfterCommitDispatcher deferred = new AfterCommitDispatcher(new SyncExecutor()) {
 			@Override
-			public void dispatch(Runnable task) {
-				afterCommit.add(task);
+			public void dispatchPrepared(java.util.function.Supplier<Runnable> prepare) {
+				afterCommit.add(() -> prepare.get().run());
 			}
 		};
 		condition.setClinicalStatus(ConditionClinicalStatus.INACTIVE);

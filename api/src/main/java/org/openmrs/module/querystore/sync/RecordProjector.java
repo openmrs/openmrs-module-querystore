@@ -75,33 +75,6 @@ public final class RecordProjector {
 		}
 	}
 
-	/**
-	 * The save voided the node its event carried: delete its document (Decision 10) and index whatever
-	 * the save wrote in its place ({@link ClinicalRecordSerializer#replacementsOf}), which no event of
-	 * its own will announce.
-	 */
-	private static <T extends BaseOpenmrsData> void replaceVoided(ClinicalRecordSerializer<T> serializer, T node,
-	        RecordIndexer indexer) {
-		String resourceType = serializer.getResourceType();
-		try {
-			indexer.delete(resourceType, node.getUuid());
-		}
-		catch (RuntimeException e) {
-			log.warn("Skipping delete for " + resourceType + "/" + node.getUuid() + " due to failure", e);
-		}
-		try {
-			for (T replacement : serializer.replacementsOf(node)) {
-				QueryDocument doc = serializer.serialize(replacement);
-				if (doc != null) {
-					indexer.index(doc);
-				}
-			}
-		}
-		catch (RuntimeException e) {
-			log.warn("Skipping the replacement of " + resourceType + "/" + node.getUuid() + " due to failure", e);
-		}
-	}
-
 	public static <T extends BaseOpenmrsData> void project(ClinicalRecordSerializer<T> serializer, T root,
 	        boolean purge, RecordIndexer indexer, AfterCommitDispatcher dispatcher) {
 		List<T> tree = serializer.collectTree(root);
@@ -126,44 +99,84 @@ public final class RecordProjector {
 			return;
 		}
 		String resourceType = serializer.getResourceType();
-		dispatcher.dispatch(() -> {
-			// Per-entity failure isolation: a single poison document (e.g., embedder throws on a
-			// pathological text) must not skip its sibling members. The dispatcher's outer guard
-			// remains as a last-resort catch for anything that escapes here.
+		dispatcher.dispatchPrepared(() -> {
+			// On the committing thread, right after the commit: the documents of the committed state.
+			// The pool worker that embeds and writes runs later, when the same instances may already
+			// carry a change a later transaction made and rolled back, so it reads no entity.
+			List<QueryDocument> committed = new ArrayList<>(toIndex.size());
+			List<String> voided = new ArrayList<>();
+			List<QueryDocument> replacements = new ArrayList<>();
 			for (int i = 0; i < toIndex.size(); i++) {
 				T node = indexedNodes.get(i);
 				QueryDocument doc = committedDocument(serializer, node, toIndex.get(i));
-				if (doc == null) {
-					if (Boolean.TRUE.equals(node.getVoided())) {
-						replaceVoided(serializer, node, indexer);
+				if (doc != null) {
+					committed.add(doc);
+				} else if (Boolean.TRUE.equals(node.getVoided())) {
+					// The save voided the node its event carried: its document goes (Decision 10) and
+					// whatever the save wrote in its place is indexed, which no event of its own announces.
+					voided.add(node.getUuid());
+					try {
+						for (T replacement : serializer.replacementsOf(node)) {
+							QueryDocument replacementDoc = serializer.serialize(replacement);
+							if (replacementDoc != null) {
+								replacements.add(replacementDoc);
+							}
+						}
 					}
-					continue;
-				}
-				try {
-					indexer.index(doc);
-				}
-				catch (RuntimeException e) {
-					log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
-					        + " due to failure", e);
+					catch (RuntimeException e) {
+						log.warn("Skipping the replacement of " + resourceType + "/" + node.getUuid()
+						        + " due to failure", e);
+					}
 				}
 			}
-			for (String uuid : toDelete) {
-				try {
-					indexer.delete(resourceType, uuid);
+			return () -> {
+				// Per-entity failure isolation: a single poison document (e.g., embedder throws on a
+				// pathological text) must not skip its sibling members. The dispatcher's outer guard
+				// remains as a last-resort catch for anything that escapes here.
+				for (QueryDocument doc : committed) {
+					try {
+						indexer.index(doc);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
+						        + " due to failure", e);
+					}
 				}
-				catch (RuntimeException e) {
-					log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+				for (String uuid : voided) {
+					try {
+						indexer.delete(resourceType, uuid);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+					}
 				}
-			}
-			if (bulkDeletePatientUuid != null) {
-				try {
-					indexer.bulkDeleteByPatient(bulkDeletePatientUuid);
+				for (QueryDocument doc : replacements) {
+					try {
+						indexer.index(doc);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
+						        + " due to failure", e);
+					}
 				}
-				catch (RuntimeException e) {
-					log.warn("Skipping bulk-delete-by-patient for " + bulkDeletePatientUuid
-					        + " due to failure", e);
+				for (String uuid : toDelete) {
+					try {
+						indexer.delete(resourceType, uuid);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+					}
 				}
-			}
+				if (bulkDeletePatientUuid != null) {
+					try {
+						indexer.bulkDeleteByPatient(bulkDeletePatientUuid);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping bulk-delete-by-patient for " + bulkDeletePatientUuid
+						        + " due to failure", e);
+					}
+				}
+			};
 		});
 	}
 }
