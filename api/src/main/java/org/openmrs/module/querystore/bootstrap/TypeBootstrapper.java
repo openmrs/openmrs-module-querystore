@@ -180,10 +180,10 @@ public abstract class TypeBootstrapper<T> {
 				break;
 			}
 			T last = page.get(page.size() - 1);
-			if (cursor != null && cursor.equals(getDateChanged(last))
-			        && java.util.Objects.equals(cursorUuid, getUuid(last))) {
-				// The page did not advance past the cursor: rows a failed fetch left half-loaded in the
-				// session come back unhydrated (null dates), and walking on would loop forever.
+			if (cursor != null && !advancesPast(getDateChanged(last), getUuid(last), cursor, cursorUuid)) {
+				// The page did not end past the cursor in keyset order: rows a failed fetch left half-loaded
+				// in the session come back unhydrated (epoch dates), and walking on would loop forever, on
+				// the same page or between pages when such a row ends a later one.
 				throw new IllegalStateException("Per-patient fetch of " + getResourceType() + " for patient "
 				        + patientUuid + " did not advance past " + cursor + "/" + cursorUuid);
 			}
@@ -192,6 +192,12 @@ public abstract class TypeBootstrapper<T> {
 			cursorUuid = getUuid(last);
 		}
 		return failed;
+	}
+
+	/** Whether (date, uuid) lies strictly after the cursor in the keyset order pages are fetched in. */
+	private static boolean advancesPast(Instant date, String uuid, Instant cursor, String cursorUuid) {
+		int byDate = date.compareTo(cursor);
+		return byDate > 0 || (byDate == 0 && uuid != null && cursorUuid != null && uuid.compareTo(cursorUuid) > 0);
 	}
 
 	/**
