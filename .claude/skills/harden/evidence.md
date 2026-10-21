@@ -143,6 +143,14 @@ equivalent, because the sibling omod module carries the same package path.
   report; `pr-harden`'s **State** section owns how a delegated agent is collected, and why a
   poll costs more than it returns.
 
+*Added 0.43.3 — the rule it supports:* “and which `pr-harden`'s **State** extends once where a usage-limit wait can outlast it”
+
+Under `CLAUDE_CODE_RETRY_WATCHDOG`, which `resolve-ticket`'s Step 1 recommends through an alias, an
+agent waiting at a usage limit is alive and is not reported stalled, so the bound can pass with it
+still working. `pr-harden`'s **State** has its await recorded again, once, rather than its phase
+re-dispatched, and its evidence (0.41.0) carries the measurement. This sentence points there, so a
+`/harden` cycle does not read the bound alone as the agent's death.
+
 *Cut down, H1-08 — the rule it supports:* “Commit before anything mutates the tree — the cycle's work before spawning them, and your own measurement probes too — and do not edit the tree while they run.”
 
 - **Commit before anything mutates the tree — the cycle's work before spawning them, and your own

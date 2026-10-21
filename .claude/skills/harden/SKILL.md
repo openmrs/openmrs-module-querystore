@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.43.2
+version: 0.43.3
 ---
 
 # Harden
@@ -119,7 +119,8 @@ One polish pass, run after Phase 1 has converged. A second one happens only wher
      from a file's size or mtime. Inside the gate's allow a terminal outcome is one the harness
      reports, and it is the signal *Record the verdict so the gate can enforce it* has you clear the
      `awaiting` entry on; past that allow what decides is the bound, which is a clock rather than a
-     liveness check. Where you need progress sooner, watch something the agent's WORK touches — the
+     liveness check, and which `pr-harden`'s **State** extends once where a usage-limit wait can
+     outlast it. Where you need progress sooner, watch something the agent's WORK touches — the
      worktree's own `target/`, which presupposes isolation.
      **And never read that file for the RESULT either** — it is the agent's transcript, not its
      report; `pr-harden`'s **State** section owns how a delegated agent is collected, and why a poll

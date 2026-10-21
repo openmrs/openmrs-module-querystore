@@ -974,6 +974,28 @@ for another 36 minutes with nothing whatsoever running. The harness reports the 
 excuse for waiting out a timeout. The one-hour bound and the no-`since`-reads-as-dead rule are
 backstops, not the mechanism.
 
+*Added 0.41.0 — the rule it supports:* “And where `CLAUDE_CODE_RETRY_WATCHDOG` is on, a live agent can outlast the bound.”
+
+`resolve-ticket` 0.29.0's Step 1 recommends that variable through an alias, which reaches every
+session its user starts, a standalone `/pr-harden` or `/harden` among them. Measured against a stub
+that answers like a claude.ai limit
+(`~/.claude/skill-lessons/artifacts/2026-10-21-retry-watchdog-limit/`), a request at the limit waits
+under it for the reset, and in a run that had spawned a background agent first, the agent's requests
+waited the same way. The harness reports a background agent stalled once it has gone
+`CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress, 600 s unset in the 2.1.306 binary, and a
+waiting agent's retries, every 30 s, kept it from that: at 20 s, the control, the waiting agent was
+reported `Agent stalled: no progress for 20s` at +21 s; at 45 s it waited out a 100 s limit and
+completed; at the default it waited out an 11-minute one and completed. So an agent can be alive and
+unreported past the gates' hour, and the gate then blocks the yield as a run that stopped (the
+artifact's `gate-await-ttl.sh`, an entry in phase `building`: allowed at 600 s, blocked at 7200 s).
+Re-dispatching the phase there starts a second agent in the worktree the first is still working in;
+recorded again, the await gives the first another hour to report. Once, because an agent that hung
+where the harness cannot see it would otherwise be re-recorded for as long as the run lasted, and
+the bound is the backstop for exactly that agent. Only where the variable is on, because without it
+the stub's first 429 ended every run at once, the one with an agent included. The rule moved here
+from `resolve-ticket`'s Step 1, which now points to it. No run has met it yet: it comes from the
+measurement, not an incident.
+
 *Cut down, R4-14 — the rule it supports:* “And this session must not busy-wait either”
 
 **And this session must not busy-wait either.** *Wait on a CONDITION, never on a clock* is written into

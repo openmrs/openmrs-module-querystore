@@ -8,9 +8,9 @@
       "why": "Step 2 names the linter's new check, a `$` followed by a digit in a SKILL.md, which the Skill tool replaces with an argument when the skill loads: on 2026-10-21 harden's awk `$0` loaded as the first argument word, and a `{print $1}` in resolve-ticket's PRS lookup loaded as `{print --plan-only}`, so the five awk programs now use $NF, $(NF-1) and $(NF-NF)"
     },
     "pr-harden": {
-      "from": 9535,
-      "to": 10532,
-      "why": "Step 0 looks a PR's URL up in the local PRS file, a gh failure being a lookup to retry, to learn it resolves a private ticket the PR no longer names, and adopts one whose key only getJiraIssue reads; a new section, A private ticket's PR, has such a run re-check that before every brief, body edit and push, tell its reviewers and fixers so with the key (their role files carry what follows), count the key with grep -a in what each push publishes and rewrite unpushed commits that carry it, the one amend it allows, report what GitHub already shows, record pairings in a directory it chmods 700, send FINISH's list of what the loop did not implement and a blocking-only reviewer's notes to the report and the run record while still applying a finding that names the body, leave the PR a draft and keep its record local, with a pointer at each site that marks ready or writes to the PR description; and the State section's documented declined command now sits on one line, so pool-test's every-documented-invocation check runs it whole; the pre-push check counts from the merge-base of the PR head it fetches, so an unresolvable ref prints no count rather than 0 and a squash never reverts a moved base, rebuilds and re-verifies after a rewrite that changes a file, reads the title and body raw, and Step 0 records an adopted PR's pairing before any guard can refuse the run and refuses a private PR that is not a draft; the check fetches the PR head itself, since every fetch rewrites FETCH_HEAD, says to read its number rather than chain a push on grep's exit status, and refuses to squash over a merge, Step 0's already-public count joins its parts with && so a failure prints no number, the privacy bullet heads Step 0, and the fixer's brief carries the PR number; a rewrite runs in the same shell call as the check, a merge is made with a message naming no key, a tree-identical rewrite carries its verified sha over, and the already-public read includes comments and reviews; the count is a regex on the key's two halves so KEY_x and hyphenless test names count, the squash is one chained call with its merge test, a merge-blocked squash stops under the override pushing nothing, and the already-public read adds line comments, and before the PR exists the squash runs from the base's merge-base without the merge test, with its message file kept outside the worktree"
+      "from": 10532,
+      "to": 10596,
+      "why": "State says that where CLAUDE_CODE_RETRY_WATCHDOG is on a live agent can outlast the gates' one-hour await bound, since a request at a usage limit waits for the reset, an agent's included, and the harness counts the waiting agent's 30 s retries as progress rather than reporting it stalled (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), so in such a session an await past the hour whose agent has no terminal outcome is recorded again, once, rather than its phase re-dispatched beside the live agent; the rule moves here from resolve-ticket's Step 1 because resolve-ticket's alias reaches a standalone pr-harden or harden too"
     },
     "pr-harden/fixer.md": {
       "from": 1134,
@@ -29,8 +29,8 @@
     },
     "resolve-ticket": {
       "from": 7873,
-      "to": 8087,
-      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn on an API error, which runs StopFailure rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so an interactive run prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in either case and the version reads 2.1.301 (Claude Code) or later, says so at once and carries on, giving the remedy for later sessions as a literal shell alias with a five-hour usage-limit wait cap or the same two variables before pool-run --work, never an export or settings.json env, which the driver's headless sessions inherit and under which a waiting session streams a retry line every 30 s so the driver never sees the limit and its ticket timeout spends an attempt, never a mid-run relaunch; and because a wait can outlast the gates' one-hour await bound, after one an agent the harness has not reported finished, stalled or dead has its await recorded again, once, rather than its phase re-dispatched"
+      "to": 8074,
+      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn on an API error, which runs StopFailure rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so an interactive run prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in either case and the version reads 2.1.301 (Claude Code) or later, says so at once and carries on, giving the remedy for later sessions as a literal shell alias with a five-hour usage-limit wait cap or the same two variables before pool-run --work, never an export or settings.json env, which the driver's headless sessions inherit and under which a waiting session streams a retry line every 30 s so the driver never sees the limit and its ticket timeout spends an attempt, never a mid-run relaunch; and a wait can hold a live agent past the gates' one-hour await bound, which the paragraph's last sentence points to pr-harden's State for"
     },
     "pr-review": {
       "from": 8064,
@@ -51,19 +51,24 @@
       "from": 1612,
       "to": 1633,
       "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 checks for, so the two skills no longer disagree about whether such a session can be carried past a usage limit"
+    },
+    "harden": {
+      "from": 7403,
+      "to": 7416,
+      "why": "the sentence on what decides an agent has stopped says the one-hour bound is extended once where a usage-limit wait can outlast it, pointing to pr-harden's State, since under CLAUDE_CODE_RETRY_WATCHDOG an agent waiting at a limit is alive and unreported past that hour"
     }
   },
   "words": {
-    "harden": 7403,
+    "harden": 7416,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 10532,
+    "pr-harden": 10596,
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
     "pr-review": 8172,
     "pr-review/posting.md": 2030,
-    "resolve-ticket": 8087,
+    "resolve-ticket": 8074,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2823,
     "ticket-pool": 5111,

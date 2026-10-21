@@ -12,7 +12,8 @@ Three drivers, each writing its case to `<case>/`:
   `meta` holds the launch, reset and end as epoch seconds, the exit code and the `claude --version`
   first on the `PATH`; `requests.jsonl` is the stub's log.
 - `stream.sh` — the same, but `-p --output-format stream-json --verbose`, the way `pool-run` starts a
-  session, with each stream line stamped in seconds from launch (`stream.tsv`).
+  session, with each stream line stamped in seconds from launch (`stream.tsv`); `STUB_MODE=agent` as
+  in `run.sh`, and `RUN_TIMEOUT` (default 400) for the seconds `timeout` allows the session.
 - `drive.py` — `pool-run`'s real `Session` (loaded read-only from `.claude/pipeline/pool-run`) driven
   against the stub; `result.json` holds its verdict, `session.jsonl` its stream.
 
@@ -30,6 +31,9 @@ Three drivers, each writing its case to `<case>/`:
 | agent-watchdog-off | none | +40s | tool call served; the agent's request and the main thread's two all 429 by +0.7s; exit 1 at +0.8s |
 | old-cli-watchdog-on | `CLAUDE_CODE_RETRY_WATCHDOG=1`, on Claude Code 2.1.42 (`old-cli-claude.sh`, saved as `claude` in a directory first on `PATH`) | +30s | one request, 429 at +1.9s; "API Error: 429 …", exit 1 at +2.0s: that version has no watchdog, so the variable alone says nothing |
 | stream-watchdog-on (`stream.sh`) | `CLAUDE_CODE_RETRY_WATCHDOG=1` | +75s | `system/api_retry` (`error_status` 429, `error` `rate_limit`) at +0s, +30s and +60s, its `retry_delay_ms` counting down 74156, 44156, 14156; the result at +75s; no `rate_limit_event` line at all |
+| agent-stall-20s (`stream.sh`, `STUB_MODE=agent`) | `CLAUDE_CODE_RETRY_WATCHDOG=1`, `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS=20000` | +100s | the control: the background agent was reported `failed`, "Agent stalled: no progress for 20s (stream watchdog did not recover)", at +21s, and sent no request after its first; the main thread waited on, 200 at +100.0s, result `success` |
+| agent-stall-45s (`stream.sh`, `STUB_MODE=agent`) | the same, `…_STALL_TIMEOUT_MS=45000` | +100s | the agent waited it out: its request and the main thread's 200 at +100.0s, the agent reported `completed` ("STUB-OK") at +100s |
+| agent-stall-default (`stream.sh`, `STUB_MODE=agent`, `RUN_TIMEOUT=900`) | `CLAUDE_CODE_RETRY_WATCHDOG=1` alone, so the stall timeout is its default, 600s | +660s | the agent waited past the default: 429 at +1.2s, 200 at +660.0s, reported `completed` ("STUB-OK") at +660s; 23 `api_retry` lines, one every 30s after the first second |
 | pool-timeout (`drive.py`) | the same, both watchdog variables | +100s | quiet window 45s, timeout 60s: three `api_retry` lines, never quiet for 45s; `killed_for` "exceeded the ticket timeout of 1m00s", `paused_for` null, `rate_limit` null |
 | pool-outlasts (`drive.py`) | the same | +100s | quiet window 45s, timeout 200s: five `api_retry` lines; 429 at +0.5s and +99.7s, 200 at +100.9s; exit 0 at 101s, never paused or killed |
 
@@ -42,6 +46,18 @@ this way writes a stream line every 30s and no `rate_limit_event`, so `pool-run`
 goes quiet nor learns of the limit: it cannot suspend the session, and its ticket timeout is what
 ends it.
 
+The harness reports a background agent `failed` as stalled once it has gone
+`CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress; unset, the 2.1.306 binary takes the larger
+of the stream idle timeout and 300s, plus 300s, which is 600s unless that timeout is raised. In the
+binary each message the agent's query yields re-arms that timer, a few bookkeeping kinds aside, and
+the three agent-stall cases agree with a waiting agent's retry, every 30s, being such a message: a
+timeout under that interval reported the waiting agent stalled, and one over it, the default
+included, let it wait out the limit and complete. So with the watchdog on, an agent at a usage limit
+is neither reported nor dead until the reset. The stub's own stderr, which `stream.sh` leaves on the
+console, printed one `ConnectionResetError` in agent-stall-default while reading a request line, so
+on a connection with no request in flight, which the client reset. The request log has every request
+answered.
+
 `gate-await-ttl.sh` (output in `gate-await-ttl.out`) runs `.claude/hooks/pr-harden-gate.sh` in a
 scratch `HOME` against a resolve-ticket entry in phase `building` whose one await is 600s and then
 7200s old: the first yield is allowed, the second blocked ("resolve-ticket: mid-run, no PR opened yet
@@ -53,7 +69,7 @@ What this does NOT show:
   login. The binary's watchdog branch (`h5() && Mmn(e)`, then `Kfr` reading
   `anthropic-ratelimit-unified-reset`) checks neither, which is a reading of the code, not a run;
 - an interactive session, and what its screen shows while it waits: every case here is `-p`;
-- a wait of hours: the longest here is under two minutes, so whether a long wait is one sleep or
+- a wait of hours: the longest here is eleven minutes, so whether a long wait is one sleep or
   several is not shown, though the stream shows one retry line every 30s while it lasts;
 - a foreground agent: the `Agent` call here ran in the background, the default in this version;
 - any Claude Code version other than 2.1.306 and 2.1.42.

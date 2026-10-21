@@ -75,10 +75,11 @@ set -uo pipefail
 
 STATE="$HOME/.claude/harden-state.json"
 STALE_AFTER=21600   # 6h; a harden run older than this is abandoned, not in flight
-AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long is dead, not running.
+AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long is taken for dead.
                     # Generous on purpose: a Phase 2 agent may run a full root build and drive
                     # mutations. Still far under STALE_AFTER, so a forgotten `awaiting` cannot outlive
-                    # the run that wrote it.
+                    # the run that wrote it. A wait at a usage limit under CLAUDE_CODE_RETRY_WATCHDOG
+                    # can hold a live one past it; pr-harden's State has its await recorded again, once.
 
 allow() { exit 0; }
 

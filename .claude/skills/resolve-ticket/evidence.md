@@ -215,12 +215,10 @@ the way, because the turn does not stop at the limit. It shares the third.
 against a resolve-ticket entry in phase `building` (the artifact's `gate-await-ttl.sh`), the pr gate
 allowed a yield on an await 600 s old and blocked one 7200 s old as a run that had stopped. A wait at
 a limit holds a live agent past that hour: its requests wait like the orchestrator's. So after one,
-an attended run that yields with agents still out meets awaits the gates read as dead, and the
-paragraph's last sentence goes by the harness instead, as `pr-harden`'s **State** already ranks it
-above the bound: an agent it has not reported finished, stalled or dead has its await recorded
-again rather than its phase re-dispatched. Once, because an agent that hung where the harness cannot
-see it would otherwise be re-recorded for as long as the run lasted, and the bound is the backstop
-for exactly that agent.
+an attended run that yields with agents still out meets awaits the gates read as dead. What such an
+await gets is `pr-harden`'s rule, in its **State** section beside the other await rules, because the
+alias reaches a standalone `/pr-harden` or `/harden` as much as this skill; the paragraph's last
+sentence points there, and `pr-harden`'s evidence carries the measurement.
 
 **What the paragraph does not ask for, and why.** A second fresh review, of the paragraph's first
 draft, found the relaunch it then advised unsafe. Exiting a `pool-run --work` session releases its
