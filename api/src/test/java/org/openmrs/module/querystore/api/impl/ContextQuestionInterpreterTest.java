@@ -30,6 +30,9 @@ public class ContextQuestionInterpreterTest {
 		assertTypes("What diagnoses are on the problem list?", "condition", "diagnosis");
 		assertTypes("Show visits and encounters", "visit", "encounter");
 		assertTypes("Which tests were ordered?", "drug_order", "test_order", "referral_order");
+		// The two medication cues ChartSearchAI's router gained in its Decision 180, kept entry for entry.
+		assertTypes("What ART regimen is she on?", "drug_order", "medication_dispense");
+		assertTypes("Is anything she is taking interacting?", "drug_order", "medication_dispense");
 	}
 
 	/** Each false cue pulls whole types into the typed tier, which a budgeted consumer must not
