@@ -188,8 +188,9 @@ without the variable. And Claude Code 2.1.42, which has no watchdog, ended the r
 with the variable set, which is why the check reads the version as well. It reads it from
 `CLAUDE_CODE_EXECPATH`, which the 2.1.306 binary sets in a Bash tool shell to its own
 `process.execPath`, and falls back to the `claude` on the `PATH`. Under an npm install that
-executable is `node`, whose version the check reads as too old, so it errs toward saying so. Its
-floor is 2.1.301, where the cap the remedy names begins.
+executable is `node`, which prints its own version (`v22…`) with no `(Claude Code)` after it, so the
+check asks for that suffix: a bare number compared with 2.1.301 would pass node's. Its floor is
+2.1.301, where the cap the remedy names begins.
 The artifact names what this leaves open: a real limit under a subscription login, an interactive
 session, a foreground agent, and a wait of hours.
 

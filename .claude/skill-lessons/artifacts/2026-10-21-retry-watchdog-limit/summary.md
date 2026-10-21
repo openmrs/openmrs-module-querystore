@@ -19,7 +19,7 @@ stub's own log (`<case>/requests.jsonl`), not off the CLI.
 | watchdog-true | `CLAUDE_CODE_RETRY_WATCHDOG=TRUE` | +20s | 429 at +0.5s, 429 at +19.1s, 200 at +20.3s; exit 0 |
 | agent-watchdog-on | `CLAUDE_CODE_RETRY_WATCHDOG=1` | +40s | tool call served at +0.6s; the agent's first request (2 messages) and the main thread's next (5) both 429 at +0.6/+0.7s, both again at +39.5s, both 200 at +40.5/+40.6s; the main thread then answered the agent's completion notice; exit 0 |
 | agent-watchdog-off | none | +40s | tool call served; the agent's request and the main thread's two all 429 by +0.6s; exit 1 at +0.7s |
-| old-cli-watchdog-on | `CLAUDE_CODE_RETRY_WATCHDOG=1`, run on Claude Code 2.1.42 (`old-cli-claude.sh` first on `PATH`) | +30s | one request, 429 at +1.7s; "API Error: 429 …", exit 1 at +1.8s: that version has no watchdog, so the variable alone says nothing |
+| old-cli-watchdog-on | `CLAUDE_CODE_RETRY_WATCHDOG=1`, run on Claude Code 2.1.42 (`old-cli-claude.sh`, saved as `claude` in a directory first on `PATH`) | +30s | one request, 429 at +1.7s; "API Error: 429 …", exit 1 at +1.8s: that version has no watchdog, so the variable alone says nothing |
 
 So with the watchdog on, a request at a usage limit sleeps until the reset the response names and
 retries, the agent's requests included, and the run ends normally; without it the first 429 ends the

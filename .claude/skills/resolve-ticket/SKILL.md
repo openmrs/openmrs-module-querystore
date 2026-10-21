@@ -204,8 +204,8 @@ started by hand depends on Claude Code's own continue-at-reset, which can be swi
 account and skips Remote Control sessions, resets more than a day out and repeated hits in a row.
 So where `$CLAUDE_PIPELINE_SESSION` is unset, run
 `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"; "${CLAUDE_CODE_EXECPATH:-claude}" --version`, and
-unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second a version from
-2.1.301, say so NOW and carry on; a session
+unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second
+`2.1.301 (Claude Code)` or later, say so NOW and carry on; a session
 `pool-run --work` launched may also have its launcher's nudge (`ticket-pool`'s `pausing.md`). The
 remedy is for the sessions after this one, never a reason to relaunch this one mid-run: start them
 with it on and with `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000`, which from Claude
