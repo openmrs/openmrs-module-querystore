@@ -259,10 +259,15 @@ agent the reset had already resumed. So one carry per launch path: the launcher'
 the alias for a session started by hand. `settings.json`'s `env` is beyond the drop: set there
 alone, the variable still had a session wait out the stub's limit (settings-env-watchdog), and
 Claude Code puts it in every session it starts, so `pool-run`'s preflight refuses to start where
-`~/.claude/settings.json` sets it (`pool-test`'s "limit watchdog settings"); a project's own
-`.claude/settings.json` it does not read. An alias reaches only the sessions a person starts. Run in
-an interactive bash (the artifact's `alias-probe.sh`), the alias started a probe `claude` with both
-variables set and left the shell itself without them.
+`~/.claude/settings.json` sets it, for the driver and for a `--work` launch whose carry is on
+(`pool-test`'s "limit watchdog settings"); a project's own `.claude/settings.json` it does not read.
+A Phase 1 reviewer found the first cut of that refusal also stopped `--claim`, which launches
+nothing, and that it and the `--work` drop read the carry as on with `limit_wait_max_seconds` at 0,
+where the watcher never acts; one reading of it, `work_carry_on`, now serves the watcher, the drop
+and the refusal, and a `--work` session whose carry is off takes the pair only in front of
+`pool-run --work`. An alias reaches only the sessions a person starts. Run in an interactive bash
+(the artifact's `alias-probe.sh`), the alias started a probe `claude` with both variables set and
+left the shell itself without them.
 
 Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
 window, which resets less than five hours after the request that meets it, and refuses any reset

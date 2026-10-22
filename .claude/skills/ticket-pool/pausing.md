@@ -21,8 +21,8 @@ window is waited out and a weekly one is not — and a ticket suspended this way
 nothing with the last reset, which is a session spinning rather than a big ticket. `Session` drops
 `CLAUDE_CODE_RETRY_WATCHDOG` and its cap from every session it starts: one waiting under them
 neither ends nor goes quiet, the only two points at which the driver looks for a limit. Set in
-`~/.claude/settings.json`'s `env` they would still arrive, so `pool-run` refuses to start under
-that; a project's own settings it does not read.
+`~/.claude/settings.json`'s `env` they would still arrive, so the driver refuses to start under
+that, as does `--work` while its carry is on; a project's own settings it does not read.
 
 **A `--work` session is carried past it too, by a third mechanism.** Neither of the other two
 reaches a hand-launched session: Claude Code's own wait belongs to the SESSION and can be gated off
@@ -34,16 +34,18 @@ it acts on: when the window reopens it tells the session to continue, over the l
 session publishes for itself. Three guards stand in front of that, because a wrong nudge is a turn
 injected into a session that was working — the run must be quiet, the ACCOUNT must have refused a
 probe rather than merely be suspected, and the account must then SERVE one again. That last is the
-signal and a reset time is not: the rejected form of the `rate_limit_event` that would carry one
-has never been captured here (all 304 records in the kept streams say `allowed_warning`, because a
+signal and a reset time is not: the rejected form of the `rate_limit_event` that would carry one has
+never been captured here (all 304 records in the kept streams say `allowed_warning`, because a
 rejection ends the run that would log one), so a named window only says when to stop asking early.
 `procStart` and the session id keep a recycled pid from being handed somebody else's resume, and
 both are compared as INSTANTS rather than as strings, because `claude` records its start in UTC and
-`ps` prints local — compared as text they disagree by the machine's offset on any box that is not
-on UTC, which silently refused every nudge the carry ever sent until 2026-09-13. With the carry on,
-the session starts without the watchdog pair, since one idle on a background agent waiting under it
-reads as stopped and would be nudged as if it were, and with `CLAUDE_PIPELINE_CARRY=work`, which
-tells `resolve-ticket`'s Step 1 this carry takes it past a limit.
+`ps` prints local — compared as text they disagree by the machine's offset on any box that is not on
+UTC, which silently refused every nudge the carry ever sent until 2026-09-13. With the carry on —
+`limit_continue_work`, and a `limit_wait_max_seconds` above 0 — the session starts without the
+watchdog pair, since one idle on a background agent waiting under it reads as stopped and would be
+nudged as if it were, and with `CLAUDE_PIPELINE_CARRY=work`, which tells `resolve-ticket`'s Step 1
+this carry takes it past a limit. With it off nothing here carries the session, which then takes the
+pair only in front of `pool-run --work`.
 
 **It only works on sessions this launcher started**, and that is not an accident of packaging. A
 session running `--dangerously-skip-permissions` HOLDS an inbound peer message unless it can

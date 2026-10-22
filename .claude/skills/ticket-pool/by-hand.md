@@ -95,9 +95,11 @@ TICKET rather than the host — `chartsearchai-266` — because the point of mon
 a phone is being able to tell which is which. It applies to `--work` only: the headless driver's
 sessions are not interactive and the flag means nothing to them.
 
-Nothing else about the environment is touched. The session inherits `os.environ` whole, plus the
-three variables the slot adds, so credentials, config and proxy settings reach it exactly as they
-would if you had typed `claude` yourself.
+Nothing else about the environment is touched but the retry watchdog. The session inherits
+`os.environ` whole, plus the three variables the slot adds, so credentials, config and proxy
+settings reach it exactly as they would if you had typed `claude` yourself; while the carry is on it
+starts without `CLAUDE_CODE_RETRY_WATCHDOG` and its cap and with `CLAUDE_PIPELINE_CARRY=work`, which
+`pausing.md` explains.
 
 **Ctrl-C goes to the session, not to the launcher.** It has to be said because it very nearly did not
 work: Ctrl-C reaches the whole foreground process group, so without care `subprocess.run` raises

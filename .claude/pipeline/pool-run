@@ -320,6 +320,14 @@ def retry_watchdog_in_settings() -> bool:
     return value is not None and str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
+def work_carry_on(cfg: dict) -> bool:
+    """Whether `watch_hand_launched` carries a `--work` session past a usage limit at all: only with
+    `ticket.limit_continue_work` on and a `ticket.limit_wait_max_seconds` above 0. The one reading of
+    it, for the watcher, the session's environment and preflight alike."""
+    t = cfg["ticket"]
+    return bool(t.get("limit_continue_work", True)) and int(t.get("limit_wait_max_seconds") or 0) > 0
+
+
 def save_json(path: Path, data) -> None:
     """Write atomically, through a temp path NO other writer can be using.
 
@@ -1456,7 +1464,7 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
     # it is guarded three times over: the session must be quiet, the account must have REFUSED a
     # probe rather than merely be suspected, and the reset must have arrived. A wrong nudge is a
     # turn injected into a session that was working.
-    carry = bool(cfg["ticket"].get("limit_continue_work", True))
+    carry = work_carry_on(cfg)
     cap = int(cfg["ticket"].get("limit_wait_max_seconds") or 0)
     jitter = max(0, int(cfg["ticket"].get("limit_wait_jitter_seconds") or 0))
     # `blocked` is the whole state: the account has refused a request while this session sat quiet.
@@ -1528,7 +1536,7 @@ def watch_hand_launched(cfg: dict, key: str, worktree: Path, started_at: int,
                 report("quiet", f"{key} has written nothing for {hms(silent)} — it may be waiting "
                                 "for you, or wedged", quiet_for_s=silent)
 
-        if not carry or pid is None or cap <= 0:
+        if not carry or pid is None:
             continue
         if blocked:
             # `fire_at` was drawn ONCE, when the window was named. Drawing the margin here instead
@@ -1664,7 +1672,8 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
 
     The session is a NORMAL interactive one. It inherits this terminal, so it looks and behaves
     exactly like starting `claude` by hand; the only difference is the directory it starts in and the
-    three variables it starts with.
+    three variables it starts with, and, while the carry is on (`work_carry_on`), the retry watchdog
+    dropped and `CLAUDE_PIPELINE_CARRY=work` added.
     """
     failure, where, base = prepare_repo(repo, say)
     if failure:
@@ -1754,7 +1763,7 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         # stopped. `CLAUDE_PIPELINE_CARRY` tells resolve-ticket's Step 1 so, which would otherwise
         # warn that nothing carries the run. With the carry off the operator's environment stands.
         env = dict(claim["env"])
-        if cfg["ticket"].get("limit_continue_work", True):
+        if work_carry_on(cfg):
             without_retry_watchdog(env)["CLAUDE_PIPELINE_CARRY"] = "work"
         proc = subprocess.Popen(argv, cwd=str(claim["worktree"]), env=env)
         record_session(claim["slot"].name, proc.pid)
@@ -1920,14 +1929,19 @@ def lint_problems(src: Path, before: str) -> list[str]:
     return found or [f"skill-lint exited {r.returncode}: {(r.stdout + r.stderr).strip()[-300:]}"]
 
 
-def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True) -> list[str]:
+def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True,
+              carried: bool = False) -> list[str]:
     """Returns a list of fatal problems. Non-fatal ones are said and carried.
 
-    `driving` is False for a command that is not about to work tickets itself. It gates exactly one
-    check — the outstanding-claims refusal — because that refusal is about the DRIVER and a
-    hand-launched session sharing standalones. Applied to `--claim` it refuses the second claim, which
+    `driving` is False for a command that is not about to work tickets itself. It gates the
+    outstanding-claims refusal, because that refusal is about the DRIVER and a hand-launched session
+    sharing standalones. Applied to `--claim` it refuses the second claim, which
     is the entire feature: measured by doing it, `--claim 297` after `--claim 266` failed with the
     driver's own message and set nothing up.
+
+    `carried` is True for a `--work` launch whose session the launcher will carry (`work_carry_on`).
+    It and `driving` decide one other check, the refusal of a retry watchdog in settings.json: a
+    `--claim`, or a `--work` with its carry off, is nobody's to carry, so neither is refused.
     """
     fatal: list[str] = []
 
@@ -1948,7 +1962,7 @@ def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True) -> li
     # The retry watchdog set in settings.json reaches every session this launcher starts, past the
     # environment it drops it from (`RETRY_WATCHDOG`), so it is refused where something here carries
     # those sessions itself: always for the driver, and for `--work` while its carry is on.
-    if retry_watchdog_in_settings() and (driving or cfg["ticket"].get("limit_continue_work", True)):
+    if retry_watchdog_in_settings() and (driving or carried):
         fatal.append(
             "~/.claude/settings.json's env turns CLAUDE_CODE_RETRY_WATCHDOG on, and Claude Code puts "
             "that in every session pool-run starts: a headless one waiting at a usage limit under it "
@@ -4254,7 +4268,7 @@ def cmd_work(cfg: dict, say: Say, token: str) -> int:
         say("    Run it in a terminal — not from inside a Claude Code session, a pipe or a script.")
         say(f"    To prepare a session without launching it: pool-run --claim {token}")
         return 1
-    problems = preflight(cfg, say, want_label=False, driving=False)
+    problems = preflight(cfg, say, want_label=False, driving=False, carried=work_carry_on(cfg))
     for problem in problems:
         say(f"  x {problem}")
     if problems:
