@@ -37,7 +37,10 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.core.bulk.OperationType;
 import co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem;
 
-/** The per-id accounting of {@code bulkDelete} when the request itself fails, which needs no cluster. */
+/**
+ * The per-id accounting of {@code bulkDelete} and the patient sweep when a request or a single item fails, which
+ * needs no cluster.
+ */
 public class ElasticsearchBulkDeleteAccountingTest {
 
 	@Test
