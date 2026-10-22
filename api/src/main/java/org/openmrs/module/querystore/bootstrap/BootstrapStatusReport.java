@@ -20,8 +20,8 @@ import java.util.Map;
 
 /**
  * A read-only, serialization-friendly summary of {@link BootstrapProgress} across all resource
- * types, with a single derived {@link #isComplete()} flag answering "is this deployment fully
- * indexed?". The bootstrap backfill populates the read store one type at a time, ordered by
+ * types, with a derived {@link #isComplete()} flag answering "is this deployment fully indexed
+ * now?" and a looser {@link #isProjected()} flag that reads use. The bootstrap backfill populates the read store one type at a time, ordered by
  * {@code dateChanged}, resuming from a persisted cursor; until every type reaches
  * {@link BootstrapStatus#COMPLETED}, reads can return stale/partial data and the lazy per-patient
  * projection cannot repair an already-partially-indexed patient. This report exists so operators
@@ -109,9 +109,10 @@ public class BootstrapStatusReport {
 
 	/**
 	 * Whether every expected resource type has completed a bootstrap, counting a type whose earlier
-	 * bootstrap completed while a restart's top-up walks it again: its documents are in place, and the
-	 * top-up only re-projects what changed since its cursor. A type being reset or resynced has had its
-	 * completion cleared and does not count. This is what a read may report as projection-complete;
+	 * bootstrap completed while a restart's top-up walks it again: the documents it projected are in
+	 * place, but records written to core while the module was not syncing are missing until the top-up
+	 * reaches them, so a patient's chart may be incomplete meanwhile. A type being reset or resynced has
+	 * had its completion cleared and does not count. This is what a read may report as projection-complete;
 	 * {@link #isComplete()} stays strict, since an export waits on it to snapshot a finished index.
 	 */
 	public boolean isProjected() {

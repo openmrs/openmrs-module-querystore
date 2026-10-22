@@ -50,7 +50,11 @@ public final class PatientChartRead {
 		return truncated;
 	}
 
-	/** Whether the source projection reports every configured resource type fully indexed. */
+	/**
+	 * Whether every configured resource type has completed its bootstrap and is not being rewritten by
+	 * a resync or a backend reset. A type a restart's top-up is walking counts, so records written to
+	 * core while the module was not syncing may still be missing from this read.
+	 */
 	public boolean isProjectionComplete() {
 		return projectionComplete;
 	}
