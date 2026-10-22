@@ -29,8 +29,8 @@
     },
     "resolve-ticket": {
       "from": 7873,
-      "to": 8022,
-      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn on an API error, which runs StopFailure rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, never settings.json env, which reaches every session pool-run starts and which pool-run refuses, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
+      "to": 8023,
+      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn on an API error, which runs StopFailure rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, never ~/.claude/settings.json's env, which reaches every session pool-run starts, so pool-run refuses it, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
       "from": 8064,
@@ -49,8 +49,8 @@
     },
     "ticket-pool/pausing.md": {
       "from": 1612,
-      "to": 1722,
-      "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 says how to set; the driver's carry says Session drops that variable and its cap from every headless session, since one waiting under them neither ends nor goes quiet, the only two points at which the driver looks for a limit, and that pool-run refuses to start where settings.json's env sets them; and the --work carry says a session it carries starts without the pair, since one idle on a background agent waiting under it reads as stopped and would be nudged as if it were (reproduced with the real watch_hand_launched), and with CLAUDE_PIPELINE_CARRY=work, which tells resolve-ticket's Step 1 the launcher carries it (all measured against a stub)"
+      "to": 1730,
+      "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 says how to set; the driver's carry says Session drops that variable and its cap from every headless session, since one waiting under them neither ends nor goes quiet, the only two points at which the driver looks for a limit, and that pool-run refuses to start where ~/.claude/settings.json's env sets them, a project's own settings unread; and the --work carry says a session it carries starts without the pair, since one idle on a background agent waiting under it reads as stopped and would be nudged as if it were (reproduced with the real watch_hand_launched), and with CLAUDE_PIPELINE_CARRY=work, which tells resolve-ticket's Step 1 the launcher carries it (all measured against a stub)"
     },
     "harden": {
       "from": 7403,
@@ -68,12 +68,12 @@
     "pr-harden/verifier.md": 1736,
     "pr-review": 8172,
     "pr-review/posting.md": 2030,
-    "resolve-ticket": 8022,
+    "resolve-ticket": 8023,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2823,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1857,
-    "ticket-pool/pausing.md": 1722,
+    "ticket-pool/pausing.md": 1730,
     "verify": 658,
     "verify-frontend-change": 1844
   }

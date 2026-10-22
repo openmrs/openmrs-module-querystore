@@ -1,10 +1,11 @@
 # `CLAUDE_CODE_RETRY_WATCHDOG` at a claude.ai-style usage limit — 2026-10-21
 
-Claude Code 2.1.306, Linux, unless a row says otherwise. `stub.py` stands in for the Messages API: it
-answers every `/v1/messages` request with a 429 carrying `anthropic-ratelimit-unified-status:
-rejected`, `anthropic-ratelimit-unified-reset: <epoch>` and `x-should-retry: false` until that reset,
-and with the text `STUB-OK` after it. In agent mode (`STUB_MODE=agent`) it serves the FIRST request
-before any limit, with a call to the `Agent` tool, so the limit then meets the agent's own request.
+Claude Code 2.1.306, Linux, unless a row says otherwise. `stub.py` stands in for the Messages API:
+it answers every `/v1/messages` request with a 429 carrying
+`anthropic-ratelimit-unified-status: rejected`, `anthropic-ratelimit-unified-reset: <epoch>` and
+`x-should-retry: false` until that reset, and with the text `STUB-OK` after it. In agent mode
+(`STUB_MODE=agent`) it serves the FIRST request before any limit, with a call to the `Agent` tool,
+so the limit then meets the agent's own request.
 
 Six drivers, each writing its case to `<case>/`:
 - `run.sh <case> <seconds to reset> [env…]` — one `claude -p --output-format text` in a clean
@@ -82,8 +83,9 @@ written every half second from the first refusal on (resumed-by-itself) as with 
 (control-limit), and sent nothing with no limit (control-no-limit), so under the watchdog the nudge
 would land beside an agent that had resumed by itself. A watchdog set in `settings.json`'s `env` is
 out of the drop's reach and still waits (settings-env-watchdog, against hooks-limit), so
-`pool-run`'s preflight refuses one. The stub's console in probe-before-vars shows the same
-`ConnectionResetError` as agent-stall-default, on a connection with no request in flight.
+`pool-run`'s preflight refuses one set in `~/.claude/settings.json` (a project's own settings it
+does not read). The stub's console in probe-before-vars shows the same `ConnectionResetError` as
+agent-stall-default, on a connection with no request in flight.
 
 The harness reports a background agent `failed` as stalled once it has gone
 `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress; unset, the 2.1.306 binary takes the larger

@@ -205,8 +205,9 @@ unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second
 carry on. The remedy is for later sessions, never a mid-run relaunch: Claude Code 2.1.301 or later,
 started through
 `alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
-whose cap waits out a reset up to five hours away. Never `settings.json`'s `env`: it reaches every
-session `pool-run` starts, which refuses to start under it (`ticket-pool`'s `pausing.md`).
+whose cap waits out a reset up to five hours away. Never `~/.claude/settings.json`'s `env`: it
+reaches every session `pool-run` starts, so `pool-run` refuses to start under it (`ticket-pool`'s
+`pausing.md`).
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs

@@ -21,7 +21,8 @@ window is waited out and a weekly one is not — and a ticket suspended this way
 nothing with the last reset, which is a session spinning rather than a big ticket. `Session` drops
 `CLAUDE_CODE_RETRY_WATCHDOG` and its cap from every session it starts: one waiting under them
 neither ends nor goes quiet, the only two points at which the driver looks for a limit. Set in
-`settings.json`'s `env` they would still arrive, so `pool-run` refuses to start under that.
+`~/.claude/settings.json`'s `env` they would still arrive, so `pool-run` refuses to start under
+that; a project's own settings it does not read.
 
 **A `--work` session is carried past it too, by a third mechanism.** Neither of the other two
 reaches a hand-launched session: Claude Code's own wait belongs to the SESSION and can be gated off
