@@ -3887,7 +3887,7 @@ def test_a_work_session_is_started_without_the_retry_watchdog_while_its_carry_is
     })
     pair = {"CLAUDE_CODE_RETRY_WATCHDOG": "1",
             "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS": "18000000"}
-    with environ({**pair, "KEEP_ME": "kept", "CLAUDE_PIPELINE_CARRY": "work"}), isolated(tmp):
+    with environ({**pair, "KEEP_ME": "kept", "CLAUDE_PIPELINE_CARRY": "inherited"}), isolated(tmp):
         say = pool.Say(tmp / "work.md")
         pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266", "number": 266},
                              work, say)

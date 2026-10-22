@@ -59,8 +59,8 @@
     },
     "ticket-pool/by-hand.md": {
       "from": 1859,
-      "to": 1879,
-      "why": "the paragraph on a --work session's environment no longer says nothing else is touched: while the launcher's carry is on, the session starts without CLAUDE_CODE_RETRY_WATCHDOG and its cap and with CLAUDE_PIPELINE_CARRY=work, which pausing.md explains"
+      "to": 1889,
+      "why": "the paragraph on a --work session's environment no longer says nothing else is touched: while the launcher's carry is on, the session starts without CLAUDE_CODE_RETRY_WATCHDOG and its cap and with CLAUDE_PIPELINE_CARRY=work, which pausing.md explains, and while it is off without a CLAUDE_PIPELINE_CARRY it inherited, since the marker says the launcher carries the session"
     }
   },
   "words": {
@@ -77,7 +77,7 @@
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2823,
     "ticket-pool": 5111,
-    "ticket-pool/by-hand.md": 1879,
+    "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1754,
     "verify": 658,
     "verify-frontend-change": 1844
