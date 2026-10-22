@@ -2,7 +2,7 @@
 in a temp dir; the repo is only read) and, for every case added since <base> (named on an added
 `run_*case` line of the suite's diff), print the mutants it fails against. The control, no mutant,
 must fail nothing; a case that no mutant fails is marked NONE."""
-import os, re, shutil, subprocess, sys, tempfile
+import os, re, subprocess, sys, tempfile
 repo, base = sys.argv[1], sys.argv[2]
 # (name, anchor, replacement[, the one gate it applies to])
 MUTANTS = [
@@ -40,7 +40,6 @@ for suite, gate in SUITES:
             hook = os.path.join(d, f"{name}-{gate}")
             open(hook, "w").write(src)
             got = subprocess.run(["bash", test, hook], capture_output=True, text=True)
-            failed = re.findall(r"^  FAIL (.+?)(?::| \(| expected|$)", got.stdout, re.M)
             total = re.search(r"passed=(\d+) failed=(\d+)", got.stdout)
             print(f"{suite:9} {name:16} {total.group(0) if total else 'NO TOTAL rc=%d' % got.returncode}")
             fails[name] = got.stdout

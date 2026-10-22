@@ -7,7 +7,7 @@ it answers every `/v1/messages` request with a 429 carrying
 (`STUB_MODE=agent`) it serves the FIRST request before any limit, with a call to the `Agent` tool,
 so the limit then meets the agent's own request.
 
-Six drivers, each writing its case to `<case>/`:
+Six drivers; each case's files are under `<case>/`, the work-carry cases' as `work-carry/<case>.out`:
 - `run.sh <case> <seconds to reset> [env…]` — one `claude -p --output-format text` in a clean
   environment (`env -i`, a throwaway `HOME`, a dummy API key, `ANTHROPIC_BASE_URL` at the stub).
   `meta` holds the launch, reset and end as epoch seconds, the exit code and the `claude --version`

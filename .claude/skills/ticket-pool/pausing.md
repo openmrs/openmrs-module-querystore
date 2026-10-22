@@ -20,7 +20,7 @@ same wave), a reset further out than `ticket.limit_wait_max_seconds` — 6h by d
 window is waited out and a weekly one is not — and a ticket suspended this way before that did
 nothing with the last reset, which is a session spinning rather than a big ticket. `Session` drops
 `CLAUDE_CODE_RETRY_WATCHDOG` and its cap from every session it starts: one waiting under them
-neither ends nor goes quiet, the only two points at which the driver looks for a limit. Set in
+neither ends nor goes quiet, the only two points at which the driver looks for a limit. Turned on in
 `~/.claude/settings.json`'s `env` they would still arrive, so the driver refuses to start under
 that, as does `--work` while its carry is on; a project's own settings it does not read.
 

@@ -214,10 +214,8 @@ nor Claude Code's own continuation. The watchdog has the first, second and fourt
 the way, because the turn does not stop at the limit. It shares the third.
 
 **The third is the gates', and the watchdog meets it too.** Both gates treat an await older than
-`AWAIT_TTL`, an hour, as an agent that died (`pr-harden-gate.sh`, `harden-cycle-gate.sh`). Run
-against a resolve-ticket entry in phase `building` (the artifact's `gate-await-ttl.sh`), the pr gate
-allowed a yield on an await 600 s old and blocked one 7200 s old as a run that had stopped. A wait
-at a limit holds a live agent past that hour: its requests wait like the orchestrator's. So after
+`AWAIT_TTL`, an hour, as an agent that died (`pr-harden-gate.sh`, `harden-cycle-gate.sh`). A wait at
+a limit can hold a live agent past that hour: its requests wait like the orchestrator's. So after
 one, an attended run that yields with agents still out meets awaits the gates read as dead. What
 such an await gets is `pr-harden`'s rule, in its **State** section beside the other await rules,
 because the alias reaches a standalone `/pr-harden` or `/harden` as much as this skill; the gates'
