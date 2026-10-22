@@ -50,8 +50,9 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   documented cap or handled backend read failure may have omitted records. For full-chart reads,
   `totalCount` is the number of records materialized by the configured backend, so clients must not
   infer completeness from the count. `projectionComplete` is true only when every currently
-  registered resource type has a completed bootstrap row; an older `QueryStoreService`
-  implementation that cannot prove this reports false.
+  registered resource type has completed a bootstrap; a type whose earlier bootstrap completed
+  still counts while a restart's top-up walks it again, and a type being reset or resynced does
+  not. An older `QueryStoreService` implementation that cannot prove this reports false.
   Full-chart reads also carry a stable
   `snapshotId` for the complete materialized chart. Ranked top-K reads use `null` because the
   service does not expose a browseable total.

@@ -35,10 +35,13 @@ public class BootstrapStatusReport {
 
 	private final boolean complete;
 
+	private final boolean projected;
+
 	private final List<TypeStatus> types;
 
-	private BootstrapStatusReport(boolean complete, List<TypeStatus> types) {
+	private BootstrapStatusReport(boolean complete, boolean projected, List<TypeStatus> types) {
 		this.complete = complete;
+		this.projected = projected;
 		this.types = Collections.unmodifiableList(types);
 	}
 
@@ -67,17 +70,27 @@ public class BootstrapStatusReport {
 	        Collection<String> expectedResourceTypes) {
 		List<TypeStatus> types = new ArrayList<TypeStatus>();
 		Map<String, BootstrapStatus> statusByType = new HashMap<String, BootstrapStatus>();
+		Map<String, Boolean> completedBefore = new HashMap<String, Boolean>();
 		if (progress != null) {
 			for (BootstrapProgress p : progress) {
 				statusByType.put(p.getResourceType(), p.getStatus());
+				completedBefore.put(p.getResourceType(), p.getCompletedAt() != null);
 				types.add(new TypeStatus(p));
 			}
 		}
 		boolean complete = expectedResourceTypes != null && !expectedResourceTypes.isEmpty();
+		boolean projected = complete;
 		if (complete) {
 			for (String expected : expectedResourceTypes) {
-				if (statusByType.get(expected) != BootstrapStatus.COMPLETED) {
+				BootstrapStatus status = statusByType.get(expected);
+				if (status != BootstrapStatus.COMPLETED) {
 					complete = false;
+				}
+				// A reset clears completedAt, so a RUNNING row that keeps it is a top-up of a type whose
+				// documents are already in place, not a resync or a backend reset rewriting them.
+				if (status != BootstrapStatus.COMPLETED
+				        && !(status == BootstrapStatus.RUNNING && Boolean.TRUE.equals(completedBefore.get(expected)))) {
+					projected = false;
 				}
 				if (!statusByType.containsKey(expected)) {
 					BootstrapProgress missing = new BootstrapProgress(expected);
@@ -86,12 +99,23 @@ public class BootstrapStatusReport {
 				}
 			}
 		}
-		return new BootstrapStatusReport(complete, types);
+		return new BootstrapStatusReport(complete, projected, types);
 	}
 
 	/** True only when every expected resource type has finished — i.e. the deployment is fully indexed. */
 	public boolean isComplete() {
 		return complete;
+	}
+
+	/**
+	 * Whether every expected resource type has completed a bootstrap, counting a type whose earlier
+	 * bootstrap completed while a restart's top-up walks it again: its documents are in place, and the
+	 * top-up only re-projects what changed since its cursor. A type being reset or resynced has had its
+	 * completion cleared and does not count. This is what a read may report as projection-complete;
+	 * {@link #isComplete()} stays strict, since an export waits on it to snapshot a finished index.
+	 */
+	public boolean isProjected() {
+		return projected;
 	}
 
 	public List<TypeStatus> getTypes() {

@@ -37,6 +37,7 @@ import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapProgress;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatus;
+import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.api.context.Context;
@@ -643,6 +644,39 @@ public class QueryStoreServiceImplTest {
 		service.setBootstrapServiceOverride(bootstrap);
 
 		assertTrue(service.getPatientChartRead("patient-uuid").isProjectionComplete());
+	}
+
+	/** A restart's top-up re-walks a completed type; its documents are in place, so reads are not withheld. */
+	@Test
+	public void getPatientChartRead_countsATypeCompletedBeforeAsCompleteDuringItsTopUp() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.resourceTypes = Collections.singletonList("obs");
+		BootstrapProgress toppingUp = new BootstrapProgress("obs");
+		toppingUp.setStatus(BootstrapStatus.RUNNING);
+		toppingUp.setCompletedAt(java.time.Instant.parse("2026-10-20T23:11:08Z"));
+		bootstrap.status = Collections.singletonList(toppingUp);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		assertTrue(service.getPatientChartRead("patient-uuid").isProjectionComplete());
+		assertFalse("the status endpoint stays strict for an export",
+		        BootstrapStatusReport.from(bootstrap.status, bootstrap.resourceTypes).isComplete());
+	}
+
+	/** A reset or resync clears completion, so a type being rewritten is not complete. */
+	@Test
+	public void getPatientChartRead_doesNotCountATypeBeingResynced() {
+		FakeBackendStore backend = new FakeBackendStore(true);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.resourceTypes = Collections.singletonList("obs");
+		BootstrapProgress resyncing = new BootstrapProgress("obs");
+		resyncing.setStatus(BootstrapStatus.RUNNING);
+		bootstrap.status = Collections.singletonList(resyncing);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+
+		assertFalse(service.getPatientChartRead("patient-uuid").isProjectionComplete());
 	}
 
 	@Test

@@ -264,8 +264,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	private boolean isProjectionComplete() {
 		try {
 			BootstrapService bootstrap = bootstrapService();
+			// A type completed before counts during its restart top-up, or every answer would be
+			// withheld while a restart re-walks the window since its last checkpoint.
 			return BootstrapStatusReport.from(bootstrap.getStatus(),
-			        bootstrap.getResourceTypeNames()).isComplete();
+			        bootstrap.getResourceTypeNames()).isProjected();
 		}
 		catch (RuntimeException e) {
 			log.warn("Could not verify QueryStore projection completeness; reporting incomplete", e);
