@@ -98,9 +98,10 @@ def isolated(tmp: Path):
     suite, it is a second pipeline. Measured while writing this one: an earlier version left a
     driver-capture record in `~/.claude/skill-lessons`, where it counted towards the retro threshold.
     """
-    # EVERY path the driver writes. A constant added to `pool-run` and forgotten here is a suite that
-    # writes the operator's real state: measured — omitting `SLOTS` let a case read the real leases
-    # and RELEASE two slots a hand-launched session was holding, removing their worktrees.
+    # EVERY path the driver writes, and the settings it reads. A constant added to `pool-run` and
+    # forgotten here is a suite that writes the operator's real state: measured — omitting `SLOTS`
+    # let a case read the real leases and RELEASE two slots a hand-launched session was holding,
+    # removing their worktrees.
     names = ["LEDGER", "LEDGER_FLOCK", "LOGS", "LESSONS", "LAST", "PR_STATE", "HARDEN_STATE",
              "UNATTENDED_DIR", "WORKTREES", "SLOT_M2", "SLOTS", "LOCK", "PAUSE", "PAUSED",
              "PROJECTS", "SESSIONS", "SETTINGS"]
@@ -3899,7 +3900,7 @@ def test_a_work_session_is_started_without_the_retry_watchdog_while_its_carry_is
                              "297", {"url": "https://example/297", "number": 297}, work, say)
         pool.work_in_session(pool.merge(cfg, {"ticket": {"limit_wait_max_seconds": 0}}), "o/r",
                              "310", {"url": "https://example/310", "number": 310}, work, say)
-    lines =seen.read_text().splitlines() if seen.exists() else []
+    lines = seen.read_text().splitlines() if seen.exists() else []
     check("a --work session with its carry on is started without the watchdog pair, marked carried",
           len(lines) == 3 and lines[0] == "unset|unset|kept|work", repr(lines))
     check("and with the carry off the operator's environment stands, unmarked",
@@ -3927,8 +3928,8 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
 
         def refuses(command, ticket=None):
             # In-process, with a terminal on both streams; a pool with no repos stops the command at
-            # its preflight, short of `gh`. None where it never got there, so that an absence of the
-            # refusal cannot pass vacuously.
+            # its preflight, before it resolves the ticket. None where it never got there, so that
+            # an absence of the refusal cannot pass vacuously.
             log = tmp / "said.md"
             log.unlink(missing_ok=True)
             with terminal():

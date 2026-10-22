@@ -1,8 +1,9 @@
 #!/bin/bash
 # settings-env-probe.sh <case> <seconds-until-reset> [extra env assignments...]
 # As hooks-probe.sh, and its settings.json also carries `"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "1"}`
-# while the process environment does not, to see whether a watchdog set there waits at the stub's
-# limit -- which is what a `pool-run` dropping the variable from a session's environment cannot undo.
+# while the process environment does not unless the case passes it, to see whether a watchdog set
+# there waits at the stub's limit -- which is what a `pool-run` dropping the variable from a
+# session's environment cannot undo.
 # SETTINGS_WATCHDOG=<value> puts that value there instead of "1", and `none` leaves the key out; the
 # variable itself never reaches `claude`.
 set -u

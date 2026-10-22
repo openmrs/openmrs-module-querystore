@@ -21,8 +21,8 @@ Six drivers, each writing its case to `<case>/`:
 - `hooks-probe.sh` — as `run.sh`, with stdin from `/dev/null`, and with a `Stop` and a `StopFailure`
   hook in the throwaway `HOME`'s `settings.json`, each appending its name and the JSON it was handed to
   `hooks.log`. Its `meta` records no end time. `settings-env-probe.sh` is the same with
-  `"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "1"}` in that `settings.json` and nothing in the process;
-  `SETTINGS_WATCHDOG` puts another value there, `none` leaving the key out.
+  `"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "1"}` in that `settings.json` and nothing in the process
+  unless the case passes it; `SETTINGS_WATCHDOG` sets another value there, `none` leaving it out.
 - `probe.py`, run by `probe-run.sh` — `pool-run`'s real `account_limit`, the limit probe a `--work`
   launcher spends, against the stub, in a clean environment plus whatever the case adds; its output
   is the case's `probe.out`.
@@ -146,5 +146,5 @@ What this does NOT show:
 - a wait of hours: the longest here is eleven minutes, so whether a long wait is one sleep or
   several is not shown, though the stream shows one retry line every 30s while it lasts;
 - a foreground agent: the `Agent` call here ran in the background, the default in this version;
-- any Claude Code version other than 2.1.306 and 2.1.42;
+- any Claude Code version other than 2.1.306, 2.1.307 (the two `-alias` rows) and 2.1.42;
 - the alias in zsh or any shell but bash: zsh is not installed here.
