@@ -43,8 +43,8 @@ both are compared as INSTANTS rather than as strings, because `claude` records i
 UTC, which silently refused every nudge the carry ever sent until 2026-09-13. With the carry on, the
 session starts without the watchdog pair, since one idle on a background agent waiting under it
 reads as stopped and would be nudged as if it were, and with `CLAUDE_PIPELINE_CARRY=work`, so
-`resolve-ticket`'s Step 1 does not warn. With it off nothing here carries the session, which then
-takes the pair only in front of `pool-run --work`.
+`resolve-ticket`'s Step 1 does not warn. With it off nothing here carries the session, and
+`resolve-ticket`'s Step 1 says what does.
 
 **It only works on sessions this launcher started**, and that is not an accident of packaging. A
 session running `--dangerously-skip-permissions` HOLDS an inbound peer message unless it can

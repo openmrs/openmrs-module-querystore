@@ -206,9 +206,8 @@ The remedy is for later sessions, never a mid-run relaunch: Claude Code 2.1.301 
 through
 `alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
 whose cap waits out a reset up to five hours away; a `pool-run --work` session whose carry is off
-takes the same two variables only in front of that command. Never `~/.claude/settings.json`'s `env`:
-it reaches every session `pool-run` starts, and the driver, or `--work` with its carry on, refuses
-to start under it (`ticket-pool`'s `pausing.md`).
+takes the same two variables only in front of that command. Never `~/.claude/settings.json`'s `env`,
+which the driver and a carried `--work` refuse to start under (`ticket-pool`'s `pausing.md`).
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs

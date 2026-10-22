@@ -1764,10 +1764,13 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
     try:
         # With the carry on, never under the retry watchdog either (`RETRY_WATCHDOG` says why), and
         # marked `CLAUDE_PIPELINE_CARRY`, which tells resolve-ticket's Step 1 not to warn that nothing
-        # carries the run. With the carry off the operator's environment stands.
+        # carries the run. With the carry off the operator's environment stands, less a marker it
+        # inherited: the marker says THIS launch carries the session.
         env = dict(claim["env"])
         if carried:
             without_retry_watchdog(env)["CLAUDE_PIPELINE_CARRY"] = "work"
+        else:
+            env.pop("CLAUDE_PIPELINE_CARRY", None)
         proc = subprocess.Popen(argv, cwd=str(claim["worktree"]), env=env)
         record_session(claim["slot"].name, proc.pid)
         # And the ROW carries it too, not only the lease. `--release` in a second terminal unlinks a
