@@ -320,6 +320,19 @@ write it.
   cover and to a swap that preserved the size it checked. So mutate the VALUE under an asserted key, not
   only the key.
 
+*Added 0.45.0 — the rule it supports:* “And an edit that REWRITES a test — a merged helper, a folded case, a changed fixture — owes the revert-check on the mutations that test caught before the edit.”
+
+Two Phase 2 rewrites of a test each changed what it could detect. TRUNK-6826 (2026-10-11, its record
+:24): a helper merge resolved `mockMvc(new Filter[]{..})` to the varargs slot, an overload ambiguity
+"caught only by re-running the ordering mutation". PR 100 (2026-10-22): cycle 5's Phase 2 (commit
+`a7cb1dc`) folded a launch into the `--work` environment case and had it inherit the marker a carried
+launch sets, so its carry-on check could no longer see a launch that set none. The case had caught
+exactly that mutant, `nomark`, before the edit (that session's transcript L3869-3870; its compaction
+summary still listed it at L4353). The calibration run after the edit ran four mutants, two of them
+new and none of them `nomark` (L5447-5448), its control passing the four tests it ran, and cycle 6's first Phase 1 pass
+found the gap with that mutant (L5525). The ledger had parked the first as a Phase 2 edit that
+introduced a defect, to reopen on a second record.
+
 ### Record the verdict so the gate can enforce it
 
 *Cut down, H3-01 — the rule it supports:* “And record an `awaiting` entry whenever a cycle delegates, or the gate will not let the cycle wait for its own agents.”
@@ -431,6 +444,21 @@ and the way out is to finish the phase or take the labelled override, not to wai
 *Cut down, H3-08 — the rule it supports:* “write the entry regardless, and treat an uninstalled gate as a reason to be stricter with yourself rather than looser”
 
 Until it is installed the gate is prose only, which is exactly the state that let the rule get skipped — so write the entry regardless, and treat an uninstalled gate as a reason to be stricter with yourself rather than looser.
+
+## Reporting
+
+*Added 0.45.0 — the rule it supports:* “When `/harden` is the run, append its record before you finish”
+
+Two standalone runs reached a retro only because their record was written by hand: chartsearchai
+#435 (2026-09-16, ten cycles; its record :5-7: "Without this file a 10-cycle run would have reached
+the retro as nothing") and querystore PR 100 (2026-10-22, seven cycles in 10 h 35 min, written when
+the user asked why the run took so long). A 2026-09 proposal to state the gap in `skill-retro`
+Step 1 was killed, among other grounds, because "it cannot make a standalone run write a record",
+with REOPEN ON "a second standalone-`harden` record" (REJECTED.md:3041-3058). This rule is the run
+writing it. The branch stands in for the file name's ticket or PR because the root `CLAUDE.md`
+suggests `/harden` for a slice "ready to commit", which can be before either exists, and its `/`
+becomes `-` because a `/` in the name makes `>>` fail, or, once the directory is made, files the
+record where skill-retro's `*.md` does not look (both the gates' objections, 2026-10-22).
 
 ## Anti-patterns
 

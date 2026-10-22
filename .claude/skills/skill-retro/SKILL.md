@@ -2,12 +2,12 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.7.0
+version: 0.7.1
 ---
 
 # Skill retro — evidence in, governance change out
 
-`resolve-ticket` and `pr-harden` each append a **run record** when they finish. This skill turns
+`resolve-ticket` and `pr-harden` each append a **run record** when they finish, and so does a `/harden` invoked on its own. This skill turns
 those records into edits to the skills themselves. It exists because the alternative — each run
 editing the skills at its own end — is worse in four measured ways, and those four are the whole
 design rationale:
@@ -39,7 +39,7 @@ the skill that ran — or, for a run that ended without writing one, by the `tic
 which marks its own file as driver capture and says which sections nobody observed. Read those as
 evidence that a run ended that way, and corroborate nothing else from them. **The store also holds measurement notes, defect
 notes and hand-written captures, so a file count is not a run count** — read each file's own header
-for what it is and for which skill, if any, wrote it. A `/harden` invoked on its own writes none.
+for what it is and for which skill, if any, wrote it. A `/harden` invoked on its own wrote none before harden 0.45.0.
 Read every record since the last retro (the last one is recorded in `~/.claude/skill-lessons/LAST`,
 if present; `--since <date>` overrides). **Step 6's comparison is owed BEFORE this read, not only
 after the push** — this step depends on the store being in sync and Step 6 is where that is checked,
