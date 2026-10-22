@@ -151,6 +151,10 @@ run_cmd_case "and uses the entry's cycle when it has one" \
 run_cmd_case "a block past the await bound names the await" \
   "past the one-hour bound (awaiting: phase2 quality)" \
   "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+# ...and names one recorded again twice, which is how a run knows pr-harden State's once is spent.
+run_cmd_case "an await recorded again past the bound is named twice" \
+  "(awaiting: phase2 quality, phase2 quality)" \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":[{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7300))},{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7200))}]}"
 run_cmd_case "and opens on it, ahead of the contract's own text" "^The newest await recorded here is " \
   "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
 run_cmd_case "and still states the termination contract" "harden termination contract" \

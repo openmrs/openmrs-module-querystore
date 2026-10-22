@@ -4662,6 +4662,8 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
             stop.set()
         if off:
             check(f"with {sorted(off)[0]} it sends nothing", not received, str(received))
+            check("and, a reporter again, asks the account nothing",
+                  not (case / "probes.txt").exists(), "the switched-off watcher probed the account")
         else:
             check("and with the carry on, the control, the same fixture is nudged",
                   bool(received), "no nudge within 20s, so the cases above prove nothing")

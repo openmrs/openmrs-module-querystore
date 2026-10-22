@@ -104,6 +104,11 @@ run_reason_case "fixing past the bound opens on it too" "^The newest await recor
   "{\"phase\":\"fixing\",\"blocking\":0,\"pr\":9,\"round\":2,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"fix r2\",\"since\":$((NOW-7200))}]}"
 run_reason_case "fixing past the bound names it too" "past the one-hour bound (awaiting: fix r2)" \
   "{\"phase\":\"fixing\",\"blocking\":0,\"pr\":9,\"round\":2,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"fix r2\",\"since\":$((NOW-7200))}]}"
+# State's "once": an await recorded again lists its agent twice, which is how the run knows the once
+# is spent, so the note must not fold a name it holds twice into one.
+run_reason_case "an await recorded again past the bound is named twice" \
+  "(awaiting: refute, refute)" \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"refute\",\"since\":$((NOW-7300))},{\"agent\":\"refute\",\"since\":$((NOW-7200))}]}"
 run_reason_case "another round owed past the bound opens on it too" "^The newest await recorded here is " \
   "{\"phase\":\"reviewed\",\"blocking\":2,\"pr\":9,\"round\":2,\"ts\":$NOW,\"awaiting\":$STALE_REFUTE}"
 run_reason_case "a --plan-only block past the bound opens on it too" "^The newest await recorded here is " \

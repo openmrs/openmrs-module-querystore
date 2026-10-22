@@ -14,6 +14,9 @@ MUTANTS = [
     ("min-not-max", "| (.since // 0)] | max'", "| (.since // 0)] | min'"),
     ("ttl-infinite", "AWAIT_TTL=3600 ", "AWAIT_TTL=999999999 "),
     ("agents-unnamed", "await_agents() { jq", "await_agents() { echo \"?\"; return; jq"),
+    ("names-deduped", '(.agent // "?")] | join(", ")',
+     '(.agent // "?")] | reduce .[] as $a ([]; if any(.[]; . == $a) then . else . + [$a] end)'
+     ' | join(", ")'),
 ]
 SUITES = [("pr-harden", "pr-harden-gate.sh"), ("harden", "harden-cycle-gate.sh")]
 for suite, gate in SUITES:
