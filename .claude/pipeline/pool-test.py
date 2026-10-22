@@ -3950,6 +3950,11 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
         check("nor with a wait cap of 0, where the carry never acts",
               refuses(pool.cmd_work, {"limit_wait_max_seconds": 0}) is False)
         check("nor --claim, which launches nothing", refuses(pool.cmd_claim) is False)
+        on = []
+        for value in ("yes", "on"):
+            settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": value}}))
+            on.append(refusal(True) is not None)
+        check("and so is every other value Claude Code reads as on", all(on), str(on))
         settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "0"}}))
         check("a watchdog settings.json turns off is no problem", refusal(True) is None)
         settings.write_text(json.dumps({"env": {"KEEP_ME": "1"}}))
