@@ -4626,9 +4626,13 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
     same is true of `limit_wait_max_seconds: 0`, which is already the switch for the driver's own
     wait: one instruction, "do not wait for usage limits", answered the same way on both paths
     rather than two knobs that can disagree.
+
+    Each case is refused once, naming no window, and then served, so a watcher that ignored the
+    switch would nudge within seconds; the last case, with the carry on, is the control that shows
+    this fixture does. A stub that never served let this pass whatever the switch said.
     """
     print("\nthe carry can be turned off")
-    for n, off in enumerate(({"limit_continue_work": False}, {"limit_wait_max_seconds": 0})):
+    for n, off in enumerate(({"limit_continue_work": False}, {"limit_wait_max_seconds": 0}, {})):
         case = tmp / str(n)
         case.mkdir()
         with isolated(case) as root:
@@ -4641,19 +4645,26 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
             stale = proj / "s.jsonl"
             stale.write_text("{}\n")
             os.utime(stale, (pool.now() - 400, pool.now() - 400))
-            stub = limit_stub(case / "stub", case / "argv.txt", resets_in=2)
+            stub = refusing_then_serving_stub(case / "stub", case / "probes.txt", 1, "true")
             cfg = pool.merge(pool.DEFAULTS, {
                 "claude": {"binary": str(stub)},
-                "ticket": {**{"timeout_seconds": 5, "quiet_seconds": 5,
+                "ticket": {**{"timeout_seconds": 2, "quiet_seconds": 2, "limit_probe_seconds": 3,
                               "limit_wait_jitter_seconds": 0}, **off},
             })
             stop = threading.Event()
             threading.Thread(target=pool.watch_hand_launched, daemon=True,
                              args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None,
                                    pid)).start()
-            time.sleep(20)
+            # Off, it must stay silent for the whole window; on, the control ends at the nudge.
+            deadline = time.time() + 20
+            while time.time() < deadline and not (received and not off):
+                time.sleep(0.5)
             stop.set()
-        check(f"with {sorted(off)[0]} it sends nothing", not received, str(received))
+        if off:
+            check(f"with {sorted(off)[0]} it sends nothing", not received, str(received))
+        else:
+            check("and with the carry on, the control, the same fixture is nudged",
+                  bool(received), "no nudge within 20s, so the cases above prove nothing")
 
 def test_pr_detection(tmp: Path) -> None:
     """A merged PR is not an open PR — the outcome check must not read that as `no-pr`.

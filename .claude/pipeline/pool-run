@@ -1673,10 +1673,10 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
     terminal is interrupted, because a slot nobody gave back is a slot the next session cannot have.
 
     The session is a NORMAL interactive one. It inherits this terminal, so it looks and behaves
-    exactly like starting `claude` by hand; the only difference is the directory it starts in and the
-    three variables it starts with, and, while the carry is on (`work_carry_on`), the retry watchdog
-    dropped, `CLAUDE_PIPELINE_CARRY=work` added, and its nudge let in (`crossSessionInbound`); with
-    it off, a `CLAUDE_PIPELINE_CARRY` it inherited dropped.
+    exactly like starting `claude` by hand; the only difference in its environment is the directory
+    it starts in and the three variables it starts with, and, while the carry is on
+    (`work_carry_on`), the retry watchdog dropped and `CLAUDE_PIPELINE_CARRY=work` added; with it
+    off, a `CLAUDE_PIPELINE_CARRY` it inherited dropped.
     """
     failure, where, base = prepare_repo(repo, say)
     if failure:
