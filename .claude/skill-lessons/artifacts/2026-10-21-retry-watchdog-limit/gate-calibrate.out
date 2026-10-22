@@ -1,14 +1,15 @@
-pr-harden control          passed=51 failed=0
-pr-harden no-note          passed=42 failed=9
-pr-harden appended         passed=45 failed=6
-pr-harden replaces         passed=50 failed=1
-pr-harden no-since-guard   passed=50 failed=1
-pr-harden no-await-needed  passed=49 failed=2
-pr-harden min-not-max      passed=50 failed=1
-pr-harden ttl-infinite     passed=40 failed=11
-pr-harden agents-unnamed   passed=47 failed=4
-pr-harden names-deduped    passed=50 failed=1
-pr-harden: 15 cases added by the slice
+pr-harden control          passed=52 failed=0
+pr-harden no-note          passed=43 failed=9
+pr-harden appended         passed=46 failed=6
+pr-harden replaces         passed=51 failed=1
+pr-harden no-since-guard   passed=51 failed=1
+pr-harden no-await-needed  passed=50 failed=2
+pr-harden min-not-max      passed=51 failed=1
+pr-harden ttl-infinite     passed=41 failed=11
+pr-harden agents-unnamed   passed=48 failed=4
+pr-harden names-deduped    passed=51 failed=1
+pr-harden note-makes-block passed=51 failed=1
+pr-harden: 16 cases added by the slice
         awaiting STALE, attended -> block (AWAIT_TTL)  <-  ttl-infinite
         a stale await recorded again, attended -> allow (newest since)  <-  min-not-max
         an unattended yield names the agents it left outstanding  <-  agents-unnamed
@@ -24,6 +25,7 @@ pr-harden: 15 cases added by the slice
         an await with no time recorded gets no note  <-  no-since-guard, no-await-needed
         an unreviewed head past the await bound opens on the await  <-  no-note, appended, ttl-infinite
         an unverified head past the await bound opens on it too  <-  no-note, appended, ttl-infinite
+        reviewed and verified on this head with a stale await -> allow (the note makes no block)  <-  note-makes-block
 harden    control          passed=56 failed=0
 harden    no-note          passed=52 failed=4
 harden    appended         passed=54 failed=2

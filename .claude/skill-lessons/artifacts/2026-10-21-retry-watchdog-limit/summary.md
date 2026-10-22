@@ -130,7 +130,8 @@ guard, it printed "allow" for all three.
 against mutants of that gate and names, for every case added since `<base>`, the mutants it fails
 against: the note removed, appended, replacing the reason, set with no `since` or with no await at
 all, `min` read for the newest `since`, the one-hour bound made infinite, the awaited agents' names
-lost, and a name recorded twice listed once. The unmutated gates
+lost, a name recorded twice listed once, and, in the pr gate, a stale note that blocks a handover
+reviewed and verified on its head. The unmutated gates
 pass every case, and every added case fails against at least one mutant.
 
 `alias-probe.sh` (output in `alias-probe.out`) defines `resolve-ticket`'s alias in an interactive

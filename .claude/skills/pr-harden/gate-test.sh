@@ -231,6 +231,10 @@ run_git_case "an unreviewed head past the await bound opens on the await" block 
   "{$CONV,\"reviewed_shas\":[\"$OTHER\"],\"awaiting\":$STALE_REFUTE}" "^The newest await recorded here is "
 run_git_case "an unverified head past the await bound opens on it too" block \
   "{$CONV,\"reviewed_shas\":[\"@HEAD@\"],\"verified_shas\":[\"$OTHER\"],\"awaiting\":$STALE_REFUTE}" "^The newest await recorded here is "
+# ...and a handover reviewed and verified on this head still ends, stale await or not: the note
+# only ever leads a block the gate reached anyway, and never makes one.
+run_git_case "reviewed and verified on this head with a stale await -> allow (the note makes no block)" allow \
+  "{$CONV,\"reviewed_shas\":[\"@HEAD@\"],\"verified_shas\":[\"@HEAD@\"],\"awaiting\":$STALE_REFUTE}"
 # A recorded value is evidence about the head only if it could BE a sha. Against the unguarded first
 # draft all three of these BLOCKED, which breaks the fail-open doctrine the hook is built on. Mutate
 # the two halves of `looks_like_sha` and read which case answers: dropping the HEX test reddens the
