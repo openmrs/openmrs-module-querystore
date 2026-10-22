@@ -1009,8 +1009,9 @@ reviewer found listed four times before any of them had had its once; it now rec
 agent. Once, because an agent that hung where the harness cannot see it would otherwise be
 re-recorded for as long as the run lasted, and the bound is the backstop for exactly that agent.
 Only where the variable is on, because without it the stub's first 429 ended every run at once, the
-one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which now points to
-it. No run has met it yet: it comes from the measurement, not an incident.
+one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which first pointed
+to it; once the gates' block named it where it applies, that pointer went as a cost every run paid
+for nothing it acted on. No run has met it yet: it comes from the measurement, not an incident.
 
 *Cut down, R4-14 — the rule it supports:* “And this session must not busy-wait either”
 

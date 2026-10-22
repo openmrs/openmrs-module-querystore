@@ -296,6 +296,30 @@ def load_json(path: Path, default):
         return default
 
 
+# Claude Code's "unattended retry mode": under it a request at a usage limit waits for the reset
+# inside the turn instead of ending it. No session this launcher carries itself may run under it. A
+# headless one waiting there neither ends nor goes quiet, the only two points at which `Session` asks
+# whether a limit is in force, so the driver cannot suspend it and a ticket timeout kills it unasked;
+# a `--work` one idle on a background agent waiting there reads as stopped to the carry, which then
+# tells it the limit that stopped it has reset (resolve-ticket's evidence, 0.29.0).
+RETRY_WATCHDOG = ("CLAUDE_CODE_RETRY_WATCHDOG", "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS")
+
+
+def without_retry_watchdog(env: dict) -> dict:
+    for name in RETRY_WATCHDOG:
+        env.pop(name, None)
+    return env
+
+
+def retry_watchdog_in_settings() -> bool:
+    """Whether ~/.claude/settings.json's `env` turns the watchdog on. Claude Code copies that `env`
+    into every session it starts, past anything `without_retry_watchdog` drops, and reads the value
+    lower-cased and trimmed, as on for `1`, `true`, `yes` or `on`."""
+    env = load_json(SETTINGS, {}).get("env")
+    value = env.get(RETRY_WATCHDOG[0]) if isinstance(env, dict) else None
+    return value is not None and str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 def save_json(path: Path, data) -> None:
     """Write atomically, through a temp path NO other writer can be using.
 
@@ -1725,7 +1749,14 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
                                "last_run": datetime.now(timezone.utc).isoformat()})
     code = 1
     try:
-        proc = subprocess.Popen(argv, cwd=str(claim["worktree"]), env=claim["env"])
+        # With the carry on, never under the retry watchdog either (`RETRY_WATCHDOG`): the carry is
+        # what takes this session past a limit, and the two together nudge a session that never
+        # stopped. `CLAUDE_PIPELINE_CARRY` tells resolve-ticket's Step 1 so, which would otherwise
+        # warn that nothing carries the run. With the carry off the operator's environment stands.
+        env = dict(claim["env"])
+        if cfg["ticket"].get("limit_continue_work", True):
+            without_retry_watchdog(env)["CLAUDE_PIPELINE_CARRY"] = "work"
+        proc = subprocess.Popen(argv, cwd=str(claim["worktree"]), env=env)
         record_session(claim["slot"].name, proc.pid)
         # And the ROW carries it too, not only the lease. `--release` in a second terminal unlinks a
         # lease with no liveness check, and `active_leases` prunes one whose worktree was removed —
@@ -1913,6 +1944,18 @@ def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True) -> li
                 f"{gate} is not registered as a Stop hook in ~/.claude/settings.json — without it "
                 "the skills' termination contract is prose and an unattended run can stop early"
             )
+
+    # The retry watchdog set in settings.json reaches every session this launcher starts, past the
+    # environment it drops it from (`RETRY_WATCHDOG`), so it is refused where something here carries
+    # those sessions itself: always for the driver, and for `--work` while its carry is on.
+    if retry_watchdog_in_settings() and (driving or cfg["ticket"].get("limit_continue_work", True)):
+        fatal.append(
+            "~/.claude/settings.json's env turns CLAUDE_CODE_RETRY_WATCHDOG on, and Claude Code puts "
+            "that in every session pool-run starts: a headless one waiting at a usage limit under it "
+            "neither ends nor goes quiet, so the driver cannot suspend it, and a --work one confuses "
+            "the launcher's carry. Take it out of settings.json; an alias carries the sessions you "
+            "start yourself (resolve-ticket's Step 1)"
+        )
 
     for skill in REQUIRED_SKILLS:
         if not (CLAUDE / "skills" / skill / "SKILL.md").is_file():
@@ -2644,15 +2687,10 @@ class Session:
         # PreToolUse rm-shape guard scopes on this stamp as well as on the worktree path, because a
         # permission prompt raised in ANY of them is a hang, not a pause -- see ~/.claude/hooks.
         self.env["CLAUDE_PIPELINE_SESSION"] = "1"
-        # And never under CLAUDE_CODE_RETRY_WATCHDOG, which an operator may have exported as Claude
-        # Code's "unattended retry mode". A session waiting at a usage limit under it streams a retry
-        # line every 30 s and no rate_limit_event, so this driver never sees the limit and cannot
-        # suspend it: the wait ends on its own or at the ticket timeout, or a limit probe's, whichever
-        # comes first (measured against a stub: resolve-ticket's evidence, 0.29.0). Carrying a
-        # headless session past a limit is this driver's job, and `ticket.limit_wait_max_seconds` is
-        # how far it goes.
-        for name in ("CLAUDE_CODE_RETRY_WATCHDOG", "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS"):
-            self.env.pop(name, None)
+        # And never under the retry watchdog (`RETRY_WATCHDOG`), which an operator may have
+        # exported: carrying a headless session past a limit is this driver's job, and
+        # `ticket.limit_wait_max_seconds` is how far it goes.
+        without_retry_watchdog(self.env)
         self.jsonl = log_stem.with_suffix(".jsonl")
         self.err = log_stem.with_suffix(".err")
         self.timeout, self.quiet, self.say = timeout, quiet, say

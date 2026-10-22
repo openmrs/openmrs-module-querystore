@@ -6,7 +6,7 @@ rejected`, `anthropic-ratelimit-unified-reset: <epoch>` and `x-should-retry: fal
 and with the text `STUB-OK` after it. In agent mode (`STUB_MODE=agent`) it serves the FIRST request
 before any limit, with a call to the `Agent` tool, so the limit then meets the agent's own request.
 
-Five drivers, each writing its case to `<case>/`:
+Six drivers, each writing its case to `<case>/`:
 - `run.sh <case> <seconds to reset> [env…]` — one `claude -p --output-format text` in a clean
   environment (`env -i`, a throwaway `HOME`, a dummy API key, `ANTHROPIC_BASE_URL` at the stub).
   `meta` holds the launch, reset and end as epoch seconds, the exit code and the `claude --version`
@@ -24,6 +24,9 @@ Five drivers, each writing its case to `<case>/`:
 - `probe.py`, run by `probe-run.sh` — `pool-run`'s real `account_limit`, the limit probe a `--work`
   launcher spends, against the stub, in a clean environment plus whatever the case adds; its output
   is the case's `probe.out`.
+- `work-carry/drive_carry.py` — a Phase 2 reviewer's driver, run again here: `pool-run`'s real
+  `watch_hand_launched` through `pool-test.py`'s own fixtures, a quiet `--work` session whose probes
+  are refused twice and then served; its three cases' output is `work-carry/<case>.out`.
 
 `+Ns` below is seconds from launch: a request's `t` in `requests.jsonl` less `START` in `meta` (or
 `start` in `result.json`).
@@ -58,9 +61,11 @@ retries, the agent's requests included, and the run ends normally; without it th
 run. A reset further away than `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` is refused at
 once, and the variable is read case-insensitively. On a Claude Code without the watchdog (2.1.42
 here; its `cli.js` never names the variable) setting it changes nothing. A headless session waiting
-this way writes a stream line every 30s and no `rate_limit_event`, so `pool-run`'s `Session` neither
-goes quiet nor learns of the limit: it cannot suspend the session, and the wait ends on its own or
-at the ticket timeout, whichever comes first (pool-outlasts, pool-timeout).
+this way writes a stream line every 30s, so it neither ends nor goes quiet, the only two points at
+which `pool-run`'s `Session` asks whether a limit is in force: it cannot suspend the session, and
+the wait ends on its own or at the ticket timeout, whichever comes first (pool-outlasts,
+pool-timeout). The stub sends no `rate_limit_event` with the variable or without it (pool-stripped
+has none either), so nothing here rests on one.
 
 A turn the limit ends runs the `StopFailure` hooks and not the `Stop` ones (hooks-limit), so a gate,
 which is a `Stop` hook, never sees it; under the watchdog the same limit ends nothing, and the turn
@@ -70,10 +75,15 @@ that ends after the wait runs `Stop` as a normal one does (hooks-watchdog-on, ag
 of `pool-run --work`, or exported, reached the launcher's limit probe, which then waited out its
 300s timeout instead of being refused (probe-before-vars). `Session` now drops the pair: a session
 handed it ends at the limit (pool-stripped) and the probe answers in under a second
-(probe-after-vars, against the control). A watchdog set in `settings.json`'s `env` is out of its
-reach and still waits (settings-env-watchdog, against hooks-limit). The stub's console in
-probe-before-vars shows the same `ConnectionResetError` as agent-stall-default, on a connection with
-no request in flight.
+(probe-after-vars, against the control). A `--work` session with its carry on is started without the
+pair too: in work-carry, once a probe was refused the carry nudged the session as the account served
+again, "the claude.ai usage limit that stopped you has reset", with a background agent's transcript
+written every half second from the first refusal on (resumed-by-itself) as with nothing written
+(control-limit), and sent nothing with no limit (control-no-limit), so under the watchdog the nudge
+would land beside an agent that had resumed by itself. A watchdog set in `settings.json`'s `env` is
+out of the drop's reach and still waits (settings-env-watchdog, against hooks-limit), so
+`pool-run`'s preflight refuses one. The stub's console in probe-before-vars shows the same
+`ConnectionResetError` as agent-stall-default, on a connection with no request in flight.
 
 The harness reports a background agent `failed` as stalled once it has gone
 `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress; unset, the 2.1.306 binary takes the larger

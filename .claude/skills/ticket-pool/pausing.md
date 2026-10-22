@@ -19,9 +19,9 @@ mid-attempt. It hands back to you instead in three cases, each named in the log 
 same wave), a reset further out than `ticket.limit_wait_max_seconds` — 6h by default, so a five-hour
 window is waited out and a weekly one is not — and a ticket suspended this way before that did
 nothing with the last reset, which is a session spinning rather than a big ticket. `Session` drops
-`CLAUDE_CODE_RETRY_WATCHDOG` and its cap from every session it starts, limit probes included: one
-waiting under them streams a retry line every 30 s and never shows the driver its limit. Set in
-`settings.json`'s `env`, they still reach those sessions, so keep them out of it.
+`CLAUDE_CODE_RETRY_WATCHDOG` and its cap from every session it starts: one waiting under them
+neither ends nor goes quiet, the only two points at which the driver looks for a limit. Set in
+`settings.json`'s `env` they would still arrive, so `pool-run` refuses to start under that.
 
 **A `--work` session is carried past it too, by a third mechanism.** Neither of the other two
 reaches a hand-launched session: Claude Code's own wait belongs to the SESSION and can be gated off
@@ -39,7 +39,10 @@ rejection ends the run that would log one), so a named window only says when to 
 `procStart` and the session id keep a recycled pid from being handed somebody else's resume, and
 both are compared as INSTANTS rather than as strings, because `claude` records its start in UTC and
 `ps` prints local — compared as text they disagree by the machine's offset on any box that is not
-on UTC, which silently refused every nudge the carry ever sent until 2026-09-13.
+on UTC, which silently refused every nudge the carry ever sent until 2026-09-13. With the carry on,
+the session starts without the watchdog pair, since one idle on a background agent waiting under it
+reads as stopped and would be nudged as if it were, and with `CLAUDE_PIPELINE_CARRY=work`, which
+tells `resolve-ticket`'s Step 1 this carry takes it past a limit.
 
 **It only works on sessions this launcher started**, and that is not an accident of packaging. A
 session running `--dangerously-skip-permissions` HOLDS an inbound peer message unless it can

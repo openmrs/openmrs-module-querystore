@@ -196,19 +196,17 @@ module that needs one. Say so NOW if either is missing, so the user can fix it w
 proceeds.
 
 **Pre-flight the usage limit too.** A claude.ai usage limit ends the turn on an API error, which
-runs `StopFailure` hooks instead of `Stop`, so no gate sees it; `CLAUDE_CODE_RETRY_WATCHDOG` makes
-the request wait for the reset instead. So where `$CLAUDE_PIPELINE_SESSION` is unset, run
+runs `StopFailure` hooks, not `Stop`, so no gate sees it; `CLAUDE_CODE_RETRY_WATCHDOG` makes the
+request wait for the reset instead. So where neither `$CLAUDE_PIPELINE_SESSION` nor
+`$CLAUDE_PIPELINE_CARRY` is set, the marks of a session `pool-run` carries itself, run
 `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"; "${CLAUDE_CODE_EXECPATH:-claude}" --version`, and
 unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second
 `2.1.301 (Claude Code)` or later, its numbers compared as numbers (2.1.42 is older), say so NOW and
-carry on. The remedy is for later sessions, never a reason to relaunch this one mid-run: Claude Code
-2.1.301 or later, started through
+carry on. The remedy is for later sessions, never a mid-run relaunch: Claude Code 2.1.301 or later,
+started through
 `alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
-whose cap waits out a reset up to five hours away, or with the two variables in front of
-`pool-run --work`. Never `settings.json`'s `env`: it reaches the driver's headless sessions, which
-`pool-run` otherwise keeps the pair out of, and a session waiting under it hides the limit from the
-driver, so a ticket timeout that ends the wait spends the attempt. And a wait can hold a live agent past the
-gates' one-hour await bound; `pr-harden`'s **State** says what its await gets then.
+whose cap waits out a reset up to five hours away. Never `settings.json`'s `env`: it reaches every
+session `pool-run` starts, which refuses to start under it (`ticket-pool`'s `pausing.md`).
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs

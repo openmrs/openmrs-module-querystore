@@ -216,12 +216,12 @@ the way, because the turn does not stop at the limit. It shares the third.
 **The third is the gates', and the watchdog meets it too.** Both gates treat an await older than
 `AWAIT_TTL`, an hour, as an agent that died (`pr-harden-gate.sh`, `harden-cycle-gate.sh`). Run
 against a resolve-ticket entry in phase `building` (the artifact's `gate-await-ttl.sh`), the pr gate
-allowed a yield on an await 600 s old and blocked one 7200 s old as a run that had stopped. A wait at
-a limit holds a live agent past that hour: its requests wait like the orchestrator's. So after one,
-an attended run that yields with agents still out meets awaits the gates read as dead. What such an
-await gets is `pr-harden`'s rule, in its **State** section beside the other await rules, because the
-alias reaches a standalone `/pr-harden` or `/harden` as much as this skill; the paragraph's last
-sentence points there, and `pr-harden`'s evidence carries the measurement.
+allowed a yield on an await 600 s old and blocked one 7200 s old as a run that had stopped. A wait
+at a limit holds a live agent past that hour: its requests wait like the orchestrator's. So after
+one, an attended run that yields with agents still out meets awaits the gates read as dead. What
+such an await gets is `pr-harden`'s rule, in its **State** section beside the other await rules,
+because the alias reaches a standalone `/pr-harden` or `/harden` as much as this skill; the gates'
+own block names it where it applies, and `pr-harden`'s evidence carries the measurement.
 
 **What the paragraph does not ask for, and why.** A second fresh review, of the paragraph's first
 draft, found the relaunch it then advised unsafe. Exiting a `pool-run --work` session releases its
@@ -233,23 +233,35 @@ the remedy is for the sessions after it.
 
 **Why never `settings.json`'s `env`, and why `pool-run` drops the pair.** A headless session waiting
 under the watchdog hides the limit from the driver. Measured with the stub (the artifact's
-`stream.sh` and `drive.py`): it streams a `system/api_retry` line every 30 s and no
-`rate_limit_event`, so `pool-run`'s `Session` never goes quiet and never records the limit. Driven
-with a 45 s quiet window and a 60 s ticket timeout, it was killed for the timeout, with nothing
-paused; with a 200 s timeout it outlasted the wait and finished. A kill is recorded as `timeout` and
-spends an attempt, where the driver's own carry would have suspended the session at no cost.
-`pool-run` copied its own environment into every session it started, the `--work` launcher's limit
-probe included, so an exported pair reached them all, and so did the pair this paragraph's remedy
-puts in front of `pool-run --work`: with it, the probe the stub's limit refuses in under a second
-waited out its own 300 s timeout (probe-before-vars). So `Session` now drops the pair, whichever way
-it arrives, which `pool-test` checks against the process it starts: a session handed the pair ended
-at the stub's first 429 (pool-stripped), and the probe answered in 0.8 s (probe-after-vars).
-`settings.json`'s `env` is beyond that: set there alone, the variable still had a session wait out
-the stub's limit (settings-env-watchdog), and it reaches every `claude`, the driver's included. An
-alias reaches only the sessions a person starts, and `pool-run --work`'s, which inherit the
-environment of the command that launched them, take the variables only when they are put in front of
-that command. Run in an interactive bash (the artifact's `alias-probe.sh`), the alias started a
-probe `claude` with both variables set and left the shell itself without them.
+`stream.sh` and `drive.py`): it streams a `system/api_retry` line every 30 s, so it neither ends nor
+goes quiet, the only two points at which `pool-run`'s `Session` asks whether a limit is in force,
+and a ticket timeout kills it without asking. The stub sends no `rate_limit_event` with the variable
+or without it (pool-stripped has none either), so none of this rests on one. Driven with a 45 s
+quiet window and a 60 s ticket timeout, it was killed for the timeout, with nothing paused; with a
+200 s timeout it outlasted the wait and finished. A kill is recorded as `timeout` and spends an
+attempt, where at a real limit the driver's own carry is built to suspend the session at no cost,
+which the stub, sending no `rate_limit_event`, cannot show. `pool-run` copied its own environment
+into every session it started, the `--work` launcher's limit probe included, so an exported pair
+reached them all, and so did the pair an earlier draft of this paragraph's remedy put in front of
+`pool-run --work`: with it, the probe the stub's limit refuses in under a second waited out its own
+300 s timeout (probe-before-vars). So `Session` now drops the pair, whichever way it arrives, which
+`pool-test` checks against the process it starts: a session handed the pair ended at the stub's
+first 429 (pool-stripped), and the probe answered in 0.8 s (probe-after-vars). A `--work` session
+drops it too while its carry is on, because the two collide, which a Phase 2 reviewer found and the
+artifact's `work-carry/` reproduces with the real `watch_hand_launched`: once a probe has been
+refused, the carry nudges the session when the account serves again ("the claude.ai usage limit that
+stopped you has reset"), and it did so with a background agent's transcript written every half
+second from the first refusal on, as with nothing written; with no limit it sent nothing. Under the
+watchdog that is a session idle on an agent waiting inside its request, whose own transcript stays
+quiet meanwhile (the reviewer saw none written during a stub wait), so the nudge lands beside an
+agent the reset had already resumed. So one carry per launch path: the launcher's nudge for
+`--work`, which marks the session `CLAUDE_PIPELINE_CARRY=work` so that Step 1 does not warn there,
+the alias for a session started by hand. `settings.json`'s `env` is beyond the drop: set there
+alone, the variable still had a session wait out the stub's limit (settings-env-watchdog), and
+Claude Code puts it in every session it starts, so `pool-run`'s preflight refuses to start under it
+(`pool-test`'s "limit watchdog settings"). An alias reaches only the sessions a person starts. Run
+in an interactive bash (the artifact's `alias-probe.sh`), the alias started a probe `claude` with
+both variables set and left the shell itself without them.
 
 Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
 window, which resets less than five hours after the request that meets it, and refuses any reset

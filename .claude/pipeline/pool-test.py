@@ -3791,14 +3791,9 @@ def test_a_rejection_covered_by_overage_is_not_a_pause(tmp: Path) -> None:
     check("an overage rejection is not slept on", results == [("o/r#266", "error")], str(results))
 
 
-def test_a_headless_session_never_waits_out_a_limit_under_the_retry_watchdog(tmp: Path) -> None:
-    """An operator may export CLAUDE_CODE_RETRY_WATCHDOG, which Claude Code documents as "unattended
-    retry mode", and every headless session would inherit it. Under it a session at a usage limit
-    waits for the reset instead of stopping, streaming a retry line every 30 s and no
-    rate_limit_event, so the driver never sees the limit, and the wait ends on its own or at the
-    ticket timeout, whichever comes first (resolve-ticket's evidence, 0.29.0). So `Session` drops
-    the pair, whichever way its environment arrives, and nothing else: the stub reports what its
-    process was actually started with.
+def test_session_drops_the_retry_watchdog_pair_and_nothing_else(tmp: Path) -> None:
+    """`Session` drops `RETRY_WATCHDOG` (pool-run says why, beside it), whichever way its
+    environment arrives, and nothing else: the stub reports what its process was started with.
     """
     with isolated(tmp):
         stub = tmp / "claude"
@@ -3833,6 +3828,94 @@ def test_a_headless_session_never_waits_out_a_limit_under_the_retry_watchdog(tmp
                   "W=unset C=unset" in got, got)
             check(f"and the rest of an environment {how} still does",
                   "P=1" in got and "K=kept" in got, got)
+
+
+def test_a_work_session_is_started_without_the_retry_watchdog_while_its_carry_is_on(tmp: Path) -> None:
+    """With its carry on, `--work` starts its session without `RETRY_WATCHDOG`, so the session stops
+    at a limit and the carry takes it past one, and with `CLAUDE_PIPELINE_CARRY=work`, which tells
+    resolve-ticket's Step 1 the launcher carries it; with the carry off the operator's environment
+    stands. The stub reports what its process was started with.
+    """
+    print("\na --work session and the retry watchdog")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    seen = tmp / "env.txt"
+    stub = tmp / "claude-stub"
+    stub.write_text("#!/bin/bash\n"
+                    'echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}|'
+                    '${CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS:-unset}|${KEEP_ME:-unset}|'
+                    '${CLAUDE_PIPELINE_CARRY:-unset}"'
+                    f" >> {seen}\n")
+    stub.chmod(0o755)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/r": str(work)},
+        "claude": {"binary": str(stub)},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]},
+    })
+    pair = {"CLAUDE_CODE_RETRY_WATCHDOG": "1",
+            "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS": "18000000"}
+    saved = {k: os.environ.get(k) for k in [*pair, "KEEP_ME"]}
+    os.environ.update(pair)
+    os.environ["KEEP_ME"] = "kept"
+    try:
+        with isolated(tmp):
+            say = pool.Say(tmp / "work.md")
+            pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266", "number": 266},
+                                 work, say)
+            pool.work_in_session(pool.merge(cfg, {"ticket": {"limit_continue_work": False}}), "o/r",
+                                 "297", {"url": "https://example/297", "number": 297}, work, say)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    lines = seen.read_text().splitlines() if seen.exists() else []
+    check("a --work session with its carry on is started without the watchdog pair, marked carried",
+          len(lines) == 2 and lines[0] == "unset|unset|kept|work", repr(lines))
+    check("and with the carry off the operator's environment stands, unmarked",
+          len(lines) == 2 and lines[1] == "1|18000000|kept|unset", repr(lines))
+
+
+def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
+    """Claude Code puts settings.json's `env` into every session it starts, past the environment
+    pool-run drops `RETRY_WATCHDOG` from, so preflight refuses one that turns it on: always for the
+    driver, and for `--work` while its carry is on. The value is read as Claude Code reads it.
+    """
+    print("\nthe retry watchdog in settings.json")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "label": "x", "repos": {"o/r": str(work)}, "source_repo": str(work),
+        "retro": {"enabled": False},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]},
+    })
+    off = pool.merge(cfg, {"ticket": {"limit_continue_work": False}})
+    settings = tmp / "settings.json"
+    saved = pool.SETTINGS
+    pool.SETTINGS = settings
+    try:
+        with isolated(tmp):
+            say = pool.Say(tmp / "preflight.md")
+
+            def refused(c, driving):
+                return any("CLAUDE_CODE_RETRY_WATCHDOG" in x
+                           for x in pool.preflight(c, say, want_label=False, driving=driving))
+            settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": " True "}}))
+            check("the driver refuses a watchdog settings.json turns on, read trimmed and in any case",
+                  refused(cfg, True))
+            check("and so does --work while its carry is on", refused(cfg, False))
+            check("but not --work with its carry off", not refused(off, False))
+            settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "0"}}))
+            check("a watchdog settings.json turns off is no problem", not refused(cfg, True))
+            settings.write_text(json.dumps({"env": {"KEEP_ME": "1"}}))
+            check("nor is an env without it", not refused(cfg, True))
+    finally:
+        pool.SETTINGS = saved
 
 
 def test_a_session_silent_under_a_limit_is_suspended_not_killed(tmp: Path) -> None:
@@ -4666,7 +4749,9 @@ def main() -> int:
                          ("status staleness", test_status_names_a_running_row_no_session_holds),
                          ("work reaps the dead", test_the_next_hand_launch_closes_out_what_died),
                          ("limit suspends", test_a_usage_limit_suspends_the_ticket_rather_than_spending_it),
-                         ("limit watchdog dropped", test_a_headless_session_never_waits_out_a_limit_under_the_retry_watchdog),
+                         ("limit watchdog dropped", test_session_drops_the_retry_watchdog_pair_and_nothing_else),
+                         ("limit watchdog --work", test_a_work_session_is_started_without_the_retry_watchdog_while_its_carry_is_on),
+                         ("limit watchdog settings", test_a_retry_watchdog_in_settings_json_is_refused),
                          ("limit recovered", test_a_limit_the_session_got_past_is_not_a_pause),
                          ("limit stale reset", test_a_reset_that_has_already_passed_did_not_stop_this_run),
                          ("limit overage", test_a_rejection_covered_by_overage_is_not_a_pause),

@@ -85,8 +85,7 @@ AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long
                     # Generous on purpose: a fixer runs a full root `mvn -o clean install` and a
                     # verifier restarts a standalone and drives a real query. Still far under
                     # STALE_AFTER, so a forgotten `awaiting` cannot outlive the run that wrote it.
-                    # A wait at a usage limit under CLAUDE_CODE_RETRY_WATCHDOG can hold a live one
-                    # past it; the skill's State section has its await recorded again, once.
+                    # A usage-limit wait can hold a live one past it: see STALE_NOTE.
 
 allow() { exit 0; }
 
