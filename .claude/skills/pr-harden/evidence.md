@@ -982,31 +982,34 @@ that answers like a claude.ai limit
 (`~/.claude/skill-lessons/artifacts/2026-10-21-retry-watchdog-limit/`), a request at the limit waits
 under it for the reset, and in a run that had spawned a background agent first, the agent's requests
 waited the same way. The harness reports a background agent stalled once it has gone
-`CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress, 600 s unset in the 2.1.306 binary, and a
-waiting agent was not reported: at 20 s, the control, it was reported
-`Agent stalled: no progress for 20s` at +21 s; at 45 s it waited out a 100 s limit and completed; at
-the default it waited out an 11-minute one and completed. What kept it alive is read, not seen: in
-the binary every message the agent's query yields re-arms that timer and the watchdog waits in 30 s
-steps, while the stream shows the agent's first retry line only, so the 20 s and 45 s cases bracket
-a 30 s step rather than show one. So an agent can be alive and unreported past the gates' hour, and
-the gate then blocks the yield as a run that stopped (the artifact's `gate-await-ttl.sh`, an entry
-in phase `building`: allowed at 600 s, blocked at 7200 s). Re-dispatching the phase there starts a
-second agent in the worktree the first is still working in; recorded again, the await gives the
-first another hour to report. The same script recorded it again through `gate-state await` and the
-gate allowed the yield, and blocked that entry with the new await taken out. Nothing in the session
-marks the hour: in the agent case the main thread's three requests carried the same five messages
-across the wait. And past the bound each gate's block handed back its phase's own text, "spawn a
-fresh reviewer agent", "Run Phase 2 once", "Continue the phases", which is the re-dispatch this rule
-forbids; two Phase 2 reviewers found it. So every block reached past the bound now opens on the
-await, its age and its agents (both `gate-test.sh`, each case calibrated against the gate without
-it; a Phase 1 reviewer found the first cases passed a note appended at the end too, so they now
-check that it opens the reason). The command that recorded the await is the one that records it
-again, because `--only` decides which gate's entry gets it and `--run` which harden run's. `await`
-appends, so with one await per agent a name listed twice is the record of the once, and past it the
-agent is stopped before the retry, which would otherwise start beside an agent waiting at a second
-limit. `resolve-ticket`'s Step 7 example had recorded Phase 2's four agents under one name, which
-the same reviewer found listed four times before any of them had had its once; it now records one
-await per agent. Once, because an agent that hung where the harness cannot see it would otherwise be
+`CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress, 600 s unset in the 2.1.306 binary unless
+its stream idle timeout is raised, and a waiting agent was not reported: at 20 s, the control, it
+was reported `Agent stalled: no progress for 20s` at +21 s; at 45 s it waited out a 100 s limit and
+completed; at the default it waited out an 11-minute one and completed. What kept it alive is read,
+not seen: in the binary every message the agent's query yields re-arms that timer and the watchdog
+waits in 30 s steps, while the stream shows the agent's first retry line only, so the 20 s and 45 s
+cases bracket a 30 s step rather than show one. So an agent can be alive and unreported past the
+gates' hour, and the gate then blocks the yield as a run that stopped (the artifact's
+`gate-await-ttl.sh`, an entry in phase `building`: allowed at 600 s, blocked at 7200 s).
+Re-dispatching the phase there starts a second agent in the worktree the first is still working in;
+recorded again, the await gives the first another hour to report. The same script recorded it again
+through `gate-state await` and the gate allowed the yield, and blocked that entry with the new await
+taken out. Nothing in the session marks the hour: in the agent case the main thread's three requests
+carried the same five messages across the wait. And past the bound each gate's block handed back its
+phase's own text, "spawn a fresh reviewer agent", "Run Phase 2 once", "Continue the phases", which
+is the re-dispatch this rule forbids; two Phase 2 reviewers found it. So every block reached past
+the bound now opens on the await, its age and its agents (both `gate-test.sh`, each case run against
+a mutant of the gate it must fail, the note removed, appended, replacing the reason, or set with no
+`since` or no await, by the artifact's `gate-calibrate.py`; a Phase 1 reviewer found the first cases
+passed a note appended at the end too, so they now check that it opens the reason, and a Phase 2 one
+that this entry had called every case calibrated against the gate without the note, which six that
+read the reason pass). The command that recorded the await is the one that records it again, because
+`--only` decides which gate's entry gets it and `--run` which harden run's. `await` appends, so with
+one await per agent a name listed twice is the record of the once, and past it the agent is stopped
+before the retry, which would otherwise start beside an agent waiting at a second limit.
+`resolve-ticket`'s Step 7 example had recorded Phase 2's four agents under one name, which the same
+reviewer found listed four times before any of them had had its once; it now records one await per
+agent. Once, because an agent that hung where the harness cannot see it would otherwise be
 re-recorded for as long as the run lasted, and the bound is the backstop for exactly that agent.
 Only where the variable is on, because without it the stub's first 429 ended every run at once, the
 one with an agent included. The rule moved here from `resolve-ticket`'s Step 1, which first pointed

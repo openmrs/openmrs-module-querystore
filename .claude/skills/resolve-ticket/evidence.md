@@ -264,10 +264,15 @@ Claude Code puts it in every session it starts, so `pool-run`'s preflight refuse
 A Phase 1 reviewer found the first cut of that refusal also stopped `--claim`, which launches
 nothing, and that it and the `--work` drop read the carry as on with `limit_wait_max_seconds` at 0,
 where the watcher never acts; one reading of it, `work_carry_on`, now serves the watcher, the drop
-and the refusal, and a `--work` session whose carry is off takes the pair only in front of
-`pool-run --work`. An alias reaches only the sessions a person starts. Run in an interactive bash
-(the artifact's `alias-probe.sh`), the alias started a probe `claude` with both variables set and
-left the shell itself without them.
+and the refusal, and the launch's `crossSessionInbound` too, which a Phase 2 reviewer found still
+let any local process put a turn into a session at that cap, where no nudge is ever sent. A `--work`
+session whose carry is off takes the pair only in front of `pool-run --work`, and the refusal says
+to delete the key rather than set it to `0`, because Claude Code applies that `env` over the
+process's own: a `"0"` there ended at the first 429 a session the alias's two variables carried past
+it otherwise (settings-env-zero-alias, against settings-env-none-alias; a Phase 2 reviewer found
+it). An alias reaches only the sessions a person starts. Run in an interactive bash (the artifact's
+`alias-probe.sh`), the alias started a probe `claude` with both variables set and left the shell
+itself without them.
 
 Five hours for `CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS` covers any wait for a five-hour
 window, which resets less than five hours after the request that meets it, and refuses any reset

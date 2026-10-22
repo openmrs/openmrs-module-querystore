@@ -9,8 +9,8 @@
     },
     "pr-harden": {
       "from": 10532,
-      "to": 10632,
-      "why": "State says that where CLAUDE_CODE_RETRY_WATCHDOG is on a live agent can outlast the gates' one-hour await bound, since its requests wait at a usage limit for the reset and the harness does not report it stalled (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), and that nothing in the session marks that hour, so the gate's block past the bound opens on its await and the run records it again with the command that recorded it, --only and --run included, rather than re-dispatching its phase beside the live agent; once, an await naming one agent so that a name listed twice is that once spent, after which the agent is stopped with TaskStop before the dead-phase contract retries its phase; the rule moves here from resolve-ticket's Step 1 because resolve-ticket's alias reaches a standalone pr-harden or harden too"
+      "to": 10625,
+      "why": "State says that where CLAUDE_CODE_RETRY_WATCHDOG is on a live agent can outlast the gates' one-hour await bound, since its requests wait at a usage limit for the reset and the harness does not report it stalled (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), and that only the gate sees that hour pass, so its block past the bound opens on that await and the run records it again with the command that recorded it, --only and --run included, rather than re-dispatching its phase beside the live agent; once, an await naming one agent so that a name listed twice is that once spent, after which the agent is stopped with TaskStop before the dead-phase contract retries its phase; the rule moves here from resolve-ticket's Step 1 because resolve-ticket's alias reaches a standalone pr-harden or harden too"
     },
     "pr-harden/fixer.md": {
       "from": 1134,
@@ -29,8 +29,8 @@
     },
     "resolve-ticket": {
       "from": 7873,
-      "to": 8049,
-      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn on an API error, which runs StopFailure rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which reaches every session pool-run starts and which the driver, or --work with its carry on, refuses, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
+      "to": 8037,
+      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which reaches every session pool-run starts and which the driver, or --work with its carry on, refuses, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
       "from": 8064,
@@ -49,8 +49,8 @@
     },
     "ticket-pool/pausing.md": {
       "from": 1612,
-      "to": 1766,
-      "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 says how to set; the driver's carry says Session drops that variable and its cap from every headless session, since one waiting under them neither ends nor goes quiet, the only two points at which the driver looks for a limit, and that the driver, and --work while its carry is on, refuse to start where ~/.claude/settings.json's env sets them, a project's own settings unread; and the --work carry says what carry on means (limit_continue_work with a limit_wait_max_seconds above 0), that a session it carries starts without the pair, since one idle on a background agent waiting under it reads as stopped and would be nudged as if it were (reproduced with the real watch_hand_launched), and with CLAUDE_PIPELINE_CARRY=work, which tells resolve-ticket's Step 1 the launcher carries it, and that with the carry off the session takes the pair only before pool-run --work (all measured against a stub)"
+      "to": 1758,
+      "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 says how to set; the driver's carry says Session drops that variable and its cap from every headless session, since one waiting under them neither ends nor goes quiet, the only two points at which the driver looks for a limit, and that the driver, and --work while its carry is on, refuse to start where ~/.claude/settings.json's env sets them, a project's own settings unread; and the --work carry says that a session it carries starts without the pair, since one idle on a background agent waiting under it reads as stopped and would be nudged as if it were (reproduced with the real watch_hand_launched), and with CLAUDE_PIPELINE_CARRY=work, so that resolve-ticket's Step 1 does not warn, and that with the carry off the session takes the pair only before pool-run --work; and that --work passes crossSessionInbound: accept only while its carry is on, since at a limit_wait_max_seconds of 0 nothing sends the nudge it lets in"
     },
     "harden": {
       "from": 7403,
@@ -67,18 +67,18 @@
     "harden": 7429,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 10632,
+    "pr-harden": 10625,
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
     "pr-review": 8172,
     "pr-review/posting.md": 2030,
-    "resolve-ticket": 8049,
+    "resolve-ticket": 8037,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2823,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1879,
-    "ticket-pool/pausing.md": 1766,
+    "ticket-pool/pausing.md": 1758,
     "verify": 658,
     "verify-frontend-change": 1844
   }

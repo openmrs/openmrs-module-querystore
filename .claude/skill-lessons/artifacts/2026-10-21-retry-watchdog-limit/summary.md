@@ -21,7 +21,8 @@ Six drivers, each writing its case to `<case>/`:
 - `hooks-probe.sh` — as `run.sh`, with stdin from `/dev/null`, and with a `Stop` and a `StopFailure`
   hook in the throwaway `HOME`'s `settings.json`, each appending its name and the JSON it was handed to
   `hooks.log`. Its `meta` records no end time. `settings-env-probe.sh` is the same with
-  `"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "1"}` in that `settings.json` and nothing in the process.
+  `"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "1"}` in that `settings.json` and nothing in the process;
+  `SETTINGS_WATCHDOG` puts another value there, `none` leaving the key out.
 - `probe.py`, run by `probe-run.sh` — `pool-run`'s real `account_limit`, the limit probe a `--work`
   launcher spends, against the stub, in a clean environment plus whatever the case adds; its output
   is the case's `probe.out`.
@@ -49,9 +50,11 @@ Six drivers, each writing its case to `<case>/`:
 | hooks-control (`hooks-probe.sh`) | none | already passed | one request, 200 at +0.5s; `STUB-OK`, exit 0; `Stop` ran, `StopFailure` did not |
 | hooks-limit (`hooks-probe.sh`) | none | +120s | one request, 429 at +0.6s; the API error, exit 1; `StopFailure` ran, with `"error": "rate_limit"`, and `Stop` did not |
 | hooks-watchdog-on (`hooks-probe.sh`) | `CLAUDE_CODE_RETRY_WATCHDOG=1` | +20s | 429 at +0.5s and +19.2s, 200 at +20.4s; `STUB-OK`, exit 0; `Stop` ran, `StopFailure` did not |
-| pool-timeout (`drive.py`) | the same, both watchdog variables | +100s | quiet window 45s, timeout 60s: three `api_retry` lines, never quiet for 45s; `killed_for` "exceeded the ticket timeout of 1m00s", `paused_for` null, `rate_limit` null |
-| pool-outlasts (`drive.py`) | the same | +100s | quiet window 45s, timeout 200s: five `api_retry` lines; 429 at +0.5s and +99.7s, 200 at +100.9s; exit 0 at 101s, never paused or killed |
+| pool-timeout (`drive.py`, `pool-run` before the drop) | the same, both watchdog variables | +100s | quiet window 45s, timeout 60s: three `api_retry` lines, never quiet for 45s; `killed_for` "exceeded the ticket timeout of 1m00s", `paused_for` null, `rate_limit` null |
+| pool-outlasts (`drive.py`, `pool-run` before the drop) | the same | +100s | quiet window 45s, timeout 200s: five `api_retry` lines; 429 at +0.5s and +99.7s, 200 at +100.9s; exit 0 at 101s, never paused or killed |
 | settings-env-watchdog (`settings-env-probe.sh`) | `CLAUDE_CODE_RETRY_WATCHDOG=1` in `settings.json`'s `env`, none in the process | +20s | 429 at +0.5s and +19.1s, 200 at +20.2s; `STUB-OK`, exit 0, `Stop` ran: set there, the watchdog waits whatever the process environment holds |
+| settings-env-none-alias (`settings-env-probe.sh`, `SETTINGS_WATCHDOG=none`, Claude Code 2.1.307) | the alias's two variables in the process, no key in `settings.json` | +20s | the control: 429 at +0.8s and +19.3s, 200 at +20.4s; `STUB-OK`, exit 0, `Stop` ran |
+| settings-env-zero-alias (`settings-env-probe.sh`, `SETTINGS_WATCHDOG=0`, Claude Code 2.1.307) | the same, and `"0"` in `settings.json`'s `env` | +20s | one request, 429 at +0.5s; the API error, exit 1, `StopFailure` ran with `"error": "rate_limit"`: the value there overrode the process's |
 | pool-stripped (`drive.py`, `Session` dropping the pair) | both watchdog variables passed in | +100s | quiet window 45s, timeout 200s: one request, 429 at +1.0s; the session ended at once, `exit` 1, its result `is_error` with `api_error_status` 429, never killed; the stub sends no `rate_limit_event`, so `rate_limit` and `paused_for` are null |
 | probe-before-vars (`probe.py`, `pool-run` before the drop) | both variables in the launcher's environment | +400s | `account_limit` took 305.1s: one 429 at +0.9s, eleven `api_retry` lines, killed at its 300s timeout, answer `refused` |
 | probe-after-vars (`probe.py`, `pool-run` with the drop) | the same | +400s | 0.8s: one 429, answer `refused` |
@@ -84,7 +87,10 @@ written every half second from the first refusal on (resumed-by-itself) as with 
 would land beside an agent that had resumed by itself. A watchdog set in `settings.json`'s `env` is
 out of the drop's reach and still waits (settings-env-watchdog, against hooks-limit), so
 `pool-run`'s preflight refuses one set in `~/.claude/settings.json` for the driver and for a
-`--work` launch whose carry is on (a project's own settings it does not read). The stub's console in
+`--work` launch whose carry is on (a project's own settings it does not read). The remedy is deleting
+the key there, not a `0`: Claude Code applies that `env` over the process's own, and a `"0"` ended at
+the first 429 a session the alias's two variables carried past it otherwise (settings-env-zero-alias,
+against settings-env-none-alias). The stub's console in
 probe-before-vars shows the same `ConnectionResetError` as agent-stall-default, on a connection with
 no request in flight.
 
@@ -95,8 +101,9 @@ binary each message the agent's query yields re-arms that timer, a few bookkeepi
 the three agent-stall cases agree with a waiting agent's retry, every 30s, being such a message: a
 timeout under that interval reported the waiting agent stalled, and one over it, the default
 included, let it wait out the limit and complete. They bracket the step rather than show it, since
-the stream carries the agent's first retry line only. So with the watchdog on, an agent at a usage
-limit is neither reported nor dead until the reset. The stub's own stderr, which `stream.sh` leaves
+the stream carries the agent's first retry line only. So with the watchdog on and the stall timeout
+above that 30s step, as it is by default, an agent at a usage limit was neither reported nor dead
+until the reset, for the eleven minutes the longest case waited. The stub's own stderr, which `stream.sh` leaves
 on the console, printed one `ConnectionResetError` in agent-stall-default while reading a request
 line, so on a connection with no request in flight, which the client reset. The request log has
 every request answered.
@@ -118,6 +125,12 @@ messages), and only the gate measures an await's age. The output prints the syst
 reason's opening. The script stops on a missing gate or one that exits non-zero, because a gate that
 does not run prints nothing, which is what an allow prints: run from the wrong directory before that
 guard, it printed "allow" for all three.
+
+`gate-calibrate.py <repo> <base>` (output in `gate-calibrate.out`) runs each gate's `gate-test.sh`
+against mutants of that gate and names, for every case added since `<base>`, the mutants it fails
+against: the note removed, appended, replacing the reason, set with no `since` or with no await at
+all, `min` read for the newest `since`, and the one-hour bound made infinite. The unmutated gates
+pass every case, and every added case fails against at least one mutant.
 
 `alias-probe.sh` (output in `alias-probe.out`) defines `resolve-ticket`'s alias in an interactive
 bash 5.2 with a probe `claude` first on the `PATH`: `claude --version` through it ran the probe with

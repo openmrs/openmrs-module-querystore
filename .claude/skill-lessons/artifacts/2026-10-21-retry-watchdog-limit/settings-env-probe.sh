@@ -3,6 +3,8 @@
 # As hooks-probe.sh, and its settings.json also carries `"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "1"}`
 # while the process environment does not, to see whether a watchdog set there waits at the stub's
 # limit -- which is what a `pool-run` dropping the variable from a session's environment cannot undo.
+# SETTINGS_WATCHDOG=<value> puts that value there instead of "1", and `none` leaves the key out; the
+# variable itself never reaches `claude`.
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 label="${1:?label}"; ahead="${2:?seconds until the reset}"; shift 2
@@ -10,13 +12,13 @@ case "$label" in */*|.*|"") echo "label must be a plain name" >&2; exit 2 ;; esa
 out="$here/$label"; rm -rf "$out"; mkdir -p "$out"
 home="$(mktemp -d)"; mkdir -p "$home/.claude"
 log="$out/hooks.log"; : > "$log"
-python3 -I - "$home/.claude/settings.json" "$log" <<'EOF'
+python3 -I - "$home/.claude/settings.json" "$log" "${SETTINGS_WATCHDOG:-1}" <<'EOF'
 import json, shlex, sys
-path, log = sys.argv[1], sys.argv[2]
+path, log, value = sys.argv[1], sys.argv[2], sys.argv[3]
 def hook(name):
     cmd = f"{{ echo {name}; cat; echo; }} >> {shlex.quote(log)}"
     return [{"hooks": [{"type": "command", "command": cmd}]}]
-json.dump({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "1"},
+json.dump({"env": {} if value == "none" else {"CLAUDE_CODE_RETRY_WATCHDOG": value},
            "hooks": {"Stop": hook("Stop"), "StopFailure": hook("StopFailure")}}, open(path, "w"))
 EOF
 port=$(( 20000 + RANDOM % 20000 ))
@@ -33,8 +35,8 @@ for _ in $(seq 50); do python3 -c "import socket; socket.create_connection(('127
 code=$?
 kill "$stub" 2>/dev/null; wait "$stub" 2>/dev/null
 rm -rf "$home"
-printf 'START=%s\nRESET=%s\nEXIT=%s\nCLAUDE=%s\nENV=%s\n' "$start" "$reset" "$code" \
-  "$(claude --version 2>&1 | head -1)" "$*" > "$out/meta"
+printf 'START=%s\nRESET=%s\nEXIT=%s\nCLAUDE=%s\nENV=%s\nSETTINGS_WATCHDOG=%s\n' "$start" "$reset" "$code" \
+  "$(claude --version 2>&1 | head -1)" "$*" "${SETTINGS_WATCHDOG:-1}" > "$out/meta"
 echo "== $label: reset +${ahead}s · exit $code · ${*:-no extra env}"
 echo "   stdout: $(tr '\n' ' ' < "$out/stdout" | cut -c1-120)"
 python3 -I - "$log" <<'EOF'

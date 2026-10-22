@@ -60,8 +60,9 @@ run_case "awaiting STALE, unattended -> block" block \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]}"
 # AWAIT_TTL on an ATTENDED session, which the case above cannot show: an unattended entry blocks a
 # yield whatever its await's age, so with the TTL made effectively infinite this suite stayed green.
+STALE_REFUTE="[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]"
 run_case "awaiting STALE, attended -> block (AWAIT_TTL)" block \
-  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]}"
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":$STALE_REFUTE}"
 # The State section has an await past the bound recorded again, once, where a usage-limit wait under
 # CLAUDE_CODE_RETRY_WATCHDOG can hold its agent alive. That works because the gate reads the NEWEST
 # `since`, and with `max` read as `min` this suite stayed green too.
@@ -71,23 +72,24 @@ run_case "a stale await recorded again, attended -> allow (newest since)" allow 
 # The block's TEXT, where allow-or-block cannot tell two blocks apart. A `want` starting with `!` must
 # be absent, and the hook must still have blocked, so an allow cannot pass an absence vacuously; one
 # starting with `^` must OPEN the reason, since a substring passes a note appended at the end too.
+reason_ok() { # want reason
+  case "$1" in
+    !*) [ -n "$2" ] && [[ "$2" != *"${1#!}"* ]] ;;
+    ^*) [[ "$2" == "${1#^}"* ]] ;;
+    *)  [[ "$2" == *"$1"* ]] ;;
+  esac
+}
 run_reason_case() { # name want entry_json
-  local name="$1" want="$2" entry="$3" work="$TMP/work" ok=0
+  local name="$1" want="$2" entry="$3" work="$TMP/work"
   mkdir -p "$work"; rm -rf "$TMP/.claude/pipeline/unattended"
   jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
   local got; got=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null | jq -r '.reason // ""')
-  case "$want" in
-    !*) [ -n "$got" ] && [[ "$got" != *"${want#!}"* ]] && ok=1 ;;
-    ^*) [[ "$got" == "${want#^}"* ]] && ok=1 ;;
-    *)  [[ "$got" == *"$want"* ]] && ok=1 ;;
-  esac
-  if [ "$ok" = 1 ]; then PASS=$((PASS+1)); echo "  ok   $name"
+  if reason_ok "$want" "$got"; then PASS=$((PASS+1)); echo "  ok   $name"
   else FAIL=$((FAIL+1)); echo "  FAIL $name: want '$want' in: ${got:0:200}"; fi
 }
 # Past the bound, each block below hands back its phase's own text, which has the run dispatch the
 # phase again; where the await's agent is waiting at a usage limit that is a second agent beside a
 # live one, and only the hook knows the await's age. So every block reached there leads with it.
-STALE_REFUTE="[{\"agent\":\"refute\",\"since\":$((NOW-7200))}]"
 run_reason_case "a block past the await bound names the await" \
   "past the one-hour bound (awaiting: refute)" \
   "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"awaiting\":$STALE_REFUTE}"
@@ -190,11 +192,7 @@ run_git_case() { # name expected entry_json [reason_substring]  (@HEAD@ / @HEAD8
   local out; out=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null)
   local got="allow"; grep -q '"block"' <<<"$out" && got="block"
   if [ -n "$want" ] && [ "$got" = "block" ]; then
-    local reason; reason=$(jq -r '.reason // ""' <<<"$out")
-    case "$want" in
-      ^*) [[ "$reason" == "${want#^}"* ]] || got="block not opening '${want#^}'" ;;
-      *)  [[ "$reason" == *"$want"* ]] || got="block without '$want'" ;;
-    esac
+    reason_ok "$want" "$(jq -r '.reason // ""' <<<"$out")" || got="block without '$want'"
   fi
   if [ "$got" = "$expect" ]; then PASS=$((PASS+1)); echo "  ok   $name ($got)"
   else FAIL=$((FAIL+1)); echo "  FAIL $name: expected $expect, got $got"; fi

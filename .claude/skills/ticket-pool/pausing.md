@@ -40,22 +40,22 @@ rejection ends the run that would log one), so a named window only says when to 
 `procStart` and the session id keep a recycled pid from being handed somebody else's resume, and
 both are compared as INSTANTS rather than as strings, because `claude` records its start in UTC and
 `ps` prints local — compared as text they disagree by the machine's offset on any box that is not on
-UTC, which silently refused every nudge the carry ever sent until 2026-09-13. With the carry on —
-`limit_continue_work`, and a `limit_wait_max_seconds` above 0 — the session starts without the
-watchdog pair, since one idle on a background agent waiting under it reads as stopped and would be
-nudged as if it were, and with `CLAUDE_PIPELINE_CARRY=work`, which tells `resolve-ticket`'s Step 1
-this carry takes it past a limit. With it off nothing here carries the session, which then takes the
-pair only in front of `pool-run --work`.
+UTC, which silently refused every nudge the carry ever sent until 2026-09-13. With the carry on, the
+session starts without the watchdog pair, since one idle on a background agent waiting under it
+reads as stopped and would be nudged as if it were, and with `CLAUDE_PIPELINE_CARRY=work`, so
+`resolve-ticket`'s Step 1 does not warn. With it off nothing here carries the session, which then
+takes the pair only in front of `pool-run --work`.
 
 **It only works on sessions this launcher started**, and that is not an accident of packaging. A
 session running `--dangerously-skip-permissions` HOLDS an inbound peer message unless it can
 identify the sender as another session in its own permission class, and `pool-run` is a python
 script — unidentifiable whatever it puts in the envelope. So `--work` passes
-`crossSessionInbound: accept` on the launch, scoped to that session: it lets any local process put
-a turn into a pool worktree that is already bypassing prompts, and deliberately does not enrol the
-operator's other sessions, which are not inside that boundary. A session started by hand will have
-its nudge held, and will say so in its own transcript. Besides Claude Code's own wait,
-`CLAUDE_CODE_RETRY_WATCHDOG` carries one; `resolve-ticket`'s Step 1 says how to set it.
+`crossSessionInbound: accept` on the launch while its carry is on, scoped to that session: it lets
+any local process put a turn into a pool worktree that is already bypassing prompts, and
+deliberately does not enrol the operator's other sessions, which are not inside that boundary. A
+session started by hand will have its nudge held, and will say so in its own transcript. Besides
+Claude Code's own wait, `CLAUDE_CODE_RETRY_WATCHDOG` carries one; `resolve-ticket`'s Step 1 says how
+to set it.
 
 **The account is asked per quiet SPELL, not per watcher.** A session that has been writing and goes
 quiet again is looked at at once; only repeats within one spell back off, at

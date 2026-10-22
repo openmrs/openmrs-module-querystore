@@ -1,0 +1,3 @@
+StopFailure
+{"session_id":"bfabc8e0-f11f-499c-bc3f-f66dda597892","transcript_path":"/tmp/tmp.vFiTfGy8Fg/.claude/projects/-tmp-tmp-vFiTfGy8Fg/bfabc8e0-f11f-499c-bc3f-f66dda597892.jsonl","cwd":"/tmp/tmp.vFiTfGy8Fg","prompt_id":"675a2292-500f-4e34-b60c-5970ebebdf3f","effort":{"level":"medium"},"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"API Error: Request rejected (429) · This request would exceed your account's rate limit."}
+

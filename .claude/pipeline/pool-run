@@ -323,7 +323,7 @@ def retry_watchdog_in_settings() -> bool:
 def work_carry_on(cfg: dict) -> bool:
     """Whether `watch_hand_launched` carries a `--work` session past a usage limit at all: only with
     `ticket.limit_continue_work` on and a `ticket.limit_wait_max_seconds` above 0. The one reading of
-    it, for the watcher, the session's environment and preflight alike."""
+    it, for the watcher, the session's launch and environment, and preflight alike."""
     t = cfg["ticket"]
     return bool(t.get("limit_continue_work", True)) and int(t.get("limit_wait_max_seconds") or 0) > 0
 
@@ -1685,6 +1685,7 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         return 1
 
     prompt = f"/resolve-ticket {issue.get('url') or claim['url']}"
+    carried = work_carry_on(cfg)
     argv = [cfg["claude"].get("binary") or "claude"]
     if cfg["claude"].get("skip_permissions"):
         # Opt-in, unlike the headless path, because this session has somebody in front of it who
@@ -1697,7 +1698,7 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         # does not start with `-` binds to it, leaving the prompt as the positional it was.
         argv += ["--remote-control", f"{slug.split('/')[-1].replace('openmrs-module-', '')}"
                                      f"-{ticket.lstrip('#')}"]
-    if cfg["ticket"].get("limit_continue_work", True):
+    if carried:
         # Without this the carry cannot land. A session that bypasses prompts HOLDS an inbound peer
         # message unless the sender is identifiable as another session of the same permission class,
         # and `pool-run` is a python script — "an unidentified session" by construction, whatever it
@@ -1709,7 +1710,8 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
         # any local process put a turn into this session. A pool worktree already running
         # `--dangerously-skip-permissions` is inside that trust boundary; the operator's other
         # sessions are not, and must not be enrolled by a knob they did not set for them.
-        # `ticket.limit_continue_work: false` turns the carry off and takes this with it.
+        # A carry that is off takes this with it, a `limit_wait_max_seconds` of 0 included: nothing
+        # will send the nudge it lets in.
         argv += ["--settings", json.dumps({"crossSessionInbound": "accept"})]
     argv += common_claude_args(cfg)
     argv.append(prompt)
@@ -1758,12 +1760,11 @@ def work_in_session(cfg: dict, slug: str, ticket: str, issue: dict, repo: Path, 
                                "last_run": datetime.now(timezone.utc).isoformat()})
     code = 1
     try:
-        # With the carry on, never under the retry watchdog either (`RETRY_WATCHDOG`): the carry is
-        # what takes this session past a limit, and the two together nudge a session that never
-        # stopped. `CLAUDE_PIPELINE_CARRY` tells resolve-ticket's Step 1 so, which would otherwise
-        # warn that nothing carries the run. With the carry off the operator's environment stands.
+        # With the carry on, never under the retry watchdog either (`RETRY_WATCHDOG` says why), and
+        # marked `CLAUDE_PIPELINE_CARRY`, which tells resolve-ticket's Step 1 not to warn that nothing
+        # carries the run. With the carry off the operator's environment stands.
         env = dict(claim["env"])
-        if work_carry_on(cfg):
+        if carried:
             without_retry_watchdog(env)["CLAUDE_PIPELINE_CARRY"] = "work"
         proc = subprocess.Popen(argv, cwd=str(claim["worktree"]), env=env)
         record_session(claim["slot"].name, proc.pid)
@@ -1959,16 +1960,14 @@ def preflight(cfg: dict, say: Say, want_label: bool, driving: bool = True,
                 "the skills' termination contract is prose and an unattended run can stop early"
             )
 
-    # The retry watchdog set in settings.json reaches every session this launcher starts, past the
-    # environment it drops it from (`RETRY_WATCHDOG`), so it is refused where something here carries
-    # those sessions itself: always for the driver, and for `--work` while its carry is on.
     if retry_watchdog_in_settings() and (driving or carried):
         fatal.append(
             "~/.claude/settings.json's env turns CLAUDE_CODE_RETRY_WATCHDOG on, and Claude Code puts "
             "that in every session pool-run starts: a headless one waiting at a usage limit under it "
             "neither ends nor goes quiet, so the driver cannot suspend it, and a --work one confuses "
-            "the launcher's carry. Take it out of settings.json; an alias carries the sessions you "
-            "start yourself (resolve-ticket's Step 1)"
+            "the launcher's carry. Delete the key from settings.json rather than setting it to 0, "
+            "which would override the alias that carries the sessions you start yourself "
+            "(resolve-ticket's Step 1)"
         )
 
     for skill in REQUIRED_SKILLS:

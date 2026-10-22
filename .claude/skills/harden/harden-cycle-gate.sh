@@ -95,6 +95,8 @@ with_note() {
   fi
   printf '%s\n' "$out"
 }
+# The awaited agents' names, for a block to quote.
+await_agents() { jq -r '[(.awaiting // [])[] | (.agent // "?")] | join(", ")' <<<"$ENTRY" 2>/dev/null || echo "?"; }
 
 [ -f "$STATE" ] || allow
 command -v jq >/dev/null 2>&1 || allow
@@ -247,7 +249,7 @@ if [ "$AWAITING" -gt 0 ]; then
   case "$NEWEST" in ''|*[!0-9]*) NEWEST=0 ;; esac
   if [ "$((NOW - NEWEST))" -lt "$AWAIT_TTL" ]; then
     [ "$UNATTENDED" = "true" ] || allow
-    AGENTS=$(jq -r '[(.awaiting // [])[] | (.agent // "?")] | join(", ")' <<<"$ENTRY" 2>/dev/null) || AGENTS="?"
+    AGENTS=$(await_agents)
     jq -n --arg a "$AGENTS" '{
       decision: "block",
       reason: ("This run is UNATTENDED and you ended your turn with a background agent outstanding: "
@@ -270,8 +272,7 @@ if [ "$AWAITING" -gt 0 ]; then
   # says so first. An await with no `since` reads as dead and gets no note. The rule is
   # pr-harden's State, and its measurement is pr-harden's evidence (0.41.0).
   if [ "$NEWEST" -gt 0 ]; then
-    STALE_AGENTS=$(jq -r '[(.awaiting // [])[] | (.agent // "?")] | join(", ")' <<<"$ENTRY" 2>/dev/null) || STALE_AGENTS="?"
-    STALE_NOTE="The newest await recorded here is $(( (NOW - NEWEST) / 60 )) min old, past the one-hour bound (awaiting: ${STALE_AGENTS}). If CLAUDE_CODE_RETRY_WATCHDOG is on and the harness has reported no outcome for an agent named there, it may still be waiting at a usage limit: record its await again with the command that recorded it, once, as pr-harden's State says, rather than dispatching its phase again; one whose name is listed twice has had that once, so stop it (TaskStop) before its phase is dispatched. Otherwise: "
+    STALE_NOTE="The newest await recorded here is $(( (NOW - NEWEST) / 60 )) min old, past the one-hour bound (awaiting: $(await_agents)). If CLAUDE_CODE_RETRY_WATCHDOG is on and the harness has reported no outcome for an agent named there, it may still be waiting at a usage limit: record its await again with the command that recorded it, once, as pr-harden's State says, rather than dispatching its phase again; one whose name is listed twice has had that once, so stop it (TaskStop) before its phase is dispatched. Otherwise: "
   fi
 fi
 

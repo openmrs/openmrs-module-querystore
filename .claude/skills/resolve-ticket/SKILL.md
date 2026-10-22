@@ -195,15 +195,15 @@ What would actually block the run is having no standalone on disk at all, or no 
 module that needs one. Say so NOW if either is missing, so the user can fix it while the work
 proceeds.
 
-**Pre-flight the usage limit too.** A claude.ai usage limit ends the turn on an API error, which
-runs `StopFailure` hooks, not `Stop`, so no gate sees it; `CLAUDE_CODE_RETRY_WATCHDOG` makes the
-request wait for the reset instead. So where neither `$CLAUDE_PIPELINE_SESSION` nor
-`$CLAUDE_PIPELINE_CARRY` is set, the marks of a session `pool-run` carries itself, run
+**Pre-flight the usage limit too.** A claude.ai usage limit ends the turn with `StopFailure` hooks,
+not `Stop`, so no gate sees it; `CLAUDE_CODE_RETRY_WATCHDOG` makes the request wait for the reset
+instead. So unless `$CLAUDE_PIPELINE_SESSION` or `$CLAUDE_PIPELINE_CARRY` is set (`pool-run` carries
+that session itself), run
 `echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"; "${CLAUDE_CODE_EXECPATH:-claude}" --version`, and
 unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second
-`2.1.301 (Claude Code)` or later, its numbers compared as numbers (2.1.42 is older), say so NOW and
-carry on. The remedy is for later sessions, never a mid-run relaunch: Claude Code 2.1.301 or later,
-started through
+`2.1.301 (Claude Code)` or later, compared numerically (2.1.42 is older), say so NOW and carry on.
+The remedy is for later sessions, never a mid-run relaunch: Claude Code 2.1.301 or later, started
+through
 `alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
 whose cap waits out a reset up to five hours away; a `pool-run --work` session whose carry is off
 takes the same two variables only in front of that command. Never `~/.claude/settings.json`'s `env`:

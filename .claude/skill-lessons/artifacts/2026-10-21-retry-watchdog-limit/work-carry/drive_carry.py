@@ -3,7 +3,8 @@
 usage: drive_carry.py <scratch pool-test.py> <case>   case: control-no-limit | control-limit | resumed-by-itself
 A --work session's transcript is stale (quiet), the account refuses probes `refusals` times, then serves.
 In `resumed-by-itself` the session's subagent transcript is written every 0.5 s from the first refusal on --
-what a background agent waiting under CLAUDE_CODE_RETRY_WATCHDOG does when its own request retries.
+more than a background agent waiting under CLAUDE_CODE_RETRY_WATCHDOG writes (a reviewer saw none written
+during a stub wait), so the case shows the carry nudging even a session whose agent is visibly at work.
 Prints how many nudges the session's socket received.
 """
 import os, sys, tempfile, threading, time, signal
