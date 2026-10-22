@@ -3796,8 +3796,9 @@ def test_a_headless_session_never_waits_out_a_limit_under_the_retry_watchdog(tmp
     retry mode", and every headless session would inherit it. Under it a session at a usage limit
     waits for the reset instead of stopping, streaming a retry line every 30 s and no
     rate_limit_event, so the driver never sees the limit, and the wait ends on its own or at the
-    ticket timeout, whichever comes first (resolve-ticket's evidence, 0.29.0). So `Session` drops the pair, whichever way its environment
-    arrives, and nothing else: the stub reports what its process was actually started with.
+    ticket timeout, whichever comes first (resolve-ticket's evidence, 0.29.0). So `Session` drops
+    the pair, whichever way its environment arrives, and nothing else: the stub reports what its
+    process was actually started with.
     """
     with isolated(tmp):
         stub = tmp / "claude"
