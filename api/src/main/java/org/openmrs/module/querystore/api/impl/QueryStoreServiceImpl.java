@@ -421,7 +421,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	/**
 	 * The documents whose type the calling user may read through core. With no user context bound
 	 * there is no caller to check, and nothing reaches one: a call through the service proxy is refused
-	 * by its {@code @Authorized} gate before it gets here. Each type's privilege is asked once per read.
+	 * by its {@code @Authorized} gate before it gets here. Each type's privilege is asked once in this
+	 * filtering pass; {@link #typesWithheldFromCaller} asks again to report what was refused.
 	 */
 	private List<QueryDocument> readableByCaller(List<QueryDocument> documents) {
 		if (documents.isEmpty() || !Context.isSessionOpen()) {
