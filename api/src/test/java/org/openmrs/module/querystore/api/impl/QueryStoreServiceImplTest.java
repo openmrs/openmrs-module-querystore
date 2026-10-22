@@ -94,6 +94,8 @@ public class QueryStoreServiceImplTest {
 		service.setBackend(backend);
 
 		assertEquals(backend.lastModifiedReturn, service.findStoredVersions("obs", Arrays.asList("u1", "u2")));
+		assertEquals("obs", backend.lastModifiedType);
+		assertEquals(Arrays.asList("u1", "u2"), backend.lastModifiedUuids);
 	}
 
 	@Test
@@ -522,6 +524,8 @@ public class QueryStoreServiceImplTest {
 		List<QueryDocument> findAllByPatientReturn = Collections.emptyList();
 
 		java.util.Map<String, java.time.Instant> lastModifiedReturn = Collections.emptyMap();
+		String lastModifiedType;
+		List<String> lastModifiedUuids;
 
 		FakeBackendStore(boolean existsByPatientReturn) {
 			this.existsByPatientReturn = existsByPatientReturn;
@@ -529,6 +533,8 @@ public class QueryStoreServiceImplTest {
 
 		@Override public java.util.Map<String, java.time.Instant> findLastModified(String resourceType,
 		        List<String> resourceUuids) {
+			lastModifiedType = resourceType;
+			lastModifiedUuids = resourceUuids;
 			return lastModifiedReturn;
 		}
 
