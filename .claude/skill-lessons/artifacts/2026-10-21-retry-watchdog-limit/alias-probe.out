@@ -1,5 +1,5 @@
 == bash 5.2.21(1)-release, interactive, with the alias
 probe claude ran: WATCHDOG=1 CAP=18000000 args=--version
-the shell after: WATCHDOG=unset
+the shell after: WATCHDOG=unset CAP=unset
 == the control: no alias
 probe claude ran: WATCHDOG=unset CAP=unset args=--version

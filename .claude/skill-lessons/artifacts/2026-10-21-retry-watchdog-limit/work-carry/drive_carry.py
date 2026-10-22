@@ -1,6 +1,6 @@
 """Drive pool-run's real watch_hand_launched (scratch copy) through pool-test's own fixtures.
 
-usage: drive_carry.py <scratch pool-test.py> <case>   case: control-no-limit | control-limit | resumed-by-itself
+usage: SCRATCH=<dir> drive_carry.py <scratch pool-test.py> <case>   case: control-no-limit | control-limit | resumed-by-itself
 A --work session's transcript is stale (quiet), the account refuses probes `refusals` times, then serves.
 In `resumed-by-itself` the session's subagent transcript is written every 0.5 s from the first refusal on --
 more than a background agent waiting under CLAUDE_CODE_RETRY_WATCHDOG writes (a reviewer saw none written

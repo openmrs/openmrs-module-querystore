@@ -3921,8 +3921,8 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
         say = pool.Say(tmp / "preflight.md")
         settings = pool.SETTINGS
 
-        def refusal(driving):
-            return next((x for x in pool.preflight(cfg, say, want_label=False, driving=driving)
+        def refusal():
+            return next((x for x in pool.preflight(cfg, say, want_label=False, driving=True)
                          if "CLAUDE_CODE_RETRY_WATCHDOG" in x), None)
 
         def refuses(command, ticket=None):
@@ -3938,7 +3938,7 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
         check("the suite's settings.json is its own, never the operator's",
               str(settings).startswith(str(tmp)), str(settings))
         settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": " True "}}))
-        said = refusal(True)
+        said = refusal()
         check("the driver refuses a watchdog settings.json turns on, read trimmed and in any case",
               said is not None)
         check("and says to delete the key rather than set it to 0, which overrides the alias",
@@ -3951,14 +3951,14 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
               refuses(pool.cmd_work, {"limit_wait_max_seconds": 0}) is False)
         check("nor --claim, which launches nothing", refuses(pool.cmd_claim) is False)
         on = []
-        for value in ("yes", "on"):
+        for value in ("1", "yes", "on"):
             settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": value}}))
-            on.append(refusal(True) is not None)
+            on.append(refusal() is not None)
         check("and so is every other value Claude Code reads as on", all(on), str(on))
         settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "0"}}))
-        check("a watchdog settings.json turns off is no problem", refusal(True) is None)
+        check("a watchdog settings.json turns off is no problem", refusal() is None)
         settings.write_text(json.dumps({"env": {"KEEP_ME": "1"}}))
-        check("nor is an env without it", refusal(True) is None)
+        check("nor is an env without it", refusal() is None)
 
 
 def test_a_session_silent_under_a_limit_is_suspended_not_killed(tmp: Path) -> None:
@@ -4653,6 +4653,7 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
             stub = refusing_then_serving_stub(case / "stub", case / "probes.txt", 1, "true")
             cfg = pool.merge(pool.DEFAULTS, {
                 "claude": {"binary": str(stub)},
+                "notify": {"enabled": False},
                 "ticket": {**{"timeout_seconds": 2, "quiet_seconds": 2, "limit_probe_seconds": 3,
                               "limit_wait_jitter_seconds": 0}, **off},
             })
@@ -4660,8 +4661,12 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
             threading.Thread(target=pool.watch_hand_launched, daemon=True,
                              args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None,
                                    pid)).start()
-            # Off, it must stay silent for the whole window; on, the control ends at the nudge.
-            deadline = time.time() + 20
+            # Off, it must stay silent for the whole window; on, the control ends at the nudge. A
+            # watcher that ignored the switch nudged at 8s on this fixture, under load too (its 2s
+            # tick: probe, refusal, probe, nudge), so 12s leaves two ticks of margin, and a machine
+            # too slow for that fails the control rather than passing an off case.
+            window = 12
+            deadline = time.time() + window
             while time.time() < deadline and not (received and not off):
                 time.sleep(0.5)
             stop.set()
@@ -4671,7 +4676,7 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
                   not (case / "probes.txt").exists(), "the switched-off watcher probed the account")
         else:
             check("and with the carry on, the control, the same fixture is nudged",
-                  bool(received), "no nudge within 20s, so the cases above prove nothing")
+                  bool(received), f"no nudge within {window}s, so the cases above prove nothing")
 
 def test_pr_detection(tmp: Path) -> None:
     """A merged PR is not an open PR — the outcome check must not read that as `no-pr`.

@@ -10,7 +10,7 @@ echo "probe claude ran: WATCHDOG=${CLAUDE_CODE_RETRY_WATCHDOG:-unset} CAP=${CLAU
 EOF
 chmod +x "$d/bin/claude"
 printf '%s\n' "alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'" \
-  'claude --version' 'echo "the shell after: WATCHDOG=${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"' > "$d/rc"
+  'claude --version' 'echo "the shell after: WATCHDOG=${CLAUDE_CODE_RETRY_WATCHDOG:-unset} CAP=${CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS:-unset}"' > "$d/rc"
 echo "== bash $BASH_VERSION, interactive, with the alias"
 # stderr kept, less the two lines an interactive bash prints with no terminal to control
 env -i PATH="$d/bin:/usr/bin:/bin" HOME="$d" bash --norc -i "$d/rc" 2>&1 |
