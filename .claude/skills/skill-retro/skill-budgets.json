@@ -3,9 +3,9 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2806,
-      "to": 2823,
-      "why": "Step 2 names the linter's new check, a `$` followed by a digit in a SKILL.md, which the Skill tool replaces with an argument when the skill loads: on 2026-10-21 harden's awk `$0` loaded as the first argument word, and a `{print $1}` in resolve-ticket's PRS lookup loaded as `{print --plan-only}`, so the five awk programs now use $NF, $(NF-1) and $(NF-NF)"
+      "from": 2823,
+      "to": 2835,
+      "why": "the opening's list of the skills that append a run record adds a /harden invoked on its own, which harden 0.45.0 makes write one, and Step 1's \"A /harden invoked on its own writes none\" becomes \"wrote none before harden 0.45.0\", so the two do not contradict each other"
     },
     "pr-harden": {
       "from": 10532,
@@ -53,9 +53,9 @@
       "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 says how to set; the driver's carry says Session drops that variable and its cap from every headless session, since one waiting under them neither ends nor goes quiet, the only two points at which the driver looks for a limit, and that the driver, and --work while its carry is on, refuse to start where ~/.claude/settings.json's env turns them on, a project's own settings unread; and the --work carry says that a session it carries starts without the pair, since one idle on a background agent waiting under it reads as stopped and would be nudged as if it were (reproduced with the real watch_hand_launched), and with CLAUDE_PIPELINE_CARRY=work, so that resolve-ticket's Step 1 does not warn, and that with the carry off resolve-ticket's Step 1 says what carries the session; and that --work passes crossSessionInbound: accept only while its carry is on, since at a limit_wait_max_seconds of 0 nothing sends the nudge it lets in"
     },
     "harden": {
-      "from": 7403,
-      "to": 7429,
-      "why": "the paragraph that bounds the gate's await allow at an hour says a usage-limit wait can have held the agent past it, that the gate's block then opens on that await, and that pr-harden's State says what it gets, since under CLAUDE_CODE_RETRY_WATCHDOG an agent waiting at a limit is alive and unreported past that hour, and past it the gate's block otherwise said Run Phase 2 once"
+      "from": 7429,
+      "to": 7538,
+      "why": "Reporting says a /harden invoked on its own appends its run record, in pr-harden's format and file name with the branch, any / replaced by -, where the slice has no ticket or PR, since chartsearchai #435 (ten cycles) and querystore PR 100 (seven) reached a retro only through records written by hand; and Termination's bullets add that an edit rewriting a test owes the revert-check on the mutations that test caught before the edit, since in TRUNK-6826 and PR 100 a Phase 2 rewrite of a test changed what it could detect and a re-run mutation showed it"
     },
     "ticket-pool/by-hand.md": {
       "from": 1859,
@@ -64,7 +64,7 @@
     }
   },
   "words": {
-    "harden": 7429,
+    "harden": 7538,
     "measure-first": 892,
     "openmrs-module-review": 1534,
     "pr-harden": 10625,
@@ -75,7 +75,7 @@
     "pr-review/posting.md": 2030,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2823,
+    "skill-retro": 2835,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1755,

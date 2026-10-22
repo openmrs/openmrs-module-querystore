@@ -1,7 +1,7 @@
 # harden 0.43.2 · openmrs-module-querystore · PR 100 · 2026-10-22
 outcome: converged (cycle 7: its Phase 1 pass found nothing substantive and its one Phase 2 did not escalate)
 rounds: n/a (not a pr-harden run)   cycles: 7   agent passes: 37 agents (9 Phase 1 reviewers, 7 four-agent Phase 2 passes); the Phase 1 passes of cycles 1 and 2 were the orchestrator's   verifier: n/a (`/verify` drove the real `pool-run` CLI and gate hooks before each code commit)
-context: compacted once, at cycle 4's Phase 2 dispatch · peak not surfaced
+context: compacted twice — 22:10Z (transcript L1763), after the run's `--cycle 2` write (L1536), and 01:39Z at cycle 4's Phase 2 dispatch (L4349) · peak not surfaced
 capture: hand-written by the orchestrator. `harden` appends no run record, and this was a standalone
 `/harden` on an open PR, asked for by the user after the slice was written and the PR opened.
 transcript: /root/.claude/projects/-home-user-openmrs-module-querystore/826e4e5b-d6e7-538c-9e4c-91ea103fac93.jsonl (the 19:25-20:31 UTC part, before the repository was attached, is also in /root/.claude/projects/-home-user/826e4e5b-d6e7-538c-9e4c-91ea103fac93.jsonl)
@@ -17,7 +17,7 @@ had already resumed. At the end: 19 files, +810/-92, plus a 116-file measurement
 commits. Wall clock 21:04 to 07:40 UTC (10 h 35 min), taken from the transcript's event timestamps
 and agreeing with the commit times (first harden commit 21:16, last 07:33).
 
-## Cycle by cycle (UTC; what reopened each)
+## Cycle by cycle (UTC, each from the cycle's first agent dispatch, c1 from `/harden`'s start; the run's own `--cycle` writes open each cycle earlier; what reopened each)
 - c1, 21:04-22:47. Phase 1: the orchestrator. Phase 2 (21:22): 3 of 4 agents SUBSTANTIVE — the
   remedy sentence never said why an alias and not an `export`, and an export turns off `pool-run`'s
   usage-limit carry; an evidence paragraph contradicted itself on the dropped keepalive. Escalated.
@@ -37,12 +37,13 @@ and agreeing with the commit times (first harden commit 21:16, last 07:33).
   without it; `cmd_work`'s `carried=` argument could be deleted with every test green. Escalated.
 - c5, 02:28-03:21. Phase 1 agent: 0 substantive, 5 cosmetic. Phase 2 (02:56): 1 SUBSTANTIVE — an
   evidence sentence ("every message the agent's query yields re-arms that timer") had dropped the
-  binary's four bookkeeping exceptions, which the artifact's summary kept; written in cycle 4
-  (d7cfefa) and read by cycle 4's Phase 2. Escalated.
+  binary's four bookkeeping exceptions, which the artifact's summary kept; written in db9fe91
+  (23:31Z, under the run's `--cycle 3` write at L3348; `git log -S` names d7cfefa, a reflow that joined the phrase onto one line) and read by
+  the Phase 2 passes of cycles 3 and 4. Escalated.
 - c6, 03:21-06:30. Phase 1, four agent passes plus one lost to a container restart (03:44): p1, 2
   SUBSTANTIVE (the `--work` env case inherited the very marker value a carried launch sets, so it
-  could not see a launch that set none — a blind spot the orchestrator's own cycle-5 polish
-  consolidation introduced; two docs still called the carry-off environment untouched); p2, 1
+  could not see a launch that set none; two docs still called the carry-off environment untouched —
+  both introduced by cycle 5's Phase 2 commit a7cb1dc, the orchestrator's own); p2, 1
   (`test_the_carry_can_be_turned_off`, from main, could not fail: its stub never served, so no nudge
   was possible whatever the switch said); p3, 1 (nothing pinned that an await recorded again is named
   twice, which State's "once" reads); p4, 0 (cosmetic: `yes`/`on`). Phase 2 (06:00): 1 SUBSTANTIVE —
@@ -82,11 +83,13 @@ in `evidence.md`, which no run loads, and two were test-coverage gaps.
 ## Where a skill blocked or contradicted this run
 - harden:Phase 2 — "If Phase 2 turns up something SUBSTANTIVE … it escalates on the spot: Phase 1
   resumes and runs to its own convergence, and Phase 2 then runs once against what that produced."
-  Cycles 5, 6 and 7 were each opened by one Phase 2 item whose fix was a clause or a line (a
-  qualifier restored in `evidence.md`; `"1"` added to a test's loop), and each cost about an hour.
+  Cycles 6 and 7 were each opened by one Phase 2 item whose fix was a clause or a line (a
+  qualifier restored in `evidence.md`; `"1"` added to a test's loop). Cycle 6 then took 3 h 09 min, with four Phase 1 passes, and cycle 7 1 h 10 min.
+  Cycle 5 was opened by three, one of them a runtime change. Cycles 1-4 took 5 h 24 min, 5-7 5 h 12 min.
 - harden:Phase 2 — "four parallel review agents … over the current diff". Each pass reviewed the whole
   slice: 34 files at cycle 1, 135 at cycle 7 (116 of them artifact files) and ~200 lines of evidence
-  prose. The cycle-5 escalation was in a sentence cycle 4's Phase 2 had already read.
+  prose. The two evidence sentences whose escalations opened cycles 5 and 6 were both written in
+  db9fe91, under the run's `--cycle 3` write, and every Phase 2 from cycle 3 on read them until one found them.
 - harden:What this does not license — "a false universal in a javadoc is still substantive" was
   applied to `evidence.md`, which "a run does not need to read", so evidence wording reopened cycles.
 - harden:Test coverage — "ask what the FIXTURE can express". In cycle 6 four Phase 1 passes each found
@@ -94,8 +97,11 @@ in `evidence.md`, which no run loads, and two were test-coverage gaps.
 - harden:Termination — "Cost, elapsed time and turn length are not termination conditions." The
   labelled override was not taken; the run went 10 h 35 min.
 - harden:Phase 2 — "each with `run_in_background: false` where the `Agent` schema carries it". Every
-  Agent call made that way returned "Async agent launched successfully"; the recorded awaits and the
-  gate's attended allow carried the yields.
+  Agent call made that way returned "Async agent launched successfully". No harden Stop gate was
+  registered in this container — its one Stop hook was `stop-hook-git-check.sh`
+  (`~/.claude/launcher-settings.json`; every `stop_hook_summary` names only it) — so no yield on
+  outstanding agents was refused, and the awaits the run recorded with the repo's vendored
+  `gate-state` were read by no hook.
 - External: a claude.ai usage limit at 00:11 killed the four cycle-3 Phase 2 agents (this session ran
   without `CLAUDE_CODE_RETRY_WATCHDOG`, the slice's own subject); the user resumed it at 00:21. A
   container restart at 03:44 killed a Phase 1 reviewer launched at 03:39; it was re-run.

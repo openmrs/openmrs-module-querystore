@@ -5417,3 +5417,168 @@ anything runs the restored code from `target/` or cites its reports.**
 
 **Not a lesson:** TRUNK-6826's Spring 7 `UrlHandlerFilter` behaviour, #607's llama-server thread and
 cgroup readings, and 3787's `routes.json` ranges are target-repo domain evidence.
+
+## 2026-10-22 (window: 1 run record — querystore PR 100, a standalone `/harden` 0.43.2 on an open PR, converged at cycle 7 after 10 h 35 min, captured by hand) — 2 proposed, both applied after revision, 0 killed; two refutation rounds, the second over the staged diff; linter 17 files, 0 findings against `1ed1eaa`; **harden 0.45.0, skill-retro 0.7.1**
+
+Step 6's pre-read comparison had no live side in this cloud container. It holds no
+`~/.claude/skill-lessons`, `~/.claude/hooks` or `~/.claude/CLAUDE.md`, and its `~/.claude/skills` holds
+none of these skills. The store read was this checkout's `.claude/skill-lessons/` at `1ed1eaa`, PR 100's
+head. Its merge base with `origin/main` is `origin/main` itself (`a829dcd`, re-fetched in Step 6), so
+the read missed nothing pushed. The cmp steps are owed where a live copy exists: on the operator's
+machine, once this lands.
+
+This branch is stacked on PR 100. `--against origin/main` reports harden's rise as 7403→7538, because
+this raise replaces PR 100's 7403→7429 entry, as `budget_ratchet`'s docstring says a second rise does.
+Against `1ed1eaa`, the head this retro started from, it reports nothing. Step 6's zero against
+`origin/main` is still owed: once PR 100 merges at harden's 7429, re-run `skill-lint.py --against
+origin/main`.
+
+The one record corroborates nothing by itself. Each proposal rests on it together with a record from an
+earlier window, and each answers a REOPEN ON this ledger held. The proposals, the gate's replies and the
+revisions are in `proposals/2026-10-22-window-pr100.md`.
+
+**APPLIED after revision · harden 0.45.0 *Reporting*: a `/harden` invoked on its own appends its run
+record, in `pr-harden`'s *Write the run record* format and file name, with the branch (any `/` replaced by `-`) where the slice
+has no ticket or PR. skill-retro 0.7.1: its opening names that run beside the two skills, and Step 1's
+"writes none" is dated to the versions before.**
+- It reopens the 2026-09-16 KILLED P1 (:3041-3058) on that kill's REOPEN ON, "a second
+  standalone-`harden` record". #435 was the first standalone record, and PR 100 is the second. The gate
+  found no other standalone record between them. Bar (a): #435:5-7 and :84, and pr100:5-6.
+- The kill's prevention objection (:3056-3057) is answered by where the rule lives: the record is written
+  in the run, not in how a retro reads the store.
+- The first gate raised five objections, all non-blocking, and each is settled:
+  - the kill's grounds are described as bar (c), with the prevention objection as its own paragraph;
+  - the file name falls back to the branch;
+  - skill-retro:10 names the run;
+  - the version pin was re-checked: harden is 0.43.2 on `origin/main` and 0.44.0 at `1ed1eaa`, and PR
+    100 is open at `1ed1eaa` (REST API, 2026-10-22), so 0.45.0 holds if PR 100 merges at 0.44.0;
+  - the budget raises are made.
+- The second gate added two non-blocking objections, both applied:
+  - the branch's `/` becomes `-`, since a `/` makes `>>` fail or files the record where the store's
+    `*.md` does not look;
+  - evidence.md's "often before either exists" becomes "can be", since both standalone records had an
+    open PR (#435:85, pr100:5-6).
+- It prunes nothing. Net +61 words in harden and +12 in skill-retro.
+
+**APPLIED after revision · harden 0.45.0 *Termination*: an edit that rewrites a test owes the
+revert-check on the mutations that test caught before the edit.**
+- It reopens the 2026-10-14 park (:5392-5394) on that park's REOPEN ON, "a second record". Bar (a):
+  - TRUNK-6826:24: a Phase 2 helper merge introduced an overload ambiguity, "caught only by re-running
+    the ordering mutation".
+  - PR 100: cycle 5's Phase 2 commit `a7cb1dc` folded a launch into the `--work` environment case, and
+    had the case inherit the marker a carried launch sets.
+- It would have caught PR 100's defect a cycle earlier:
+  - the case caught `nomark` before the edit (L3869-3870), and L4353 still lists that mutant;
+  - the run after the edit ran four mutants, two of them new and none of them `nomark` (L5447-5448);
+  - cycle 6's first Phase 1 pass found the gap with that mutant (L5525).
+- **Blocking at the first gate, settled by revision:** the drafted evidence said the run "re-ran four
+  mutants", but two of the four were new.
+- Its non-blocking objections were also applied:
+  - "owes that check" now names its target;
+  - the Step 4 note's "committed with the build green" is in no text, since TRUNK-6826:24 does not
+    say it.
+- The second gate's one objection here was to the `raises` why: "only a re-run mutation showed it"
+  overstated PR 100, whose reviewer named the gap by reading the fixture and then confirmed it with the
+  mutant (L5525). It now reads "and a re-run mutation showed it".
+- It subsumes nothing. The bullet before it covers an edit that FIXES a behaviour or ADDS a guard, and a
+  rewritten test does neither. Net +48 words.
+
+**Corrections the first gate found, now made in the record and listed in the proposals file's
+revisions.**
+- "Cycles 5-7, each opened by a one-line fix" is false for cycle 5, which three findings opened, one of
+  them a runtime change. Cycles 1-4 took 5 h 24 min, and cycles 5-7 took 5 h 12 min.
+- `d7cfefa` changed no words in pr-harden's evidence.md, because it was a reflow. `git log -S` names it
+  anyway, which is the failure :3036-3037 records.
+- Both evidence sentences whose escalations opened cycles 5 and 6 were written in `db9fe91`, under cycle
+  3's state write (L3348).
+- Both of cycle 6's first-pass findings came from `a7cb1dc`, not one.
+- The record's context line counts two compactions, not one.
+
+**Corrections the second gate found, made in the record, this block and the proposals file.**
+- **Blocking: no harden Stop gate was registered in this container.**
+  - `~/.claude/launcher-settings.json` registers one Stop hook, `stop-hook-git-check.sh`, and there is
+    no user or project `settings.json`.
+  - Each of the transcript's 56 `stop_hook_summary` events (L696-L7054) counts one hook and names it.
+  - The record's "the gate's attended allow carried the yields" was false, and so was this block's
+    first draft of it.
+- **Blocking: the delta-only premise was false.** Each escalating evidence sentence was inside the diff
+  of the Phase 2 that found it:
+  - `d7cfefa`'s reflow put both in `c5111fe..6e8b512`, cycle 4's Phase 2;
+  - `bd1b5b2`'s edit put the second in `6e8b512..d5dcea8`, cycle 5's.
+
+  The first gate had endorsed the premise.
+- **Blocking: the record's "each cost about an hour"** was false for cycle 6, which took 3 h 09 min.
+- The record now states its cycle convention: each range runs from the cycle's first agent dispatch, and
+  the run's `--cycle` writes open each cycle earlier. Its corrections anchor on those writes.
+
+**REOPEN ON met, no text owed · a `run_in_background: false` spawn answered "Async agent launched"
+(:4364-4367): 2 records.**
+- PR 100 is the new record. It was attended and cost 0.
+  - Inside the run, each of 37 `Agent` calls passed `false`, and each was answered "Async agent launched
+    successfully" (transcript L1457-L6026; the session spanned harness 2.1.306 to 2.1.308).
+  - No harden Stop gate was registered in this container, so no yield on outstanding agents could be
+    refused (the second gate's corrections, above).
+- The clause met is "a second post-0.30.0 record". No text is owed:
+  - `pr-harden`'s *Collecting in the same turn* (:679-683) is headed "where the harness allows it". It
+    already names this answer and the unattended fallback: "where a spawn still answers "Async agent
+    launched", an unattended run keeps the turn alive with a bounded foreground wait".
+  - harden's Phase 2 points there.
+- The first gate's count, "34 of 36", did not reproduce. The condition is met either way.
+- **REOPEN ON:** one that cost a turn or a Stop refusal, or one from a session with a harden or
+  pr-harden Stop gate registered, which PR 100's was not.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 32 records.**
+  - +PR 100: six of seven Phase 2 passes escalated, and this was the record's main cost.
+  - Three remedies were weighed against its REOPEN ON and not proposed. **Correcting a Phase 2 finding
+    in place** was killed before the gate on 2026-09-24 (:4068-4076), and PR 100 repeats the kill's
+    reason. Cycle 5's Phase 2 found one evidence sentence. The Phase 1 it reopened found four
+    substantive items in cycle 6, two of them introduced by `a7cb1dc`.
+  - **Exempting `evidence.md` from escalation** is the same remedy narrowed to one file, and loses the
+    same four.
+  - **A delta-only Phase 2 after an escalation** is not refuted by this record. `d7cfefa`'s reflow and
+    `bd1b5b2`'s edit put both sentences' lines in the diff of the Phase 2 that found each. A proposal
+    would have to show, finding by finding across the records, what each escalating Phase 2 found
+    inside its delta and what it reached only by tracing outward from it.
+  - REOPEN unchanged.
+- **Prose the change made false, found by a fresh agent: 34 records.**
+  - +PR 100: cycle 4's Phase 1 found two unchanged passages the slice falsified.
+  - The Phase 2 passes of cycles 4 and 5 each found a false `evidence.md` sentence that the slice
+    wrote.
+  - Cycle 6's first Phase 1 pass found two documents that `a7cb1dc` made false.
+  - PR 100 is open, so none reached a merged head. REOPEN unchanged.
+- **Usage-limit interruption: 3 records** (:4004).
+  - +PR 100: a claude.ai usage limit at 00:11Z killed the four cycle-3 Phase 2 agents, and the user
+    resumed at 00:21Z. No convergence was lost.
+  - The session ran without `CLAUDE_CODE_RETRY_WATCHDOG`, which is PR 100's own subject.
+- **Not advanced, on the first gate's objection:** *harden's full cycle as a fixed cost on a small fix*
+  (:4063) stays at #408 alone. That class is a 2-line change with lenses under a minute each. PR 100
+  was 19 files, +810, with Phase 2 passes of 25-35 min, and its cost belongs to the escalation park.
+
+**Parked, new, 1 record each.**
+- **A `/harden` run in a cloud container had no harden Stop gate registered** (PR 100).
+  - The container's one Stop hook was `stop-hook-git-check.sh`. The run recorded its state with the
+    repo's vendored `gate-state` (L1037), which no hook read, so nothing enforced its termination or
+    its yields.
+  - Cost: none observed, since the run was attended and converged.
+  - **REOPEN ON:** a second record, or a cloud run that ended with Phase 1 open or agents outstanding.
+- **A container restart killed an in-flight Phase 1 reviewer** (PR 100). The reviewer was launched at
+  03:39Z, killed at 03:44Z and re-run at 03:45Z, a cost of minutes. **REOPEN ON:** a second record, or
+  one that cost a cycle.
+- **pool-test's `live_session_fixture` leaves an orphan `sleep 300` per case** (PR 100).
+  - The orphans held a harness's captured stdout pipe for about 10 min. Writing to a file avoids it.
+  - This is a test defect, not a skill rule.
+  - **REOPEN ON:** a second record, or one in a pipeline run.
+- **The budgets' unit, `LC_ALL=C wc -w`, is not the linter's count on GNU coreutils 9.4.**
+  - `skill-budgets.json`'s `unit` and `skill-lint.py`'s `words()` docstring say the two agree.
+  - In this container they differ: `LC_ALL=C wc -w` counts harden at `1ed1eaa` as 7322, and the
+    linter counts it as 7429.
+  - GNU `wc` skips a token made only of non-ASCII bytes. `printf 'a — b'` counts as 2 words there, and
+    as 3 under Python's `bytes.split()`.
+  - This window used the linter's count, at no cost. The tool on the operator's machine was not
+    measured.
+  - **REOPEN ON:** a second record, or a budget set from `wc` that the linter then failed.
+
+**Not a lesson:** PR 100's measurements of Claude Code's limit handling. They are the slice's own domain
+evidence, in its artifact: the retry line every 30 s, a `0` in `settings.json` overriding an alias's
+`=1`, and 2.1.307 passing `background_tasks` to the Stop hook.
