@@ -16,6 +16,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -207,6 +208,27 @@ public class BootstrapServiceImplTest {
 		        obs.lastAfterDateChanged);
 		assertEquals("documents_indexed reset for the re-walk", 0, dao.find("obs").getDocumentsIndexed());
 		assertEquals(BootstrapStatus.COMPLETED, dao.find("obs").getStatus());
+	}
+
+	@Test
+	public void resyncType_clearsTheEarlierCompletionWhileItReWalks() {
+		// A read counts a RUNNING type as complete only while its row still carries an earlier
+		// completion, which is what a restart's top-up looks like. A resync rewrites the type, so the
+		// row it walks under must have that completion cleared, or reads would accept it mid-rewrite.
+		BootstrapProgress prior = new BootstrapProgress("obs");
+		prior.setStatus(BootstrapStatus.COMPLETED);
+		prior.setCompletedAt(Instant.parse("2026-10-20T23:11:08Z"));
+		prior.setBackend("lucene");
+		dao.store.put("obs", prior);
+		service.setBackendNameSupplierOverride(() -> "lucene");
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		final List<Instant> completedAtDuringWalk = new ArrayList<>();
+		obs.onFetch = type -> completedAtDuringWalk.add(dao.find(type).getCompletedAt());
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		service.resyncType("obs");
+
+		assertEquals(Collections.singletonList((Instant) null), completedAtDuringWalk);
 	}
 
 	@Test
