@@ -3,8 +3,8 @@
 This is `SKILL.md`'s *Two sessions by hand*. Read the whole file before you start a `--work` or
 `--claim` session, release a slot, or act on a hand-launched run's ledger row. Where it names a
 section or a rule it does not contain, that is in `SKILL.md`, beside this file. What a `--work`
-session opens to any local process so that a usage limit cannot strand it, and why a session started
-any other way is not carried past one, is in `pausing.md`, beside it too.
+session opens to any local process so that a usage limit cannot strand it, and what carries a session
+started any other way past one, is in `pausing.md`, beside it too.
 
 **What a hand-launched run does NOT get, and what it now does.** `ticket.timeout_seconds` and
 `ticket.quiet_seconds` are enforced by `Session`, which only the driven path and the retro use; a
@@ -95,9 +95,11 @@ TICKET rather than the host — `chartsearchai-266` — because the point of mon
 a phone is being able to tell which is which. It applies to `--work` only: the headless driver's
 sessions are not interactive and the flag means nothing to them.
 
-Nothing else about the environment is touched. The session inherits `os.environ` whole, plus the
-three variables the slot adds, so credentials, config and proxy settings reach it exactly as they
-would if you had typed `claude` yourself.
+Nothing else about the environment is touched, but for the carry. The session inherits `os.environ`
+whole, plus the three variables the slot adds, so credentials, config and proxy settings reach it
+exactly as they would if you had typed `claude` yourself; while the carry is on it starts without
+`CLAUDE_CODE_RETRY_WATCHDOG` and its cap and with `CLAUDE_PIPELINE_CARRY=work`, which `pausing.md`
+explains, and while it is off without a `CLAUDE_PIPELINE_CARRY` it inherited.
 
 **Ctrl-C goes to the session, not to the launcher.** It has to be said because it very nearly did not
 work: Ctrl-C reaches the whole foreground process group, so without care `subprocess.run` raises

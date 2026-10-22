@@ -36,3 +36,6 @@ Thumbs.db
 # Run records of private tickets, and the PR pairings beside them, stay on the machine that ran
 # them. skill-retro never mirrors confidential/; this keeps a recursive copy out of git anyway.
 .claude/skill-lessons/confidential/
+
+# skill-lint.py imported as a module, by a word count or a test, leaves this beside it
+.claude/skills/skill-retro/__pycache__/

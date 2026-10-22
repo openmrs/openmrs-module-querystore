@@ -1,0 +1,3 @@
+control-no-limit: probes=3 subagent_writes=0 (first at +Nones) silence_at_end=427s nudges=0 at +27.0s
+   said: ! run-overdue (past-its-bound): o/r#1 has been running 16m44s, past its 0m04s bound — it is NOT killed
+   said: ! run-overdue (quiet): o/r#1 has written nothing for 6m44s — it may be waiting for you, or wedged

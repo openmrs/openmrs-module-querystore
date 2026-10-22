@@ -1,0 +1,3 @@
+{"t": 1792619908.448728, "method": "POST", "path": "/v1/messages", "status": 429, "stream": true, "max_tokens": 128000, "n_messages": 2, "last": "text:# Environment\nYou have been invoked in t", "has_agent_tool": true}
+{"t": 1792619967.0114026, "method": "POST", "path": "/v1/messages", "status": 429, "stream": true, "max_tokens": 128000, "n_messages": 2, "last": "text:# Environment\nYou have been invoked in t", "has_agent_tool": true}
+{"t": 1792619968.1174057, "method": "POST", "path": "/v1/messages", "status": 200, "stream": true, "max_tokens": 128000, "n_messages": 2, "last": "text:# Environment\nYou have been invoked in t", "has_agent_tool": true}

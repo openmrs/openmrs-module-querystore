@@ -17,6 +17,7 @@ import json
 import os
 import re
 import contextlib
+import io
 import shutil
 import socket
 import time
@@ -97,12 +98,13 @@ def isolated(tmp: Path):
     suite, it is a second pipeline. Measured while writing this one: an earlier version left a
     driver-capture record in `~/.claude/skill-lessons`, where it counted towards the retro threshold.
     """
-    # EVERY path the driver writes. A constant added to `pool-run` and forgotten here is a suite that
-    # writes the operator's real state: measured — omitting `SLOTS` let a case read the real leases
-    # and RELEASE two slots a hand-launched session was holding, removing their worktrees.
+    # EVERY path the driver writes, and the settings it reads. A constant added to `pool-run` and
+    # forgotten here is a suite that writes the operator's real state: measured — omitting `SLOTS`
+    # let a case read the real leases and RELEASE two slots a hand-launched session was holding,
+    # removing their worktrees.
     names = ["LEDGER", "LEDGER_FLOCK", "LOGS", "LESSONS", "LAST", "PR_STATE", "HARDEN_STATE",
              "UNATTENDED_DIR", "WORKTREES", "SLOT_M2", "SLOTS", "LOCK", "PAUSE", "PAUSED",
-             "PROJECTS", "SESSIONS"]
+             "PROJECTS", "SESSIONS", "SETTINGS"]
     saved = {n: getattr(pool, n) for n in names}
     root = tmp / "state"
     for n in names:
@@ -124,6 +126,44 @@ def isolated(tmp: Path):
             os.environ.pop("CLAUDE_HOME", None)
         else:
             os.environ["CLAUDE_HOME"] = prior_claude_home
+
+
+@contextlib.contextmanager
+def environ(values: dict):
+    """This process's environment with `values` set, each put back as it was afterwards."""
+    saved = {k: os.environ.get(k) for k in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+class _Tty:
+    def __init__(self, stream):
+        self._stream = stream
+
+    def isatty(self) -> bool:
+        return True
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+@contextlib.contextmanager
+def terminal():
+    """Both standard streams answering `isatty()` as a terminal does, which `--work` requires before
+    anything else. What is printed meanwhile stays out of the suite's output; the `Say` log has it."""
+    saved = sys.stdin, sys.stdout
+    sys.stdin, sys.stdout = _Tty(sys.stdin), _Tty(io.StringIO())
+    try:
+        yield
+    finally:
+        sys.stdin, sys.stdout = saved
 
 
 # ───────────────────────────────────────────────────────────── worktrees ──
@@ -3791,6 +3831,136 @@ def test_a_rejection_covered_by_overage_is_not_a_pause(tmp: Path) -> None:
     check("an overage rejection is not slept on", results == [("o/r#266", "error")], str(results))
 
 
+def test_session_drops_the_retry_watchdog_pair_and_nothing_else(tmp: Path) -> None:
+    """`Session` drops `RETRY_WATCHDOG` (pool-run says why, beside it), whichever way its
+    environment arrives, and nothing else: the stub reports what its process was started with.
+    """
+    with isolated(tmp):
+        stub = tmp / "claude"
+        stub.write_text(
+            "#!/bin/bash\n"
+            "printf '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,"
+            "\"result\":\"W=%s C=%s P=%s K=%s\",\"total_cost_usd\":0}\\n' "
+            "\"${CLAUDE_CODE_RETRY_WATCHDOG:-unset}\" "
+            "\"${CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS:-unset}\" "
+            "\"${CLAUDE_PIPELINE_SESSION:-unset}\" \"${KEEP_ME:-unset}\"\n")
+        stub.chmod(0o755)
+        cfg = pool.merge(pool.DEFAULTS, {"claude": {"binary": str(stub)}})
+        pair = {"CLAUDE_CODE_RETRY_WATCHDOG": "1",
+                "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS": "18000000"}
+        with environ({**pair, "KEEP_ME": "kept"}):
+            inherited = pool.Session("p", tmp, cfg, tmp / "a", 300, 300,
+                                     lambda *a, **k: None).run()
+        given = pool.Session("p", tmp, cfg, tmp / "b", 300, 300, lambda *a, **k: None,
+                             env={**pair, "KEEP_ME": "kept", "PATH": os.environ.get("PATH", "")}).run()
+        for how, run in (("inherited", inherited), ("passed in", given)):
+            got = run.get("summary") or ""
+            check(f"the watchdog pair, {how}, never reaches a headless session",
+                  "W=unset C=unset" in got, got)
+            check(f"and the rest of an environment {how} still does",
+                  "P=1" in got and "K=kept" in got, got)
+
+
+def test_a_work_session_is_started_without_the_retry_watchdog_while_its_carry_is_on(tmp: Path) -> None:
+    """With its carry on (`work_carry_on`), `--work` starts its session without `RETRY_WATCHDOG`,
+    with `CLAUDE_PIPELINE_CARRY=work` and accepting the carry's nudge (`work_in_session` says why);
+    with it off, a `limit_wait_max_seconds` of 0 included, the operator's environment stands, less a
+    marker it inherited, and nothing is let in. The stub reports what its process was started with.
+    """
+    print("\na --work session and the retry watchdog")
+    origin, work = git_fixture(tmp)
+    root = tmp / "sa"
+    one = standalone_fixture(root, "sa1", 8081, 3316)
+    two = standalone_fixture(root, "sa2", 8083, 3318)
+    seen = tmp / "env.txt"
+    stub = tmp / "claude-stub"
+    stub.write_text("#!/bin/bash\n"
+                    'echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}|'
+                    '${CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS:-unset}|${KEEP_ME:-unset}|'
+                    '${CLAUDE_PIPELINE_CARRY:-unset}|$*"'
+                    f" >> {seen}\n")
+    stub.chmod(0o755)
+    cfg = pool.merge(pool.DEFAULTS, {
+        "repos": {"o/r": str(work)},
+        "claude": {"binary": str(stub)},
+        "parallel": {"max_workers": 2, "standalones": [str(one), str(two)]},
+    })
+    pair = {"CLAUDE_CODE_RETRY_WATCHDOG": "1",
+            "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS": "18000000"}
+    with environ({**pair, "KEEP_ME": "kept", "CLAUDE_PIPELINE_CARRY": "inherited"}), isolated(tmp):
+        say = pool.Say(tmp / "work.md")
+        pool.work_in_session(cfg, "o/r", "266", {"url": "https://example/266", "number": 266},
+                             work, say)
+        pool.work_in_session(pool.merge(cfg, {"ticket": {"limit_continue_work": False}}), "o/r",
+                             "297", {"url": "https://example/297", "number": 297}, work, say)
+        pool.work_in_session(pool.merge(cfg, {"ticket": {"limit_wait_max_seconds": 0}}), "o/r",
+                             "310", {"url": "https://example/310", "number": 310}, work, say)
+    lines = seen.read_text().splitlines() if seen.exists() else []
+    got = [line.split("|", 4) for line in lines]
+    ok = len(got) == 3 and all(len(g) == 5 for g in got)
+    env = ["|".join(g[:4]) for g in got] if ok else []
+    let_in = ["crossSessionInbound" in g[4] for g in got] if ok else []
+    check("a --work session with its carry on is started without the watchdog pair, marked carried",
+          ok and env[0] == "unset|unset|kept|work" and let_in[0], repr(lines))
+    check("and with the carry off the operator's environment stands, unmarked, nothing let in",
+          ok and env[1] == "1|18000000|kept|unset" and not let_in[1], repr(lines))
+    check("and so it does with a wait cap of 0, where the carry never acts",
+          ok and env[2] == "1|18000000|kept|unset" and not let_in[2], repr(lines))
+
+
+def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
+    """Preflight refuses a watchdog settings.json's `env` turns on where pool-run carries the session
+    itself (`preflight` says why): the driver, asked through `preflight` itself, and `--work` with its
+    carry on, run through `cmd_work` because that is what reads the carry for it. `--claim` and a
+    `--work` with its carry off are not refused. The value is read as Claude Code reads it.
+    """
+    print("\nthe retry watchdog in settings.json")
+    cfg = pool.merge(pool.DEFAULTS, {"label": "x", "repos": {}, "retro": {"enabled": False},
+                                     "parallel": {"max_workers": 1}})
+    with isolated(tmp):
+        say = pool.Say(tmp / "preflight.md")
+        settings = pool.SETTINGS
+
+        def refusal():
+            return next((x for x in pool.preflight(cfg, say, want_label=False, driving=True)
+                         if "CLAUDE_CODE_RETRY_WATCHDOG" in x), None)
+
+        def refuses(command, ticket=None):
+            # In-process, with a terminal on both streams; a pool with no repos stops the command at
+            # its preflight, before it resolves the ticket. None where it never got there, so that
+            # an absence of the refusal cannot pass vacuously.
+            log = tmp / "said.md"
+            log.unlink(missing_ok=True)
+            with terminal():
+                command(pool.merge(cfg, {"ticket": ticket or {}}), pool.Say(log), "266")
+            said = log.read_text() if log.exists() else ""
+            return "CLAUDE_CODE_RETRY_WATCHDOG" in said if "no repos configured" in said else None
+        check("the suite's settings.json is its own, never the operator's",
+              str(settings).startswith(str(tmp)), str(settings))
+        settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": " True "}}))
+        said = refusal()
+        check("the driver refuses a watchdog settings.json turns on, read trimmed and in any case",
+              said is not None)
+        check("and says to delete the key rather than set it to 0, which overrides the alias",
+              "Delete the key" in (said or "") and "rather than setting it to 0" in (said or ""),
+              str(said))
+        check("and so does --work while its carry is on", refuses(pool.cmd_work) is True)
+        check("but not --work with its carry turned off",
+              refuses(pool.cmd_work, {"limit_continue_work": False}) is False)
+        check("nor with a wait cap of 0, where the carry never acts",
+              refuses(pool.cmd_work, {"limit_wait_max_seconds": 0}) is False)
+        check("nor --claim, which launches nothing", refuses(pool.cmd_claim) is False)
+        on = []
+        for value in ("1", "yes", "on"):
+            settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": value}}))
+            on.append(refusal() is not None)
+        check("and so is every other value Claude Code reads as on", all(on), str(on))
+        settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "0"}}))
+        check("a watchdog settings.json turns off is no problem", refusal() is None)
+        settings.write_text(json.dumps({"env": {"KEEP_ME": "1"}}))
+        check("nor is an env without it", refusal() is None)
+
+
 def test_a_session_silent_under_a_limit_is_suspended_not_killed(tmp: Path) -> None:
     """The quiet watchdog must not spend a ticket that is only blocked on quota.
 
@@ -4461,9 +4631,13 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
     same is true of `limit_wait_max_seconds: 0`, which is already the switch for the driver's own
     wait: one instruction, "do not wait for usage limits", answered the same way on both paths
     rather than two knobs that can disagree.
+
+    Each case is refused once, naming no window, and then served, so a watcher that ignored the
+    switch would nudge within seconds; the last case, with the carry on, is the control that shows
+    this fixture does. A stub that never served let this pass whatever the switch said.
     """
     print("\nthe carry can be turned off")
-    for n, off in enumerate(({"limit_continue_work": False}, {"limit_wait_max_seconds": 0})):
+    for n, off in enumerate(({"limit_continue_work": False}, {"limit_wait_max_seconds": 0}, {})):
         case = tmp / str(n)
         case.mkdir()
         with isolated(case) as root:
@@ -4476,19 +4650,33 @@ def test_the_carry_can_be_turned_off(tmp: Path) -> None:
             stale = proj / "s.jsonl"
             stale.write_text("{}\n")
             os.utime(stale, (pool.now() - 400, pool.now() - 400))
-            stub = limit_stub(case / "stub", case / "argv.txt", resets_in=2)
+            stub = refusing_then_serving_stub(case / "stub", case / "probes.txt", 1, "true")
             cfg = pool.merge(pool.DEFAULTS, {
                 "claude": {"binary": str(stub)},
-                "ticket": {**{"timeout_seconds": 5, "quiet_seconds": 5,
+                "notify": {"enabled": False},
+                "ticket": {**{"timeout_seconds": 2, "quiet_seconds": 2, "limit_probe_seconds": 3,
                               "limit_wait_jitter_seconds": 0}, **off},
             })
             stop = threading.Event()
             threading.Thread(target=pool.watch_hand_launched, daemon=True,
                              args=(cfg, "o/r#1", wt, started, stop, lambda *a, **k: None,
                                    pid)).start()
-            time.sleep(20)
+            # Off, it must stay silent for the whole window; on, the control ends at the nudge. A
+            # watcher that ignored the switch nudged at 8s on this fixture, under load too (its 2s
+            # tick: probe, refusal, probe, nudge), so 12s leaves two ticks of margin, and a machine
+            # too slow for that fails the control rather than passing an off case.
+            window = 12
+            deadline = time.time() + window
+            while time.time() < deadline and not (received and not off):
+                time.sleep(0.5)
             stop.set()
-        check(f"with {sorted(off)[0]} it sends nothing", not received, str(received))
+        if off:
+            check(f"with {sorted(off)[0]} it sends nothing", not received, str(received))
+            check("and, a reporter again, asks the account nothing",
+                  not (case / "probes.txt").exists(), "the switched-off watcher probed the account")
+        else:
+            check("and with the carry on, the control, the same fixture is nudged",
+                  bool(received), f"no nudge within {window}s, so the cases above prove nothing")
 
 def test_pr_detection(tmp: Path) -> None:
     """A merged PR is not an open PR — the outcome check must not read that as `no-pr`.
@@ -4622,6 +4810,9 @@ def main() -> int:
                          ("status staleness", test_status_names_a_running_row_no_session_holds),
                          ("work reaps the dead", test_the_next_hand_launch_closes_out_what_died),
                          ("limit suspends", test_a_usage_limit_suspends_the_ticket_rather_than_spending_it),
+                         ("limit watchdog dropped", test_session_drops_the_retry_watchdog_pair_and_nothing_else),
+                         ("limit watchdog --work", test_a_work_session_is_started_without_the_retry_watchdog_while_its_carry_is_on),
+                         ("limit watchdog settings", test_a_retry_watchdog_in_settings_json_is_refused),
                          ("limit recovered", test_a_limit_the_session_got_past_is_not_a_pause),
                          ("limit stale reset", test_a_reset_that_has_already_passed_did_not_stop_this_run),
                          ("limit overage", test_a_rejection_covered_by_overage_is_not_a_pause),

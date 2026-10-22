@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.40.1
+version: 0.41.0
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -728,6 +728,13 @@ turn to wait*, in `verifier.md`.
 "The moment the result arrives" says nothing about a result that never will, and agents die. The
 harness reports the death, so there is no excuse for waiting out a timeout. The one-hour bound and
 the no-`since`-reads-as-dead rule are backstops, not the mechanism.
+
+**And where `CLAUDE_CODE_RETRY_WATCHDOG` is on, a live agent can outlast the bound.** Waiting at a
+usage limit, it is not reported stalled, and only the gate sees the hour pass: its block past the
+bound opens on that await. Where the harness has reported no outcome for that agent, record the
+await again with the command that recorded it, `--only` and `--run` included, rather than
+re-dispatching its phase. Once: an await names one agent, so a name listed twice has had it; stop
+that agent (`TaskStop`) before the contract below retries its phase.
 
 **And this session must not busy-wait either.** *Wait on a CONDITION, never on a clock* is written into
 `verifier.md`, but the orchestrator is where a blind `sleep` loop costs the most, because its

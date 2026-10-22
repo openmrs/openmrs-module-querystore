@@ -2,7 +2,7 @@
 name: resolve-ticket
 description: Take a GitHub issue or JIRA ticket URL all the way to a pull request that is ready to merge, in one unattended run — read the ticket with its comments, plan, have the plan refuted by a fresh agent, write the failing test first, implement, prove the build green, harden with context, open a draft PR, then cycle clean-context review rounds until the sha it hands over is reviewed clean, and mark it ready (a private ticket's stays a draft). Use when handed a ticket or issue URL and asked to deliver a reviewed PR. Trigger phrases include "work this issue", "resolve this ticket", "take this to a PR", "implement and harden issue N", "here's the ticket, deliver a PR".
 argument-hint: <issue-url|jira-url|issue-number|jira-key> [--max-rounds N] [--no-verify] [--plan-only]
-version: 0.28.0
+version: 0.29.0
 ---
 
 # Resolve ticket — one URL in, a mergeable PR out
@@ -194,6 +194,20 @@ a busy port is the normal state, and the verifier simply takes and restarts the 
 What would actually block the run is having no standalone on disk at all, or no LLM endpoint for a
 module that needs one. Say so NOW if either is missing, so the user can fix it while the work
 proceeds.
+
+**Pre-flight the usage limit too.** A claude.ai usage limit ends the turn with `StopFailure` hooks,
+not `Stop`, so no gate sees it; `CLAUDE_CODE_RETRY_WATCHDOG` makes the request wait for the reset
+instead. So unless `$CLAUDE_PIPELINE_SESSION` or `$CLAUDE_PIPELINE_CARRY` is set (`pool-run` carries
+that session itself), run
+`echo "${CLAUDE_CODE_RETRY_WATCHDOG:-unset}"; "${CLAUDE_CODE_EXECPATH:-claude}" --version`, and
+unless the first line is `1`, `true`, `yes` or `on`, in any case, and the second
+`2.1.301 (Claude Code)` or later, compared numerically (2.1.42 is older), say so NOW and carry on.
+The remedy is for later sessions, never a mid-run relaunch: Claude Code 2.1.301 or later, started
+through
+`alias claude='CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=18000000 claude'`,
+whose cap waits out a reset up to five hours away; a `pool-run --work` session whose carry is off
+takes the same two variables only in front of that command. Never `~/.claude/settings.json`'s `env`,
+which the driver and a carried `--work` refuse to start under (`ticket-pool`'s `pausing.md`).
 
 Then check nobody is already on it: `gh pr list --state open --search "<number-or-key>"` and a look at
 open branch names — and, for a private ticket, also the PRs its comments name as work on it and the URLs
@@ -442,10 +456,10 @@ a pile of nits and spends a whole round on them.
 to `~/.claude/harden-state.json`. So a harden cycle blocked on its Phase 2 agents is invisible to
 the armed gate, which then refuses the yield the cycle needs in order to wait. That is what
 `gate-state`'s default scope is for — **omit `--only` and one command writes both**, so the pair
-cannot come apart the way two commands could:
+cannot come apart the way two commands could. One await per agent, under its own name:
 
 ```bash
-~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 await "harden phase 2"
+~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 await "phase2 quality"
 ~/.claude/pipeline/gate-state --owner $PPID --run harden-1758600000 clear-await
 ```
 

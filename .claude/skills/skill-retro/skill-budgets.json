@@ -8,9 +8,9 @@
       "why": "Step 2 names the linter's new check, a `$` followed by a digit in a SKILL.md, which the Skill tool replaces with an argument when the skill loads: on 2026-10-21 harden's awk `$0` loaded as the first argument word, and a `{print $1}` in resolve-ticket's PRS lookup loaded as `{print --plan-only}`, so the five awk programs now use $NF, $(NF-1) and $(NF-NF)"
     },
     "pr-harden": {
-      "from": 9535,
-      "to": 10532,
-      "why": "Step 0 looks a PR's URL up in the local PRS file, a gh failure being a lookup to retry, to learn it resolves a private ticket the PR no longer names, and adopts one whose key only getJiraIssue reads; a new section, A private ticket's PR, has such a run re-check that before every brief, body edit and push, tell its reviewers and fixers so with the key (their role files carry what follows), count the key with grep -a in what each push publishes and rewrite unpushed commits that carry it, the one amend it allows, report what GitHub already shows, record pairings in a directory it chmods 700, send FINISH's list of what the loop did not implement and a blocking-only reviewer's notes to the report and the run record while still applying a finding that names the body, leave the PR a draft and keep its record local, with a pointer at each site that marks ready or writes to the PR description; and the State section's documented declined command now sits on one line, so pool-test's every-documented-invocation check runs it whole; the pre-push check counts from the merge-base of the PR head it fetches, so an unresolvable ref prints no count rather than 0 and a squash never reverts a moved base, rebuilds and re-verifies after a rewrite that changes a file, reads the title and body raw, and Step 0 records an adopted PR's pairing before any guard can refuse the run and refuses a private PR that is not a draft; the check fetches the PR head itself, since every fetch rewrites FETCH_HEAD, says to read its number rather than chain a push on grep's exit status, and refuses to squash over a merge, Step 0's already-public count joins its parts with && so a failure prints no number, the privacy bullet heads Step 0, and the fixer's brief carries the PR number; a rewrite runs in the same shell call as the check, a merge is made with a message naming no key, a tree-identical rewrite carries its verified sha over, and the already-public read includes comments and reviews; the count is a regex on the key's two halves so KEY_x and hyphenless test names count, the squash is one chained call with its merge test, a merge-blocked squash stops under the override pushing nothing, and the already-public read adds line comments, and before the PR exists the squash runs from the base's merge-base without the merge test, with its message file kept outside the worktree"
+      "from": 10532,
+      "to": 10625,
+      "why": "State says that where CLAUDE_CODE_RETRY_WATCHDOG is on a live agent can outlast the gates' one-hour await bound, since its requests wait at a usage limit for the reset and the harness does not report it stalled (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), and that only the gate sees that hour pass, so its block past the bound opens on that await and the run records it again with the command that recorded it, --only and --run included, rather than re-dispatching its phase beside the live agent; once, an await naming one agent so that a name listed twice is that once spent, after which the agent is stopped with TaskStop before the dead-phase contract retries its phase; the rule moves here from resolve-ticket's Step 1 because resolve-ticket's alias reaches a standalone pr-harden or harden too"
     },
     "pr-harden/fixer.md": {
       "from": 1134,
@@ -28,9 +28,9 @@
       "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     },
     "resolve-ticket": {
-      "from": 7709,
-      "to": 7873,
-      "why": "a --plan-only run saves the plan its gate passed, first line naming the ticket, time and base, in the worktree's git directory, where nothing commits, pushes or mirrors it, and Step 2 of the full run in that worktree starts from it, revising it only for what the user asks, newer comments and new commits on the default branch, with Step 3 refuting it again only if it changed, because the owner asked that the full run not plan again from nothing"
+      "from": 7873,
+      "to": 8028,
+      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
       "from": 8064,
@@ -46,24 +46,39 @@
       "from": 5084,
       "to": 5111,
       "why": "the sentence listing what a ticket argument may be says a private ticket's JIRA key is never one and not to queue one, because the pool cannot tell it from a missing key, its headless sessions cannot read it, and its driver writes a record named for the key into the store skill-retro publishes"
+    },
+    "ticket-pool/pausing.md": {
+      "from": 1612,
+      "to": 1755,
+      "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 says how to set; the driver's carry says Session drops that variable and its cap from every headless session, since one waiting under them neither ends nor goes quiet, the only two points at which the driver looks for a limit, and that the driver, and --work while its carry is on, refuse to start where ~/.claude/settings.json's env turns them on, a project's own settings unread; and the --work carry says that a session it carries starts without the pair, since one idle on a background agent waiting under it reads as stopped and would be nudged as if it were (reproduced with the real watch_hand_launched), and with CLAUDE_PIPELINE_CARRY=work, so that resolve-ticket's Step 1 does not warn, and that with the carry off resolve-ticket's Step 1 says what carries the session; and that --work passes crossSessionInbound: accept only while its carry is on, since at a limit_wait_max_seconds of 0 nothing sends the nudge it lets in"
+    },
+    "harden": {
+      "from": 7403,
+      "to": 7429,
+      "why": "the paragraph that bounds the gate's await allow at an hour says a usage-limit wait can have held the agent past it, that the gate's block then opens on that await, and that pr-harden's State says what it gets, since under CLAUDE_CODE_RETRY_WATCHDOG an agent waiting at a limit is alive and unreported past that hour, and past it the gate's block otherwise said Run Phase 2 once"
+    },
+    "ticket-pool/by-hand.md": {
+      "from": 1859,
+      "to": 1889,
+      "why": "the paragraph on a --work session's environment no longer says nothing else is touched: while the launcher's carry is on, the session starts without CLAUDE_CODE_RETRY_WATCHDOG and its cap and with CLAUDE_PIPELINE_CARRY=work, which pausing.md explains, and while it is off without a CLAUDE_PIPELINE_CARRY it inherited, since the marker says the launcher carries the session"
     }
   },
   "words": {
-    "harden": 7403,
+    "harden": 7429,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 10532,
+    "pr-harden": 10625,
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
     "pr-review": 8172,
     "pr-review/posting.md": 2030,
-    "resolve-ticket": 7873,
+    "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2823,
     "ticket-pool": 5111,
-    "ticket-pool/by-hand.md": 1859,
-    "ticket-pool/pausing.md": 1612,
+    "ticket-pool/by-hand.md": 1889,
+    "ticket-pool/pausing.md": 1755,
     "verify": 658,
     "verify-frontend-change": 1844
   }

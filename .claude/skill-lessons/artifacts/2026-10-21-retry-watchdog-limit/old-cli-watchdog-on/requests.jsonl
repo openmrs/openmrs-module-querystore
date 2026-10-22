@@ -1,0 +1,1 @@
+{"t": 1792620033.062619, "method": "POST", "path": "/v1/messages", "status": 429, "stream": true, "max_tokens": 32000, "n_messages": 1, "last": "text:<system-reminder>\nAs you answer the user text:Reply with one word.", "has_agent_tool": true}

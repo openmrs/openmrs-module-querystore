@@ -1,0 +1,3 @@
+Stop
+{"session_id":"0ba015f2-92c5-4327-a9d5-d7d138880d08","transcript_path":"/tmp/tmp.aWq7ZWuEpD/.claude/projects/-tmp-tmp-aWq7ZWuEpD/0ba015f2-92c5-4327-a9d5-d7d138880d08.jsonl","cwd":"/tmp/tmp.aWq7ZWuEpD","prompt_id":"59982f04-f20e-4e81-b52c-d4ea89e8f7b2","permission_mode":"default","effort":{"level":"medium"},"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"STUB-OK","background_tasks":[],"session_crons":[]}
+

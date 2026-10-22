@@ -18,7 +18,11 @@ mid-attempt. It hands back to you instead in three cases, each named in the log 
 `wait_for_limit_reset`: a suspended ticket with no reset time on it (an operator's own pause, in the
 same wave), a reset further out than `ticket.limit_wait_max_seconds` — 6h by default, so a five-hour
 window is waited out and a weekly one is not — and a ticket suspended this way before that did
-nothing with the last reset, which is a session spinning rather than a big ticket.
+nothing with the last reset, which is a session spinning rather than a big ticket. `Session` drops
+`CLAUDE_CODE_RETRY_WATCHDOG` and its cap from every session it starts: one waiting under them
+neither ends nor goes quiet, the only two points at which the driver looks for a limit. Turned on in
+`~/.claude/settings.json`'s `env` they would still arrive, so the driver refuses to start under
+that, as does `--work` while its carry is on; a project's own settings it does not read.
 
 **A `--work` session is carried past it too, by a third mechanism.** Neither of the other two
 reaches a hand-launched session: Claude Code's own wait belongs to the SESSION and can be gated off
@@ -30,22 +34,28 @@ it acts on: when the window reopens it tells the session to continue, over the l
 session publishes for itself. Three guards stand in front of that, because a wrong nudge is a turn
 injected into a session that was working — the run must be quiet, the ACCOUNT must have refused a
 probe rather than merely be suspected, and the account must then SERVE one again. That last is the
-signal and a reset time is not: the rejected form of the `rate_limit_event` that would carry one
-has never been captured here (all 304 records in the kept streams say `allowed_warning`, because a
+signal and a reset time is not: the rejected form of the `rate_limit_event` that would carry one has
+never been captured here (all 304 records in the kept streams say `allowed_warning`, because a
 rejection ends the run that would log one), so a named window only says when to stop asking early.
 `procStart` and the session id keep a recycled pid from being handed somebody else's resume, and
 both are compared as INSTANTS rather than as strings, because `claude` records its start in UTC and
-`ps` prints local — compared as text they disagree by the machine's offset on any box that is not
-on UTC, which silently refused every nudge the carry ever sent until 2026-09-13.
+`ps` prints local — compared as text they disagree by the machine's offset on any box that is not on
+UTC, which silently refused every nudge the carry ever sent until 2026-09-13. With the carry on, the
+session starts without the watchdog pair, since one idle on a background agent waiting under it
+reads as stopped and would be nudged as if it were, and with `CLAUDE_PIPELINE_CARRY=work`, so
+`resolve-ticket`'s Step 1 does not warn. With it off nothing here carries the session, and
+`resolve-ticket`'s Step 1 says what does.
 
 **It only works on sessions this launcher started**, and that is not an accident of packaging. A
 session running `--dangerously-skip-permissions` HOLDS an inbound peer message unless it can
 identify the sender as another session in its own permission class, and `pool-run` is a python
 script — unidentifiable whatever it puts in the envelope. So `--work` passes
-`crossSessionInbound: accept` on the launch, scoped to that session: it lets any local process put
-a turn into a pool worktree that is already bypassing prompts, and deliberately does not enrol the
-operator's other sessions, which are not inside that boundary. A session started by hand will have
-its nudge held, and will say so in its own transcript.
+`crossSessionInbound: accept` on the launch while its carry is on, scoped to that session: it lets
+any local process put a turn into a pool worktree that is already bypassing prompts, and
+deliberately does not enrol the operator's other sessions, which are not inside that boundary. A
+session started by hand will have its nudge held, and will say so in its own transcript. Besides
+Claude Code's own wait, `CLAUDE_CODE_RETRY_WATCHDOG` carries one; `resolve-ticket`'s Step 1 says how
+to set it.
 
 **The account is asked per quiet SPELL, not per watcher.** A session that has been writing and goes
 quiet again is looked at at once; only repeats within one spell back off, at

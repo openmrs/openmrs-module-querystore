@@ -335,6 +335,18 @@ this first and its **State** section carries the reasoning; the field and the se
 the gate cannot tell your entry from one a co-located run left in the same directory; `pr-harden`'s
 **State** section carries that reasoning as well:
 
+*Added 0.44.0 — the rule it supports:* “except where a usage-limit wait can have held it: the gate's block past the bound opens on that await, and `pr-harden`'s **State** says what it gets”
+
+Under `CLAUDE_CODE_RETRY_WATCHDOG`, which `resolve-ticket`'s Step 1 recommends through an alias, an
+agent waiting at a usage limit is alive and is not reported stalled, so the bound can pass with it
+still working; `pr-harden`'s evidence (0.41.0) carries the measurement. Past the bound the gate
+blocked a yield with "Run Phase 2 once", an instruction to run the phase whose agents may still be
+running, and nothing in the cycle's own context marks the hour. So the gate's block now opens on the
+stale await, its age and its agents, measured in `gate-test.sh`, and this clause sends the reader to
+`pr-harden`'s **State**, which says what such an await gets. It first went in as a clause on the
+"idle output" bullet (0.43.3); a Phase 2 reviewer found it qualified the weaker of the two
+statements of the bound, and the one here was left saying the agent is dead.
+
 *Cut down, H3-02 — the rule it supports:* “`--run` is what makes this checkout's leftovers yours to ignore.”
 
 **`--run` is what makes this checkout's leftovers yours to ignore.** Nothing clears the entry between
