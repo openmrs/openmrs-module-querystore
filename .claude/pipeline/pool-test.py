@@ -3921,9 +3921,9 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
         say = pool.Say(tmp / "preflight.md")
         settings = pool.SETTINGS
 
-        def refused(driving):
-            return any("CLAUDE_CODE_RETRY_WATCHDOG" in x for x in
-                       pool.preflight(cfg, say, want_label=False, driving=driving))
+        def refusal(driving):
+            return next((x for x in pool.preflight(cfg, say, want_label=False, driving=driving)
+                         if "CLAUDE_CODE_RETRY_WATCHDOG" in x), None)
 
         def refuses(command, ticket=None):
             # In-process, with a terminal on both streams; a pool with no repos stops the command at
@@ -3938,8 +3938,12 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
         check("the suite's settings.json is its own, never the operator's",
               str(settings).startswith(str(tmp)), str(settings))
         settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": " True "}}))
+        said = refusal(True)
         check("the driver refuses a watchdog settings.json turns on, read trimmed and in any case",
-              refused(True))
+              said is not None)
+        check("and says to delete the key rather than set it to 0, which overrides the alias",
+              "Delete the key" in (said or "") and "rather than setting it to 0" in (said or ""),
+              str(said))
         check("and so does --work while its carry is on", refuses(pool.cmd_work) is True)
         check("but not --work with its carry turned off",
               refuses(pool.cmd_work, {"limit_continue_work": False}) is False)
@@ -3947,9 +3951,9 @@ def test_a_retry_watchdog_in_settings_json_is_refused(tmp: Path) -> None:
               refuses(pool.cmd_work, {"limit_wait_max_seconds": 0}) is False)
         check("nor --claim, which launches nothing", refuses(pool.cmd_claim) is False)
         settings.write_text(json.dumps({"env": {"CLAUDE_CODE_RETRY_WATCHDOG": "0"}}))
-        check("a watchdog settings.json turns off is no problem", not refused(True))
+        check("a watchdog settings.json turns off is no problem", refusal(True) is None)
         settings.write_text(json.dumps({"env": {"KEEP_ME": "1"}}))
-        check("nor is an env without it", not refused(True))
+        check("nor is an env without it", refusal(True) is None)
 
 
 def test_a_session_silent_under_a_limit_is_suspended_not_killed(tmp: Path) -> None:

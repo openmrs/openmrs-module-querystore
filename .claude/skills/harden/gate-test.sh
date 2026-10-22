@@ -191,6 +191,10 @@ run_case "awaiting fresh, attended -> allow (yield)" allow "{\"cycle\":2,\"edits
 run_case "awaiting fresh, marker LIVE -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" $$
 run_case "awaiting fresh, marker DEAD -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" 999999
 run_case "awaiting fresh, unattended FIELD -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"unattended\":true,\"awaiting\":$AW}"
+# ...naming the agents it holds the run for, through the lookup the stale-await note uses.
+run_cmd_case "an unattended yield names the agents it left outstanding" \
+  "outstanding: phase2 quality, phase2 reuse" \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"phase2 quality\",\"since\":$NOW},{\"agent\":\"phase2 reuse\",\"since\":$NOW}]}"
 run_case "marker live but edits 0 -> allow" allow "{\"cycle\":2,\"edits\":0,\"ts\":$NOW}" $$
 run_case "override -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"override\":true}"
 

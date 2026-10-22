@@ -129,7 +129,8 @@ guard, it printed "allow" for all three.
 `gate-calibrate.py <repo> <base>` (output in `gate-calibrate.out`) runs each gate's `gate-test.sh`
 against mutants of that gate and names, for every case added since `<base>`, the mutants it fails
 against: the note removed, appended, replacing the reason, set with no `since` or with no await at
-all, `min` read for the newest `since`, and the one-hour bound made infinite. The unmutated gates
+all, `min` read for the newest `since`, the one-hour bound made infinite, and the awaited agents'
+names lost. The unmutated gates
 pass every case, and every added case fails against at least one mutant.
 
 `alias-probe.sh` (output in `alias-probe.out`) defines `resolve-ticket`'s alias in an interactive

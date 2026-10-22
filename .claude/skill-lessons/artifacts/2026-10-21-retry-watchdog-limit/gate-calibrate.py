@@ -13,6 +13,7 @@ MUTANTS = [
     ("no-await-needed", 'STALE_NOTE=""', 'STALE_NOTE="The newest await recorded here is 0 min old, past the one-hour bound (awaiting: ?). Otherwise: "'),
     ("min-not-max", "| (.since // 0)] | max'", "| (.since // 0)] | min'"),
     ("ttl-infinite", "AWAIT_TTL=3600 ", "AWAIT_TTL=999999999 "),
+    ("agents-unnamed", "await_agents() { jq", "await_agents() { echo \"?\"; return; jq"),
 ]
 SUITES = [("pr-harden", "pr-harden-gate.sh"), ("harden", "harden-cycle-gate.sh")]
 for suite, gate in SUITES:

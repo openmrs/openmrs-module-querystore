@@ -87,6 +87,9 @@ run_reason_case() { # name want entry_json
   if reason_ok "$want" "$got"; then PASS=$((PASS+1)); echo "  ok   $name"
   else FAIL=$((FAIL+1)); echo "  FAIL $name: want '$want' in: ${got:0:200}"; fi
 }
+# The unattended block names the agents it holds the run for, through the lookup the note below uses.
+run_reason_case "an unattended yield names the agents it left outstanding" "outstanding: refute, fix r2" \
+  "{\"phase\":\"building\",\"blocking\":0,\"pr\":null,\"round\":1,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"refute\",\"since\":$NOW},{\"agent\":\"fix r2\",\"since\":$NOW}]}"
 # Past the bound, each block below hands back its phase's own text, which has the run dispatch the
 # phase again; where the await's agent is waiting at a usage limit that is a second agent beside a
 # live one, and only the hook knows the await's age. So every block reached there leads with it.
