@@ -1,0 +1,16 @@
+$ integ_content.py 4 pre034-harden.tsv
+no	best=3	20260826T122937Z-openmrs_openmrs-module-chartsearchai-310.js
+no	best=2	20260831T204439Z-openmrs_openmrs-module-chartsearchai-346.js
+no	best=3	20260831T220615Z-openmrs_openmrs-module-chartsearchai-346.js
+no	best=2	20260901T065554Z-openmrs_openmrs-module-chartsearchai-349.js
+YES	best=6	20260902T192225Z-openmrs_openmrs-module-chartsearchai-347.js
+YES	best=6	20260902T192225Z-openmrs_openmrs-module-chartsearchai-348.js
+no	best=3	20260902T192225Z-openmrs_openmrs-module-chartsearchai-353.js
+YES	best=6	20260916T211849Z-openmrs_openmrs-module-chartsearchai-446.js
+no	best=2	20260916T211849Z-openmrs_openmrs-module-chartsearchai-448.js
+YES	best=6	20260917T031805Z-openmrs_openmrs-module-chartsearchai-447.js
+no	best=2	20260917T031805Z-openmrs_openmrs-module-chartsearchai-450.js
+YES	best=6	20260917T093644Z-openmrs_openmrs-module-chartsearchai-445.js
+YES	best=5	20260917T093645Z-openmrs_openmrs-module-chartsearchai-444.js
+read: 13 of 13 | with a block naming >=4 of 6 topics: 6
+exit=0

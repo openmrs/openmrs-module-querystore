@@ -1,0 +1,102 @@
+{
+ "1": {
+  "source": "relocated",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-527.md c3 next=ESCALATED window L2315-L2341 (0.5 min) edits=33",
+  "original_class": null
+ },
+ "2": {
+  "source": "calibration",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-476.md c1 next=DONE window L324-L359 (- min) edits=0",
+  "original_class": "0"
+ },
+ "3": {
+  "source": "relocated",
+  "header": "== 2026-09-30-openmrs-module-chartsearchai-564.md c1 next=DONE window L1046-L1067 (3.3 min) edits=3",
+  "original_class": null
+ },
+ "4": {
+  "source": "calibration",
+  "header": "== 2026-09-29-openmrs-module-chartsearchai-552.md c3 next=DONE window L612-L618 (0.2 min) edits=5",
+  "original_class": "Rc"
+ },
+ "5": {
+  "source": "calibration",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-429.md c1 next=DONE window L112-L133 (- min) edits=0",
+  "original_class": "N"
+ },
+ "6": {
+  "source": "relocated",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-527.md c4 next=ESCALATED window L2510-L2531 (0.4 min) edits=10",
+  "original_class": null
+ },
+ "7": {
+  "source": "relocated",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-527.md c2 next=ESCALATED window L1900-L1922 (0.3 min) edits=23",
+  "original_class": null
+ },
+ "8": {
+  "source": "calibration",
+  "header": "== 2026-09-29-openmrs-module-chartsearchai-560.md c1 next=ESCALATED window L634-L641 (0.3 min) edits=4",
+  "original_class": "M"
+ },
+ "9": {
+  "source": "calibration",
+  "header": "== 2026-09-23-openmrs-module-chartsearchai-488-PR501.md c2 next=DONE window L448-L552 (7.3 min) edits=2",
+  "original_class": "U"
+ },
+ "10": {
+  "source": "calibration",
+  "header": "== 2026-09-23-openmrs-module-chartsearchai-469.md c5 next=ESCALATED window L1557-L1566 (2.4 min) edits=7",
+  "original_class": "U"
+ },
+ "11": {
+  "source": "relocated",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-527.md c1 next=ESCALATED window L1507-L1511 (0.0 min) edits=3",
+  "original_class": null
+ },
+ "12": {
+  "source": "relocated",
+  "header": "== 2026-09-29-openmrs-module-chartsearchai-562.md c1 next=ESCALATED window L1981-L2005 (3.2 min) edits=6",
+  "original_class": null
+ },
+ "13": {
+  "source": "calibration",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-433.md c2 next=DONE window L559-L578 (2.6 min) edits=4",
+  "original_class": "R"
+ },
+ "14": {
+  "source": "relocated",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-527.md c5 next=DONE window L2630-L2660 (2.4 min) edits=7",
+  "original_class": null
+ },
+ "15": {
+  "source": "calibration",
+  "header": "== 2026-09-28-openmrs-module-chartsearchai-462.md c3 next=ESCALATED window L340-L369 (0.6 min) edits=2",
+  "original_class": "R"
+ },
+ "16": {
+  "source": "calibration",
+  "header": "== 2026-09-23-openmrs-module-chartsearchai-471.md c1 next=ESCALATED window L1190-L1207 (1.1 min) edits=2",
+  "original_class": "Rc"
+ },
+ "17": {
+  "source": "calibration",
+  "header": "== 2026-09-23-openmrs-module-chartsearchai-477.md c3 next=ESCALATED window L1099-L1120 (2.5 min) edits=1",
+  "original_class": "M"
+ },
+ "18": {
+  "source": "calibration",
+  "header": "== 2026-09-24-openmrs-module-chartsearchai-273.md c1 next=ESCALATED window L378-L405 (- min) edits=0",
+  "original_class": "0"
+ },
+ "19": {
+  "source": "relocated",
+  "header": "== 2026-09-29-openmrs-module-chartsearchai-562.md c2 next=DONE window L2201-L2223 (0.8 min) edits=4",
+  "original_class": null
+ },
+ "20": {
+  "source": "calibration",
+  "header": "== 2026-09-27-openmrs-module-chartsearchai-463.md c2 next=DONE window L309-L327 (0.8 min) edits=1",
+  "original_class": "N"
+ }
+}

@@ -5759,3 +5759,55 @@ transcript up by its session id before reading it as gone).**
 - The folder half (:4568-4570) falls from 10 to 9.
 - :5144 stays "no remedy owed", and :5242 keeps no reopen condition.
 - :5149 is now answered, and :5249, :5245-5246 and :5163-5164 are corrected.
+
+## 2026-10-23 (owner-directed: harden's gate sentences, and the confirming-pass measurement re-run with the moved runs) — 1 proposal parked by the gate, 1 measurement re-run; no skill file changed; one refutation round
+
+The owner directed both. The direction on the gate sentences rested on this session's statement that
+runs never state them, and the gate found that statement holds only after harden 0.34.0.
+- The proposal, the gate's reply and what changed are in
+  `proposals/2026-10-23-owner-directed-harden-gate-sentences.md`. One line of the reply is redacted
+  there: it cited a session that belongs to a ticket whose records are confidential.
+- The evidence is in `artifacts/2026-10-23-gate-sentences-periods/` and
+  `artifacts/2026-10-23-harden-phase1-confirming-pass/relocated-addendum/`, each with a README.
+
+**PARKED by the gate · a harden 0.45.0 proposal: each gate states its required content instead of a
+fill-in template.** :5562's REOPEN ("a proposal to delete or replace those sentences") was met, and
+the proposal does not survive the facts.
+
+- **Before 0.34.0** (`6f15b1c`, 2026-09-22). The pool's stream logs, 2026-08-26 to 2026-09-17, cover 13
+  runs that load harden.
+  - 8 of them state the Transition gate's sentences in their literal form.
+  - 6 answer at least 4 of its 6 integration questions in one block (`gate-sentences-pre034.out`,
+    `integ-pre034.out`).
+- **After 0.34.0.** The 61 transcripts behind :5552-5565 do neither: 0 and 0. The most any reaches is
+  3 topics (`integ-post034.out`). So the Transition gate's content went with its wording.
+- **Three changes coincide.** harden 0.34.0 moved the verdict into `gate-state harden-set`. All 13
+  earlier runs ran on Opus 5 or Sonnet 5, and all 61 later ones on Opus 5.5. The 61 ran on Claude Code
+  2.1.280 or later, and the pool logs record no version (`models.out`). These counts cannot separate the
+  three, so the cause is not established.
+- **The gate's other blocking points lapse with the proposal:**
+  - the Phase 2 gate lost "ran once" and its edit count as a number;
+  - that gate went beyond what the owner directed;
+  - the measurement note belonged under each gate's own heading.
+- **REOPEN ON:** the owner deciding again on these facts, or a measurement that separates harden
+  0.34.0 from the model change.
+
+**Corrections to :5552-5565.**
+- Its title and counts hold for its population, which is the runs after 0.34.0, and not before.
+- `harden/evidence.md`:214's "the phase gates demand verbatim sentences and get them" held for the
+  period it was written in (`5bc2d71`, 2026-08-17). The pool logs bear it out.
+- :5559's "for this population" was the right limit.
+
+**Re-run · the harden confirming-pass measurement, with the moved runs** (:5645's "Affected, not
+re-run"):
+
+- Three moved runs, #527, #562 and #564, add 8 traversals to the note's 127.
+- A fresh agent classified them blind, with record and outcome removed, among 12 calibration blocks.
+  It agreed with the note's reader on 10 of 12 exactly, and on 11 of 12 by table group
+  (`score-blind.out`).
+- Over 135 traversals (`combined-rates.out`):
+  - first traversals escalated after a re-review in 72%, and after a mechanical check or nothing in 65%;
+  - resumed traversals, 47% and 54%.
+- The note's reading stands, and its addendum records this. :5539's park and REOPEN are unchanged.
+
+**Running parked counts:** unchanged.

@@ -1,0 +1,20 @@
+1 R — pass 2's "Check Decision 90 states the published-findings premise" re-reads unedited ADR prose after the precision-defect fix. If that claim is the fix itself, the call only checks the edit (Rc with the prose); R is favoured because the call traces the claim outward.
+2 0 — edits=0. Pass 1's mutation check of the control and its grep sweeps for sentences the change made false found nothing.
+3 M — after "Apply the cosmetic ADR fixes", only the full offline build and its in-turn wait run before converged. No review is shown or claimed.
+4 Rc — "Pass 4 found nothing substantive" appears only in prose. The window's only tool call is the orphaned-javadoc detector, which is mechanical. Rc over M because a pass is claimed.
+5 0 — edits=0, and only the HARDEN line and STATE writes appear. No review call is visible, but 0 depends only on there being no edit in the traversal, so 0 over U.
+6 Rc — "Recording and committing; then a final pass." is followed by the commit and, 14 s later, converged, with no tool call that shows the pass. Rc over N because the pass is claimed.
+7 Rc — "cycle 2's Phase 1 pass found only cosmetic items" is not shown. The only read after the edit checks that "the reflowed javadoc joins cleanly", which is a check of that edit. Rc over N.
+8 M — the cosmetic fix's own call runs the orphaned-javadoc sweep, and nothing else comes before converged. M over N because the rubric names the detector under M.
+9 U — "Root build after the prose corrections" and the re-open at L507 point to corrections the extractor did not see (the window opens at the L448 reflow). The window cannot show whether the L516-L536 claim sweeps came after those corrections (R) or before them (M).
+10 U — after "Fix remaining small prose items" and phase1=open, 2.3 minutes pass with nothing shown (L1561-L1566) before converged. That is a silent gap.
+11 N — "Stage the ADR residue fix", the commit and converged all land within one second. Nothing follows the edit.
+12 R — after the full build, a grep re-reads every config.xml sentence that names answerFromFindings. It would be M if the grep only checks a cosmetic edit; R is favoured because nothing in the block ties it to that edit.
+13 Rc — "Pass 3 found only a cosmetic reflow" is not shown. After the edit come only the full build and a sed of the reflowed DrugReferenceTestSupport lines, which checks that edit. Rc over M.
+14 R — cycle 5 pass 1 greps README's "Attributable is two things" section to confirm where the new pointer lands, which traces outward after the Phase 2 fixes. It would be N if read as a check of the pointer edit alone; R is favoured because it reads another file.
+15 R — after "Replace muddled clause with measured fact", three greps re-read ArchitectureGuardTest, one of them at a second anchor ("identity, and a review round"). It would be Rc if they only check the replaced clause; R is favoured by the rubric's "re-reads a file".
+16 Rc — "Pass 2 re-read the whole diff ... found nothing substantive" appears only in prose. No read follows the L1190 bash that opens the window, and the announced instructions-guard check is followed only by the converged write.
+17 M — the last edit is the test-filter consolidation in L1110, followed only by that call's mutation check of the label and the full build. The call-site read at L1102 comes before it, and phase1 reopens and converges 10 s later with nothing else.
+18 0 — edits=0. Pass 1 traced outward to the unchanged homes (the DrugReferenceValidity lines, adr.md, README) and found nothing.
+19 R — after the setUp mutation probe is restored, "Re-read the edited parts of Decision 131" re-reads the edited prose as it now stands.
+20 N — "I'm deleting one unsupported clause I just wrote" is an edit stated right before the converged write, with nothing after it.

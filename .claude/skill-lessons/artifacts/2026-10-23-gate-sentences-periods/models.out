@@ -1,0 +1,6 @@
+$ models.py pre-0.34=pre034-harden.tsv post-0.34=post034-harden.tsv
+pre-0.34: models {'claude-opus-5': 12, 'claude-sonnet-5': 1}
+pre-0.34: Claude Code versions {}
+post-0.34: models {'claude-opus-5-5': 61}
+post-0.34: Claude Code versions {'2.1.280': 22, '2.1.281': 21, '2.1.282': 2, '2.1.283': 6, '2.1.284': 7, '2.1.285': 1, '2.1.287': 1, '2.1.296': 1}
+exit=0

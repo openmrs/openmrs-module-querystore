@@ -105,3 +105,34 @@ The same rates for the narrower classes:
   start before the true last edit. The reader classified from the prose in that case, and U holds what
   the prose did not settle.
 - **Narrow sample.** 55 of the 57 runs are chartsearchai, from about one week.
+
+## Addendum, later on 2026-10-23: the runs whose transcripts had moved
+
+The population above came from `public-transcripts.py`, which keeps a record's transcript only at its
+recorded path. Five records named a path their transcript had since been moved away from
+(`../2026-10-23-retro-window/transcript-presence.out`).
+
+- Three of them load harden: #527, #562 and #564.
+- This addendum adds their 8 traversals, 3 first and 5 resumed, with the note's own scripts. The work
+  is in `artifacts/2026-10-23-harden-phase1-confirming-pass/relocated-addendum/`, and its README gives
+  every command.
+
+**Blind classification.** A fresh agent classified the 8 new blocks against the rubric above.
+- Each block had its record and its outcome removed, and was shuffled among 12 of the original blocks
+  as calibration: 2 per class, chosen with a fixed seed.
+- On the calibration blocks it agreed with this note's reader on 10 of 12 exactly, and on 11 of 12 by
+  the groups the tables use (`score-blind.out`). The differences were one N read as 0 and one R read
+  as Rc.
+
+**Rates over all 135 classified traversals** (`combined-rates.out`):
+
+| traversal | re-review (R+Rc) | then escalated | mechanical or nothing (M+N) | then escalated |
+|---|---|---|---|---|
+| first | 25 | 18 (72%) | 23 | 15 (65%) |
+| resumed after an escalation | 38 | 18 (47%) | 26 | 14 (54%) |
+
+**The reading stands.** At these sizes neither gap is distinguishable from noise. Enforcing the
+confirming pass still shows no way to stop an escalation chain.
+
+**Limits.** Only the 8 new blocks were classified blind; the original 127 are still one unblinded
+reader's. The calibration covers 12 blocks.

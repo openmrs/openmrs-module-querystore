@@ -1,0 +1,24 @@
+calibration blocks: k | original | blind
+   2 | 0  | 0 
+   4 | Rc | Rc
+   5 | N  | 0    <- differs
+   8 | M  | M 
+   9 | U  | U 
+  10 | U  | U 
+  13 | R  | Rc   <- differs
+  15 | R  | R 
+  16 | Rc | Rc
+  17 | M  | M 
+  18 | 0  | 0 
+  20 | N  | N 
+agreement: exact 10 of 12, by table group 11 of 12
+relocated blocks: header | blind class
+  == 2026-09-24-openmrs-module-chartsearchai-527.md c1 next=ESCALATED window L1507-L1511 (0.0 min) edits=3 | N
+  == 2026-09-24-openmrs-module-chartsearchai-527.md c2 next=ESCALATED window L1900-L1922 (0.3 min) edits=23 | Rc
+  == 2026-09-24-openmrs-module-chartsearchai-527.md c3 next=ESCALATED window L2315-L2341 (0.5 min) edits=33 | R
+  == 2026-09-24-openmrs-module-chartsearchai-527.md c4 next=ESCALATED window L2510-L2531 (0.4 min) edits=10 | Rc
+  == 2026-09-24-openmrs-module-chartsearchai-527.md c5 next=DONE window L2630-L2660 (2.4 min) edits=7 | R
+  == 2026-09-29-openmrs-module-chartsearchai-562.md c1 next=ESCALATED window L1981-L2005 (3.2 min) edits=6 | R
+  == 2026-09-29-openmrs-module-chartsearchai-562.md c2 next=DONE window L2201-L2223 (0.8 min) edits=4 | R
+  == 2026-09-30-openmrs-module-chartsearchai-564.md c1 next=DONE window L1046-L1067 (3.3 min) edits=3 | M
+wrote combined-digest.txt (135 blocks) and combined-classes.txt

@@ -1,0 +1,33 @@
+$ gate_sentences.py pre034-logs.tsv
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260826T122937Z-openmrs_openmrs-module-chartsearchai-310.jsonl
+   L792 [stop] clause — claim confirmed. Phase 1 has converged.  **Phase 1 stopping condition met:** last pass returned no further review value. Edits made by that last pass: 0. **Integration questions answered:** `cl
+   L792 [integ] no further review value. Edits made by that last pass: 0. **Integration questions answered:** `clauses` has exactly one consumer (`appendSection`, `DrugReferenceInjector.java:1827`) and no other site in `api/sr
+   L792 [tests] s`, the test class javadoc) and all three were corrected. **Behavior changes without tests:** none — fold: `twoRulesOfDifferentKeysCarryingOneNoteAreOneClause` and `theSurvivingClauseKeepsItsPlaceAmongTheEntrys
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260902T192225Z-openmrs_openmrs-module-chartsearchai-347.jsonl
+   L1339 [stop] Phase 1 converged. **"Phase 1 stopping condition met: the last pass returned no further review value. Edits made by that last pass: 0."**  **"Integration questions answered
+   L1339 [integ] rther review value. Edits made by that last pass: 0."**  **"Integration questions answered:"** upstream mutation — the bridges are derived per-request from the post-answer `validate`, nothing caches them separa
+   L1339 [tests] olvesFrom` name match visible rather than creating one.  **"Behavior changes without tests: none"** — silence test: `OneOrderNameAcrossAnswerAndChipTest.aSubstanceTheChartNamesOnlyByABrandIsBridgedToTheOrderItC
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260902T192225Z-openmrs_openmrs-module-chartsearchai-348.jsonl
+   L2099 [stop] **Phase 1 stopping condition met**: the last pass returned no further review value (pass 6 found nothing; pass 5 was cosmetic only). Edits made by that 
+   L2099 [integ] s 5 was cosmetic only). Edits made by that last pass: 0.  **Integration questions answered**: an upstream service mutating without notifying me — the flag has one reader (`strengthClause`), reached only from `i
+   L2099 [tests] e's own "more than one finding" assertion staying green.  **Behavior changes without tests**: none — screening interaction arm (test added: `aScreenedPairOfHerOwnMedicationsStatesTheCurrentMedicationCall`, `.aS
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260902T192225Z-openmrs_openmrs-module-chartsearchai-353.jsonl
+   L1843 [stop] Phase 1 stopping condition met: last pass returned no further review value. Edits made by that last pass: 0. Committing before Phase 2 spawns agents.
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260916T211849Z-openmrs_openmrs-module-chartsearchai-446.jsonl
+   L834 [stop] Phase 1 gate:  > "Phase 1 stopping condition met: the last pass returned no further review value. Edits made by that last pass: 0."  > "Integration questions answered: 
+   L834 [integ] further review value. Edits made by that last pass: 0."  > "Integration questions answered: an upstream service mutating without notifying me — n/a, the slice holds no derived state; an optional dependency abse
+   L834 [tests] ofInputStream()` cannot leak a connection on any path."  > "Behavior changes without tests: none. Ceiling on the streaming read — `anEndlessTokenStreamIsAbortedInsteadOfAccumulatedWithoutABound`; on the non-str
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260917T031805Z-openmrs_openmrs-module-chartsearchai-447.jsonl
+   L6446 [stop] **`/harden` complete.** Both gates satisfied:  > "Phase 1 stopping condition met: the last pass returned no further review value. Edits made by that last pass: 0."  > "Integration questions answered: 
+   L6446 [integ] further review value. Edits made by that last pass: 0."  > "Integration questions answered: *upstream mutation* — `AboveFloorRules` is a per-arm local built from a list the caller already holds, so there is no 
+   L6446 [tests] er every ordered pair at five floors on four datasets."  > "Behavior changes without tests: none — `AboveFloorRules` → `AboveFloorRuleJoinAgreementTest` (8 cases); the cost property → `QuestionPairRuleScanPerPa
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260917T093644Z-openmrs_openmrs-module-chartsearchai-445.jsonl
+   L1680 [stop] found nothing substantive. **Transition gate:**  > "Phase 1 stopping condition met: the last pass returned no further review value. Edits made by that last pass: 0."  > "Integration questions answered: 
+   L1680 [integ] further review value. Edits made by that last pass: 0."  > "Integration questions answered: (1) upstream mutation without notifying — no derived value crosses a module boundary; the per-start endpoint is produc
+   L1680 [tests] he next start's port check accuse our own dying child."  > "Behavior changes without tests: `--host`/`--no-webui` (test added: `theServerCommandPinsTheBindToLoopback`, `theServerCommandServesNoWebUi`); env hand
+HIT /Users/danielkayiwa/.claude/pipeline/logs/20260917T093645Z-openmrs_openmrs-module-chartsearchai-444.jsonl
+   L1483 [stop] l and leaves nothing behind).  **Phase 1 gate:** > "Phase 1 stopping condition met: the last pass returned no further review value. Edits made by that last pass: 0."  > "Integration questions answered: 
+   L1483 [integ] further review value. Edits made by that last pass: 0."  > "Integration questions answered: an upstream service mutating without notifying me — the pinned revision is immutable, and a volume file that drifts is
+   L1483 [tests] agation were driven together and behave as documented."  > "Behavior changes without tests: none. Library lookups → `everyLookupReturnsTheFieldOnThatArtifactsOwnRow`, `anIdThatIsAPrefixOfAnotherResolvesToItsOwn
+named: 26 | read: 26 | loading the template: 13 | of those, with the Termination gate's: 0 | with an assistant hit: 8 | assistant hits: {'stop': 11, 'integ': 7, 'tests': 7, 'p2gate': 0, 'term': 0} | template blocks: 13
+exit=0
