@@ -4,7 +4,8 @@ The 2026-10-23 `skill-retro` pass read five measurement notes and no run record.
 it ran beyond each note's own `scripts/`, so that its entries in `REJECTED.md` can be re-checked
 without this session's scratchpad. The refutation gate made that a condition: the transcripts these
 scripts read are being deleted (below), so a figure whose instrument is not kept here cannot be
-checked again.
+checked again. They are also moved between project folders, so `transcript_presence.py` looks each
+one up by its session id as well as by the path its record names.
 
 Every script reads only and runs with `python3 -I <script> <args>`. The outputs beside them are
 their stdout and stderr.
@@ -38,6 +39,13 @@ the commit that added each sentence.
   ```
 
   The two deleted transcripts held no template block: the 58 blocks are the same before and after.
+- **`gate-sentences-relocated.out`**, added later the same day, covers the five transcripts
+  `transcript-presence.out` lists as RELOCATED. The tsv above left them out, because it keeps a record's
+  transcript only at its recorded path (see *The deletion*).
+  - 3 of the 5 load the template, all on a harden with the Termination gate.
+  - 1 states the Phase 2 gate's sentence: #527's transcript `ebc78818…`.
+  - With the 58 above, 61 transcripts load harden. 0 of the 61 state the Transition gate's three
+    sentences or the Termination gate's, and 2 state the Phase 2 gate's.
 
 ## `reader_check.py`: the reader sees assistant text
 
@@ -82,10 +90,35 @@ At about 12:40 on 2026-10-23, during this pass, two transcripts named by public 
   transcripts before automatic cleanup (default: 30)". `~/.claude/settings.json` does not set it. The
   two deletions fit that schedule.
 - `transcript_presence.py` counts this over the `transcript:` lines of all public records (output in
-  `transcript-presence.out`): 77 of the 141 distinct paths are gone. A few more paths appear in
-  record bodies, which it does not read.
-- Five of the 77 belong to records under 30 days old (2026-09-24 to 2026-09-30):
-  - one is a `<cwd-slug>` placeholder that was never a real path;
-  - the other four's whole project directories are gone too.
-- So the 30-day cleanup does not account for every loss, and what removed those four was not
-  established.
+  `transcript-presence.out`). It does not read paths that appear only in record bodies.
+  - 77 of the 141 distinct paths point at no file.
+  - Searched by session id across every folder under `~/.claude/projects`, 72 of those 77 are absent
+    everywhere. All 72 belong to records dated 2026-08-26 to 2026-09-21, more than 30 days old, which
+    fits the cleanup.
+  - The other 5 still exist in another folder.
+
+**Corrected later on 2026-10-23.** This section first said that five of the 77 belonged to records under
+30 days old, that four of them had lost their whole project directory, and that the cause was not
+established. All five transcripts exist:
+
+- **Four were relocated by Claude Code itself** (`relocations.py`, output in `relocations.out`).
+  - On `EnterWorktree`, Claude Code moves a session's transcript into the worktree's project folder.
+    Each of the four runs looked its transcript up by session id from inside the worktree, and each
+    lookup printed the worktree-folder path its record names.
+  - When the worktree session ends, Claude Code moves the transcript back to the folder of the directory
+    the session started in. Each of the four transcripts ends with a `worktree-state` record showing the
+    worktree session exited, then a `relocated` record pointing at the main `chartsearchai` checkout.
+  - So each record was right when written and went stale afterwards.
+- **The fifth is the 515 driver capture**, which wrote an unfilled `<cwd-slug>` placeholder. Its
+  transcript, never relocated, sits under the pipeline worktree's folder.
+
+## `relocations.py`: where a transcript lived when its record was written, and where it lives now
+
+For each transcript given, the script prints:
+- its current folder;
+- the targets of its `relocated` records;
+- its last `worktree-state`;
+- its `EnterWorktree` and `ExitWorktree` calls;
+- every lookup the run made of its own transcript, with the path that lookup printed.
+
+The output is **`relocations.out`**, over the five RELOCATED transcripts.

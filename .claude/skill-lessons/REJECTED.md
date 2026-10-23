@@ -5561,6 +5561,8 @@ with `controls.out`).
 - 1 measurement.
 - **REOPEN ON:** a proposal to delete or replace those sentences. This count is evidence that they are
   not said, not that they do nothing.
+- **Corrected the same day (addendum below):** 61 transcripts load harden, not 58; 0 and 2 of them, not
+  0 and 1.
 
 **Linter: `stated_counts` did not flag harden:77.** Three things missed it (`skill-lint.py`:16-18, :27,
 :36): no noun from `NOUNS` followed "BOTH", "both" is not in `WORDS`, and blockquote items are not
@@ -5588,6 +5590,8 @@ disappearing.**
   - queue96's 2026-09-16 handler-order miss cannot be explained (`…-queue96.md`:80-81);
   - the harden note's first two stages no longer re-derive.
 - The action is the operator's: a long `cleanupPeriodDays` in `~/.claude/settings.json`.
+- **Corrected the same day (addendum below):** none of those five is lost. Four were relocated by
+  Claude Code, and the fifth's transcript was never moved. 72 of the 77 are gone.
 
 **Observed, no remedy owed.**
 
@@ -5598,3 +5602,65 @@ disappearing.**
   (`…-queue96.md`:50).
 
 **Running parked counts:** unchanged. The window holds no run record.
+
+## 2026-10-23 (addendum to the window above, operator-directed: the lost transcripts re-measured by session id) — 2 entries corrected, 1 parked; no skill file changed; **Step 5 not run**
+
+The owner asked, after the window, to "dig into the lost project folders". The re-measure is in
+`artifacts/2026-10-23-retro-window/`, and its README says what each output shows:
+- `transcript_presence.py`, which now also searches every folder by session id, with its output in
+  `transcript-presence.out`;
+- `relocations.py`, with its output in `relocations.out`;
+- `gate-sentences-relocated.out`.
+
+**CORRECTED · the transcript-loss entry.** The block above says four records under 30 days old had lost
+their whole project directory, by a cause not established. The transcripts of all five records under
+30 days old are on disk.
+
+- **Four, Claude Code relocated itself:** #527, #402/PR544, #562 and #564 (`relocations.out`).
+  - Each run entered its worktree with `EnterWorktree`.
+  - Each then looked its transcript up by session id from inside the worktree: #527 at L3120, #402 at
+    L2157, #562 at L2575, #564 at L1575 of its transcript.
+  - Each record names the worktree-folder path that lookup printed.
+  - In each transcript, the last `worktree-state` record shows the worktree session exited, and the
+    last `relocated` record points at the main `chartsearchai` checkout. All four now sit in that
+    checkout's folder.
+  - So each record was right when it was written, and went stale afterwards.
+- **The fifth is the 515 driver capture.** It names an unfilled `<cwd-slug>` placeholder. Its transcript
+  sits under the pipeline worktree's folder and was never relocated.
+- **What is actually gone.** 72 of the 141 paths name a transcript that is missing from every folder.
+  All 72 come from records dated 2026-08-26 to 2026-09-21, more than 30 days old
+  (`transcript-presence.out`).
+  - No mechanism beyond the 30-day cleanup is in evidence.
+  - `cleanupPeriodDays` was set to 3650 on 2026-10-23, at the operator's direction.
+
+**CORRECTED · the gate-sentences entry.**
+
+- Three of the five relocated transcripts load harden, on a version carrying every gate. #527's states
+  the Phase 2 gate's sentence (`gate-sentences-relocated.out`).
+- So the population is 61, not 58:
+  - 0 state the Transition gate's sentences or the Termination gate's;
+  - 2 state the Phase 2 gate's (#477, #527).
+- The entry's reading and its REOPEN stand.
+
+**Affected, not re-run: the harden note's population** (`…-confirming-pass.md`). That population came
+from `public-transcripts.py`, which keeps a transcript only at its recorded path, so the relocated runs
+were left out. Its escalation rates were not re-derived with them.
+
+**Parked for the next retro: the example both evidence files give of a name taken "from anywhere
+else".**
+
+- `pr-harden/evidence.md`:1090 and `resolve-ticket/evidence.md`:591 say "#527 recorded the folder of
+  the worktree it had moved into".
+- #527 found that folder by a `find` on its own session id (L3120), which is the kind of lookup the rule
+  prescribes.
+- #402/PR544, #562 and #564 recorded the same kind of path after the rule shipped (`2794d2c`,
+  2026-09-25), each from a lookup by session id.
+- The rule gives the path as it stands at write time, and Claude Code can move the file afterwards.
+  Read against this, the example looks like a relocation rather than a misnamed path.
+- Not edited here: it is skill text, and this addendum ran no refutation.
+- **REOPEN ON:** the next retro, which owes it a fresh agent's check.
+- Until then, a reader of any record's `transcript:` line should resolve it by session id:
+  `ls ~/.claude/projects/*/<uuid>.jsonl`.
+
+**Deviation, recorded because it is one:** Step 5 was not run on this addendum. Its figures come from
+the outputs it names, and its commits and evidence lines from `git log` and the files cited.

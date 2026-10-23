@@ -7,3 +7,13 @@ gone though its record is under 30 days old: 2026-09-24-openmrs-module-chartsear
 gone though its record is under 30 days old: 2026-09-28-openmrs-module-chartsearchai-402.md | project dir exists: False | ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-544/c3fd0664-f6fd-4bb0-9dbe-b81585926c1e.jsonl
 gone though its record is under 30 days old: 2026-09-29-openmrs-module-chartsearchai-562.md | project dir exists: False | ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-562/111381c1-d104-4508-9063-81d4c5f687f1.jsonl
 gone though its record is under 30 days old: 2026-09-30-openmrs-module-chartsearchai-564.md | project dir exists: False | ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai--claude-worktrees-564-tail-partner/12e2feb4-5c6c-4205-9910-5e4d194feff4.jsonl
+
+by session id, across ~/.claude/projects:
+control relocated before 2026-10-23 (named under chartsearchai-527, lives under chartsearchai): ['-Users-danielkayiwa-Projects-openmrs-chartsearchai']
+gone paths: 77 | RELOCATED (same file in another folder): 5 | ABSENT (in no folder): 72
+  relocated: 2026-09-24-openmrs-module-chartsearchai-515-driver.md | <cwd-slug> -> -Users-danielkayiwa--claude-pipeline-worktrees-openmrs-openmrs-module-chartsearchai-515
+  relocated: 2026-09-24-openmrs-module-chartsearchai-527.md | -Users-danielkayiwa-Projects-openmrs-chartsearchai-527 -> -Users-danielkayiwa-Projects-openmrs-chartsearchai
+  relocated: 2026-09-28-openmrs-module-chartsearchai-402.md | -Users-danielkayiwa-Projects-openmrs-chartsearchai-544 -> -Users-danielkayiwa-Projects-openmrs-chartsearchai
+  relocated: 2026-09-29-openmrs-module-chartsearchai-562.md | -Users-danielkayiwa-Projects-openmrs-chartsearchai-562 -> -Users-danielkayiwa-Projects-openmrs-chartsearchai
+  relocated: 2026-09-30-openmrs-module-chartsearchai-564.md | -Users-danielkayiwa-Projects-openmrs-chartsearchai--claude-worktrees-564-tail-partner -> -Users-danielkayiwa-Projects-openmrs-chartsearchai
+absent, record dates: 2026-08-26 .. 2026-09-21

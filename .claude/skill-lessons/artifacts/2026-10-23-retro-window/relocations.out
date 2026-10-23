@@ -1,0 +1,37 @@
+$ relocations.py <the five transcripts the records name by a stale path>
+== ebc78818-5b31-4fed-9943-24ca301a3943
+   now under: -Users-danielkayiwa-Projects-openmrs-chartsearchai
+   relocated records: 140, targets: {'~/Projects/openmrs/chartsearchai-527': 138, '~/Projects/openmrs/chartsearchai': 2}
+   last relocated: L3165 -> ~/Projects/openmrs/chartsearchai
+   last worktree-state: L3161 -> none (worktree session exited)
+   EnterWorktree at L119: Entered worktree at ~/Projects/openmrs/chartsearchai-527 on branch fix/527-current-medication-referent. The session
+   lookup at L3120 printed: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-527/ebc78818-5b31-4fed-9943-24ca301a3943.jsonl
+== c3fd0664-f6fd-4bb0-9dbe-b81585926c1e
+   now under: -Users-danielkayiwa-Projects-openmrs-chartsearchai
+   relocated records: 83, targets: {'~/Projects/openmrs/chartsearchai-544': 81, '~/Projects/openmrs/chartsearchai': 2}
+   last relocated: L3376 -> ~/Projects/openmrs/chartsearchai
+   last worktree-state: L3373 -> none (worktree session exited)
+   EnterWorktree at L1356: Entered worktree at ~/Projects/openmrs/chartsearchai-544 on branch fix/402-drug-in-play-her-own-order-referent. The session
+   lookup at L2157 printed: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-544/c3fd0664-f6fd-4bb0-9dbe-b81585926c1e.jsonl
+== 111381c1-d104-4508-9063-81d4c5f687f1
+   now under: -Users-danielkayiwa-Projects-openmrs-chartsearchai
+   relocated records: 75, targets: {'~/Projects/openmrs/chartsearchai-562': 73, '~/Projects/openmrs/chartsearchai': 2}
+   last relocated: L2619 -> ~/Projects/openmrs/chartsearchai
+   last worktree-state: L2616 -> none (worktree session exited)
+   EnterWorktree at L944: Entered worktree at ~/Projects/openmrs/chartsearchai-562 on branch feat/562-answer-from-findings-on. The session
+   lookup at L2575 printed: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-562/111381c1-d104-4508-9063-81d4c5f687f1.jsonl
+== 12e2feb4-5c6c-4205-9910-5e4d194feff4
+   now under: -Users-danielkayiwa-Projects-openmrs-chartsearchai
+   relocated records: 926, targets: {'~/Projects/openmrs/chartsearchai/.claude/worktrees/564-tail-partner': 59, '~/Projects/openmrs/chartsearchai': 826, '~/Projects/openmrs/chartsearchai/.claude/worktrees/567-stated-in-answer': 41}
+   last relocated: L20290 -> ~/Projects/openmrs/chartsearchai
+   last worktree-state: L20294 -> none (worktree session exited)
+   EnterWorktree at L295: Created worktree at ~/Projects/openmrs/chartsearchai/.claude/worktrees/564-tail-partner on branch worktree-564-tail-partner. The session
+   ExitWorktree at L1657: <tool_use_error>Worktree has 2 commits on worktree-564-tail-partner. Removing will discard
+   ExitWorktree at L1682: Exited and removed worktree at ~/Projects/openmrs/chartsearchai/.claude/worktrees/564-tail-partner. Discarded 2 commits.
+   EnterWorktree at L3255: Created worktree at ~/Projects/openmrs/chartsearchai/.claude/worktrees/567-stated-in-answer on branch worktree-567-stated-in-answer. The session
+   ExitWorktree at L4152: Exited and removed worktree at ~/Projects/openmrs/chartsearchai/.claude/worktrees/567-stated-in-answer. Discarded 2 commits.
+   lookup at L1575 printed: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai--claude-worktrees-564-tail-partner/12e2feb4-5c6c-4205-9910-5e4d194feff4.jsonl
+== ac307d1b-45d9-420e-b170-3f64e0d5d7f5
+   now under: -Users-danielkayiwa--claude-pipeline-worktrees-openmrs-openmrs-module-chartsearchai-515
+   relocated records: 0, targets: {}
+exit=0
