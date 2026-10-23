@@ -1,0 +1,5 @@
+$ calibrate.sh
+transcripts: 2
+P-rel holds: 1 | fails: 1
+  P-rel FAIL ebc78818-5b31-4fed-9943-24ca301a3943 cur -wrong-folder first /Users/danielkayiwa/Projects/openmrs/chartsearchai last_rel /Users/danielkayiwa/Projects/openmrs/chartsearchai enter 1
+exit=0

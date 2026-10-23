@@ -5664,3 +5664,98 @@ else".**
 
 **Deviation, recorded because it is one:** Step 5 was not run on this addendum. Its figures come from
 the outputs it names, and its commits and evidence lines from `git log` and the files cited.
+
+## 2026-10-23 (targeted pass: the #527 example the addendum above parked) — 1 applied after revision, 1 correction found through the second gate's report, 1 parked by the gate; three refutation rounds, the second and third over the staged diff; linter 17 files, 0 findings; **pr-harden 0.41.1, resolve-ticket 0.29.1**
+
+**Step 6's pre-read comparison.** `origin/main` (`92781d1`) and this store agreed on all 590 shared files,
+and on all 43 governance files.
+
+**The window.** No record is newer than `LAST`, so the window is the addendum's parked item and the four
+records it rests on: #527, #402/PR544, #562 and #564.
+- The proposals, each gate's verbatim reply and the revisions are in
+  `proposals/2026-10-23-targeted-527-example.md`.
+- The instruments are in `artifacts/2026-10-23-targeted-527/`, beside `…-retro-window/` from the
+  addendum. Each folder's README maps its figures to their outputs.
+
+**This is not new ground.**
+- The ledger has carried this shape since 2026-10-02: "Transcript paths that moved after the record
+  named them" (:5144-5149), filed under "Observed, no remedy owed" (:5143).
+- On 2026-10-07 :5242-5250 advanced it under "Parked counts advanced" (:5207), with no reopen condition.
+- :5149 left the #527 example "not re-checked".
+- The window block above read these moves as losses (:5587). Its correction (:5593-5594) and the
+  addendum (:5619-5627) re-derived the move without citing either entry.
+
+**APPLIED after revision · pr-harden 0.41.1 and resolve-ticket 0.29.1, `evidence.md`: the #527 example
+is deleted from the list that supports "Take neither name from anywhere else", and a note records why.**
+
+- **Bar: none needed.** Deleting a false clause is a patch (:2454-2455). The note is the measurement
+  that retires the example, which Step 4 keeps in `evidence.md`.
+- **What #527 did** (transcript `ebc78818…`). It answers :5149: the example fits the move.
+  - It started in the main checkout (L5) and entered its worktree with `EnterWorktree` (L119).
+  - From inside the worktree it looked its own session id up (L3120) and wrote that path into its
+    record (L3125). `record-write.out` shows the header naming the folder that then held the transcript.
+  - Claude Code moved the transcript back to the main checkout's folder when the worktree session
+    exited (L3161, L3165).
+- **Revised at the first gate.** The note's lead follows the sibling "*Pruned 0.38.1:*"
+  (`pr-harden/evidence.md`:786), and the note cites the transcript's own lines beside `relocations.out`.
+- **The rule's own count changes.** The 2026-09-25 folder half (:4568-4570) falls from 10 records to 9,
+  which is still bar (a). The rule stands.
+- **Size.** Neither SKILL.md changes beyond its version line, and `evidence.md` has no budget.
+
+**APPLIED as a correction, found through the second gate's report · resolve-ticket 0.29.1
+`evidence.md`:115-116.**
+
+- The entry said TRUNK-6826's transcript "lives under" `core-6826`'s project folder. It now says it
+  lived there while the session worked in that worktree, with a "*Corrected 0.29.1:*" note after the
+  paragraph.
+- During this pass, that session's worktree session exited and Claude Code moved the transcript to
+  `openmrs-core`'s folder (transcript `74a2fd99…`, L1650-L1653). L1652's `cost-state` puts that at
+  2026-10-23T11:24:58Z.
+- `2026-10-11-openmrs-core-TRUNK-6826.md`:5's path is stale for the same reason. The uuid glob resolves
+  it (:5148).
+- Deleting the clause would have broken the entry's reasoning ("which is why a private ticket's slug
+  never carries its key"), so this is replacement text.
+  - It ships on the third gate's verdict: CLEAN.
+  - The note's wording and citations follow that gate's non-blocking points.
+
+**PARKED by the gate · skill-retro Step 1: a reader-side remedy for :5144's shape (look a record's
+transcript up by its session id before reading it as gone).**
+
+- **Bar (a) is not met.**
+  - The four records carry the stale paths, not the lesson.
+  - Both sightings of the lesson are reader passes: the 2026-09-25 owner-directed pass and the
+    2026-10-23 window's retro (:5584-5587). That retro's misreading of all four was one script run.
+  - Step 1 admits run records only (:1502, :2148-2150).
+  - :5144 owed the shape no remedy, and :5242 advanced it with no reopen condition.
+- **The draft's first sentence is false of the store.** It read: "A record's `transcript:` line is
+  where its transcript was when the run wrote it."
+  - #592's second header was wrong when written (below).
+  - The 515 driver capture names a placeholder.
+  - `2026-10-02-chartsearchai-592.md`:5 names a session, not a path.
+  - #505's header names another session (:4604-4606).
+- **The draft would not have reached the 2026-09-25 misreading.** That pass searched by uuid, and read
+  #527 as misnamed, not gone.
+- **Count: 2 reader sightings, 0 run records. REOPEN ON:** a run record where reading a moved
+  transcript's path as lost cost a round, or a second retro that does.
+- **The mechanism, as the gate measured it and this pass re-ran it** (`relocation-mechanism.out`,
+  calibrated in `calibrate.out`):
+  - Re-run after the TRUNK-6826 move: 767 of 767 top-level transcripts sit where their last `relocated`
+    record, or their first cwd when there is none, puts them.
+  - The 8 sessions whose `relocated` records reach outside their first cwd all called `EnterWorktree`.
+    The other 2 callers, #607 and 3787, were refused and moved nothing.
+  - 2 sessions' last `worktree-state` still names a worktree, and both sit in that worktree's folder.
+
+**Correction to :5242-5250, not a new count.**
+
+- :5249, "(`…10-05-…-592.md`:6) names the starting folder": that header was wrong when it was written.
+  - At L2582, from inside `chartsearchai-592`, it named the starting folder.
+  - The transcript was then held for the worktree, after 82 `relocated` records (`record-write.out`).
+  - The worktree session's later exit moved the file to the starting folder, so the header reads right
+    today. The exit is at L2604-L2608; L2606's `cost-state` puts it at 2026-10-08T14:01:02Z.
+- :5245-5246, "the file sits under the worktree's project folder", no longer holds, for the same reason.
+- Neither does :5163-5164, which names that transcript under `-chartsearchai-592/`.
+
+**Running parked counts:**
+- The folder half (:4568-4570) falls from 10 to 9.
+- :5144 stays "no remedy owed", and :5242 keeps no reopen condition.
+- :5149 is now answered, and :5249, :5245-5246 and :5163-5164 are corrected.

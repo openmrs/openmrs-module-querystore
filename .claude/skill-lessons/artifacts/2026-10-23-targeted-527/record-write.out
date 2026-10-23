@@ -1,0 +1,12 @@
+$ record_write.py <#592 transcript 9356b230…>
+L413 Bash cwd=~/Projects/openmrs/chartsearchai header names: $T
+     transcript then held for: ~/Projects/openmrs/chartsearchai (no relocated record yet) | relocated records before: 0
+L846 Bash cwd=~/Projects/openmrs/chartsearchai-592 header names: $T
+     transcript then held for: ~/Projects/openmrs/chartsearchai-592 | relocated records before: 10
+L2582 Write cwd=~/Projects/openmrs/chartsearchai-592 header names: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai/9356b230-6691-4281-ad32-2e72bb32ee1e.jsonl
+     transcript then held for: ~/Projects/openmrs/chartsearchai-592 | relocated records before: 82
+exit=0
+$ record_write.py <#527 transcript ebc78818…> (control: a run whose header was right when written)
+L3125 Bash cwd=~/Projects/openmrs/chartsearchai-527 header names: ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-527/ebc78818-5b31-4fed-9943-24ca301a3943.jsonl
+     transcript then held for: ~/Projects/openmrs/chartsearchai-527 | relocated records before: 136
+exit=0

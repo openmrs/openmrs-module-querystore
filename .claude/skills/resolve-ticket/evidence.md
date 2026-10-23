@@ -112,7 +112,7 @@ with `comment` among the `fields` it returned both (2026-10-21).
 
 The owner asked for it on 2026-10-21, rather than remember to make one. TRUNK-6826 had done it by
 hand: its session started in `~/Projects/openmrs/openmrs-core` (transcript line 5), moved into the
-`core-6826` worktree it entered (line 291), and its transcript lives under
+`core-6826` worktree it entered (line 291), and while it worked there its transcript lived under
 `~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-core-6826/`, named after that worktree,
 which is why a private ticket's slug never carries its key. `EnterWorktree` accepts a path only
 where it is a worktree of the session's own repository or of one nested inside it, so the session
@@ -120,6 +120,11 @@ must start in the target repository. Measured in a scratch repository on 2026-10
 subdirectory `git rev-parse --git-dir` printed an absolute path while `--git-common-dir` printed
 `../../.git`, so only `--path-format=absolute` tells a main checkout from a linked worktree there;
 the exclude line went in once across two runs, and openmrs-core's `info/exclude` already carried it.
+
+*Corrected 0.29.1:* this said its transcript “lives under” that folder. That was true until Claude Code
+moved the transcript back to `openmrs-core`'s folder when the worktree session exited.
+- The move is in transcript `74a2fd99…` at L1650-L1653.
+- The time is 2026-10-23T11:24:58Z, from L1652's `cost-state`.
 
 *Cut down, A-06 — the rule it supports:* “Pre-flight the verifier here, not at the end.”
 
@@ -588,13 +593,21 @@ the transcript, which carries the ground truth a retro can measure instead. The 
 bookkeeping: the uuid is `$CLAUDE_CODE_SESSION_ID`, and the transcript is the one file
 `ls ~/.claude/projects/*/"$CLAUDE_CODE_SESSION_ID".jsonl` prints. Take neither name from anywhere else:
 the pool's headless `claude -p` runs have had no scratchpad path; #305, resumed from `~`, had its
-scratchpad under that folder and its transcript under its worktree's; #527 recorded the folder of the
-worktree it had moved into; and #514/PR524's third loop and #505/PR529 took their uuid from a directory
-listing, which named another session. `no compaction · peak not surfaced` is the expected
-reading and is worth writing for the same reason a clean run still gets a record — a field filled in
-only when something went wrong biases every retro that reads it, in the direction of the runs that
-went badly. Derive nothing from it here: whether context pressure costs quality is a claim about many
-runs, and no run can settle it about itself.
+scratchpad under that folder and its transcript under its worktree's; and #514/PR524's third loop and
+#505/PR529 took their uuid from a directory listing, which named another session. `no compaction · peak
+not surfaced` is the expected reading and is worth writing for the same reason a clean run still gets a
+record — a field filled in only when something went wrong biases every retro that reads it, in the
+direction of the runs that went badly. Derive nothing from it here: whether context pressure costs
+quality is a claim about many runs, and no run can settle it about itself.
+
+*Corrected 0.29.1:* until 2026-10-23 this list also named #527, as having “recorded the folder of the
+worktree it had moved into”. That path was right when it was written.
+- #527 started in the main checkout and entered its worktree with `EnterWorktree`.
+- From inside the worktree, it looked its own session id up, found that folder, and wrote it into its
+  record.
+- Claude Code moved the transcript back to the main checkout's folder when the worktree session exited.
+- Sources: the transcript `ebc78818…` at L5, L119, L3120, L3125, L3161 and L3165, and
+  `skill-lessons/artifacts/2026-10-23-retro-window/relocations.out`.
 
 ## Anti-patterns
 

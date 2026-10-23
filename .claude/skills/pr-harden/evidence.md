@@ -1087,10 +1087,18 @@ the transcript, which carries the ground truth a retro can measure instead. The 
 bookkeeping: the uuid is `$CLAUDE_CODE_SESSION_ID`, and the transcript is the one file
 `ls ~/.claude/projects/*/"$CLAUDE_CODE_SESSION_ID".jsonl` prints. Take neither name from anywhere else:
 the pool's headless `claude -p` runs have had no scratchpad path; #305, resumed from `~`, had its
-scratchpad under that folder and its transcript under its worktree's; #527 recorded the folder of the
-worktree it had moved into; and #514/PR524's third loop and #505/PR529 took their uuid from a directory
-listing, which named another session. `no compaction · peak not surfaced` is the expected
-reading and is worth writing for the same reason a clean run still gets a record — a field filled in
-only when something went wrong biases every retro that reads it, in the direction of the runs that
-went badly. Derive nothing from it here: whether context pressure costs quality is a claim about many
-runs, and no run can settle it about itself.
+scratchpad under that folder and its transcript under its worktree's; and #514/PR524's third loop and
+#505/PR529 took their uuid from a directory listing, which named another session. `no compaction · peak
+not surfaced` is the expected reading and is worth writing for the same reason a clean run still gets a
+record — a field filled in only when something went wrong biases every retro that reads it, in the
+direction of the runs that went badly. Derive nothing from it here: whether context pressure costs
+quality is a claim about many runs, and no run can settle it about itself.
+
+*Corrected 0.41.1:* until 2026-10-23 this list also named #527, as having “recorded the folder of the
+worktree it had moved into”. That path was right when it was written.
+- #527 started in the main checkout and entered its worktree with `EnterWorktree`.
+- From inside the worktree, it looked its own session id up, found that folder, and wrote it into its
+  record.
+- Claude Code moved the transcript back to the main checkout's folder when the worktree session exited.
+- Sources: the transcript `ebc78818…` at L5, L119, L3120, L3125, L3161 and L3165, and
+  `skill-lessons/artifacts/2026-10-23-retro-window/relocations.out`.
