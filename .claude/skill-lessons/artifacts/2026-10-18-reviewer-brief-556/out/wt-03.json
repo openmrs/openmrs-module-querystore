@@ -1,0 +1,29 @@
+{
+ "pr": 556,
+ "round": 1,
+ "head": "d77204bae7091579a7131f486b613d03e365609d",
+ "findings": [
+  {
+   "id": "r1-1",
+   "blocking": true,
+   "file": "api/src/main/java/org/openmrs/module/chartsearchai/reference/DrugSafetyValidator.java",
+   "line": 2136,
+   "finding": "The new prose-rule arm (namesThePartner \u2192 statedPartners) is pinned only in the crediting direction. No case drives the real validator over the shipped dataset with an answer that does NOT name a partner carrying rows and asserts the order is still appended and stated < named. Every pre-existing 'appended' case in CitedFindingPartnerCompletionTest runs through service(chart, chips, ...) \u2192 validatorRaising(null, chips) (line 621), so drugReferenceService is null and namesThePartner always returns false there. The only new negative case (ordersOfOneSubstanceAreNotStatedByThatSubstancesName) concerns #477 partners that carry no rows. Fix: add a case on the alprazolam arrangement whose answer names Nevirapine but not rifampicin [cites both findings], asserting the 'Also covered by those findings and not named above: active order Rifampicin (rifampin).' sentence is appended and coverage is {2,1}, on search and searchStreaming.",
+   "failure_mode": "If merged as-is, a regression that makes the prose arm credit a partner the answer never named passes CI. Example: the one-character slip `ids.contains(row.getId()) || namesAnyOf(lower, row)`. ADR Decision 100's completion sentence would then never fire for an interaction-rule finding, and findingPartners.stated would equal named. That silences the safety-relevant direction: an order the clinician was never told about is reported as stated. Nothing throws.",
+   "evidence": "Mutated DrugSafetyValidator.java:2136 `&&` \u2192 `||`. Ran `mvn -o -B -pl api -am test -Dtest='CitedFindingPartnerCompletionTest,FindingPartnerLogDisclosureTest,LlmInferenceServiceAnswerFromFindingsContextTest,SharedMechanismChipCollapseTest'`: Tests run 54, Failures 0, Errors 0 (CitedFindingPartnerCompletionTest 14/14 green). Restored with git checkout; git status --porcelain is empty. Those four classes are every test class that references 'not named above', getFindingPartnerCoverage or withUnstatedPartnersNamed (grep over api/src/test). Unmutated head: the same classes plus ArchitectureGuardTest, ProjectInstructionsGuardTest and InteractionClaimPairFidelityTest are green (128 tests)."
+  },
+  {
+   "id": "r1-2",
+   "blocking": false,
+   "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+   "line": 276,
+   "finding": "statedPartners merges rows by the partner's comparable key across ALL cited findings. Suppose a #477 finding (substanceInSeveralActiveOrders / ordersSharingASubstance, no rows) and an interaction rule chip whose reconciled chipName is the same order display are both cited. The #477 finding's order is then credited through the rule chip's rows. That contradicts the javadoc above it and ADR Decision 100's amendment ('each of their orders is stated only by its display'). I did not establish whether reconciliation can give a rule chip a display that a #477 finding also names. In the test arrangement with two metronidazole orders, the rule chip printed 'Metronidazole', not an order display. So this may be unreachable today. Either key rows per finding, or narrow the javadoc claim to say the union can credit them.",
+   "failure_mode": "",
+   "evidence": ""
+  }
+ ],
+ "notes": [
+  "Solution fit: the PR resolves issue #555 as stated. Its three reported question shapes (alprazolam via the drug-in-play arm, the medication screen via the screening arm, and dolutegravir via the same drug-in-play arm, untested directly) all reach FindingPartnerCoverageCheck through the one shared statedPartners decision, so measure and the appended sentence cannot disagree. Rows travel structurally, set at the chip sites and never re-resolved from the label. That matches reference CLAUDE.md's 'Matching a drug name' (matchesText for prose) and #151's single-resolution rule.",
+  "Every SafetyWarning rebuild path (withMatchedOrderNames, withCurrentOrderDisplays, statedInTheAnswer, aboutSubstance, asAboutAnEndedOrder) carries partnerRows. The partnerRows key equals the printed partner at both arms (partnerName / chipPartnerName) and in the merge (member.partnerName)."
+ ]
+}

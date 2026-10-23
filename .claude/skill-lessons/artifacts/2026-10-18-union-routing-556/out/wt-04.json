@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+      "line": 268,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The documented residue says issue #477's findings carry no rows, so their orders are stated only by their displays. But statedPartners unions rows by printed-name key across every cited finding, so a #477 finding's order inherits a rule finding's rows whenever both name the same order. The new javadoc, the ADR Decision 100 amendment (docs/adr.md:7809) and the ChartSearchService/README wording all state that guarantee more broadly than the code delivers.",
+      "failure_mode": "",
+      "evidence": "Throwaway case added to CitedFindingPartnerCompletionTest using its OverShippedData (real injector over shipped KB, real search()), then restored with git checkout. Orders Rifampicin (J04AB02) and 'Isoniazid / rifampin' (J04AM02), question 'Can I give her alprazolam?'. Injected findings: [4] partners=[Isoniazid / rifampin] rows=[[6038]] (the isoniazid rule), [5] [Rifampicin (rifampin)] rows=[[9384]], [6] (#477 duplicate-therapy) [Rifampicin, Isoniazid / rifampin] rows=[[],[]]. Answer 'Use caution: isoniazid is relevant [4] [5] [6].' gives coverage {named=4, stated=2}: finding [6]'s 'Isoniazid / rifampin' counts as stated through [4]'s isoniazid rows. Under the documented rule it would be stated=1. Per-key dedup makes the union necessary (otherwise the sentence and the count would disagree), so the fix is to the docs: say that a #477 order also named by a rule finding is stated by that finding's rows. Optionally, pin that with a case.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Ready to merge. The fix resolves all three of the issue's reproductions through the real pipeline, by the prose rule the drug-reference CLAUDE.md requires. The one finding is a non-blocking doc inaccuracy about a residue's scope.",
+  "what_i_swept": "Checked that the diff stat matches (15 files, +493/-69). Read the PR body, issue #555, root CLAUDE.md and the reference/CLAUDE.md rules (Matching a drug name, Naming a partner) and the full main-code diff. Solution fit: confirmed that the key each chip stores rows under is the name it prints (partnerName/chipPartnerName equal namedPartners, including the merged chip in collapseSharedMechanisms). Confirmed that rowsOfSubstance returns empty for a null partner. Compared namesThePartner with its siblings namesTheFindingsSubject (ids \u2192 getAll scan) and namesTheEndedOrderDrug (prose rule over rows), and it matches both. Outward trace: every SafetyWarning copy method passes partnerRows through. The question-pair arm (public ctor) names no active order. Class-only chips have empty namedPartners. Condition-mediated findings are default-off and carry no rows, as documented. All 6 RecordMapping construction sites are covered, and no path copies or re-numbers mappings. RecordMapping never reaches omod/REST: zero git-grep hits, with a positive control on the same pipeline. InteractionClaimPairFidelityCheck is deliberately untouched. No partner names were added to log lines (#439). Ran CitedFindingPartnerCompletionTest (14), SharedMechanismChipCollapseTest, ArchitectureGuardTest, ProjectInstructionsGuardTest, InteractionClaimPairFidelityTest and FindingPartnerLogDisclosureTest at head: all green. Mutated the merge union (withPartnerRows(null)), which reddened exactly anOrderOfAMergedFindingTheAnswerNamedWithoutItsLabelsParentheticalIsNotListedAgain with the ticket's appended sentence. Restored. Probed the issue's untested dolutegravir question plus the alprazolam and screen questions through the real pipeline: all three are stated with nothing appended. Probed the over-credit and union direction on combination orders and same-substance orders (F1).",
+  "could_not_verify": [
+    "Did not run the full `mvn -o clean install` (machine busy). Only the targeted classes above were run, so the PR's whole-suite claim is unverified here.",
+    "No live llama-server/standalone run, by instruction. The issue's 6-of-22 live rate after the fix is unmeasured. Only the deterministic pipeline with a stubbed model was exercised.",
+    "Did not measure how often the acknowledged prose-rule residue fires on the shipped KB (an alias filed under two substances crediting both)."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1: approach and diff (no findings). Pass 2: probes of the union and combination arrangements (F1). Pass 3: re-swept consumers, copy paths and wire exposure after F1 (nothing new). The working copy is clean: both probe edits and the mutation were restored with git checkout and confirmed with git status --porcelain."
+}

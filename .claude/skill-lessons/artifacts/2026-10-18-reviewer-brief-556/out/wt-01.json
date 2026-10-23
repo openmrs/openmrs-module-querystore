@@ -1,0 +1,34 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+      "line": 276,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "statedPartners unions partner rows across cited findings by printed name, so a #477 'orders share a substance' finding's order (which the PR and ADR say is stated only by its display) is credited through ANOTHER cited finding's rows, re-admitting exactly the ambiguity the PR excludes.",
+      "failure_mode": "If merged as-is, on a patient with two rifampin-bearing combination orders (RHZ and RHZE) asked 'Can I give her ivosidenib?', an answer saying only 'rifampicin' and citing both findings now gets RHZ counted stated in both findings (findingPartners {named:3, stated:2}; base {3,0}), and the completion lists only RHZE as 'not named above'. That implies the answer's 'rifampicin' meant RHZ, although the answer cannot tell the two orders apart. The error is silent, in the direction the class javadoc calls unsafe, and contradicts ADR Decision 100's #555 amendment ('each of their orders is stated only by its display').",
+      "evidence": "Throwaway test zzProbeCombination added temporarily to CitedFindingPartnerCompletionTest, reusing its OverShippedData arrangement (shipped KB, real injector, real search()); orders taken from InteractionClaimPairFidelityTest.roseLike: 'Isoniazid / pyrazinamide / rifampin 75/400/150mg' (J04AM05), 'Rifampicin isoniazid pyrazinamide and ethambutol 150/75/400/275mg' (J04AM06), plus Nevirapine. Model answer 'It interacts with her <drug>.' citing every injected finding. Control: same probe with the prose-rule arm of statedPartners disabled (`|| false && validator != null`), which is base's containment-only behaviour. Both files restored with git checkout; git status clean. PR head, q='Can I give her ivosidenib?', 3 orders: finding[5] partners=[RHZ] rows=[[9384]], finding[6] partners=[RHZ, RHZE] rows=[[],[]]. Answer 'It interacts with her rifampicin. [5] [6]' -> appended only 'active order Rifampicin isoniazid pyrazinamide and ethambutol 150/75/400/275mg', FindingPartnerCoverage{named=3, stated=2}. Control (prose arm off): both orders appended, {named=3, stated=0}. The pinning test ordersOfOneSubstanceAreNotStatedByThatSubstancesName does not reach this, because its interaction finding prints 'Metronidazole' (the label), which is not either order's display, so the keys never collide. Fix: decide stated per (finding, partner) over that finding's own rows, then dedup the unstated list.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/reference/DrugSafetyValidator.java",
+      "line": 4615,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "The rows written for a partner are the RULE partner's substance, not the order's. So for a combination order, naming any one constituent states the whole order, and via F1's union a constituent the cited finding is not about also states it. Is that intended? The ADR/README describe the exception as 'the prose names its DRUG', and the residue list names only aliases shared by two substances.",
+      "failure_mode": "",
+      "evidence": "Throwaway test zzProbeCombination added temporarily to CitedFindingPartnerCompletionTest, reusing its OverShippedData arrangement (shipped KB, real injector, real search()); orders taken from InteractionClaimPairFidelityTest.roseLike: 'Isoniazid / pyrazinamide / rifampin 75/400/150mg' (J04AM05), 'Rifampicin isoniazid pyrazinamide and ethambutol 150/75/400/275mg' (J04AM06), plus Nevirapine. Model answer 'It interacts with her <drug>.' citing every injected finding. Control: same probe with the prose-rule arm of statedPartners disabled (`|| false && validator != null`), which is base's containment-only behaviour. Both files restored with git checkout; git status clean. PR head, q='Can I give her alprazolam?', orders Nevirapine + RHZ: finding[5] RHZ rows=[[6038]] (isoniazid entry), finding[6] RHZ rows=[[9384]] (rifampicin entry). Answer naming only 'isoniazid' -> RHZ stated for BOTH findings, including the rifampicin one, and no completion for it: {named=3, stated=2}. Control: RHZ appended, {3,0}. q='Can I give her ivosidenib?', orders Nevirapine + RHZ: 'rifampicin' -> RHZ stated, no sentence appended (control: appended). This widens the change past the ticket's class (a KB label carrying a parenthetical synonym) into combination orders, with no test or documented residue covering it.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Not ready to merge: the cross-finding union of partner rows in statedPartners credits orders through another finding's rows. That silently defeats the #477 exclusion the PR documents and pins, and over-reports findingPartners.stated in the unsafe direction on realistic combination-TB charts.",
+  "what_i_swept": "Read the skill, PR body, issue #555, and the full diff (stat matches 15 files +493/-69; three-dot equals two-dot, so no base drift). Read the reference CLAUDE.md sections on drug-name matching. Traced the outward write path: both rule-chip arms in DrugSafetyValidator (drug-in-play ~4600, screening ~8890), collapseSharedMechanisms' union, the SafetyWarning copy factories (all carry partnerRows; the question-pair arm's 4-arg constructor names no order), the DrugReferenceInjector mapping, RecordMapping padding, the three LlmInferenceService call sites (search, searchStreaming, composed path), and InteractionClaimPairFidelityCheck's doc change. Compared namesThePartner to its sibling namesTheFindingsSubject (same getAll scan, so no perf finding). Considered the alternative of containment over findingBridgeNames and dropped it: that list mixes substances and labels and is not per-partner. Probed combination-order charts empirically against a containment-only control. Ran CitedFindingPartnerCompletionTest, SharedMechanismChipCollapseTest, ArchitectureGuardTest, ProjectInstructionsGuardTest and FindingPartnerLogDisclosureTest at head: 66 tests, 0 failures.",
+  "could_not_verify": [
+    "No live llama-server/OpenMRS run (unavailable by constraint). The model's actual wording on combination-order charts is unmeasured; the probe stubs the model answer.",
+    "Did not run the full `mvn clean install`; the PR body reports 0 failures and I ran only the related suites."
+  ],
+  "passes_run": 3,
+  "notes": "The fix for the ticket's own case is real and tested on both paths. Pass 1 found F1 and F2 with the probe, pass 2 swept the copy factories and sibling methods, and pass 3 compared the approach against findingBridgeNames. Passes 2 and 3 found nothing new. All mutations were restored and git status --porcelain is clean."
+}

@@ -1,0 +1,9 @@
+control on disk: True | control deleted 2026-10-23: False
+distinct transcript paths named: 141 | on disk: 64 | gone: 77
+gone, record dates: 2026-08-26 .. 2026-09-30
+on disk, record dates: 2026-09-23 .. 2026-10-18
+gone though its record is under 30 days old: 2026-09-24-openmrs-module-chartsearchai-515-driver.md | project dir exists: False | ~/.claude/projects/<cwd-slug>/ac307d1b-45d9-420e-b170-3f64e0d5d7f5.jsonl
+gone though its record is under 30 days old: 2026-09-24-openmrs-module-chartsearchai-527.md | project dir exists: False | ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-527/ebc78818-5b31-4fed-9943-24ca301a3943.jsonl
+gone though its record is under 30 days old: 2026-09-28-openmrs-module-chartsearchai-402.md | project dir exists: False | ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-544/c3fd0664-f6fd-4bb0-9dbe-b81585926c1e.jsonl
+gone though its record is under 30 days old: 2026-09-29-openmrs-module-chartsearchai-562.md | project dir exists: False | ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai-562/111381c1-d104-4508-9063-81d4c5f687f1.jsonl
+gone though its record is under 30 days old: 2026-09-30-openmrs-module-chartsearchai-564.md | project dir exists: False | ~/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai--claude-worktrees-564-tail-partner/12e2feb4-5c6c-4205-9910-5e4d194feff4.jsonl

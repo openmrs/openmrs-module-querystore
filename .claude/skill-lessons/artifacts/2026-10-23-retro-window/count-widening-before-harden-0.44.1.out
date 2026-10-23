@@ -1,0 +1,22 @@
+== wide: 15 hit(s) over 17 files
+   harden/SKILL.md:27 says 'one' over 6: The slice is a piece of a bigger machine. Reviewing it in isolation hides the bugs that live at its 
+   harden/SKILL.md:77 says 'BOTH' over 3: **Transition gate** (forcing function — say BOTH out loud in the report before moving to Phase 2):
+   harden/SKILL.md:89 says 'One' over 5: One polish pass, run after Phase 1 has converged. A second one happens only where the first escalate
+   harden/SKILL.md:89 says 'one' over 5: One polish pass, run after Phase 1 has converged. A second one happens only where the first escalate
+   harden/SKILL.md:198 says 'both' over 11: This is deliberately cheap to satisfy and expensive to fake, which is the point — but it cuts both w
+   harden/SKILL.md:448 says 'one' over 6: - **Anti-tell phrases.** These are smoke that hides the failure-mode question. If you reach for one,
+   pr-review/SKILL.md:59 says 'one' over 8: **Works, but hacky** is the other half, and the one a correctness-focused review skips by constructi
+   pr-review/SKILL.md:101 says 'one' over 4: The diff is a piece of a bigger machine; review the machine, not the patch. Follow each thread at le
+   pr-review/SKILL.md:118 says 'one' over 4: The verification above is the default and is usually enough. A heavier technique — challenging each 
+   pr-review/SKILL.md:118 says 'two' over 4: The verification above is the default and is usually enough. A heavier technique — challenging each 
+   pr-review/SKILL.md:149 says 'two' over 5: - Every inline comment must either request an action or ask a question, and its **first line must ma
+   pr-review/SKILL.md:154 says 'one' over 2: - **note (no action needed)** — exceptional. Allowed only when it does one of these jobs:
+   resolve-ticket/SKILL.md:142 says 'one' over 3: ticket's PR* records one:
+   resolve-ticket/SKILL.md:573 says 'One' over 9: One report for the whole run, in this order:
+   verify-frontend-change/SKILL.md:64 says 'both' over 3: Use a real headless browser. Playwright is the default — a driver script needs both the node module 
+== both: 3 hit(s) over 17 files
+   harden/SKILL.md:77 says 'BOTH' over 3: **Transition gate** (forcing function — say BOTH out loud in the report before moving to Phase 2):
+   harden/SKILL.md:198 says 'both' over 11: This is deliberately cheap to satisfy and expensive to fake, which is the point — but it cuts both w
+   verify-frontend-change/SKILL.md:64 says 'both' over 3: Use a real headless browser. Playwright is the default — a driver script needs both the node module 
+== BOTH: 1 hit(s) over 17 files
+   harden/SKILL.md:77 says 'BOTH' over 3: **Transition gate** (forcing function — say BOTH out loud in the report before moving to Phase 2):

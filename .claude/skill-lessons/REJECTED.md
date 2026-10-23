@@ -5417,3 +5417,184 @@ anything runs the restored code from `target/` or cites its reports.**
 
 **Not a lesson:** TRUNK-6826's Spring 7 `UrlHandlerFilter` behaviour, #607's llama-server thread and
 cgroup readings, and 3787's `routes.json` ranges are target-repo domain evidence.
+
+## 2026-10-23 (window: no run record — five measurement notes, four `pr-review` replays dated 2026-10-18 and one `harden` measurement dated 2026-10-23) — 1 applied (bar (c)), 0 killed, every ledger entry revised at the first gate, parked below; two refutation rounds, the second over the staged diff; linter 17 files, 0 findings; **harden 0.44.1**
+
+**Step 6's pre-read comparison.**
+
+- `origin/main` (`72df9d9`) and this store agreed on all 415 shared files.
+- They agreed on all 43 governance files (`skills/`, `hooks/`, `CLAUDE.md`, `bin/`, `pipeline/`).
+- Each gate's skill copy matched its hook copy.
+- The five notes were local-only, and this ledger named none of them.
+- Nothing was drawn from `confidential/`. Only its file names and `PRS` were read, as Step 1 allows.
+
+No run record is newer than `LAST`, so nothing here corroborates a lesson. A measurement "is admissible
+as argument … and has never counted as corroboration" (:2148-2150). The one skill edit is a bar-(c)
+correction.
+
+- The proposals, both gates' verbatim replies and the revisions are in
+  `proposals/2026-10-23-window-five-measurements.md`.
+- This pass's instruments and their outputs are in `artifacts/2026-10-23-retro-window/`. Its README
+  says which output backs which figure below.
+
+**Re-derived rather than taken from the notes.**
+
+- The 6551, queue96 and union-556 notes' own `scripts/score.py` print their tables.
+- The reviewer-brief-556 note has no adjudication. Its "S1: R 0 of 3, P 0 of 3" holds under a search
+  whose pattern hits that note's protocol (`notes-checks.out` 1).
+- The harden note's `rederive.sh` reproduced all three of its stages before the deletion recorded
+  below. After it, the rates still re-derive.
+
+**APPLIED · harden 0.44.1, Transition gate: "say BOTH out loud" now reads "say these out loud".**
+
+- Bar (c). :77's "BOTH" stood over three blockquoted sentences, against :85's "ALL THREE sentences".
+  - `01d1cd2` (2026-05-20) wrote "BOTH" when the gate had two sentences.
+  - `c18bf29` (2026-05-20) added the third sentence and changed :85, but not :77.
+- "these" replaces the draft's "them", at the gate's suggestion: "them" reads back to the stop
+  conditions at :72-75.
+- The edit is word-neutral: 7429 words, the budget.
+- `evidence.md` has no Transition gate entry, so nothing moved.
+- `skill-lint.py` did not flag the stale count; see the linter entry below.
+
+**Measured and not adopted: skill-text candidates the 2026-10-18 notes tested.** Each one is recorded in
+its own note. REOPEN ON for each: a measurement on another PR where the candidate moves a
+pre-registered outcome.
+
+- **(a) A verification-techniques file beside `pr-review`, with a Step 3 pointer** (6551, arm K).
+  - The file was read in 3 of 3 runs, the non-admin probe run in 1, `NOT_SUPPORTED` in 0.
+  - L04 filed blocking: 0 of 3, against the control's 0 of 3.
+- **(b) A *Trace outward* thread naming transaction, flush, handler order and required privilege**
+  (queue96, arm T). Its runs asked the transaction question in 3 of 3 runs and answered it wrongly in
+  3 of 3 (K7 0 of 3), on the subject the text was written from.
+- **(c) The per-condition mutation sentence** (queue96 T, 6551 M).
+  - T's unique REAL defect, the unpinned `purgeVisit` guard (2 of 3 runs), was not a pre-registered
+    target.
+  - On 6551, M found 0 of its targets (L06/L08), and the mutation-shaped finding there came from C and
+    K.
+- **(d) "A concern is cleared by the same bar a finding has to meet"** (queue96, arm V,
+  `…-queue96.md`:28-30, added after waves 1-2). K7 0 of 3, and wt-12 cleared it "by reading the proxy
+  chain only, so not raised" (:65-66).
+- **(e) "A claim in the review conversation about runtime or framework behaviour is a lead to verify,
+  whoever made it"** (queue96 `PROTOCOL.md`:115-117). Tested by withholding the conversation (arm B):
+  K7 0 of 3.
+- **(f) `pr-harden/reviewer.md`'s "never against the PR description" sentence, ported into
+  `pr-review`** (556, arm P, with "agent" read as "person"). S1 0 of 3.
+  - The pipeline's own round-1 brief with today's `reviewer.md` (arm R) also found S1 in 0 of 3.
+  - So its 2026-09-29 catch rests on one run.
+
+**Parked, measurements only, 0 run records.**
+
+- **A demonstrated privilege bypass filed below blocking.**
+  - On 6551, all 6 L04 findings were filed as questions (`notes-checks.out` 3). One of them is
+    wt-02's, filed after it ran the exploit with a positive control.
+  - The 2026-09-11 A/B's control filed L04 as a suggestion (`…-ab.md`:46-47).
+  - `pr-review`:152 sends "uncertainty about an observed side effect" to a question and names no
+    exposure case. :158 makes a written failure mode the blocking test.
+  - The candidate rule, "a privilege bypass you have demonstrated is blocking", rode untested in 556's
+    arm U, because nothing in 556 is an exposure.
+  - **REOPEN ON:** a run record where a demonstrated exposure was filed below blocking, or a
+    measurement of the rule on a PR that holds one.
+- **Routing `could_not_verify` to the author.**
+  - 556: 25 risk items over all nine runs, 19 of them NOISE. Arm U's pairs held 18, 13 of them NOISE
+    (`notes-checks.out` 4). Routing alone reached neither S1 nor S3.
+  - queue96: 6 of 12 runs put K7's unobserved rollback in that field and raised nothing (C 1, T 2,
+    B 0, V 3).
+  - `could_not_verify` is a field of the measurement briefs only. `pr-harden/reviewer.md`:26-33
+    returns `findings` and `notes`, and no live skill names the field.
+  - **REOPEN ON:** a pre-registered measurement where routing reaches a blocker the findings missed,
+    or a run record where a reviewer's `notes` held a blocker the round did not raise.
+- **A union of two independent single-context reviewers** (556, arm U).
+  - S3 surfaced in 1 of 3 pairs, against 0 of 3 controls, below the pre-registered bar.
+  - U bundled the union with routing and the disposition rule, and the one S3 came from a single
+    reviewer (wt-07).
+  - It is not per-dimension fan-out, so it does not meet P-A's condition.
+  - **REOPEN ON:** a pre-registered measurement where a union clears its bar.
+- **A limitation the PR declares, accepted as scope** (556).
+  - S1, and S3 in its narrow form, sit inside limitations the description declared, and all nine
+    `pr-review` replays accepted them.
+  - The run whose round-1 head they replayed did not. #555's r1 raised S1 regardless
+    (`2026-09-29-…-555.md`:17, :31), a record the 2026-09-29 window counted. r1 and r2 missed S3, and
+    the record names no cause (:19).
+  - The closest tested remedy is (f) above, at S1 0 of 3.
+  - **REOPEN ON:** a run record where a declared limitation hid a blocker.
+- **Agent-tool subagents load the project's memory index.** That goes beyond what `pr-harden`:42-44
+  says a non-fork subagent reads ("Any other subagent type starts clean. It still reads `CLAUDE.md`
+  and the repo's skills").
+  - Two observations: queue96's canary (`PROTOCOL.md`:69-72), and this pass's own refuter, whose
+    transcript holds the `MEMORY.md` index as an `AutoMem` record.
+  - **REOPEN ON:** a run record where a reviewer's or refuter's loaded memory carried content about
+    the change under review.
+
+**P-A (:2143, :2307-2327): parking reason qualified, condition unchanged.**
+
+- In the 2026-09-11 A/B's run 1, fan-out found "no blocker the single context missed", partly because
+  its control found L02 (`artifacts/ab-6551/arm-A-control.json` A1, filed blocking).
+- At `pr-review` 0.19.0, L02 was found by 0 of 3 controls and 3 of 9 runs. So that half of "measured
+  twice, no blocker yield either time" rests on a control draw that later measured 0 of 3.
+- That later measurement also used a later skill version and a different harness. The A/B ran
+  Agent-tool subagents (`…-queue96.md`:82-83); 2026-10-18 ran headless clones without project memory.
+- queue96 at `ae7f8fa2` is a subject the condition can use: single contexts missed K7 12 times in 12.
+- No fan-out arm ran in any of the four measurements.
+
+**Phase 2 escalating repeatedly on the run's own fixes (:5378, 31 records; REOPEN at :3998-4000).**
+
+- The remedy "enforce Phase 1's confirming pass" was measured observationally, over 57 public runs and
+  127 classified traversals.
+- After a re-review, 71% of first traversals and 45% of resumed ones escalated. After a mechanical
+  check or nothing, 67% and 54% did.
+- The count and REOPEN are unchanged, since a measurement adds no record. A proposal of this remedy has
+  to show an effect this comparison did not.
+- Limits (`…-confirming-pass.md`:99-101, :107):
+  - the comparison is observational;
+  - one classifier, neither blinded nor independent, sorted every traversal;
+  - 55 of the 57 runs are chartsearchai, from about one week.
+
+**Observed: harden's gate sentences are not said in their literal form** (`gate-sentences-after-deletion.out`,
+with `controls.out`).
+
+- 58 public-record transcripts load harden, all of them on a version carrying every gate. Of those:
+  - 0 state the Transition gate's three sentences or the Termination gate's;
+  - 1 states the Phase 2 gate's (`2026-09-23-…-477.md`'s transcript).
+- Runs announce convergence in their own words ("Harden Phase 1 has converged.").
+- For this population, that contradicts `harden/evidence.md`:214, "the phase gates demand verbatim
+  sentences and get them", which is the Termination gate's stated rationale.
+- 1 measurement.
+- **REOPEN ON:** a proposal to delete or replace those sentences. This count is evidence that they are
+  not said, not that they do nothing.
+
+**Linter: `stated_counts` did not flag harden:77.** Three things missed it (`skill-lint.py`:16-18, :27,
+:36): no noun from `NOUNS` followed "BOTH", "both" is not in `WORDS`, and blockquote items are not
+counted.
+
+- A widening run in scratch (`count-widening-before-harden-0.44.1.out`), counting the number words one
+  to ten and "both" with `>` items, gave 15 hits on 13 lines, 1 of them true.
+- "both" alone gave 3 hits, 1 true.
+- A capitals-only "BOTH" gave 1 hit, 1 true, but it is fitted to the one instance.
+- **REOPEN ON:** a second stale count the linter missed.
+
+**Observed, operator action recommended (not a skill change): the transcripts records cite are
+disappearing.**
+
+- During this pass, two transcripts named by public records were deleted: `b2cc1733…` (the 2026-09-16
+  PR440 record) and `56821ae1…` (the 2026-09-21 PR465 record).
+- Claude Code 2.1.309's settings schema describes `cleanupPeriodDays` as "Number of days to retain chat
+  transcripts before automatic cleanup (default: 30)". `~/.claude/settings.json` does not set it.
+- 77 of the 141 distinct paths on public records' `transcript:` lines are gone
+  (`transcript-presence.out`). Five of those belong to records under 30 days old:
+  - one is a `<cwd-slug>` placeholder;
+  - four have lost their whole project directory too, and what removed them was not established.
+- Costs so far:
+  - #250's step attribution can no longer be checked (:5346);
+  - queue96's 2026-09-16 handler-order miss cannot be explained (`…-queue96.md`:80-81);
+  - the harden note's first two stages no longer re-derive.
+- The action is the operator's: a long `cleanupPeriodDays` in `~/.claude/settings.json`.
+
+**Observed, no remedy owed.**
+
+- reviewer-brief-556's isolation finding (`…-reviewer-brief-556.md`:43-49): earlier briefs left the
+  scratchpad's other folders readable. A scan of 30 earlier transcripts found no read. This is
+  measurement hygiene, not a skill.
+- queue96's round-1 handler-order miss does not reproduce: 12 of 12 runs found K6
+  (`…-queue96.md`:50).
+
+**Running parked counts:** unchanged. The window holds no run record.

@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.44.0
+version: 0.44.1
 ---
 
 # Harden
@@ -74,7 +74,7 @@ A behavior change without a named test is a Phase 1 finding — even when the co
 - Two consecutive passes return only cosmetic items (e.g., test assertion tightening, import ordering).
 - The pass starts re-flagging items prior passes addressed.
 
-**Transition gate** (forcing function — say BOTH out loud in the report before moving to Phase 2):
+**Transition gate** (forcing function — say these out loud in the report before moving to Phase 2):
 
 > "Phase 1 stopping condition met: [last pass returned no further review value | last two consecutive passes returned only cosmetic items | last pass started re-flagging prior items]. Edits made by that last pass: [N]."
 

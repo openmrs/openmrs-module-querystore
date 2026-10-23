@@ -1,0 +1,46 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/test/java/org/openmrs/api/LocationServiceTest.java",
+      "line": 557,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "purgeLocation_shouldDeleteLocationAssignedToAUser cannot fail: nothing flushes the session after purgeLocation, so the user_location FK is never checked and the test passes even with the native delete removed.",
+      "failure_mode": "If merged as-is, the FK fix that reviewers asked to be locked down has no guard. Deleting the native `delete from user_location` in HibernateLocationDAO.deleteLocation leaves the suite green, and the next refactor can bring back the 'cannot purge a location ever assigned to a user' failure without any test catching it. Adding the missing Context.flushSession() is not enough on its own, because the test then fails for the reason in F2.",
+      "evidence": "Mutation: removed the two native-delete lines from HibernateLocationDAO.deleteLocation and ran `mvn -o -B -pl api -am test -Dtest='TmpReviewProbeTest#probeC*,LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser'`. The PR test passed (Tests run: 1, Errors: 0). The positive control (same setup, with Context.flushSession() after the purge) failed with `Referential integrity constraint violation: FKC0WEUGWTYIDBYTMDYE09CP0GL: PUBLIC.USER_LOCATION FOREIGN KEY(LOCATION_ID) REFERENCES PUBLIC.LOCATION(LOCATION_ID) (4)`. Without the mutation that same control passes with 0 rows left. The file was restored with git checkout.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 133,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The native delete leaves any User.locations already loaded in the session pointing at the deleted Location, so the next flush throws TransientPropertyValueException. The PR's own regression test is exactly that case, which contradicts the code comment's claim that this is 'Safe today since no caller holds a loaded User across this call'.",
+      "failure_mode": "",
+      "evidence": "Probe on the unmodified head: the PR test body plus Context.flushSession() threw `TransientPropertyValueException: Persistent instance of 'org.openmrs.User' references an unsaved transient instance of 'org.openmrs.Location' [org.openmrs.User.locations -> org.openmrs.Location]` at the flush. Variant probeB (user 1 loaded and locations initialised, then purge and flush) threw the same error. probeC (user not loaded) and probeD (user loaded, collection not initialised) purged cleanly with 0 user_location rows left. Suggested alternative: remove the location from each owning user's collection at the entity level (select u from User u join u.locations l where l = :location, then u.getLocations().remove(location)) before session.remove. That keeps the session consistent and keeps Envers auditing, which the native SQL bypasses because User is @Audited and the collection is audited. The native delete is the only path where this happens. Whether any production code path (for example a module loading users and purging locations in one session) hits this was not traced.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/main/java/org/openmrs/api/impl/UserServiceImpl.java",
+      "line": 868,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Purging a restricted user's last assigned location silently makes that user unrestricted: getAllowedLocations then returns every tagged location. Retiring the same location gives the opposite result, an empty list. Is widening on purge intended?",
+      "failure_mode": "",
+      "evidence": "TmpReviewProbeTest.probePurgeWidensRestriction on the head: tagged locations 1 and 4, assigned user 1 only to 4, allowed=[4]. After purgeLocation(4) the allowed list was [4, 1], because the assignment rows were deleted and the empty set means unrestricted (UserServiceImpl:868). In that probe location 4 itself survived because of a read-only-session artifact that control probeF shows predates this PR. probeC confirms that a clean purge leaves 0 user_location rows for user 1. After assigning only location 1 and retiring it, allowed=[]. The 'empty means unrestricted' rule follows the ticket's resolution logic. The question is only whether a purge should be allowed to widen access, or should instead fail (as purging a location referenced elsewhere does) or be documented.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Not ready: the purge regression test the PR adds for the user_location FK fix passes with the fix removed, and making it actually flush shows that the native-delete approach breaks a session that holds the affected User.",
+  "what_i_swept": "Read the full diff (8 files, +216/-6; the three-dot and two-dot stats match, so the branch has no drift from base), the PR body and the ticket. Solution fit: the ticket's core asks are met (a Liquibase user_location table, a resolution method with intersection semantics or unrestricted when empty, tag filtering, tests). The REST part is deferred to webservices.rest#762 as stated. The composite PK is better than the ticket's surrogate key. Correctness: ran the changed tests, then ran probes covering purge with and without a flush, a user loaded and initialised vs not loaded, purgeUser of a user with assigned locations (works: Hibernate removes the owning-side join rows), and retire vs purge semantics. Ran a mutation that removes the native delete. Outward trace: LocationServiceImpl.getLocationsByTag (excludes retired, so retired assignments are dropped), User's L2 cache and @Audited status with the Envers audit-table initializer (the native SQL bypasses audit), RequiredDataAdvice/@Independent, and the changeset-count constant (only one occurrence, in DatabaseUpdaterDatabaseIT). Ran ValidateHibernateMappingsDatabaseIT and DatabaseUpdaterDatabaseIT under -Pintegration-test (H2-backed): both pass, so the changeset matches the mapping and the 917 count is right. Conventions: the duplicate @Authorized on the impl has precedent (changePassword). The LOCATION_ID refactor is small and Sonar-driven, so I did not raise it.",
+  "could_not_verify": [
+    "Whether any production or module code path (for example Initializer loaders, or OpenSessionInView requests) holds a User with initialised locations in the same session as a purgeLocation call. F2 is therefore a suggestion, not a blocker.",
+    "Whether the native executeUpdate evicts unrelated second-level cache regions: my positive control failed (User 1 was not in L2 before the purge in the test context), so I dropped this line of inquiry.",
+    "Ran nothing against MySQL/PostgreSQL. The schema ITs ran on H2 only."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 found F1 (via mutation). Pass 2, prompted by F1, found F2 and F3, and also ran the schema ITs and the Envers/cache trace. Pass 3 (authorization, merged state, purgeUser, conventions) found nothing new. F1 and F2 share a root cause: once F1's test flushes, it hits F2. Fixing deleteLocation at the entity level resolves both, and the test then needs a flushSession(). One probe showed a purge silently not deleting a location that had been loaded in a readOnly service call in the same test transaction. Control probeF reproduces this without any user_location involvement, so it predates the PR and is not reported. Temporary probe test was moved to /tmp/wt03-TmpReviewProbeTest.java; the working copy is clean."
+}

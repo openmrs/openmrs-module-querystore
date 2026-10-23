@@ -1,0 +1,19 @@
+$ gate_sentences.py controls/empty.tsv controls/control-good.jsonl controls/control-good2.jsonl
+HIT controls/control-good.jsonl
+   L1 [stop] Phase 1 stopping condition met: last pass returned no further review value. Edits made by that last pass: 0.  Integration questions answered: ... Beha
+   L1 [integ]  no further review value. Edits made by that last pass: 0.  Integration questions answered: ... Behavior changes without tests: none.
+   L1 [tests]  by that last pass: 0.  Integration questions answered: ... Behavior changes without tests: none.
+HIT controls/control-good2.jsonl
+   L1 [p2gate] Phase 2 ran once, over 4 agents. Substantive findings: none.  Phase 1 verdict: converged — the last pass found nothing substantive.
+   L1 [term] ase 2 ran once, over 4 agents. Substantive findings: none.  Phase 1 verdict: converged — the last pass found nothing substantive.
+named: 2 | read: 2 | loading the template: 0 | of those, with the Termination gate's: 0 | with an assistant hit: 2 | assistant hits: {'stop': 1, 'integ': 1, 'tests': 1, 'p2gate': 1, 'term': 1} | template blocks: 0
+exit=0
+$ gate_sentences.py controls/empty.tsv controls/control-bad.jsonl
+named: 1 | read: 1 | loading the template: 1 | of those, with the Termination gate's: 0 | with an assistant hit: 0 | assistant hits: {'stop': 0, 'integ': 0, 'tests': 0, 'p2gate': 0, 'term': 0} | template blocks: 1
+exit=0
+$ gate_sentences.py controls/empty.tsv controls/control-term-template.jsonl
+named: 1 | read: 1 | loading the template: 1 | of those, with the Termination gate's: 1 | with an assistant hit: 0 | assistant hits: {'stop': 0, 'integ': 0, 'tests': 0, 'p2gate': 0, 'term': 0} | template blocks: 1
+exit=0
+$ gate_sentences.py controls/empty.tsv
+named: 0 | read: 0 | loading the template: 0 | of those, with the Termination gate's: 0 | with an assistant hit: 0 | assistant hits: {'stop': 0, 'integ': 0, 'tests': 0, 'p2gate': 0, 'term': 0} | template blocks: 0
+exit=2

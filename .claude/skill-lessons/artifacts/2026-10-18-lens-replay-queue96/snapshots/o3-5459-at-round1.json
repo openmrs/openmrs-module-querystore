@@ -1,0 +1,33 @@
+{
+ "key": "O3-5459",
+ "summary": "Patient persists in the queue after visit deletion",
+ "description": "Steps to reproduce:\n\n# Navigate to a patient with an active visit\n# Add the patient to a service queue\n# Delete the patient\u2019s active visit\n# Observe the service queue list\n# The patient is still present, yet no active visit exists for that patient\n\nWhen a visit is deleted, any associated queue entries should be removed\n\n!image-20260303-082038.png|width=687,alt=\"image-20260303-082038.png\"!\n\n!image-20260303-082057.png|width=687,alt=\"image-20260303-082057.png\"!\n\n\n\n!image-20260303-082209.png|width=687,alt=\"image-20260303-082209.png\"!",
+ "comments_before_2026-09-16T11:16:58Z": [
+  {
+   "author": "fempingu",
+   "created": "2026-03-13T04:53:27.503+1100",
+   "body": "Looks like this issue is fixed. I have checked in test3 and dev3 environment. The deleted patient from the is not being displayed in the queue. "
+  },
+  {
+   "author": "Veronica Muthee",
+   "created": "2026-03-16T18:28:11.678+1100",
+   "body": "[~accountid:712020:91a58c22-269a-422c-82a1-e1fbe9ef0912] this is not fixed, nor the other 2. Check my comments here and steps to reproduce \u2192 [https://openmrs.atlassian.net/browse/O3-5461|https://openmrs.atlassian.net/browse/O3-5461|smart-link] "
+  },
+  {
+   "author": "Veronica Muthee",
+   "created": "2026-06-24T21:10:56.759+1000",
+   "body": "[~accountid:712020:d67ee77d-e0cd-46b0-b16b-9dd1a283ab4a] please feel free to pick up this issue as it\u2019s not currently assigned to anyone."
+  },
+  {
+   "author": "joseph kagimu",
+   "created": "2026-06-28T08:22:43.010+1000",
+   "body": "[~accountid:712020:8065febe-de94-482d-b210-63c409a6e06b] I have raised a  [Pull request|https://github.com/openmrs/openmrs-esm-patient-chart/pull/3427] "
+  },
+  {
+   "author": "Dennis Kigen",
+   "created": "2026-07-03T22:16:13.457+1000",
+   "body": "Root cause and fix status, from reviewing the two linked PRs:\n\nThis is a backend bug in the queue module, not a frontend one. The module already ships code intended to void queue entries when their visit is voided (added for O3-4416 in {{VisitWithQueueEntriesSaveHandler}} in Queue 2.6.0+), but that code's void branch is guarded by {{visit.getVoided()}}, which is only set if openmrs-core's {{BaseVoidHandler}} happens to run first. Both handlers use the default {{Handler}} annotation order, and core breaks the tie in {{HashMap}} iteration order, so the guard passes in some deployments and silently fails in others. On the Reference Application it fails, which is this ticket. Ending a visit still removes the patient from the queue because the same handler's {{stop}} branch reads {{stopDatetime}} and does not depend on handler ordering, which is why only deletion shows the bug.\n\nThe fix is [openmrs-module-queue#96|https://github.com/openmrs/openmrs-module-queue/pull/96(], which hooks {{voidVisit}} and {{purgeVisit}} with AOP advice registered in {{config.xml}}, immune to the ordering issue. It also fixes a second failure this ticket does not mention: purging a visit that has queue entries currently fails on a foreign-key constraint. The PR was built and verified live against a Reference Application stack (core 2.8.7, queue 3.0.0): visit delete voids the entries with the reason propagated, and purge completes cleanly. It is approved, pending a rebase onto main and merge.\n\nThe frontend PR [openmrs-esm-patient-chart#3427|https://github.com/openmrs/openmrs-esm-patient-chart/pull/3427] is a client-side workaround for the same bug. The recommendation on that thread is to close it once PR 96 merges, since the backend fix covers every client and makes the frontend call a no-op.\n\nFollow-ups identified during review, to be filed separately: retire the superseded handler void branch, and handle {{unvoidVisit}} so restoring a deleted visit also restores its queue entries."
+  }
+ ],
+ "note": "Snapshot of the ticket as it stood before the review round being replayed. Status and later comments deliberately omitted."
+}

@@ -1,0 +1,68 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 133,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "Purging a location silently deletes it from every user's assignment, so a user whose only assigned location is purged becomes unrestricted and gets every tagged location: the restriction fails open.",
+      "failure_mode": "If merged as-is, an admin who purges a ward that a restricted user was confined to turns that user's empty user_location set into 'unrestricted' (per the getAllowedLocations contract at UserServiceImpl.java:868-870), so the user is offered every Login Location. Nothing throws and nothing is logged, so the widening is found only when someone notices. Retiring the same location fails closed instead (getLocationsByTag drops retired locations, so the user gets an empty list), which makes the two paths inconsistent. Recommended fix: drop the native delete and let the RESTRICT FK reject the purge, as OpenMRS already does for any referenced location (retire is the supported path). The alternative is to refuse or flag the purge when it would empty a user's assignments.",
+      "evidence": "Probe test (temporary ZzProbeTest, since removed): tag locations 1 and 2, assign user 1 only to a freshly saved location, flush and clear. getAllowedLocations returned 0 ('PROBE-A before purge allowed=0'). After purgeLocation, flush and clear it returned 2, with userLocations=0 ('PROBE-A after purge allowed=2 userLocations=0'). Run with: mvn -o -B -pl api -am test -Dtest=ZzProbeTest. Read LocationServiceImpl.getLocationsByTag:213-223 (dao.getAllLocations(false)).",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/test/java/org/openmrs/api/LocationServiceTest.java",
+      "line": 557,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "purgeLocation_shouldDeleteLocationAssignedToAUser never flushes, so the DELETE never reaches the database and the test passes with the user_location fix removed: it is not a regression test for the FK fix.",
+      "failure_mode": "If merged as-is, the purge fix it claims to guard can be reverted and CI stays green, because session.remove() without a flush issues no SQL and getLocation() returns null for the removed entity in the same session. A version that flushes and clears before the purge and flushes after it does catch the regression.",
+      "evidence": "Mutation: removed the two native-delete lines from HibernateLocationDAO.deleteLocation, ran -Dtest='LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser': Tests run 1, Failures 0 (passes without the fix). Control: same mutation, test changed to flush+clear before purge and flush after: fails with H2 'Referential integrity constraint violation ... USER_LOCATION FOREIGN KEY(LOCATION_ID)'. With the fix restored, the flushed test passes. All files restored with git checkout.",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 130,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The comment says no caller holds a loaded User across deleteLocation, but the PR's own purge test does, and the PR's own getAllowedLocations leaves an initialized User.locations in the session: once a flush follows the purge, it throws TransientPropertyValueException.",
+      "failure_mode": "",
+      "evidence": "Adding Context.flushSession() after ls.purgeLocation(...) in the PR's purgeLocation_shouldDeleteLocationAssignedToAUser fails with 'TransientPropertyValueException: Persistent instance of org.openmrs.User references an unsaved transient instance of org.openmrs.Location [org.openmrs.User.locations]'. ZzProbeTest showed the same: getAllowedLocations(user 1), then purge, then flush. Removing the users' collection entries through the session (load the Users holding the location with HQL and remove it from each collection) would keep the session and Envers consistent. This becomes moot if F1 is fixed by letting the FK reject the purge.",
+      "confidence": "high"
+    },
+    {
+      "id": "F4",
+      "file": "api/src/main/java/org/openmrs/User.java",
+      "line": 372,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "User.getLocations() on the authenticated user (Context.getAuthenticatedUser(), which is detached between requests) throws LazyInitializationException, whereas getRoles() works because roles are EAGER. Is the companion REST change (exposing 'locations' on the user resource) safe for representations built from the authenticated user, e.g. the session resource?",
+      "failure_mode": "",
+      "evidence": "ZzProbeTest probeD: after flushSession+clearSession, au.getRoles().size() printed 1, and au.getLocations().size() threw 'LazyInitializationException: Cannot lazily initialize collection of role org.openmrs.User.locations with key 1 (no session)'. I did not read or run the companion webservices.rest PR, so the REST consequence is unverified.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F5",
+      "file": "api/src/test/java/org/openmrs/api/UserServiceTest.java",
+      "line": 1814,
+      "where": "inline",
+      "disposition": "nit",
+      "claim": "The getAllowedLocations tests never flush or clear, so dao.getUser returns the in-memory instance and the user_location mapping is never read back from the database.",
+      "failure_mode": "",
+      "evidence": "Read assignLocations and the tests at UserServiceTest.java:1804-1871. A probe with flush+clear showed the mapping does round-trip correctly (PROBE-B reloaded locations=3, allowed=2), so this is a coverage gap rather than a bug.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Not ready to merge: the location-purge fix makes the restriction fail open (purging a user's only assigned location makes that user unrestricted), and the regression test added for that fix passes even with the fix deleted.",
+  "what_i_swept": "Read the PR body, the ticket and its comments, and the full diff (8 files, +216/-6, matches the stat). Checked the changed files in full around the hunks. Solution fit against the ticket's resolution logic and acceptance criteria: intersection versus unrestricted is implemented as specified, and REST is out of scope (companion PR). Traced outward: user purge (HibernateUserDAO.deleteUser uses session.remove, which Hibernate handles for the owning many-to-many), HibernateUserDAO.saveUser managed-entity handling, getLocationsByTag's retired filter, BaseOpenmrsObject.equals proxy handling for the contains() intersection, Envers (User and Location are @Audited, audit tables are auto-generated only when enabled), the test schema (hbm2ddl create-drop, so unit tests don't exercise the Liquibase changeset), and changeset id/author conventions. Ran probe tests and two mutation tests, plus DatabaseUpdaterDatabaseIT on MariaDB 10.11.7 via Testcontainers (OMRS_DB=mariadb, -Pintegration-test): it passed with the count at 917. Second pass found nothing further beyond F3 to F5.",
+  "could_not_verify": [
+    "Whether Hibernate 7.4.7's native executeUpdate in deleteLocation (no synchronized query space) evicts the whole second-level cache. In unit tests, sessionFactory.getCache().containsEntity returned false even before the purge (no positive control), so I dropped the claim.",
+    "Behaviour of the companion openmrs-module-webservices.rest PR #762 (F4 is a question for that reason).",
+    "DatabaseUpdaterDatabaseIT passing at 917 was not calibrated against 916 (no negative run), and it was run on MariaDB only, not MySQL 5.7 or PostgreSQL."
+  ],
+  "passes_run": 2,
+  "notes": "The PR conversation was not available. The PR body says the native delete was added 'from review', so F1's recommended fix (let the FK reject the purge) may run against a reviewer's earlier request. The finding is the fail-open semantics, and either fix resolves it. All probe and mutation edits were reverted, and the probe file was moved out of the tree to /tmp/wt09-ZzProbeTest.java.bak. git status --porcelain is clean."
+}

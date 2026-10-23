@@ -1,0 +1,57 @@
+{
+ "skill_dirs": {
+  "control": "s1",
+  "treatment": "s2",
+  "clearance": "s3"
+ },
+ "slots": {
+  "wt-01": {
+   "wave": 1,
+   "arm": "B"
+  },
+  "wt-02": {
+   "wave": 1,
+   "arm": "T"
+  },
+  "wt-03": {
+   "wave": 1,
+   "arm": "C"
+  },
+  "wt-04": {
+   "wave": 2,
+   "arm": "B"
+  },
+  "wt-05": {
+   "wave": 2,
+   "arm": "T"
+  },
+  "wt-06": {
+   "wave": 2,
+   "arm": "C"
+  },
+  "wt-07": {
+   "wave": 3,
+   "arm": "T"
+  },
+  "wt-08": {
+   "wave": 3,
+   "arm": "B"
+  },
+  "wt-09": {
+   "wave": 3,
+   "arm": "C"
+  },
+  "wt-10": {
+   "wave": 4,
+   "arm": "V"
+  },
+  "wt-11": {
+   "wave": 4,
+   "arm": "V"
+  },
+  "wt-12": {
+   "wave": 4,
+   "arm": "V"
+  }
+ }
+}

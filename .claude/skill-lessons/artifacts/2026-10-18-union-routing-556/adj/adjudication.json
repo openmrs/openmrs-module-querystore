@@ -1,0 +1,427 @@
+{
+  "verdicts": [
+    {
+      "key": "E001",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL_OVERSTATED",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. Orders Nevirapine J05AG01 + 'Isoniazid / pyrazinamide / rifampin' J04AM05, alprazolam: finding [5] partner=the combination rows=[6038 Isoniazid], [6] same partner rows=[9384 Rifampicin]. 'Alprazolam can be given: it interacts with her rifampin, a Minor caution [6].' -> head: nothing appended, {named=1, stated=1}; the same chart and chips with validatorRaising(null, ...), which makes namesThePartner return false and so is exactly main's predicate (git show main:.../FindingPartnerCoverageCheck.java: haystack.contains(comparable(partner)) in both unstatedPartners and measure) -> appends 'active order Isoniazid / pyrazinamide / rifampin', {1,0}. 'her rifampin [5] [6]' -> head {2,2}: the isoniazid finding [5] is credited through [6]'s rows by the per-key union; 'active order Rifampicin [4] [5] [6]' -> only Nevirapine appended, {3,2}.",
+      "why": "Reproduced exactly: the rows are attached for every printed partner name, ORDER-rung displays included (DrugSafetyValidator.java:4614-4615, 8896-8898), so one constituent states a combination order and, through the union, the other constituent's finding too. Blocking overstates it: the answer did name the drug that order was resolved to (the README exception's own wording covers that), and the base output it replaces ('not named above' right after 'her rifampin') is itself a #555-style sentence; what is wrong is that this widening beyond the issue's ENTRY-label case is undiscussed and over-credits the co-cited constituent's finding, so scope rows to the ENTRY rung or document and pin it.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E002",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "No live server allowed. The issue's questions over its patient (Nevirapine J05AG01 + Rifampicin J04AB02, shipped KB, real injector and search()) all state the order at head: alprazolam answer naming 'active order Rifampicin' -> 'Rifampicin (rifampin)' stated; dolutegravir {2,2}, nothing appended (containment-only appends it); the screen case is the PR's own green test.",
+      "why": "An environment caveat; the deterministic path the live symptom came from is fixed for the issue's questions, so no defect stands behind it.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E003",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "No live model allowed. The behaviour the caveat is about was reproduced deterministically through the real pipeline (E001's probe): a lone constituent ('rifampin' / 'isoniazid') states 'Isoniazid / pyrazinamide / rifampin' and suppresses the append that containment (base) makes.",
+      "why": "The live frequency stays unmeasured, but a real behaviour stands behind the risk: whenever a model writes a lone constituent, the combination order is no longer appended. Same point as E028.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E004",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "No live server allowed. The issue's questions over its patient (Nevirapine J05AG01 + Rifampicin J04AB02, shipped KB, real injector and search()) all state the order at head: alprazolam answer naming 'active order Rifampicin' -> 'Rifampicin (rifampin)' stated; dolutegravir {2,2}, nothing appended (containment-only appends it); the screen case is the PR's own green test.",
+      "why": "An environment caveat; the deterministic path the live symptom came from is fixed for the issue's questions, so no defect stands behind it.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E005",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "git show main:api/src/main/java/.../FindingPartnerCoverageCheck.java: unstatedPartners and measure are both haystack.contains(comparable(partner)). At head validatorRaising(null, ...) makes namesThePartner return false, and the PR changes no printed partner name, so the containment-only run is base's predicate.",
+      "why": "The comparison method is sound; nothing stands behind the caveat.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E006",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. Orders Nevirapine J05AG01, Rifampicin J04AB02, 'Isoniazid / pyrazinamide / rifampin' J04AM05, alprazolam: [6] combo rows=[6038], [8] (#477) partners=[Rifampicin, combo] rows=[[],[]] - as reported. 'her isoniazid' citing [8] alone -> both of [8]'s orders appended {2,0}; citing [6] [8] -> {3,2}, the combo stated for [8] too; an answer naming 'nevirapine and isoniazid' citing [5]-[8] gives exactly the reported {5,3}, and containment-only the reported positive control {5,1}.",
+      "why": "The per-key union at line 282 credits a #477 finding's order through a co-cited rule finding's rows, so FindingPartnerCoverageCheck.java:268-272 says #477's findings 'carry none ... so each is stated only by its printed name'; docs/adr.md:7808-7810 says 'each of their orders is stated only by its display' - both false here. The README sentence E006 also faults never mentions #477 and is accurate.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E007",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Reference-package probe (OneOrderNameAcrossOneResponseTest's ddi-combination-two-rules-one-note.json, truvadaChart(), 'Can I give her bedaquiline?', real validate()), restored: bedaquiline carries two Moderate rules (tenofovir disoproxil first, emtricitabine second); 1 chip survives, partners=[Emtricitabine / Tenofovir disoproxil], rowsOfPartner=[300195 Tenofovir disoproxil] only; namesThePartner('...her tenofovir disoproxil [1].')=true, namesThePartner('...her emtricitabine [1].')=false. Over the shipped KB through real search() (order J05AR03): 'her tenofovir disoproxil [3]' -> nothing appended {1,1}; 'her emtricitabine [3]' -> 'active order Emtricitabine / Tenofovir disoproxil' appended {1,0}.",
+      "why": "StatedInteractionChips.isFirstStatementOf (line 4621) drops the restating chip with its rows before any union, which happens only in collapseSharedMechanisms, so which constituent states the order follows rule order; its 'removes a chip and nothing else' javadoc and the ADR amendment do not cover this.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E008",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "full `mvn -o -B clean install` at d77204ba in a separate local clone (own scratch maven.repo.local, same ~/.m2 tail): BUILD SUCCESS, api 2676 tests 0 failures 0 errors (59 skipped), omod 253 tests 0 failures.",
+      "why": "The full build the caveat says was not run is green at this head.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E009",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Mutated FindingPartnerCoverageCheck.java:282 to rowsByPartner.put(comparable(...), new LinkedHashSet<String>(partnerRows.get(i))): CitedFindingPartnerCompletionTest, FindingPartnerLogDisclosureTest, LlmInferenceServiceAnswerFromFindingsContextTest, SharedMechanismChipCollapseTest, SubstanceInSeveralActiveOrdersTest, FindingEnumerationRepairTest, SafetyFindingSeverityFidelityTest, InteractionClaimPairFidelityTest all green (158 existing tests); whole api suite under the mutation, clean test in a separate clone: 2676 run, 0 failures, 0 errors, 59 skipped - identical to head. Probe (Rifampicin 150mg J04AB02, Isoniazid / rifampicin J04AM02, 'Can I give her rifampicin?'): [4] rows=[[6038]], [5] (#477) rows=[[],[]]; '...her isoniazid [4] [5].' head: only 'Rifampicin 150mg' appended {3,2}; mutated: 'Isoniazid / rifampicin and ... Rifampicin 150mg' appended {3,0}. Restored with git checkout.",
+      "why": "The union is load-bearing and nothing pins it: overwriting re-reports, in a reachable co-cited arrangement, an order the PR's own exception counts as named.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E010",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "full `mvn -o -B clean install` at d77204ba in a separate local clone (own scratch maven.repo.local, same ~/.m2 tail): BUILD SUCCESS, api 2676 tests 0 failures 0 errors (59 skipped), omod 253 tests 0 failures.",
+      "why": "The full build the caveat says was not run is green at this head.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E011",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. Alprazolam over {Rifampicin J04AB02, Rifampicin / isoniazid J04AM02}: [4] partner 'Rifampicin / isoniazid' rows=[6038], [6] (#477) partners=[Rifampicin, Rifampicin / isoniazid] rows=[[],[]]. 'her isoniazid' citing [6] alone -> both appended {2,0}; citing [4] [6] -> only 'Rifampicin' appended {3,2}. 'her Rifampicin and isoniazid' gives exactly the reported figures: [6] alone {2,1} with 'active order Rifampicin / isoniazid' appended; [4] [6] {3,3}, nothing appended (containment-only {3,1}).",
+      "why": "Same mechanism as E006, and the reviewer's reading - the union is what keeps measure and the append agreeing per key, so the two docs should change - is right. A false statement of behaviour in the canonical javadoc and ADR is worth more than a nit.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E012",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Read docs/adr.md 7740-7830 at head and `git show main:docs/adr.md`: on main the paragraph 'Spec changed deliberately, by the product owner (issue #516, decision 4).' is at 7790, right after the #516 bullets; at head the #555 block occupies 7790-7813, the paragraph moved to 7815, and 7817 still reads 'the case this amendment decides gets nothing'.",
+      "why": "Confirmed. The paragraph's heading still names #516, so the antecedent is recoverable; moving the #555 block below it is a pure placement nit.",
+      "correct_disposition": "nit"
+    },
+    {
+      "key": "E013",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "No live server allowed. The issue's questions over its patient (Nevirapine J05AG01 + Rifampicin J04AB02, shipped KB, real injector and search()) all state the order at head: alprazolam answer naming 'active order Rifampicin' -> 'Rifampicin (rifampin)' stated; dolutegravir {2,2}, nothing appended (containment-only appends it); the screen case is the PR's own green test.",
+      "why": "An environment caveat; the deterministic path the live symptom came from is fixed for the issue's questions, so no defect stands behind it.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E014",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "full `mvn -o -B clean install` at d77204ba in a separate local clone (own scratch maven.repo.local, same ~/.m2 tail): BUILD SUCCESS, api 2676 tests 0 failures 0 errors (59 skipped), omod 253 tests 0 failures.",
+      "why": "The full build the caveat says was not run is green at this head.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E015",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "Three mutations, each run against CitedFindingPartnerCompletionTest and restored: no withPartnerRows at the drug-in-play arm (4614-4615) reddens anOrderTheAnswerNamedWithoutItsLabelsParentheticalIsNotListedAgain, its searchStreaming_ twin and anOrderOfAMergedFinding...; none at the screening arm (8896-8898) reddens onAScreenOfHerMedications...; the merged chip given only group.get(0)'s rows reddens anOrderOfAMergedFinding...",
+      "why": "Every write site the caveat names is pinned.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E016",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "git show main:api/src/main/java/.../FindingPartnerCoverageCheck.java: unstatedPartners and measure are both haystack.contains(comparable(partner)). At head validatorRaising(null, ...) makes namesThePartner return false, and the PR changes no printed partner name, so the containment-only run is base's predicate.",
+      "why": "The comparison method is sound; nothing stands behind the caveat.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E017",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. 'Can I give her dolutegravir?' over Nevirapine J05AG01 + Rifampicin J04AB02: [5] partner 'Rifampicin (rifampin)' rows=[9384] from the drug-in-play arm; answer naming 'active order Rifampicin' -> nothing appended {2,2}; containment-only appends it {2,1}.",
+      "why": "The dolutegravir case goes through the drug-in-play arm, as the caveat inferred, and is fixed.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E018",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. Alprazolam over Rifampicin J04AB02 + 'Isoniazid / rifampin' J04AM02: [4] rows=[6038], [5] 'Rifampicin (rifampin)' rows=[9384], [6] (#477) rows=[[],[]]. 'Use caution: isoniazid is relevant [4] [5] [6].' -> {named=4, stated=2}, exactly as reported; citing [6] alone -> {2,0}.",
+      "why": "Mechanism and figures reproduced, and FindingPartnerCoverageCheck.java:268-272 says #477's findings 'carry none ... so each is stated only by its printed name'; docs/adr.md:7808-7810 says 'each of their orders is stated only by its display'. Slightly over-broad: the ChartSearchService and README wording it also faults says nothing about #477 and is accurate for the union (an order a rule finding names is stated where the prose names the entry it was resolved to).",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E019",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "full `mvn -o -B clean install` at d77204ba in a separate local clone (own scratch maven.repo.local, same ~/.m2 tail): BUILD SUCCESS, api 2676 tests 0 failures 0 errors (59 skipped), omod 253 tests 0 failures.",
+      "why": "The full build the caveat says was not run is green at this head.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E020",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. Same arrangement as E001: answers naming the combination only as 'rifampicin' (and separately only as 'isoniazid'), citing [5] [6] -> head {2,2}, nothing appended; the same chart and chips with validatorRaising(null, ...), which makes namesThePartner return false and so is exactly main's predicate (git show main:.../FindingPartnerCoverageCheck.java: haystack.contains(comparable(partner)) in both unstatedPartners and measure) -> the combination appended, {2,0}. Read README.md:555 and ChartSearchService.java:713-726.",
+      "why": "Same point as E001, reproduced; the opposite-direction residue lists name only containment and the shared alias. The behaviour is defensible for a single-constituent citation but undiscussed and it credits the other constituent's finding, so it deserves a concrete suggestion (scope rows to the ENTRY rung, or document and pin) rather than only a question.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E021",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Over the SHIPPED knowledge base (not only the fixture), real search(): 'Can I give her bedaquiline?' with order 'Emtricitabine / Tenofovir disoproxil' (J05AR03) yields one finding whose rows are only [300195 Tenofovir disoproxil]; 'her emtricitabine' appends the order, 'her tenofovir disoproxil' does not.",
+      "why": "The collapse, and E007's asymmetry with it, reaches a very common HIV fixed-dose combination on the data the module ships, so a real defect stands behind the frequency caveat.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E022",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. E009's arrangement at head, no mutation: 'Rifampicin can be given; it interacts with her isoniazid [4] [5].' -> {3,2}: the #477 finding [5] (rows [[],[]]) has 'Isoniazid / rifampicin' stated through [4]'s row 6038; containment-only {3,0}. Read README.md:555 and ChartSearchService.java:713-726.",
+      "why": "Correct on all points checkable here: the javadoc (268-272) and ADR (7808-7810) overclaim, and the README and ChartSearchService wording is accurate. The PR-body claim cannot be checked from the clone.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E023",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Mutated DrugSafetyValidator.java:2136 to `if (ids.contains(row.getId()))`: the eight finding-partner suites (158 existing tests) green, and the WHOLE api suite green in a separate clone (2676 run, 0 failures, 0 errors, 59 skipped - identical to head). Positive control: alprazolam over Nevirapine + Rifampicin, answer naming only 'active order Nevirapine' citing both findings: head appends 'active order Rifampicin (rifampin)', {2,1}; mutated: nothing appended, {2,2}. Restored.",
+      "why": "No case drives the prose arm with a dataset against a row-carrying partner the answer leaves out; the older negative cases use validatorRaising(null, ...), so the conjunct can go and every partner with rows reads stated.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E024",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "Read the four places the residue is disclosed (namesThePartner javadoc, README.md:555, ChartSearchService.java:713-726, docs/adr.md:7812-7813).",
+      "why": "Asks only how often the residue the PR itself documents (an alias filed under two substances names both) fires; that is disclosed and accepted, and the entry does not name the wider reach (an alias occurring where it names no drug), so nothing undisclosed stands behind it.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E025",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "full `mvn -o -B clean install` at d77204ba in a separate local clone (own scratch maven.repo.local, same ~/.m2 tail): BUILD SUCCESS, api 2676 tests 0 failures 0 errors (59 skipped), omod 253 tests 0 failures.",
+      "why": "The full build the caveat says was not run is green at this head.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E026",
+      "matches": [
+        "S3-r"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "No live run allowed; E027's probe reproduces the over-credit with the stubbed answer through the real injector and search().",
+      "why": "Names S3's possibility (the magnesium-salicylate over-credit on a real model's answer) without establishing it live; the deterministic mechanism behind it is real.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "E027",
+      "matches": [
+        "S3"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. 'Can I give her magnesium salicylate?' over {Salicylic acid, D01AE12}: finding [4] rows=[DDInter1633, DDInter1634, DDInter2085], each carrying the alias 'salicylate'; reference-package probe: Magnesium salicylate's own row 52364 carries only 'magnesium salicylate', so this is not a shared alias. 'Magnesium salicylate can be given with caution [4].' -> head nothing appended {1,1}; containment-only appends 'active order Salicylic acid' {1,0}. Procaine benzylpenicillin over Procaine N01BA02 + Benzylpenicillin J01CE01: head {2,2}, containment-only {2,1} + 'active order penicillin g'.",
+      "why": "Asserts S3's mechanism: matchesText finds a partner alias anywhere in the answer, here as a word inside the subject drug's own name, which the answer did not use to name the partner, and the note is silently dropped.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "E028",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "As E003: no live run; the triggered behaviour reproduced through real search() with a stubbed answer.",
+      "why": "Same caveat as E003; the defect behind it (E001/E020) is real, only its live rate is unmeasured.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E029",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "As E024.",
+      "why": "Same caveat as E024: the frequency of a disclosed residue; it does not name the undisclosed over-credit.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E030",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Built the arrangement the hypothesis names (E007's probe): the collapsed chip keeps only the first rule's partner rows, so 'tenofovir disoproxil' states the order and 'emtricitabine' does not.",
+      "why": "The hypothesis is true; same point as E007.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E031",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. 'Can I give her dolutegravir?' over Nevirapine J05AG01 + Rifampicin J04AB02: [5] partner 'Rifampicin (rifampin)' rows=[9384] from the drug-in-play arm; answer naming 'active order Rifampicin' -> nothing appended {2,2}; containment-only appends it {2,1}.",
+      "why": "The dolutegravir case goes through the drug-in-play arm, as the caveat inferred, and is fixed.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E032",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Mutated each write site (drug-in-play 4614-4615, screening 8896-8898: each reddens named cases) and namesThePartner's prose conjunct (line 2136): the latter survives the whole api suite (2676 run, 0 failures), as E023 reports.",
+      "why": "Two of the three items it took on trust are pinned, but the namesThePartner one hides a real gap: the prose check is unpinned in the over-crediting direction.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E033",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "full `mvn -o -B clean install` at d77204ba in a separate local clone (own scratch maven.repo.local, same ~/.m2 tail): BUILD SUCCESS, api 2676 tests 0 failures 0 errors (59 skipped), omod 253 tests 0 failures.",
+      "why": "The full build the caveat says was not run is green at this head.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E034",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "throwaway probe in CitedFindingPartnerCompletionTest reusing its OverShippedData (shipped KB, real injector, real LlmInferenceService.search, model stubbed), restored with git checkout. Warfarin over 'Metronidazole 500mg tablet' Z99ZZ01 + 'Metronidazole 0.75% gel' Z99ZZ02: [4] partners=[Metronidazole 500mg tablet] rows=[DDInter1202, DDInter1203], [5] (#477) both displays rows=[[],[]]. Citing [5] only -> both appended {2,0}; the reported [4]+[5] answer -> only the gel appended {3,2}. Control with the real codes J01XD01/D06BX01: [4] prints 'Metronidazole', no collision, {3,1}.",
+      "why": "Reproduced byte for byte: the tablet order of the #477 finding is stated through [4]'s rows while its gel order is not, against the documented residue - and against the #477 rationale that the substance name does not say which order was meant.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "E035",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "No live server allowed. The issue's questions over its patient (Nevirapine J05AG01 + Rifampicin J04AB02, shipped KB, real injector and search()) all state the order at head: alprazolam answer naming 'active order Rifampicin' -> 'Rifampicin (rifampin)' stated; dolutegravir {2,2}, nothing appended (containment-only appends it); the screen case is the PR's own green test.",
+      "why": "An environment caveat; the deterministic path the live symptom came from is fixed for the issue's questions, so no defect stands behind it.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E036",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "Read DrugReferenceService.getAll/ensureLoaded and LlmInferenceService:280-297: namesThePartner reaches getAll() only for a partner with rows, rows exist only if the dataset loaded at injection, the load is memoised, and drugSafetyValidator.validate() - unguarded - calls into the same dataset just before.",
+      "why": "No new failure path: anything that could make getAll() throw would already have thrown in validate().",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "E037",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "full `mvn -o -B clean install` at d77204ba in a separate local clone (own scratch maven.repo.local, same ~/.m2 tail): BUILD SUCCESS, api 2676 tests 0 failures 0 errors (59 skipped), omod 253 tests 0 failures. Whole api suite also run under each candidate 'F1' mutation in that clone: the matchesText conjunct dropped (2676 run, 0 failures) and the union replaced by put (whole api suite under the mutation, clean test in a separate clone: 2676 run, 0 failures, 0 errors, 59 skipped - identical to head).",
+      "why": "The full build is green, and no test outside the targeted suites catches either mutation, so the caveat hides nothing.",
+      "correct_disposition": "drop"
+    }
+  ],
+  "duplicate_groups": [
+    [
+      "E001",
+      "E020"
+    ],
+    [
+      "E006",
+      "E011",
+      "E018",
+      "E022",
+      "E034"
+    ],
+    [
+      "E007",
+      "E030"
+    ],
+    [
+      "E003",
+      "E028"
+    ],
+    [
+      "E002",
+      "E004",
+      "E013",
+      "E035"
+    ],
+    [
+      "E008",
+      "E010",
+      "E014",
+      "E019",
+      "E025",
+      "E033",
+      "E037"
+    ],
+    [
+      "E005",
+      "E016"
+    ],
+    [
+      "E017",
+      "E031"
+    ],
+    [
+      "E024",
+      "E029"
+    ]
+  ],
+  "notes": "Looked for duplicates across every unmatched entry, findings and risks alike; the groups above are each one point stated differently. Not grouped: E009 (no test pins the union) vs the E006 docs group (what the union contradicts); E021 (frequency of the collapse) vs E007/E030 (its mechanism); E015 vs E032, which overlap but E032 also names namesThePartner, where a real gap (E023) exists. Matching: no entry asserts or names S1 (condition-mediated findings carry no rows) or S2 (the comparable javadoc's cross-check claim against InteractionClaimPairFidelityCheck). E027 asserts S3 through a word inside the subject drug's own name. E026 names that over-credit as a live possibility, so S3-r. E024 and E029 were judged NOT to match S3-r: both ask only the frequency of the residue the PR itself documents in four places (an alias filed under two substances, which by the module's account names both); neither names an alias credited where it names no drug, which is what makes S3 blocking. That is the one borderline call. E001/E020 are not S3: the answer used 'rifampin' to name rifampicin, the substance of the attached rows; their defect is which rows the ORDER rung attaches. Every whole-suite and full-build figure was produced in a separate local clone at the same sha; the adjudication clone was restored with git checkout and is clean at d77204ba."
+}

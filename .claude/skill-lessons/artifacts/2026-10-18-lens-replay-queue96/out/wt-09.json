@@ -1,0 +1,56 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 41,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The merge of main dropped the advice's voidVisit branch and now relies on VisitWithQueueEntriesSaveHandler for voiding (Javadoc lines 30-33). That handler's void branch is still guarded by visit.getVoided(), the handler-ordering dependency the ticket and the approving review name as O3-5459's root cause, so the PR no longer fixes the reported bug. It only fixes purge.",
+      "failure_mode": "If merged as-is, deleting a visit (REST DELETE /visit/{uuid} -> VisitService.voidVisit, VisitResource1_9:276) still leaves its queue entries active on any deployment where the HashMap tie-break runs the queue handler before core's BaseVoidHandler. Per the ticket comment and the 2026-07-03 review, the RefApp is one of them. The patient stays in the service queue with no visit, and nothing throws.",
+      "evidence": "git diff 36b2040 HEAD -- VisitWithQueueEntriesDeleteAdvice.java shows the voidVisit branch removed in merge ae7f8fa. VisitWithQueueEntriesSaveHandler.java at head: @Handler(supports = Visit.class) with default order, and the void branch guarded by `visit.getVoided()`. Core 2.7.4: Handler.order() defaults to Integer.MAX_VALUE, which is also BaseVoidHandler's order. HandlerUtil.getHandlersForType does a stable sort over ServiceContext.getRegisteredComponents, which returns `new ArrayList<>(HashMap.values())`. VisitServiceImpl.voidVisit calls dao.saveVisit, so no SaveHandler pass runs afterwards; RequiredDataAdvice's void branch runs only VoidHandlers. Probe: I set order = 1 on VisitWithQueueEntriesSaveHandler (forcing the queue handler to run first) and ran `mvn -o -pl integration-tests -am -Dtest=VisitWithQueueEntriesSaveHandlerTest`. shouldVoidQueueEntriesWhenVisitIsVoidedThroughVoidVisit FAILED at line 128 (`assertTrue(queueEntry.getVoided())`). Unmodified head: 7/7 pass. File restored afterwards. Main's own test comment (lines 121-122) concedes the outcome 'depends on it running after core's BaseVoidHandler'. Recommended fix, following the sibling PatientWithQueueEntriesVoidHandler: move the visit-void cascade into its own VoidHandler<Visit> that voids unconditionally from the handle() arguments (voidingUser, voidedDate, voidReason). RequiredDataAdvice passes the same dateVoided and user to every handler, so the stamping that unvoid matching relies on is kept. Alternatively, restore the reviewed advice branch.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "integration-tests/src/test/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdviceTest.java",
+      "line": 69,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "No test exercises the voidVisit path under the ordering that breaks it. The PR's test class now covers purge only, and main's voidVisit test passes only because of the test context's tie-break.",
+      "failure_mode": "",
+      "evidence": "The test class has only shouldPurgeQueueEntriesWhenVisitIsPurged and shouldPurgeVoidedQueueEntriesOfAPurgedVisit. The F1 probe shows the existing voidVisit test flips from pass to fail when only the handler order changes. A fix for F1 should come with a test that does not depend on bean-name hash order.",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": null,
+      "line": null,
+      "where": "PR-level",
+      "disposition": "suggestion",
+      "claim": "The PR title and description still say the advice voids queue entries on voidVisit and that tests cover 'both void and purge scenarios'. Since merge ae7f8fa the advice handles purgeVisit only, and only purge is tested.",
+      "failure_mode": "",
+      "evidence": "pr96-body-at-round1.md 'Changes' section compared with the head advice, which returns early unless method is purgeVisit (line 41). The approving review (2026-07-03, commit 36b2040) verified the earlier void-handling version, so that approval does not cover the head's behavior.",
+      "confidence": "high"
+    },
+    {
+      "id": "F4",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 64,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "On installs upgraded from the pre-2023 schema, does the legacy visit_queue_entries table still hold rows with FKs to both visit and queue_entry? If so, purging still fails there, on visit_queue_entries_queue_entry_fk or visit_queue_entries_visit_fk.",
+      "failure_mode": "",
+      "evidence": "liquibase.xml: changeset add_visit_queue_entries_20220202 creates visit_queue_entries with FKs to queue_entry and visit. migrate_visit_id_to_queue_entry_20231025 copies visit_id into queue_entry but never deletes rows. No dropTable for it in liquibase.xml, and no Java mapping references it (git grep). Not reproduced: the H2 test schema comes from Hibernate mappings, so the table does not exist in tests, and I had no MySQL instance with legacy data.",
+      "confidence": "low"
+    }
+  ],
+  "verdict": "Not ready to merge. The merge of main removed the voidVisit handling, so visit deletion (O3-5459's actual symptom) still depends on @Handler tie-break order. The purge half works and is tested.",
+  "what_i_swept": "Read the PR body, both ticket snapshots and the review conversation. Checked diff stat main...HEAD against main HEAD (identical, 3 files +170). Diffed the approved commit 36b2040 against head to see what the merge changed. Read the full advice, its test, config.xml, and main's VisitWithQueueEntriesSaveHandler, Patient*VoidHandler/UnvoidHandler and VisitWithQueueEntriesSaveHandlerTest. Outward trace into core 2.7.4: HandlerUtil.getHandlersForType, ServiceContext.getRegisteredComponents/addAdvice, Handler.order default, BaseVoidHandler, RequiredDataAdvice.before, VisitServiceImpl.voidVisit/purgeVisit, the visitService TransactionProxyFactoryBean (added advice runs inside the transaction, after authorization). Webservices VisitResource1_9 delete and purge callers. liquibase FKs referencing visit and queue_entry. Ran the advice and save-handler tests at head (9/9 pass), plus one mutation probe on handler order.",
+  "could_not_verify": [
+    "The live RefApp handler ordering at this head: no RefApp stack was run. The ordering dependency was shown by forcing the tie-break in the integration test, and the RefApp outcome comes from the ticket's and reviewer's live verification of the same unchanged guard.",
+    "F4 (legacy visit_queue_entries rows blocking purge): needs a MySQL database upgraded from a pre-2023 queue schema. H2 tests do not create the table."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 found F1 (from the merge-commit diff, confirmed by the order probe). Pass 2 covered tests, description and FK/purge transactionality, which added F2, F3 and F4. Pass 3 covered the authorization and transaction placement of the advice, other VisitService purge* methods (guarded by the instanceof Visit check), and multi-entry purge (no self-FK on queue_entry), and found nothing new. The probe mutated VisitWithQueueEntriesSaveHandler.java and was restored with git checkout; git status --porcelain is clean."
+}

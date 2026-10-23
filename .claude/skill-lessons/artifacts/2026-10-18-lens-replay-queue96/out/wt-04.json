@@ -1,0 +1,56 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 31,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "At this head the PR no longer touches voidVisit at all. Its Javadoc says VisitWithQueueEntriesSaveHandler already voids the entries on the voidVisit path, but that handler's void branch is guarded by visit.getVoided(), which holds only if core's BaseVoidHandler runs first. The ticket names exactly that handler-ordering dependency as the root cause of O3-5459, and it is still deployment-dependent.",
+      "failure_mode": "If merged as-is, the bug the ticket reports (deleting a visit in O3, which is REST DELETE -> VisitService.voidVisit, leaves the patient in the queue) stays unfixed on any deployment where VisitWithQueueEntriesSaveHandler sorts ahead of BaseVoidHandler. Both handlers use the default @Handler order (Integer.MAX_VALUE), so HandlerUtil's sort ties and falls back to ServiceContext's HashMap iteration over every VoidHandler bean name, which changes with how many VoidHandler beans the installed modules contribute. The entry stays silently un-voided, and CI cannot catch it because the 7-bean test context happens to order the handlers correctly. The merge commit ae7f8fa dropped the PR's original voidVisit branch (in 39195a0, which the ticket comment says was verified live on the RefApp) and replaced it with this Javadoc. The PR description still says the advice intercepts voidVisit. Recommended fix: make the void cascade order-independent, the way the sibling PatientWithQueueEntriesVoidHandler does, by using the VoidHandler's (user, date, reason) arguments instead of reading visit.getVoided(). Restoring the voidVisit branch in this advice would also work.",
+      "evidence": "Read core 2.7.4 HandlerUtil.getHandlersForType (a stable sort by Handler.order only) and ServiceContext.getRegisteredComponents (`new HashMap<>(context.getBeansOfType(type))`). BaseVoidHandler is @Handler(supports = Voidable.class) and VisitWithQueueEntriesSaveHandler is @Handler(supports = Visit.class), both with the default order. The handler's void branch is at VisitWithQueueEntriesSaveHandler.java:62 and is unchanged by O3-5955 (git show bdfaa72). Ran a scratch integration test against the real Spring context (since deleted): it printed 7 VoidHandler beans with order [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler], and voidVisit voided entry 3 (entryVoided=true). After registering 17 no-op VoidHandler singletons (24 beans in total) and clearing HandlerUtil's cache, the order became [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler], and visitService.voidVisit(visit, \"deleted\") returned visitVoided=true with entryVoided=false, failing the assertion. A java.util.HashMap simulation over the real bean names reproduced the 7-bean order (calibration) and flips once there are 24 or more beans. REST VisitResource1_9.delete calls voidVisit (webservices checkout HEAD). git diff 36b2040 ae7f8fa shows the merge removed the voidVisit branch.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 52,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The advice proxies Manage Queue Entries, but QueueEntryService.purgeQueueEntry is @Authorized(PURGE_QUEUE_ENTRIES), so purging a visit that has queue entries still fails for any non-superuser who holds Purge Visits but not Purge Queue Entries. The comment at line 49 states the opposite intent.",
+      "failure_mode": "If merged as-is, a non-admin user with Purge Visits who purges a visit that has queue entries gets APIAuthenticationException 'Privileges required: Purge Queue Entries', so the purge half of the fix only works for superusers. The PR's tests run as admin and cannot see this. Fix: proxy PrivilegeConstants.PURGE_QUEUE_ENTRIES (Manage Queue Entries is not needed on this path) in both the add and the remove calls.",
+      "evidence": "QueueEntryService.java:132 is @Authorized({ PrivilegeConstants.PURGE_QUEUE_ENTRIES }) on purgeQueueEntry. Added a temporary test method (since reverted with git checkout): Context.becomeUser(\"3-4\") (non-superuser), proxied PURGE_VISITS and GET_ENCOUNTERS, then called visitService.purgeVisit(visit) and flushed. Output: 'PROBE purge FAILED org.openmrs.api.APIAuthenticationException: Privileges required: Purge Queue Entries'. As a control, the same test with PURGE_QUEUE_ENTRIES also proxied printed 'PROBE purge OK' and the test passed.",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": "integration-tests/src/test/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdviceTest.java",
+      "line": 75,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "Neither test flushes after purgeVisit, so neither one exercises the queue_entry -> visit foreign key the advice exists for. Without the advice, purgeVisit still 'succeeds' in the test session and only the entry-still-present assertion fails.",
+      "failure_mode": "",
+      "evidence": "With the Context.addAdvice line disabled, both tests failed at the assertFalse(...isPresent()) line (VisitWithQueueEntriesDeleteAdviceTest.java:78), and assertNull(visitService.getVisit(visitId)) passed, so the visit delete never reached the DB. After adding Context.flushSession() after each purgeVisit: with the advice, 2/2 passed; without it, 2/2 errored with 'Referential integrity constraint violation: FK...: PUBLIC.QUEUE_ENTRY FOREIGN KEY(VISIT_ID) REFERENCES PUBLIC.VISIT(VISIT_ID)'. The probe edits were reverted.",
+      "confidence": "high"
+    },
+    {
+      "id": "F4",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 33,
+      "where": "inline",
+      "disposition": "nit",
+      "claim": "The Javadoc says the visit's void stamps let 'an unvoid' tell the entries apart, but nothing restores queue entries when a visit is unvoided. The only UnvoidHandler in the module supports Patient, so the sentence describes behaviour that doesn't exist (the ticket lists unvoidVisit as a follow-up).",
+      "failure_mode": "",
+      "evidence": "grep in api/src/main/java: only VisitWithQueueEntriesSaveHandler has @Handler(supports = Visit.class), and PatientWithQueueEntriesUnvoidHandler is @Handler(supports = Patient.class). The ticket comment from 2026-07-03 lists 'handle unvoidVisit' as a follow-up.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Not ready to merge: since the merge of main, the PR only handles purge, and leaves the ticket's actual symptom (voidVisit through REST delete) relying on the handler-ordering accident the ticket identifies as the root cause.",
+  "what_i_swept": "Diff stat checked (3 files, +170/-0; same with two-dot and three-dot). Read the ticket, its comments and O3-5461, and compared the PR description and the ticket's 'fix' comment against the head. That surfaced that merge ae7f8fa rewrote the advice to purge-only (git diff 36b2040 ae7f8fa). Solution fit: traced the O3 delete path (REST VisitResource1_9.delete -> voidVisit) into core 2.7.4's RequiredDataAdvice/HandlerUtil/ServiceContext ordering, and drove it with scratch tests at 7 and 24 VoidHandler beans. Purge path: confirmed core's ModuleFactory turns config.xml <advice> into Context.addAdvice, and that addAdvice appends after the TransactionInterceptor of visitService's TransactionProxyFactoryBean, so a later Visit.purge.inUse failure rolls back the purged entries. Checked liquibase for other FKs to queue_entry (legacy visit_queue_entries was dropped in drop_visit_queue_entries_20231025), and checked the DAO's voided filtering for already-voided visits and patients. Privileges: compared the proxied privileges with @Authorized on purgeQueueEntry and drove it as a non-superuser. Tests: ran VisitWithQueueEntriesDeleteAdviceTest at head (2/2 pass), with the advice disabled (fails), and with and without a flush. Compared against the sibling PatientWithQueueEntriesVoidHandler (O3-5955), which is order-independent. Performance and security beyond privileges: the advice is a string compare per VisitService call, which is negligible, and authorization runs before it.",
+  "could_not_verify": [
+    "I did not run a Reference Application stack, so I can't confirm how many VoidHandler beans a RefApp deployment registers, or that it lands in the flipped order. That RefApp fails comes from the 2026-07-03 ticket comment. What I verified is the mechanism: the order depends on the VoidHandler bean count, and voidVisit leaves the entry un-voided once the order flips.",
+    "I checked REST VisitResource1_9.delete -> voidVisit in the local webservices checkout at its HEAD, not at the exact REST version a RefApp ships."
+  ],
+  "passes_run": 3,
+  "notes": "The ticket comment saying the PR was 'verified live' and 'approved' describes the pre-merge version (39195a0/36b2040), which intercepted voidVisit. The merge commit ae7f8fa silently removed that half and replaced it with a Javadoc claim that the handler already covers it. The build's formatter rewrites test sources in place, so watch for that when probing. All scratch files were removed, probe edits were reverted with git checkout, and git status --porcelain is clean."
+}

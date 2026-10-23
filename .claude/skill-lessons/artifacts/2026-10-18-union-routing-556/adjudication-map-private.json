@@ -1,0 +1,187 @@
+{
+ "E001": {
+  "wt": "wt-06",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E002": {
+  "wt": "wt-02",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E003": {
+  "wt": "wt-06",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E004": {
+  "wt": "wt-05",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E005": {
+  "wt": "wt-07",
+  "kind": "unverified-risk",
+  "id": "cnv2"
+ },
+ "E006": {
+  "wt": "wt-08",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E007": {
+  "wt": "wt-02",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E008": {
+  "wt": "wt-07",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E009": {
+  "wt": "wt-05",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E010": {
+  "wt": "wt-01",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E011": {
+  "wt": "wt-07",
+  "kind": "finding",
+  "id": "F2"
+ },
+ "E012": {
+  "wt": "wt-03",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E013": {
+  "wt": "wt-01",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E014": {
+  "wt": "wt-08",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E015": {
+  "wt": "wt-08",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E016": {
+  "wt": "wt-06",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E017": {
+  "wt": "wt-03",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E018": {
+  "wt": "wt-04",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E019": {
+  "wt": "wt-05",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E020": {
+  "wt": "wt-08",
+  "kind": "finding",
+  "id": "F2"
+ },
+ "E021": {
+  "wt": "wt-02",
+  "kind": "unverified-risk",
+  "id": "cnv2"
+ },
+ "E022": {
+  "wt": "wt-05",
+  "kind": "finding",
+  "id": "F2"
+ },
+ "E023": {
+  "wt": "wt-09",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E024": {
+  "wt": "wt-03",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E025": {
+  "wt": "wt-03",
+  "kind": "unverified-risk",
+  "id": "cnv2"
+ },
+ "E026": {
+  "wt": "wt-07",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E027": {
+  "wt": "wt-07",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E028": {
+  "wt": "wt-08",
+  "kind": "unverified-risk",
+  "id": "cnv2"
+ },
+ "E029": {
+  "wt": "wt-04",
+  "kind": "unverified-risk",
+  "id": "cnv2"
+ },
+ "E030": {
+  "wt": "wt-05",
+  "kind": "unverified-risk",
+  "id": "cnv2"
+ },
+ "E031": {
+  "wt": "wt-09",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E032": {
+  "wt": "wt-02",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E033": {
+  "wt": "wt-04",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ },
+ "E034": {
+  "wt": "wt-01",
+  "kind": "finding",
+  "id": "F1"
+ },
+ "E035": {
+  "wt": "wt-04",
+  "kind": "unverified-risk",
+  "id": "cnv1"
+ },
+ "E036": {
+  "wt": "wt-08",
+  "kind": "unverified-risk",
+  "id": "cnv3"
+ },
+ "E037": {
+  "wt": "wt-09",
+  "kind": "unverified-risk",
+  "id": "cnv0"
+ }
+}

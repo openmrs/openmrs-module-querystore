@@ -1,0 +1,48 @@
+{
+ "key": "O3-5461",
+ "summary": "Patient summary banner retains stale queue entry context after visit deletion",
+ "description": "The patient summary page still displays the queue stage (Outpatient Consultation) and the queue priority (Urgent) after visit deletion. These should be removed when the visit is deleted. \n\n* Related tickets\n** [https://openmrs.atlassian.net/browse/O3-5459|https://openmrs.atlassian.net/browse/O3-5459|smart-link] \n** [https://openmrs.atlassian.net/browse/O3-5460|https://openmrs.atlassian.net/browse/O3-5460|smart-link] \n\n!image-20260303-083720.png|width=687,alt=\"image-20260303-083720.png\"!",
+ "comments_before_2026-09-16T11:16:58Z": [
+  {
+   "author": "fempingu",
+   "created": "2026-03-13T04:28:44.612+1100",
+   "body": "I have tested it in dev3 and test3, the details of the visit are deleted from the patient and the visit delete. Looks like its already fixed."
+  },
+  {
+   "author": "Veronica Muthee",
+   "created": "2026-03-16T18:20:10.939+1100",
+   "body": "[~accountid:712020:91a58c22-269a-422c-82a1-e1fbe9ef0912] \n\n{{Not yet fixed}}, and have added the steps to reproduce:\n\n# Select one patient with no active visit\n# Add a visit\n# Add patient to a queue\n# Call \u2192 serve patient\n# Then delete the active visit\n# Check the patient banner and try to transition\n\n!image-20260316-071908.png|width=747,alt=\"image-20260316-071908.png\"!\n\n!image-20260316-072003.png|width=747,alt=\"image-20260316-072003.png\"!"
+  },
+  {
+   "author": "fempingu",
+   "created": "2026-03-17T05:39:54.476+1100",
+   "body": "Thank you [~accountid:712020:8065febe-de94-482d-b210-63c409a6e06b] I was able to reproduce this issue on *dev3* following the above steps. After adding the patient to the queue, selecting 'Serve Patient,' and then deleting the active visit, the banner still displays the stale queue stage and priority. I have assigned to myself to proceed with this issue. "
+  },
+  {
+   "author": "Veronica Muthee",
+   "created": "2026-03-17T16:10:30.242+1100",
+   "body": "[~accountid:712020:91a58c22-269a-422c-82a1-e1fbe9ef0912] Thanks. In the spirit of collaboration, please avoid unassigning tickets from others unless you've checked in with them first and they've confirmed they're happy to hand it over."
+  },
+  {
+   "author": "Kalemeera Collins",
+   "created": "2026-03-18T01:01:43.663+1100",
+   "body": "Hello [~accountid:712020:8065febe-de94-482d-b210-63c409a6e06b] and [~accountid:712020:91a58c22-269a-422c-82a1-e1fbe9ef0912]  is there anyone working on this ticket or i take it up"
+  },
+  {
+   "author": "Veronica Muthee",
+   "created": "2026-03-18T02:10:11.161+1100",
+   "body": "[~accountid:712020:7dfe58a9-daa9-4c4e-a4ee-223b5829689a] can you confirm if you are working on this ticket please. "
+  },
+  {
+   "author": "fempingu",
+   "created": "2026-03-18T02:58:37.020+1100",
+   "body": "Yes , I made a mistake, I assumed no one is working on this and assigned it myself. [~accountid:712020:7dfe58a9-daa9-4c4e-a4ee-223b5829689a] Can you please confirm if you are working on this."
+  },
+  {
+   "author": "abhee",
+   "created": "2026-03-18T04:29:48.713+1100",
+   "body": "Hello [~accountid:712020:91a58c22-269a-422c-82a1-e1fbe9ef0912]  and [~accountid:712020:67202037-8277-46b7-a63b-a5f4a5937531] ,\n\nI am actively investigating the root cause of this issue. It appears to be related to the other linked tickets, so once those are resolved, I will proceed with raising the PR.\nthanks"
+  }
+ ],
+ "note": "Snapshot as it stood before the review round being replayed. Status and later comments omitted."
+}

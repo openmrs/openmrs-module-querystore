@@ -1,0 +1,45 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 41,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The merge commit ae7f8fa dropped the advice's voidVisit branch and now relies on VisitWithQueueEntriesSaveHandler to void entries, but that handler's void branch is guarded by visit.getVoided(), which is only true when core's BaseVoidHandler happens to run first. That is the HashMap-order tie that causes O3-5459, so at this head the PR no longer fixes visit deletion, the scenario the ticket reports.",
+      "failure_mode": "If merged as-is, deleting a visit (REST DELETE /visit/{uuid} -> VisitService.voidVisit) on any deployment where the tied @Handler order puts the queue handler ahead of BaseVoidHandler (the Reference Application, per the live verification in the ticket and the approving review) leaves the queue entry active, so the patient stays in the service queue. No exception is thrown, and CI stays green because the test context happens to resolve the tie the favourable way.",
+      "evidence": "git diff 36b2040 HEAD shows the merge removed the voidVisit branch and added the Javadoc 'Voiding needs no advice' (advice:30). Core 2.7.4 source: VisitServiceImpl.voidVisit:201 calls dao.saveVisit directly; RequiredDataAdvice:159-163 runs VoidHandlers from HandlerUtil.getHandlersForType, which sorts by @Handler order (default Integer.MAX_VALUE for both BaseVoidHandler and the queue handler), and ties keep the order of ServiceContext.getRegisteredComponents, which iterates a HashMap of bean names (ServiceContext.java:919-926). Mutation probe: set @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler to simulate the adverse order and ran -pl integration-tests -am -Dtest=VisitWithQueueEntriesSaveHandlerTest. Baseline was 7/7 pass; the probe gave 3 failures, including shouldVoidQueueEntriesWhenVisitIsVoidedThroughVoidVisit:128 (assertTrue(queueEntry.getVoided())) and shouldVoidQueueEntriesForUserWithoutQueuePrivileges:151. Fix probe under the same adverse order: restored a voidVisit branch in the advice that copies the visit's voidReason, voidedBy and dateVoided, and voidVisit then voided entry 3 with the visit's reason, dateVoided and voidedBy (3/3 pass). The advice runs after RequiredDataAdvice has stamped the visit, so it is order-independent. The sibling PatientWithQueueEntriesVoidHandler reads the handler arguments rather than patient.getVoided() for the same reason. All probes were reverted with git checkout.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 52,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The advice proxies Get and Manage Queue Entries, but the call it makes, QueueEntryService.purgeQueueEntry, is @Authorized(Purge Queue Entries). The Manage proxy goes unused and the needed privilege is never granted, so the comment 'grant them for the duration of this cascade' does not hold for purge.",
+      "failure_mode": "",
+      "evidence": "QueueEntryService.java:132 @Authorized({ PrivilegeConstants.PURGE_QUEUE_ENTRIES }). Probe test: as user 3-4 with proxied PURGE_VISITS, GET_ENCOUNTERS and GET_VISITS only, visitService.purgeVisit(visit) threw 'APIAuthenticationException: Privileges required: Purge Queue Entries' from the advice. Not blocking: liquibase.xml:657-663 grants Purge Queue Entries to roles holding 'Delete Visits', so most purgers already hold it. Core's purgeVisit, however, requires 'Purge Visits' (VisitService.java:226), which is a different privilege. Fix: proxy PURGE_QUEUE_ENTRIES in place of MANAGE_QUEUE_ENTRIES. The probe test was reverted.",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": null,
+      "line": null,
+      "where": "PR-level",
+      "disposition": "question",
+      "claim": "The PR description, Dennis's approval (on 36b2040) and the ticket's fix-status comment all describe advice that voids entries on voidVisit. The merge commit 'Merge branch main' silently removed that behaviour, so the approval no longer covers the head. Was dropping the void branch intentional, and if so, what makes the handler's void path order-independent now?",
+      "failure_mode": "",
+      "evidence": "Read pr96-body-at-round1.md ('voidVisit(): voids all associated queue entries'), the review JSON (APPROVED, commit_id 36b2040) and O3-5459's comment of 2026-07-03, then git diff 36b2040 HEAD -- VisitWithQueueEntriesDeleteAdvice.java. git log main..HEAD shows the change arrived only in merge ae7f8fa.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Not ready to merge: at this head the advice only handles purge, and visit deletion relies on the handler whose ordering-dependent visit.getVoided() guard is the O3-5459 root cause, so the reported bug survives wherever that handler-order tie falls the wrong way.",
+  "what_i_swept": "Diff stat (3 files, +170/-0, identical for main...HEAD and main HEAD, so no drift). Read the ticket, the linked ticket, the PR body and the review conversation. Diffed the approved commit 36b2040 against head and found that the merge commit rewrote the advice. Traced outward into core 2.7.4: VisitServiceImpl.voidVisit and purgeVisit, RequiredDataAdvice's void branch, HandlerUtil ordering, ServiceContext.getRegisteredComponents and BaseVoidHandler. Compared against the sibling PatientWithQueueEntriesVoidHandler from main. Checked the purge path's privileges (QueueEntryService @Authorized), the liquibase privilege grants, and the FKs onto queue_entry (no self-reference; the legacy visit_queue_entries table is dropped). Ran a baseline of VisitWithQueueEntriesSaveHandlerTest plus DeleteAdviceTest (7+2 pass), a handler-order mutation probe (3 failures), a fix probe that restores the advice void branch under adverse order (pass), and a privilege probe for purge (APIAuthenticationException). Dimensions: solution fit, correctness, test coverage, security/authorization, performance (the advice runs a string compare on every VisitService call, which is negligible) and conventions.",
+  "could_not_verify": [
+    "Did not deploy on a Reference Application stack to observe the real HashMap tie order. Adverse ordering was simulated with @Handler(order = 1); that the RefApp falls the adverse way rests on the approving reviewer's live verification of the same guard in queue 3.0.0 and on the ticket comment, not on my own run.",
+    "The fix probe's dateVoided equality could in principle coincide at millisecond resolution even if the visit were unstamped when the advice ran. I did not capture the probe's log line showing visit.getVoided() inside the advice."
+  ],
+  "passes_run": 3,
+  "notes": "The substantive regression sits entirely in the merge commit ae7f8fa, which reads like a routine 'merge main' but replaced the reviewed void behaviour with a Javadoc claim the code does not uphold. The new main test shouldVoidQueueEntriesWhenVisitIsVoidedThroughVoidVisit says it 'pins the outcome', but it can only pin the test context's bean-name hash order. Purge handling itself is sound apart from F2. unvoidVisit stays unhandled, which was already raised as a follow-up and is not re-raised here. The working copy was left clean (git status --porcelain is empty)."
+}

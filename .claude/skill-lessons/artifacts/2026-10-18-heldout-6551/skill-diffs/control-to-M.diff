@@ -1,0 +1,11 @@
+--- /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-queue/5743c726-b776-450f-a755-a07953eaf17e/scratchpad/replay-6551/skills/x1/SKILL.md	2026-10-18 16:09:29
++++ /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-queue/5743c726-b776-450f-a755-a07953eaf17e/scratchpad/replay-6551/skills/x2/SKILL.md	2026-10-18 16:09:29
+@@ -107,7 +107,7 @@
+ 
+ ### Test coverage is a review dimension
+ 
+-For each behavior change the PR introduces, name the test that exercises it — one that would fail on the base branch, passes on the PR, and asserts the **runtime effect**, not a proxy ("the generated string looks right" or "mirrors an existing pattern" verifies the shape or the sibling, not the behavior). A behavior change with no such test is a finding, even when the code looks obviously correct. If part of the path genuinely can't be tested, name the specific blocked sub-path — and confirm the adjacent runnable path is still exercised.
++For each behavior change the PR introduces, name the test that exercises it — one that would fail on the base branch, passes on the PR, and asserts the **runtime effect**, not a proxy ("the generated string looks right" or "mirrors an existing pattern" verifies the shape or the sibling, not the behavior). A behavior change with no such test is a finding, even when the code looks obviously correct. If part of the path genuinely can't be tested, name the specific blocked sub-path — and confirm the adjacent runnable path is still exercised. Failing on the base branch reverts the whole change at once, so a test can clear that bar while one new condition, guard or registration is pinned by nothing. For each one the PR adds, delete or invert it alone and name the test that goes red; one the suite survives is a finding.
+ 
+ ### Convergence
+ 

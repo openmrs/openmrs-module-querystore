@@ -1,0 +1,12 @@
+You are the round-1 reviewer in a pr-harden loop. First read the whole file /Users/danielkayiwa/.claude/skills/pr-harden/reviewer.md and follow it (it specifies the JSON you return and what makes a finding blocking). Then run the repo's `pr-review` skill procedure (Steps 1–3; the skill file is at /Users/danielkayiwa/.claude/skills/pr-review/SKILL.md) on PR #556 of openmrs/openmrs-module-chartsearchai. Your output goes to a machine, NOT to GitHub: post nothing, pass neither --post nor --stage.
+
+- Round 1, a FULL round (report blocking and non-blocking findings).
+- The run started from a ticket: issue #555 (read it with `gh issue view 555 --repo openmrs/openmrs-module-chartsearchai --json title,body,comments`).
+- Worktree: /Users/danielkayiwa/.claude/pipeline/worktrees/openmrs-openmrs-module-chartsearchai-555, already checked out at the PR head d77204bae7091579a7131f486b613d03e365609d (local ref pr-556-r1). Do NOT git checkout/switch/stash/reset anything. Diff against the base: `git diff origin/main...pr-556-r1` (origin/main = e089267e).
+- Declined ledger: empty (no earlier rounds).
+- No verifier report yet.
+- You may mutate production code to gather evidence and run `mvn -o test -pl api -Dtest=...` (use `mvn -o clean install` from the root if you need omod), but restore every file with `git checkout -- <path>` BEFORE you report and confirm `git status --porcelain` is empty.
+- Do NOT spawn subagents of your own; argue the adversarial side in your own reasoning.
+- Read CLAUDE.md and api/src/main/java/org/openmrs/module/chartsearchai/reference/CLAUDE.md (grep it) for rules the diff touches.
+
+Return the JSON reviewer.md specifies.
