@@ -1395,7 +1395,9 @@ budgeting, and question interpretation.
    performs **mechanical selection only**; it does not interpret the question.
 2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
    highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
-   `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`) → `exact` (explicit
+   `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`, `RECURRENCE` or `RELAPSE`,
+   the statuses core's `ConditionService.getActiveConditions` counts as active since TRUNK-6170) →
+   `exact` (explicit
    UUIDs, dates (also matched against the day of an ISO date-time such as a visit's
    `end_date_time`), namespaced codes matched against a record's `mapping_codes`, labeled identifiers,
    and quoted phrases in straight or curly quotes, each starting and ending on a non-space) → `typed` (resource
