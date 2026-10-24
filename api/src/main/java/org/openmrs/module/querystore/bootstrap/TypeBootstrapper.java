@@ -177,8 +177,22 @@ public abstract class TypeBootstrapper<T> {
 		}
 	}
 
+	/**
+	 * Whether this type's version changes whenever its content does, so a record stored at its
+	 * current version can be skipped by a top-up. Orders answer false: {@code Order.hbm.xml} maps no
+	 * {@code dateChanged}, so stopping an order (revise, discontinue) leaves its version at
+	 * {@code dateCreated}, and core raises no event for the stopped order (openmrs-core #6197). A
+	 * top-up must rewrite such a record or the stopped order keeps reading as active.
+	 */
+	protected boolean versionTracksContent() {
+		return true;
+	}
+
 	/** The entities whose stored version differs from their own, or that are not stored at all. */
 	private List<T> withoutStoredAtCurrentVersion(List<T> entities, QueryStoreService service) {
+		if (!versionTracksContent()) {
+			return entities;
+		}
 		List<String> uuids = new ArrayList<String>(entities.size());
 		for (T entity : entities) {
 			String uuid = getUuid(entity);

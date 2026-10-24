@@ -29,6 +29,12 @@ public class DrugOrderBootstrapper extends HibernateTypeBootstrapper<DrugOrder> 
 	}
 
 	@Override
+	protected boolean versionTracksContent() {
+		// Stopping an order leaves its version at dateCreated; see TypeBootstrapper#versionTracksContent.
+		return false;
+	}
+
+	@Override
 	protected String cursorDateExpr() {
 		// Order.hbm.xml does not map dateChanged; cursor uses dateCreated alone.
 		return "e.dateCreated";
