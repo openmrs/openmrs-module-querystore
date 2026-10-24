@@ -241,6 +241,29 @@ public class ContextSliceTest {
 		assertNotEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("cond-old"), "got " + tiers);
 	}
 
+	/** A type interpretation derives is withheld like a requested one, never left as an empty tier. */
+	@Test
+	public void interpretMode_withholdsADerivedTypeTheCallerCannotRead() {
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setInterpretQuestion(true);
+		org.openmrs.api.context.Context.setUserContext(new org.openmrs.api.context.UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !org.openmrs.util.PrivilegeConstants.GET_ALLERGIES.equals(privilege);
+			}
+		});
+		ContextSlice slice;
+		try {
+			slice = service.getContextSlice(PATIENT, "Any allergies?", request);
+		}
+		finally {
+			org.openmrs.api.context.Context.clearUserContext();
+		}
+
+		assertEquals(Collections.singleton("allergy"), slice.getWithheldTypes());
+		assertTrue(slice.getEffectiveTypes().isEmpty());
+	}
+
 	@Test
 	public void mandatoryCore_ridesEverySlice_regardlessOfTypesAndSimilarity() {
 		JsonNode fixtureCase = fixtureCase("context_policy", "context.enumerated-medications-are-complete");
@@ -702,6 +725,81 @@ public class ContextSliceTest {
 		ContextSlice slice = service.getContextSlice(PATIENT, "anything?", request);
 
 		assertTrue(slice.isChartTruncated(), "a backend-reported incomplete chart must be surfaced");
+	}
+
+	@Test
+	public void interpretMode_derivesTypesAndTemporalServerSide() {
+		// ADR Decision 18: interpretQuestion makes QueryStore authoritative for the typed scope
+		// and temporal flag while preserving the caller's explicit additions.
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setInterpretQuestion(true);
+		request.setRecencyAnchorSize(3);
+
+		ContextSlice slice = service.getContextSlice(PATIENT,
+		        "What medications is the patient currently on?", request);
+
+		Map<String, String> tiers = tiersByUuid(slice);
+		assertEquals(QueryStoreConstants.TIER_TYPED, tiers.get("med-1"));
+		assertEquals(QueryStoreConstants.TIER_TYPED, tiers.get("med-2"));
+		assertEquals(QueryStoreConstants.TIER_RECENCY_ANCHOR, tiers.get("recent-1"),
+		        "\"currently\" is a temporal cue — the anchor applies; got " + tiers);
+		assertTrue(slice.getEffectiveTypes().contains("drug_order"),
+		        "the derived interpretation is traced on the slice; got " + slice.getEffectiveTypes());
+		assertTrue(slice.isTemporalApplied());
+	}
+
+	@Test
+	public void interpretMode_keepsTheCallersTemporalFlag() {
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), true);
+		request.setInterpretQuestion(true);
+		request.setRecencyAnchorSize(3);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "Any eye problems?", request);
+
+		assertTrue(slice.isTemporalApplied());
+		assertEquals(QueryStoreConstants.TIER_RECENCY_ANCHOR, tiersByUuid(slice).get("recent-1"));
+	}
+
+	@Test
+	public void interpretMode_unionsCallerTypes_withDerivedOnes() {
+		// Module-contributed scopes (chartsearchai QueryScopeContributor SPI) remain caller
+		// additions — unioned with the derived types, never replaced.
+		ContextSliceRequest request = new ContextSliceRequest(
+		        new HashSet<String>(Collections.singletonList("billing_record")), false);
+		request.setInterpretQuestion(true);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "What medications is the patient on?", request);
+
+		assertTrue(slice.getEffectiveTypes().contains("billing_record"),
+		        "caller types survive; got " + slice.getEffectiveTypes());
+		assertTrue(slice.getEffectiveTypes().contains("drug_order"),
+		        "derived types join; got " + slice.getEffectiveTypes());
+	}
+
+	@Test
+	public void similarityLeg_preprocessesTheQuestion_ownedByTheRetrievalStore() {
+		// Retrieval-quality preprocessing (the patient left out, lab panels expanded, natural language
+		// preserved) runs HERE on every slice, at the owner of the index and embedder — callers send
+		// the raw question.
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		service.getContextSlice(PATIENT, "results of the last BMP?", request);
+
+		assertTrue(backend.lastQueryText.contains("basic metabolic panel"),
+		        "the panel abbreviation must be expanded for retrieval; got " + backend.lastQueryText);
+		assertTrue(backend.lastQueryText.contains("results of the last"),
+		        "natural language context must be preserved for dense embeddings; got " + backend.lastQueryText);
+	}
+
+	@Test
+	public void similarityLeg_leavesOutThePatientTheWholeChartIsAbout() {
+		// Records saying "Patient reported ..." matched the word itself and filled the similarity tier
+		// ahead of the kidney-function labs a kidney question needs.
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+
+		service.getContextSlice(PATIENT, "Does the patient have any kidney problems?", request);
+
+		assertEquals("Does have any kidney problems?", backend.lastQueryText);
 	}
 
 	/** Scripted backend: canned chart + canned similarity hits, everything else inert. */

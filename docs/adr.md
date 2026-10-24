@@ -30,6 +30,7 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 15. [Full-Chart Retrieval — Unfiltered Per-Patient Enumeration](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration)
 16. [REST Read API — `patientrecord` Resource](#decision-16-rest-read-api--patientrecord-resource)
 17. [Context-Slice Read — Tiered Record Selection](#decision-17-context-slice-read--tiered-record-selection)
+18. [Context-Slice Question Interpretation and Retrieval Preprocessing](#decision-18-context-slice-question-interpretation-and-retrieval-preprocessing)
 
 [Open Questions](#open-questions)
 
@@ -1392,7 +1393,8 @@ budgeting, and question interpretation.
    The request carries the caller's question interpretation — `types` (resource types whose
    records must be typed-complete) and `temporal` (whether a recency anchor applies), plus
    bounded knobs `recencyAnchorSize` (default 15) and `similarityLimit` (default 30). Querystore
-   performs **mechanical selection only**; it does not interpret the question.
+   performs **mechanical selection only**; it interprets the question only when the caller opts
+   in ([Decision 18](#decision-18-context-slice-question-interpretation-and-retrieval-preprocessing)).
 2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
    highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
    `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`, `RECURRENCE` or `RELAPSE`,
@@ -1416,7 +1418,8 @@ budgeting, and question interpretation.
    or a failed cold touch may have omitted records) so an incomplete chart is never silently
    absorbed into a "complete" slice.
 4. **Explicit non-goals, unchanged from Decisions 14/15/16**: no prompt composition, no token
-   or model awareness, no question NLU, no result the caller could not read via
+   or model awareness, no question NLU (Decision 18's opt-in interpretation is mechanical cue
+   matching), no result the caller could not read via
    `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling
    reads. The REST surface (Decision 16) exposes the slice additively via
    `patientrecord?...&mode=context&types=...&temporal=...`, with each record carrying its
@@ -1450,13 +1453,70 @@ budgeting, and question interpretation.
 ### Consequences
 - The v1 read surface grows to four methods; REST wraps all four uniformly (Decision 16 shape).
 - ChartSearchAI's `buildScoped` and the hub's querystore source become thin adapters over this
-  method; their intent-routing and temporal detection remain caller-side, so interpretation drift
-  between engines is still possible.
+  method. A caller that does not opt into Decision 18's interpretation keeps its intent-routing and
+  temporal detection caller-side, so interpretation drift between engines remains possible for
+  such callers.
 - Active-condition detection reads the `clinical_status` metadata the condition serializer
   already emits; `diagnosis` documents without that metadata simply never match the mandatory
   tier (no text sniffing).
 - The `panel` tier is additive beyond the four policy tiers above it; it makes family
   completion honest instead of mislabeling joined members as `typed`.
+
+---
+
+## Decision 18: Context-Slice Question Interpretation and Retrieval Preprocessing
+
+### Status
+Accepted
+
+### Context
+[Decision 17](#decision-17-context-slice-read--tiered-record-selection) kept question
+interpretation caller-side: each consumer derived the typed scope and the temporal flag itself and
+passed them as request parameters. The expected consequence followed: the two consumers'
+interpreters and their retrieval preprocessing drifted (bundled
+sent a stopword-stripped, panel-expanded question with its own topK; the hub sent the raw question
+with the server default), producing systematically different similarity tiers for identical
+questions. Query normalization is retrieval quality, which this module owns.
+
+### Decision
+1. **`ContextSliceRequest.interpretQuestion`**: when set, querystore derives the typed scope and
+   temporal flag from the question via conservative word-boundary cues (mechanical matching, not
+   NLU), UNIONs the caller's `types` (module-contributed scopes survive), and ORs the caller's
+   `temporal`. Everyday idioms that share a word with a cue (`in order to`, `under what
+   conditions`, `condition of`, `last name`) are blanked before matching, since each false cue
+   pulls whole types into the protected `typed` tier. The REST twin exposes `interpret=true`.
+   Explicit caller parameters remain fully supported. Interpretation is opt-in and additive:
+   derived types only add to the caller's, so a caller cannot remove one; a caller that wants only
+   its own scope leaves `interpretQuestion` unset.
+2. **The slice's similarity leg preprocesses the question server-side**: it leaves out the
+   patient the whole chart is about ("the patient", "this patient", "patient's") and expands
+   lab-panel abbreviations, always and idempotently. A caller sending the raw question gets the
+   same retrieval text. Clients must not strip stopwords: QueryStore cannot restore text removed
+   before the request. General stopword stripping is not done: it destroys the grammatical
+   context required by `multilingual-e5`'s self-attention (Decision 8), drops qualifiers such as
+   "well" and "poorly", and is unnecessary for BM25 (which applies IDF naturally). The patient is
+   the one exception because every record in a per-patient slice is about it, so the word tells
+   no record from another, while records that say "Patient reported ..." match it: on the HIV
+   dataset, "Does the patient have any kidney problems?" ranked twelve "Patient reported current
+   ... treatment: None" records first and none of the patient's three creatinine records, which
+   ranked first to third once the patient was left out (four patients checked). Only the English
+   article forms and the possessive are removed, so other languages keep their words.
+3. **`ContextSlice` traces the effective interpretation** (`effectiveTypes`, `temporalApplied`)
+   so consumers can log and audit what the selection actually used. The REST envelope repeats
+   those fields on every page together with `sliceId`, `chartSize`, and `chartTruncated`.
+
+### Rationale
+1. **Interpretation duplicated in two engines measurably drifted; one implementation cannot.**
+2. **Preprocessing is embedder-facing** — the same argument that placed the e5 pipeline here.
+3. **Opt-in keeps Decision 17's contract intact** for callers with their own interpretation.
+
+### Consequences
+- Both AI consumers switch to `interpretQuestion` + raw questions; their local cue routers and
+  query preprocessing become unused on the slice path (retained for their non-slice paths).
+- The cue tables live here now; extending a question class (new cue, new typed scope) is a
+  querystore change verified by its own tests, visible to every consumer at once.
+- Interpretation stays deliberately mechanical; upgrading it to anything smarter is a future
+  decision with its own evaluation, not an incremental edit.
 
 ---
 
