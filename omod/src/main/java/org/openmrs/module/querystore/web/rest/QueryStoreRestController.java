@@ -9,30 +9,43 @@
  */
 package org.openmrs.module.querystore.web.rest;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.StringUtils;
 import org.openmrs.api.APIAuthenticationException;
 import org.openmrs.api.APIException;
+import org.openmrs.api.PatientService;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.context.ContextAuthenticationException;
 import org.openmrs.module.querystore.api.QueryStoreService;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
+import org.openmrs.module.querystore.bootstrap.IncompleteProjectionException;
+import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
+import org.openmrs.module.webservices.rest.web.RestUtil;
 import org.openmrs.util.PrivilegeConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 /**
@@ -73,12 +86,181 @@ public class QueryStoreRestController {
 	public ResponseEntity<Object> getIndexingStatus() {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
+		BootstrapService bootstrap = bootstrapService();
 		BootstrapStatusReport report = BootstrapStatusReport.from(
-				Context.getService(BootstrapService.class).getStatus());
+				bootstrap.getStatus(), bootstrap.getResourceTypeNames());
 
 		// Response shape (keys + values) is produced and unit-tested in BootstrapStatusReport.toMap();
 		// the controller stays a thin adapter so the JSON contract isn't hand-typed untested here.
 		return new ResponseEntity<Object>(report.toMap(), HttpStatus.OK);
+	}
+
+	private static final int DEFAULT_LIMIT = 50;
+
+	private Integer injectedMaximumPageSize;
+
+	/**
+	 * Read endpoint over the query store's three read methods (ADR Decision 16):
+	 *
+	 * <pre>
+	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;            -&gt; full chart (getPatientChart), date desc, paged
+	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;q=&lt;text&gt; -&gt; hybrid-ranked top-K (searchByPatient)
+	 * GET /ws/rest/v1/querystore/patientrecord?q=&lt;text&gt;                  -&gt; cross-patient ranked top-K (search; coarse gate)
+	 * </pre>
+	 *
+	 * <p>Gated by {@code Get Patients} — the same privilege the read methods carry. The {@code embedding}
+	 * vector is never returned, and no {@code score} is emitted (relevance is list order plus a 1-based
+	 * {@code rank}). A full chart carries the materialized record count and pages in memory; a
+	 * backend-documented cap may omit older records. Ranked results are a top-K window (null totalCount).
+	 * The JSON shape is produced and unit-tested in {@link PatientRecordView}.
+	 */
+	@RequestMapping(value = "/patientrecord", method = RequestMethod.GET)
+	@ResponseBody
+	public ResponseEntity<Object> getPatientRecords(
+	        HttpServletRequest request,
+	        @RequestParam(value = "patient", required = false) String patient,
+	        @RequestParam(value = "q", required = false) String q,
+	        @RequestParam(value = "limit", required = false) Integer limit,
+	        @RequestParam(value = "startIndex", required = false) Integer startIndex,
+	        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
+		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
+
+		if (patient != null && StringUtils.isBlank(patient)) {
+			// A client whose patient variable came up empty asked for one patient's records; running the
+			// cross-patient search for it would hand it other patients' records, which carry no patientUuid.
+			return errorResponse(HttpStatus.BAD_REQUEST, "patient must not be blank");
+		}
+		String patientUuid = StringUtils.trimToNull(patient);
+		String query = StringUtils.trimToNull(q);
+		int from = startIndex == null ? 0 : startIndex.intValue();
+		int requestedSize = limit == null ? DEFAULT_LIMIT : limit.intValue();
+		if (requestedSize <= 0 || from < 0) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "limit must be > 0 and startIndex >= 0");
+		}
+		int maximum = maximumPageSize();
+		int size = Math.min(requestedSize, maximum);
+		if (patientUuid == null && query == null) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "patient or q is required");
+		}
+		// 404 a bogus patient up front — correct status, and it avoids a wasted cold-touch projection.
+		if (patientUuid != null && patientService().getPatientByUuid(patientUuid) == null) {
+			return errorResponse(HttpStatus.NOT_FOUND, "No patient with uuid '" + patientUuid + "'");
+		}
+		StringBuilder baseParams = new StringBuilder();
+		if (patientUuid != null) {
+			baseParams.append("patient=").append(PatientRecordView.encode(patientUuid)).append('&');
+		}
+		if (query != null) {
+			baseParams.append("q=").append(PatientRecordView.encode(query)).append('&');
+		}
+
+		boolean ranked = query != null;
+		if (ranked && from > maximum - size) {
+			return errorResponse(HttpStatus.BAD_REQUEST,
+			        "ranked result window must not exceed the OpenMRS maximum result count");
+		}
+		List<QueryDocument> page;
+		Integer totalCount;
+		String snapshotId = null;
+		String pageEtag = null;
+		Boolean chartTruncated = null;
+		Boolean projectionComplete = null;
+		if (patientUuid != null && query == null) {
+			// Full chart: enumerate (Decision 15 returns the whole set), then page in memory.
+			PatientChartRead chartRead = queryStoreService().getPatientChartRead(patientUuid);
+			List<QueryDocument> all = chartRead.getDocuments();
+			totalCount = Integer.valueOf(all.size());
+			chartTruncated = Boolean.valueOf(chartRead.isTruncated());
+			projectionComplete = Boolean.valueOf(chartRead.isProjectionComplete());
+			page = slice(all, from, size);
+			snapshotId = PatientRecordView.snapshotId(all, chartRead.isTruncated(),
+			        chartRead.isProjectionComplete());
+			pageEtag = PatientRecordView.pageEtag(snapshotId, from, size);
+			if (etagMatches(ifNoneMatch, pageEtag)) {
+				return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+				        .eTag(pageEtag)
+				        .header("Cache-Control", "private, no-cache, must-revalidate")
+				        .build();
+			}
+		} else {
+			// Ranked top-K: the service has no offset, so fetch the whole window at one fixed depth (a
+			// depth that grew with startIndex would re-fuse and re-filter per page) and slice it. A ranked
+			// query is top-K, not a browseable collection — there is no true total, so totalCount is null.
+			List<QueryDocument> top = (patientUuid != null)
+			        ? queryStoreService().searchByPatient(patientUuid, query, maximum)
+			        : queryStoreService().search(query, maximum);
+			page = slice(top, from, size);
+			totalCount = null;
+		}
+
+		Map<String, Object> body = PatientRecordView.page(request.getRequestURL().toString(), page, ranked, from, size, totalCount,
+		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete, maximum);
+		if (pageEtag != null) {
+			return ResponseEntity.ok()
+			        .eTag(pageEtag)
+			        .header("Cache-Control", "private, no-cache, must-revalidate")
+			        .body(body);
+		}
+		// Ranked window: uncached, and says so, since it carries the same record text as the chart.
+		return ResponseEntity.ok().header("Cache-Control", "private, no-cache, must-revalidate").body((Object) body);
+	}
+
+	/** Convenience seam retained for existing direct controller tests. */
+	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex) {
+		return getPatientRecords(request, patient, q, limit, startIndex, null);
+	}
+
+	private static boolean etagMatches(String ifNoneMatch, String pageEtag) {
+		if (ifNoneMatch == null || pageEtag == null) {
+			return false;
+		}
+		for (String candidate : ifNoneMatch.split(",")) {
+			String trimmed = candidate.trim();
+			if ("*".equals(trimmed) || pageEtag.equals(trimmed)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** The sublist [from, from+size) clamped to the list bounds; empty when {@code from} is past the end. */
+	private static List<QueryDocument> slice(List<QueryDocument> list, int from, int size) {
+		if (from >= list.size()) {
+			return Collections.emptyList();
+		}
+		int available = list.size() - from;
+		return new ArrayList<QueryDocument>(list.subList(from, from + Math.min(size, available)));
+	}
+
+	private int maximumPageSize() {
+		if (injectedMaximumPageSize != null) {
+			return injectedMaximumPageSize.intValue();
+		}
+		// RestUtil.getAbsoluteLimit() is the live read of webservices.rest.maxResultsAbsolute, the
+		// one the REST framework itself uses to size pages. RestConstants.MAX_RESULTS_ABSOLUTE is a
+		// plain static that nothing assigns after its initializer, so an administrator's change to
+		// the global property would never reach this endpoint through it.
+		Integer configuredMaximum = RestUtil.getAbsoluteLimit();
+		return configuredMaximum != null && configuredMaximum.intValue() > 0
+		        ? configuredMaximum.intValue() : DEFAULT_LIMIT;
+	}
+
+	/** Test seam: POJO tests intentionally run without the core AdministrationService RestUtil reads. */
+	void setMaximumPageSize(Integer maximumPageSize) {
+		this.injectedMaximumPageSize = maximumPageSize;
+	}
+
+	/** Non-null only when a test injects it; production resolves core's PatientService per call. */
+	private PatientService injectedPatientService;
+
+	private PatientService patientService() {
+		return injectedPatientService != null ? injectedPatientService : Context.getPatientService();
+	}
+
+	/** Visible-for-testing seam: lets the POJO controller test stub patient existence (the 404 path)
+	 *  without a Spring context. Production resolves the PatientService via {@link Context}. */
+	void setPatientService(PatientService patientService) {
+		this.injectedPatientService = patientService;
 	}
 
 	/**
@@ -102,7 +284,8 @@ public class QueryStoreRestController {
 	 * <ul>
 	 * <li>{@code {"patient":"<uuid>"}} — force a full re-projection of one patient (delete + re-index
 	 * every type), then report the resulting document count. <strong>Synchronous</strong>: bounded to
-	 * one patient and runs in the authenticated request thread. The delete-before-reindex invariant
+	 * one patient and runs in the authenticated request thread. A re-projection that left records out
+	 * returns {@code 500} with the same count and an {@code error} naming how many types and records failed. The delete-before-reindex invariant
 	 * lives in {@link BootstrapService#reindexPatient} (unit-tested) so this stays a thin adapter.</li>
 	 * <li>{@code {"scope":"all"}} — launch the global bootstrap over every patient and type.
 	 * <strong>Asynchronous</strong>: a full-corpus scan cannot run in a request thread, so it is handed
@@ -195,12 +378,24 @@ public class QueryStoreRestController {
 			return errorResponse(HttpStatus.BAD_REQUEST, "patient or scope (\"all\" or \"type\") is required");
 		}
 
-		bootstrapService().reindexPatient(patientUuid);
+		String incomplete = null;
+		try {
+			bootstrapService().reindexPatient(patientUuid);
+		}
+		catch (IncompleteProjectionException e) {
+			// Every type was attempted and what projected stays indexed, but records were left out:
+			// report the gap instead of a success. The message carries counts, not record content.
+			incomplete = e.getMessage();
+		}
 
 		int documentsIndexed = queryStoreService().getPatientChart(patientUuid).size();
 		Map<String, Object> result = new HashMap<String, Object>();
 		result.put("patient", patientUuid);
 		result.put("documentsIndexed", documentsIndexed);
+		if (incomplete != null) {
+			result.put("error", incomplete);
+			return new ResponseEntity<Object>(result, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
 		return new ResponseEntity<Object>(result, HttpStatus.OK);
 	}
 
@@ -278,6 +473,13 @@ public class QueryStoreRestController {
 	@ResponseBody
 	public ResponseEntity<Object> handleMalformedBody(HttpMessageNotReadableException e) {
 		return errorResponse(HttpStatus.BAD_REQUEST, "Malformed request body");
+	}
+
+	/** Typed query-parameter binding failures are client errors, not internal failures. */
+	@ExceptionHandler(TypeMismatchException.class)
+	@ResponseBody
+	public ResponseEntity<Object> handleBadParameter(TypeMismatchException e) {
+		return errorResponse(HttpStatus.BAD_REQUEST, "Malformed request parameter");
 	}
 
 	/**

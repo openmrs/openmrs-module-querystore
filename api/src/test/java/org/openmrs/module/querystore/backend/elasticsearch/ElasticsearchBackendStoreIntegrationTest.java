@@ -197,7 +197,8 @@ public class ElasticsearchBackendStoreIntegrationTest {
 	public void findAllByPatient_returnsAllDocsAcrossTypesOrderedByRecordDateDesc() {
 		// ADR Decision 15: getPatientChart returns every indexed doc for the patient, no filtering,
 		// ordered by record_date desc with (resource_type, resource_uuid) tie-breaker. The ES
-		// backend uses a single wildcard search sorted ES-side by record_date desc with _doc asc as
+		// backend uses a single wildcard search sorted ES-side by record_date desc with the stable
+		// (index/resource type, resource UUID) tie-breaker as
 		// the deterministic secondary key; this test pins both the cross-type completeness and the
 		// CHART_ORDER re-sort that aligns the ES tier byte-for-byte with MySQL and Lucene.
 		QueryDocument recentObs = doc("obs", "patient-A", "Glucose 8.1", null);
@@ -390,6 +391,21 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		assertTrue("a dropped stale write still reports success", backend.upsert(stale).isSucceeded());
 
 		assertEquals(0, backend.findAllByPatient("patient-A").size());
+	}
+
+	@Test
+	public void knnServesALimitAboveTheCandidatesElasticsearchAccepts() {
+		// Elasticsearch refuses num_candidates above 10,000, which four times a ranked read of 2,501 asks for.
+		QueryDocument near = doc("obs", "patient-A", "near", new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f });
+		backend.upsert(near);
+
+		for (int limit : new int[] { 834, 2_501 }) {
+			SearchResult result = backend.knn(SearchRequest.builder().resourceType("obs")
+			        .queryVector(new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f }).limit(limit)
+			        .filter(Filter.patientScope("patient-A")).build());
+
+			assertEquals("limit " + limit, 1, result.getHits().size());
+		}
 	}
 
 	@Test

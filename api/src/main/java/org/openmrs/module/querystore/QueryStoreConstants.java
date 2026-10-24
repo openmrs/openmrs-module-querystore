@@ -41,6 +41,17 @@ public final class QueryStoreConstants {
 
 	public static final String FIELD_RECORD_DATE = "record_date";
 
+	/**
+	 * Date semantics exposed by the patient-record REST representation. They live in metadata so
+	 * existing backend schemas keep their generic document contract; serializers assign them while
+	 * they still know the source OpenMRS resource.
+	 */
+	public static final String FIELD_CLINICAL_DATE = "clinical_date";
+	public static final String FIELD_DATE_KIND = "date_kind";
+	public static final String DATE_KIND_CLINICAL_EVENT = "clinical_event";
+	public static final String DATE_KIND_ADMINISTRATIVE = "administrative";
+	public static final String DATE_KIND_UNKNOWN = "unknown";
+
 	// Document metadata field names per ADR Decision 6. Keep aligned with the example documents
 	// and field-descriptions table in docs/adr.md.
 
