@@ -113,6 +113,35 @@ public class ElasticsearchBulkDeleteAccountingTest {
 		assertTrue(result.getFailures().get(0).isRetryable());
 	}
 
+	@Test
+	@SuppressWarnings("unchecked")
+	public void aPatientSweepDeletesOnTheNextPassADocumentTheFirstPassLostToARewrite() throws Exception {
+		ElasticsearchFactoryAndClient es = mockedClient();
+		SearchResponse<Void> firstPass = SearchResponse.of(r -> r.took(1).timedOut(false)
+		        .shards(sh -> sh.total(1).successful(1).failed(0))
+		        .hits(h -> h.hits(Arrays.asList(Hit.<Void> of(hit -> hit.index("querystore_obs").id("a").version(3L)),
+		            Hit.<Void> of(hit -> hit.index("querystore_obs").id("b").version(3L))))));
+		SearchResponse<Void> secondPass = SearchResponse.of(r -> r.took(1).timedOut(false)
+		        .shards(sh -> sh.total(1).successful(1).failed(0))
+		        .hits(h -> h.hits(Arrays.asList(Hit.<Void> of(hit -> hit.index("querystore_obs").id("b").version(4L))))));
+		SearchResponse<Void> none = SearchResponse.of(r -> r.took(1).timedOut(false)
+		        .shards(sh -> sh.total(1).successful(1).failed(0)).hits(h -> h.hits(java.util.Collections.emptyList())));
+		when(es.client.search(any(Function.class), eq(Void.class))).thenReturn(firstPass, secondPass, none);
+		when(es.client.bulk(any(BulkRequest.class))).thenReturn(
+		    BulkResponse.of(b -> b.took(1).errors(true).items(Arrays.asList(
+		        BulkResponseItem.of(i -> i.index("querystore_obs").id("a").operationType(OperationType.Delete).status(200)),
+		        BulkResponseItem.of(i -> i.index("querystore_obs").id("b").operationType(OperationType.Delete).status(409)
+		                .error(ErrorCause.of(e -> e.type("version_conflict_engine_exception").reason("rewritten"))))))),
+		    BulkResponse.of(b -> b.took(1).errors(false).items(Arrays.asList(
+		        BulkResponseItem.of(i -> i.index("querystore_obs").id("b").operationType(OperationType.Delete).status(200))))));
+
+		BulkWriteResult result = new ElasticsearchBackendStore(es.factory).bulkDeleteByPatient("patient-A");
+
+		assertEquals(2, result.getTotalRequested());
+		assertEquals("the document the first pass lost is deleted on the next", 2, result.getSucceeded());
+		assertTrue(result.getFailures().isEmpty());
+	}
+
 	private static final class ElasticsearchFactoryAndClient {
 
 		final ElasticsearchClientFactory factory = mock(ElasticsearchClientFactory.class);
