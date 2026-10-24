@@ -63,13 +63,15 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	 * quotes that open and close at a word edge. The phrase starts and ends on a non-space, so the
 	 * closing quote of one phrase and the opening quote of the next never enclose the words between
 	 * them. An apostrophe inside a word (patient's) neither opens nor closes a single-quoted phrase.
+	 * The single-quote loops are bounded: each repetition of a group with alternatives is a recursive
+	 * call in Java's regex engine, so an unbounded one overflows the stack on a long question.
 	 */
 	private static final Pattern QUOTED_PHRASE = Pattern.compile(
 	        "\"([^\"\\s][^\"]*[^\"\\s])\""
 	                + "|\\u201C([^\\u201C\\u201D\\s][^\\u201C\\u201D]*[^\\u201C\\u201D\\s])\\u201D"
-	                + "|(?<![\\p{L}\\p{N}])'([^'\\s](?:[^']|'(?=[\\p{L}\\p{N}]))*[^'\\s])'(?![\\p{L}\\p{N}])"
-	                + "|(?<![\\p{L}\\p{N}])\\u2018([^\\u2018\\u2019\\s](?:[^\\u2018\\u2019]|\\u2019(?=[\\p{L}\\p{N}]))*"
-	                + "[^\\u2018\\u2019\\s])\\u2019(?![\\p{L}\\p{N}])");
+	                + "|(?<![\\p{L}\\p{N}])'([^'\\s](?:[^']|'(?=[\\p{L}\\p{N}])){0,200}[^'\\s])'(?![\\p{L}\\p{N}])"
+	                + "|(?<![\\p{L}\\p{N}])\\u2018([^\\u2018\\u2019\\s](?:[^\\u2018\\u2019]|\\u2019(?=[\\p{L}\\p{N}]))"
+	                + "{0,200}[^\\u2018\\u2019\\s])\\u2019(?![\\p{L}\\p{N}])");
 
 	private static final Pattern ISO_DATE = Pattern.compile("\\b\\d{4}-\\d{2}-\\d{2}\\b");
 

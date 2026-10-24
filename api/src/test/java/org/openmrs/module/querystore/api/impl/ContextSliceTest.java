@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -452,6 +453,40 @@ public class ContextSliceTest {
 		assertEquals(1, touches.get(), "the projection ran once for the slice");
 		assertTrue(slice.isChartTruncated(), "the failed touch is still disclosed");
 		assertEquals(1, backend.hybridCount.get(), "the similarity search still ran");
+	}
+
+	/** An opening single quote followed by a long span must not overflow the stack: each repetition
+	 *  of an unbounded alternation is a recursive call in Java's regex engine. The slice runs on a
+	 *  thread with Linux x64's default 1 MB stack, where 4,000 characters overflowed it. */
+	@Test
+	public void aLongSpanAfterAnOpeningSingleQuoteDoesNotOverflowTheStack() throws InterruptedException {
+		for (String quote : Arrays.asList("'", "\u2018")) {
+			assertSliceCompletesOnA1MbStack("Did the notes mention " + quote + "chest pain");
+		}
+	}
+
+	private void assertSliceCompletesOnA1MbStack(String opening) throws InterruptedException {
+		StringBuilder question = new StringBuilder(opening);
+		while (question.length() < 4000) {
+			question.append(" and more");
+		}
+		question.append("?");
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		AtomicReference<Map<String, String>> tiers = new AtomicReference<>();
+		Thread slice = new Thread(null, () -> {
+			try {
+				tiers.set(tiersByUuid(service.getContextSlice(PATIENT, question.toString(),
+				        new ContextSliceRequest(Collections.<String> emptySet(), false))));
+			}
+			catch (Throwable t) {
+				failure.set(t);
+			}
+		}, "slice-1mb", 1024 * 1024);
+		slice.start();
+		slice.join();
+
+		assertEquals(null, failure.get(), "the slice completed on a 1 MB stack after " + opening);
+		assertFalse(tiers.get().isEmpty(), "the slice still carries its mandatory tier");
 	}
 
 	/** A visit's start and end are date-times; the date a question names matches the day part. */
