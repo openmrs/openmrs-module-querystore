@@ -452,6 +452,64 @@ public class ConceptNameUtilTest {
 				ConceptNameUtil.getMappingNames(c).get(9));
 	}
 
+	@Test
+	public void getMappingCodes_namespacesEachLiveCodeBySourceSortedAndDeduplicated() {
+		// SNOMED terms on the demo carry a code and no name, so the code is the only handle a
+		// question naming "SNOMED-CT:72341003" or "CIEL:857" has on the concept.
+		ConceptReferenceTerm retired = sourcedTerm("CIEL", "999", null);
+		retired.setRetired(true);
+		Concept c = conceptWithMappings("Blood urea nitrogen",
+				mappingTo(sourcedTerm("LOINC", "14937-7", "Urea nitrogen [Moles/volume] in Serum or Plasma")),
+				mappingTo(sourcedTerm("CIEL", "857", "Blood urea nitrogen")),
+				mappingTo(sourcedTerm("PIH", "857", "Urea (BUN)")),
+				mappingTo(sourcedTerm("SNOMED-CT", "72341003", null)),
+				mappingTo(sourcedTerm("CIEL", " 857 ", null)),
+				mappingTo(sourcedTerm(null, "123", null)),
+				mappingTo(sourcedTerm("CIEL", "  ", null)),
+				mappingTo(retired));
+
+		assertEquals(Arrays.asList("CIEL:857", "LOINC:14937-7", "PIH:857", "SNOMED-CT:72341003"),
+				ConceptNameUtil.getMappingCodes(c));
+		assertTrue(ConceptNameUtil.getMappingCodes(null).isEmpty());
+	}
+
+	@Test
+	public void getMappingCodes_writesASourceNameWithSpacesAsOneTypableToken() {
+		// CIEL-based dictionaries name sources "SNOMED CT" and "IMO ProblemIT". A question can only
+		// name a code as one token, so the stored namespace is that token: "SNOMED-CT:72341003".
+		Concept c = conceptWithMappings("Hypertension",
+				mappingTo(sourcedTerm("SNOMED CT", "38341003", null)),
+				mappingTo(sourcedTerm("IMO  ProblemIT", "10000", null)));
+
+		assertEquals(Arrays.asList("IMO-ProblemIT:10000", "SNOMED-CT:38341003"), ConceptNameUtil.getMappingCodes(c));
+	}
+
+	@Test
+	public void getMappingCodes_keepsEveryLiveCodeHoweverManyMappingsAConceptHas() {
+		// Only exact matching reads codes, and an alphabetical cap of ten cost Cough (13 live mappings)
+		// its SNOMED CT code on a refapp standalone, so a question naming it found no exact match.
+		ConceptMap[] mappings = new ConceptMap[13];
+		for (int i = 0; i < 12; i++) {
+			mappings[i] = mappingTo(sourcedTerm("CIEL", String.valueOf(100 + i), null));
+		}
+		mappings[12] = mappingTo(sourcedTerm("SNOMED CT", "49727002", null));
+
+		java.util.List<String> codes = ConceptNameUtil.getMappingCodes(conceptWithMappings("Cough", mappings));
+
+		assertEquals(13, codes.size());
+		assertTrue(codes.contains("SNOMED-CT:49727002"));
+	}
+
+	private static ConceptReferenceTerm sourcedTerm(String source, String code, String name) {
+		ConceptReferenceTerm t = term(name, code);
+		if (source != null) {
+			org.openmrs.ConceptSource conceptSource = new org.openmrs.ConceptSource();
+			conceptSource.setName(source);
+			t.setConceptSource(conceptSource);
+		}
+		return t;
+	}
+
 	private static ConceptReferenceTerm term(String name, String code) {
 		ConceptReferenceTerm t = new ConceptReferenceTerm();
 		t.setName(name);

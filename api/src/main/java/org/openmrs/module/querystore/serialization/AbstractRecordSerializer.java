@@ -22,6 +22,7 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_FORM_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_FORM_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_LOCATION_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_LOCATION_UUID;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_CODES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_NAMES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PROVIDER_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PROVIDER_UUID;
@@ -167,12 +168,18 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 	 * drug-class parents) into {@link QueryStoreConstants#FIELD_MAPPING_NAMES} as a list of
 	 * strings. Same shape and extraction rationale as {@link #putDescription}: a separate
 	 * BM25-only channel populated from external-authority vocabulary the preferred name lacks.
-	 * No-op on null concept or when no mapping carries a populated reference-term name.
+	 Writes the same mappings' {@code SOURCE:CODE} codes into
+	 * {@link QueryStoreConstants#FIELD_MAPPING_CODES}, which exact matching reads (ADR Decision 17 §2)
+	 * and which, like the names, is never embedded. Each field is written only where it has values.
 	 */
 	protected final void putMappingNames(QueryDocument doc, Concept concept) {
 		List<String> names = ConceptNameUtil.getMappingNames(concept);
 		if (!names.isEmpty()) {
 			doc.putMetadata(FIELD_MAPPING_NAMES, names);
+		}
+		List<String> codes = ConceptNameUtil.getMappingCodes(concept);
+		if (!codes.isEmpty()) {
+			doc.putMetadata(FIELD_MAPPING_CODES, codes);
 		}
 	}
 

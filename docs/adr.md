@@ -29,6 +29,7 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 14. [Authorization and Consumer API Surface](#decision-14-authorization-and-consumer-api-surface)
 15. [Full-Chart Retrieval — Unfiltered Per-Patient Enumeration](#decision-15-full-chart-retrieval--unfiltered-per-patient-enumeration)
 16. [REST Read API — `patientrecord` Resource](#decision-16-rest-read-api--patientrecord-resource)
+17. [Context-Slice Read — Tiered Record Selection](#decision-17-context-slice-read--tiered-record-selection)
 
 [Open Questions](#open-questions)
 
@@ -748,6 +749,8 @@ The cap raise from 3 → 10 has a real trade-off worth naming: synonyms feed *bo
 
 **Re-bootstrap advisory on upgrade.** Adding `mapping_names` is a top-level BM25 field-shape change ([per-decision re-index event](#re-index--alias-strategy)). Pre-upgrade Lucene segments and Elasticsearch documents carry no `mapping_names` field — BM25 recall on category-word queries that the new vocabulary would have bridged is lower on stale documents than on freshly-indexed ones, with no error surfacing. Operators on existing deployments should: drop the per-type Lucene FSDirectory / ES index, then re-run `BootstrapService.bootstrap()` to project every record through the updated serializers. On Elasticsearch specifically, alternatively a one-time `client.indices().putMapping(...)` adds the field to the live mapping but does not back-populate existing documents — only re-projection populates the field for past records. During the re-bootstrap window itself, querystore is briefly internally inconsistent: re-projected resource types carry `mapping_names`; types that haven't been re-indexed yet do not. A patient whose chart spans both (e.g. obs reprojected, conditions pending) will see asymmetric BM25 recall across resource types until bootstrap completes. The window is operator-observable in `BootstrapProgress` and resolves at completion; queries arriving during it return clinically valid results, just under-recalled on the not-yet-reprojected slice.
 
+**Re-bootstrap advisory on upgrade.** `mapping_codes` is emitted only by documents produced AFTER the upgrade, so a question naming a code finds no exact match on a pre-upgrade document. The field lives in record metadata, so re-walking each type with a concept (`BootstrapService.resyncType(type)`, REST `POST /reindex {"scope":"type","resourceType":"<type>"}`) populates it; no schema change is needed on any backend. A plain `bootstrap()` does not: it resumes a completed type from its end cursor and re-projects nothing that has not changed since.
+
 **Group obs.** Obs that are members of a group are indexed as atomic documents with `obs_group_uuid` and `obs_group_concept_name` set on the metadata. No parent (group-aggregate) document is emitted. The group concept name is concatenated onto the embedding input — but not the stored `text` — so a group-level semantic query like "vitals" matches member vectors without the prefix appearing in citations or duplicating across siblings. Multivariate reasoning happens at response time: consumers (LLM-driven or otherwise) cluster atomic hits by `obs_group_uuid` to assemble group-level narratives or reason over sibling values together. This preserves member-level structured filtering (`value_numeric` etc.) and avoids the storage duplication, cascade-on-edit, and citation-ambiguity costs of materializing parent docs.
 
 **Embedding input construction.** For a coded record, the embedding input is `[obs_group_concept_name + " — "] + text + [" " + synonyms.join(" ")]` (bracketed parts conditional on presence). The stored `text` is unaffected. An indexer that has access to the structured fields can reconstruct the embedding input deterministically; round-tripping `text` through the embedder is therefore *not* the contract.
@@ -806,6 +809,7 @@ remain dedicated metadata fields per [Decision 7](#decision-7-date-separation--e
 | `synonyms` | (records with a primary concept) Locale-aware concept synonyms as a list of strings, capped per document and deterministically sorted. BM25-indexed by the Lucene and Elasticsearch backends as a top-level companion of `text` so exact-keyword matches on alternative terms work; concatenated onto embedding input at index time for synonym-aware vectors on every backend. Excluded from `text` to keep LLM citations clean. See [Synonyms and group obs convention](#synonyms-and-group-obs-convention) |
 | `description` | (records with a primary concept) Locale-aware concept free-text description, trimmed, single string. BM25-indexed as a top-level companion of `text` with a sub-1.0 boost ({@link QueryStoreConstants#BM25_DESCRIPTION_BOOST}) so longer descriptions don't dominate term-frequency scoring; gives BM25 a vocabulary bridge from natural-language category-word queries to records whose preferred name doesn't carry the matching term. Deliberately excluded from embedding input (asymmetric-bias concern with vocabulary-overlapping descriptions). MySQL tier does not search it. See [Synonyms and group obs convention](#synonyms-and-group-obs-convention) |
 | `mapping_names` | (records with a primary concept) Reference-term mapping names sourced from `Concept.getConceptMappings()` (LOINC / ICD-10 / PIH / WHO-ATC / CIEL drug-class parents). Alphabetically-sorted list of strings, capped at `ConceptNameUtil.MAX_MAPPING_NAMES`, retired terms and null/blank names dropped. BM25-indexed as a top-level companion of `text` with a sub-1.0 boost ({@link QueryStoreConstants#BM25_MAPPING_NAMES_BOOST}); deliberately excluded from embedding input (asymmetric-bias risk). MySQL tier does not search it. See [Synonyms and group obs convention](#synonyms-and-group-obs-convention) |
+| `mapping_codes` | (records with a primary concept) The same mappings' reference-term codes, each namespaced by its source as `SOURCE:CODE` (`CIEL:857`, `LOINC:14937-7`, `SNOMED-CT:72341003`), from `ConceptNameUtil.getMappingCodes`. Whitespace in a source name is written as a hyphen (CIEL's `SNOMED CT` source is stored as `SNOMED-CT`), so the namespace is one token a question can name. Sorted list of strings, not capped: only exact matching reads codes, so the index-size reason for capping names does not apply, and an alphabetical cap cost Cough (13 live mappings) and Headache (15) their SNOMED CT codes on a refapp 3.7.1 standalone; retired terms, terms without a source and blank codes dropped. Kept where a term has a code and no name. Read by exact matching ([Decision 17](#decision-17-context-slice-read--tiered-record-selection) §2); not embedded and not BM25-boosted |
 | `value_numeric` | Numeric range queries (e.g., "HbA1c values above 7", "systolic BP over 140") |
 | `value_coded_uuid` | Exact filtering by coded answer concept (e.g., "all HIV-positive results", "all Yes answers to a symptom question") — null for numeric or text obs |
 | `value_coded_name` | Human-readable coded answer name for display and keyword search — null for numeric or text obs |
@@ -1359,10 +1363,100 @@ Accepted
 - **The endpoint is NOT in the OpenMRS Swagger spec** (plain controllers aren't, unlike framework resources); it is documented in [`rest-api.md`](./rest-api.md) alongside the operational endpoints. Promoting it to a framework resource for Swagger discoverability is a deferred follow-up.
 - **The ES 10 000-hit cap (Decision 15) is surfaced explicitly via `chartTruncated`;** `totalCount` remains the number of records materialized by the backend and must not be used to infer completeness. The cap is not lifted; `search_after` remains the deferred v1.1 item.
 - **First REST touch on a never-indexed patient pays the Decision-15 cold-touch cost**; the 404 validation guards only bogus uuids.
-- **Ordinary reads surface, but do not repair, index completeness.** Full-chart reads carry an expected-resource-type-aware `projectionComplete` signal: a type counts once its bootstrap has completed, including while a restart's top-up walks it again, since its documents are in place; a reset or resync clears that completion. `indexingstatus` reports `complete` strictly, every row `COMPLETED`, because an export waits on it to snapshot a finished index. Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to diagnose and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
+- **Ordinary reads surface, but do not repair, index completeness.** Full-chart and context reads carry an expected-resource-type-aware `projectionComplete` signal: a type counts once its bootstrap has completed, including while a restart's top-up walks it again, since its documents are in place; a reset or resync clears that completion. `indexingstatus` reports `complete` strictly, every row `COMPLETED`, because an export waits on it to snapshot a finished index. Deployments use `indexingstatus`, `drift`, and explicit `reindex` operations to diagnose and repair the materialized store. This preserves the Java service's read semantics and avoids turning every read into a source-system rebuild.
 - **External clients can cache only in private memory.** The response is revalidated on use rather than given a shared-cache lifetime; a client treats an ETag/snapshot mismatch as a fresh chart and never serves the stale clinical payload.
 - **The endpoint is read-only** — indexing stays unexposed (Decision 14).
 - **Budget-aware retrieval, FHIR shaping, and a general non-AI read breadth remain deferred** — explicitly the next iteration.
+
+---
+
+## Decision 17: Context-Slice Read — Tiered Record Selection
+
+### Status
+Accepted
+
+### Context
+Two AI consumers assemble question-scoped context from this read store today — bundled
+ChartSearchAI in-process (`QueryStoreChartBuilder.buildScoped`) and med-agent-hub over the
+Decision 16 REST surface (`context_sources.py`) — and each implements its own selection policy
+over the same indexed documents. Compared side by side, the two policies drifted symmetrically:
+bundled lacked the mandatory clinical core (allergies + active conditions) the hub always includes,
+the hub lacks the obs-group panel completion bundled performs, and both re-derive semantics this
+store already owns (clinical-date kinds, group metadata, ranked search). The selection invariants
+therefore belong here, at the data owner, while each engine keeps prompt composition, token
+budgeting, and question interpretation.
+
+### Decision
+1. **A fourth v1 read method returns a tier-tagged record selection**:
+   `ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request)`.
+   The request carries the caller's question interpretation — `types` (resource types whose
+   records must be typed-complete) and `temporal` (whether a recency anchor applies), plus
+   bounded knobs `recencyAnchorSize` (default 15) and `similarityLimit` (default 30). Querystore
+   performs **mechanical selection only**; it does not interpret the question.
+2. **Selection tiers, assigned by priority** (each document appears once, tagged with the
+   highest tier that matched): `mandatory` (the `patient` record, every `allergy`, and every
+   `condition`/`diagnosis` whose `clinical_status` metadata is `ACTIVE`, `RECURRENCE` or `RELAPSE`,
+   the statuses core's `ConditionService.getActiveConditions` counts as active since TRUNK-6170) →
+   `exact` (explicit
+   UUIDs, dates (also matched against the day of an ISO date-time such as a visit's
+   `end_date_time`), namespaced codes matched against a record's `mapping_codes`, labeled identifiers,
+   and quoted phrases in straight or curly quotes, each starting and ending on a non-space) → `typed` (resource
+   type ∈ `types`) → `recency_anchor` (the first `recencyAnchorSize` chart documents, only when
+   `temporal`) → `similarity` (uuid ∈ the `searchByPatient(question, similarityLimit)`
+   hits) → `panel` (obs-group family completion: when a group parent or any member is selected,
+   the whole family joins and any budget-droppable triggering record is promoted to `panel`).
+   Output preserves Decision 15's `record_date`-desc chart order. A panel-promoted similarity
+   record retains its original retrieval rank for traceability.
+3. **Degradation and edges follow the sibling reads**: blank question or `similarityLimit <= 0`
+   skips the search RPC; a search failure degrades to the policy tiers alone (never blocks);
+   cold-patient lazy bootstrap is inherited from `getPatientChart` and runs once per slice: the
+   similarity search reads what the chart read's touch projected rather than touching the patient
+   again, so a failed touch is not repeated within one request. `ContextSlice` surfaces
+   `chartSize` and `chartTruncated` (true when a documented cap, a handled backend read failure,
+   or a failed cold touch may have omitted records) so an incomplete chart is never silently
+   absorbed into a "complete" slice.
+4. **Explicit non-goals, unchanged from Decisions 14/15/16**: no prompt composition, no token
+   or model awareness, no question NLU, no result the caller could not read via
+   `getPatientChart`. Authorization is `@Authorized(GET_PATIENTS)`, identical to the sibling
+   reads. The REST surface (Decision 16) exposes the slice additively via
+   `patientrecord?...&mode=context&types=...&temporal=...`, with each record carrying its
+   `tier`. Every context page carries `chartSnapshotId`, the same stable complete-chart snapshot
+   the full-chart read publishes (`PatientChartFingerprint.snapshotId(chart, truncated,
+   projectionComplete)` over the complete chart the slice was selected from), plus a
+   deterministic `sliceId` over the complete ordered selection and effective interpretation,
+   built by `PatientChartFingerprint` with the snapshot's canonical form.
+   A consumer that combines a full-chart ledger with a later slice must require matching
+   `chartSnapshotId` values and retry or fail when they differ; `sliceId` lets it reject mixed
+   pages and is neither a chart snapshot nor a cache validator. Every core type the caller
+   holds no core read privilege for (Decision 14 point 4), requested or not, is left out of
+   `effectiveTypes` and named in `withheldTypes`, so a consumer that marks every effective type
+   complete, or reads the mandatory tier's allergies as all of them, does not take an empty tier
+   for a patient without such records.
+
+### Rationale
+1. **Selection is retrieval.** The tiers are query semantics over fields this store owns
+   (`clinical_status`, `obs_group_uuid`, `record_date`, the ranked search) — a smarter read,
+   not a prompt service. Decision 16 already deferred "budget-aware retrieval" as the next
+   iteration; this lands its selection half while budgets stay engine-side.
+2. **One implementation ends structural drift.** Safety-relevant invariants (mandatory core,
+   panel completion) implemented twice measurably diverged; conformance fixtures caught it
+   after the fact. A single implementation makes the provider-neutral `context_policy` cases
+   (`api/src/test/resources/conformance/dual-provider-conformance.v1.json`, each case unchanged
+   from the shared fixture set) this module's own red-first test suite.
+3. **Consumers stay thin and source-neutral.** Engines pass their interpretation flags and
+   compose prompts from tagged records; the hub keeps its local policy for non-querystore
+   sources. `mandatory` tags tell a budget-constrained consumer what is never droppable.
+
+### Consequences
+- The v1 read surface grows to four methods; REST wraps all four uniformly (Decision 16 shape).
+- ChartSearchAI's `buildScoped` and the hub's querystore source become thin adapters over this
+  method; their intent-routing and temporal detection remain caller-side, so interpretation drift
+  between engines is still possible.
+- Active-condition detection reads the `clinical_status` metadata the condition serializer
+  already emits; `diagnosis` documents without that metadata simply never match the mandatory
+  tier (no text sniffing).
+- The `panel` tier is additive beyond the four policy tiers above it; it makes family
+  completion honest instead of mislabeling joined members as `typed`.
 
 ---
 

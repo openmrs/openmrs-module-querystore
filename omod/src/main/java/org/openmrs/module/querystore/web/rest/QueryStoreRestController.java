@@ -12,8 +12,10 @@ package org.openmrs.module.querystore.web.rest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -29,6 +31,9 @@ import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
 import org.openmrs.module.querystore.bootstrap.IncompleteProjectionException;
+import org.openmrs.module.querystore.events.SerializerRegistry;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.module.webservices.rest.web.RestUtil;
@@ -122,6 +127,9 @@ public class QueryStoreRestController {
 	        @RequestParam(value = "q", required = false) String q,
 	        @RequestParam(value = "limit", required = false) Integer limit,
 	        @RequestParam(value = "startIndex", required = false) Integer startIndex,
+	        @RequestParam(value = "mode", required = false) String mode,
+	        @RequestParam(value = "types", required = false) String types,
+	        @RequestParam(value = "temporal", required = false) Boolean temporal,
 	        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
@@ -139,6 +147,18 @@ public class QueryStoreRestController {
 		}
 		int maximum = maximumPageSize();
 		int size = Math.min(requestedSize, maximum);
+		String requestedMode = StringUtils.trimToNull(mode);
+		boolean contextMode = "context".equals(requestedMode);
+		if (requestedMode != null && !contextMode) {
+			return errorResponse(HttpStatus.BAD_REQUEST,
+			        "Unknown mode '" + requestedMode + "'; the only supported mode is \"context\"");
+		}
+		if (!contextMode && (types != null || temporal != null)) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "types and temporal require mode=context");
+		}
+		if (contextMode && patientUuid == null) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "mode=context requires a patient");
+		}
 		if (patientUuid == null && query == null) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "patient or q is required");
 		}
@@ -153,6 +173,41 @@ public class QueryStoreRestController {
 		if (query != null) {
 			baseParams.append("q=").append(PatientRecordView.encode(query)).append('&');
 		}
+		if (contextMode) {
+			// Tiered context slice (ADR Decision 17 §4): the caller's question interpretation
+			// rides as params; each record carries its selection tier. chartSnapshotId binds the
+			// selection to its complete source chart, while sliceId identifies the ordered selection;
+			// context pages do not participate in HTTP ETag revalidation.
+			Set<String> typeSet = new HashSet<String>();
+			if (StringUtils.isNotBlank(types)) {
+				for (String type : types.split(",")) {
+					if (StringUtils.isNotBlank(type)) {
+						typeSet.add(type.trim());
+					}
+				}
+			}
+			if (!typeSet.isEmpty()) {
+				Set<String> knownTypes = serializerRegistry().getResourceTypeNames();
+				for (String type : typeSet) {
+					if (!knownTypes.contains(type)) {
+						return errorResponse(HttpStatus.BAD_REQUEST, "Unknown resource type '" + type + "'");
+					}
+				}
+			}
+			ContextSliceRequest sliceRequest = new ContextSliceRequest(typeSet, Boolean.TRUE.equals(temporal));
+			ContextSlice slice = queryStoreService().getContextSlice(patientUuid, query, sliceRequest);
+			baseParams.append("mode=context&");
+			if (StringUtils.isNotBlank(types)) {
+				baseParams.append("types=").append(PatientRecordView.encode(types.trim())).append('&');
+			}
+			if (temporal != null) {
+				baseParams.append("temporal=").append(temporal).append('&');
+			}
+			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size,
+			        request.getRequestURL().toString(), baseParams.toString());
+			// Question-dependent page: same private, revalidate-only caching as the full chart.
+			return ResponseEntity.ok().header("Cache-Control", "private, no-cache, must-revalidate").body((Object) sliceBody);
+		}
 
 		boolean ranked = query != null;
 		if (ranked && from > maximum - size) {
@@ -165,6 +220,7 @@ public class QueryStoreRestController {
 		String pageEtag = null;
 		Boolean chartTruncated = null;
 		Boolean projectionComplete = null;
+		java.util.Set<String> withheldTypes = null;
 		if (patientUuid != null && query == null) {
 			// Full chart: enumerate (Decision 15 returns the whole set), then page in memory.
 			PatientChartRead chartRead = queryStoreService().getPatientChartRead(patientUuid);
@@ -172,10 +228,12 @@ public class QueryStoreRestController {
 			totalCount = Integer.valueOf(all.size());
 			chartTruncated = Boolean.valueOf(chartRead.isTruncated());
 			projectionComplete = Boolean.valueOf(chartRead.isProjectionComplete());
+			withheldTypes = chartRead.getWithheldTypes();
 			page = slice(all, from, size);
 			snapshotId = PatientRecordView.snapshotId(all, chartRead.isTruncated(),
 			        chartRead.isProjectionComplete());
-			pageEtag = PatientRecordView.pageEtag(snapshotId, from, size);
+			// The withheld types depend on the caller, not the chart, so they key the page's ETag only.
+			pageEtag = PatientRecordView.pageEtag(snapshotId, withheldTypes, from, size);
 			if (etagMatches(ifNoneMatch, pageEtag)) {
 				return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
 				        .eTag(pageEtag)
@@ -194,7 +252,7 @@ public class QueryStoreRestController {
 		}
 
 		Map<String, Object> body = PatientRecordView.page(request.getRequestURL().toString(), page, ranked, from, size, totalCount,
-		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete, maximum);
+		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete, withheldTypes, maximum);
 		if (pageEtag != null) {
 			return ResponseEntity.ok()
 			        .eTag(pageEtag)
@@ -207,7 +265,13 @@ public class QueryStoreRestController {
 
 	/** Convenience seam retained for existing direct controller tests. */
 	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex) {
-		return getPatientRecords(request, patient, q, limit, startIndex, null);
+		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, null);
+	}
+
+	/** Convenience seam retained for existing conditional-read controller tests. */
+	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex,
+	        String ifNoneMatch) {
+		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, ifNoneMatch);
 	}
 
 	private static boolean etagMatches(String ifNoneMatch, String pageEtag) {
@@ -420,6 +484,17 @@ public class QueryStoreRestController {
 	private BootstrapService injectedBootstrapService;
 
 	private QueryStoreService injectedQueryStoreService;
+
+	private SerializerRegistry injectedSerializerRegistry;
+
+	private SerializerRegistry serializerRegistry() {
+		return injectedSerializerRegistry != null ? injectedSerializerRegistry
+		        : Context.getRegisteredComponent("querystore.serializerRegistry", SerializerRegistry.class);
+	}
+
+	void setSerializerRegistry(SerializerRegistry registry) {
+		this.injectedSerializerRegistry = registry;
+	}
 
 	private BootstrapService bootstrapService() {
 		return injectedBootstrapService != null ? injectedBootstrapService
