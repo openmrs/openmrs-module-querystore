@@ -16,6 +16,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -33,12 +34,14 @@ import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
+import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.Refresh;
 
 /**
  * Integration test for {@link ElasticsearchBackendStore} against a real ES 8.13 server via
@@ -249,6 +252,144 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		SearchResult remaining = backend.bm25(SearchRequest.builder().queryText("Temperature").limit(10).build());
 		assertEquals(1, remaining.getHits().size());
 		assertEquals("patient-B", remaining.getHits().get(0).getDocument().getPatientUuid());
+	}
+
+	/**
+	 * The reindex contract: {@code reindexPatient} clears a patient and re-projects the same records
+	 * straight away, and a record whose audit dates did not change comes back with the same
+	 * {@code last_modified}. Elasticsearch keeps a tombstone for a deleted document (60 s by default)
+	 * and, while it is retained, a versioned rewrite strictly below the tombstone's version is a
+	 * conflict (external_gte accepts an equal one), so the delete must leave the tombstone at the
+	 * document's own version for the rewrite to apply.
+	 */
+	@Test
+	public void bulkDeleteByPatientThenSameVersionRewriteRestoresTheChart() {
+		Instant t = Instant.parse("2025-03-15T09:00:00Z");
+		QueryDocument obs = doc("obs", "patient-A", "Weight: 71 kg", null);
+		obs.setLastModified(t);
+		QueryDocument condition = doc("condition", "patient-A", "Asthma", null);
+		condition.setLastModified(t);
+		assertFalse(backend.bulkUpsert(Arrays.asList(obs, condition)).hasFailures());
+
+		assertEquals(2, backend.bulkDeleteByPatient("patient-A").getSucceeded());
+		BulkWriteResult rewrite = backend.bulkUpsert(Arrays.asList(obs, condition));
+
+		assertFalse(rewrite.hasFailures());
+		assertEquals(2, rewrite.getSucceeded());
+		List<QueryDocument> chart = backend.findAllByPatient("patient-A");
+		assertEquals("the same-version rewrite must be applied, not dropped as stale", 2, chart.size());
+		for (QueryDocument d : chart) {
+			assertEquals(t, d.getLastModified());
+		}
+	}
+
+	/** A void then an unvoid of a record whose audit dates did not change. */
+	@Test
+	public void deleteThenSameVersionUpsertRestoresTheDocument() {
+		Instant t = Instant.parse("2025-03-15T09:00:00Z");
+		QueryDocument d = doc("obs", "patient-A", "Pulse: 72", null);
+		d.setLastModified(t);
+		assertTrue(backend.upsert(d).isSucceeded());
+
+		assertTrue(backend.delete("obs", d.getResourceUuid()).isSucceeded());
+		assertTrue(backend.upsert(d).isSucceeded());
+
+		assertEquals(1, backend.findAllByPatient("patient-A").size());
+	}
+
+	@Test
+	public void bulkDeleteOnAnIndexNeverCreatedIsANoOp() {
+		// mget reports a missing index per item rather than throwing, so the catch below the loop
+		// never sees it; each id is the second-call no-op outcome, as delete() treats it.
+		BulkWriteResult result = backend.bulkDelete("never_created", Arrays.asList("a", "b"));
+		assertEquals(2, result.getSucceeded());
+		assertFalse(result.hasFailures());
+	}
+
+	@Test
+	public void bulkDeleteThenSameVersionRewriteRestoresTheDocuments() {
+		Instant t = Instant.parse("2025-03-15T09:00:00Z");
+		QueryDocument a = doc("obs", "patient-A", "Pulse: 72", null);
+		a.setLastModified(t);
+		QueryDocument b = doc("obs", "patient-A", "Temperature: 37.0", null);
+		b.setLastModified(t);
+		assertFalse(backend.bulkUpsert(Arrays.asList(a, b)).hasFailures());
+
+		assertEquals(2, backend.bulkDelete("obs", Arrays.asList(a.getResourceUuid(), b.getResourceUuid())).getSucceeded());
+		assertEquals(2, backend.bulkUpsert(Arrays.asList(a, b)).getSucceeded());
+
+		assertEquals(2, backend.findAllByPatient("patient-A").size());
+	}
+
+	@Test
+	public void deleteRetriesAtTheVersionAConcurrentWriteLeft() {
+		// A write between the version read and the delete conflicts; the delete must read the new
+		// version and try again rather than report a failure nothing retries.
+		QueryDocument doc = doc("obs", "patient-A", "Raced", null);
+		doc.setLastModified(Instant.parse("2026-10-21T10:00:05Z"));
+		backend.upsert(doc);
+		ElasticsearchBackendStore racing = new ElasticsearchBackendStore(clientFactory) {
+			private boolean stale = true;
+
+			@Override
+			Long currentVersion(String index, String id) throws java.io.IOException {
+				Long version = super.currentVersion(index, id);
+				if (stale && version != null) {
+					stale = false;
+					return version - 1L;
+				}
+				return version;
+			}
+		};
+
+		WriteResult result = racing.delete("obs", doc.getResourceUuid());
+
+		assertTrue(result.getFailure() == null ? "ok" : result.getFailure().getErrorMessage(), result.isSucceeded());
+		assertEquals(0, backend.bm25(SearchRequest.builder().resourceType("obs").queryText("Raced").limit(5).build())
+		        .getHits().size());
+	}
+
+	@Test
+	public void bulkDeleteByPatientReportsASearchThatCouldNotReadEveryShard() throws Exception {
+		// A search answered by part of the shards must not pass for the patient's whole chart.
+		QueryDocument kept = doc("obs", "patient-A", "Kept", null);
+		backend.upsert(kept);
+		ElasticsearchClient client = clientFactory.getClient();
+		client.indices().create(c -> c.index("querystore_broken")
+		        .mappings(m -> m.properties(ElasticsearchFieldNames.PATIENT_UUID, p -> p.long_(l -> l))));
+		client.index(i -> i.index("querystore_broken").id("x").refresh(Refresh.WaitFor)
+		        .document(Collections.singletonMap(ElasticsearchFieldNames.PATIENT_UUID, 7)));
+		try {
+			BulkWriteResult result = backend.bulkDeleteByPatient("patient-A");
+
+			assertTrue("a partial search must be reported", result.hasFailures());
+			assertEquals(1, backend.bm25(SearchRequest.builder().resourceType("obs").queryText("Kept").limit(5).build())
+			        .getHits().size());
+		}
+		finally {
+			client.indices().delete(d -> d.index("querystore_broken"));
+		}
+	}
+
+	/**
+	 * The conditional-upsert guard survives a delete: while the tombstone is retained, a strictly older
+	 * write still does not resurrect the record.
+	 */
+	@Test
+	public void deleteStillBlocksAnOlderRewrite() {
+		Instant t1 = Instant.parse("2025-03-15T09:00:00Z");
+		Instant t2 = t1.plus(1, ChronoUnit.HOURS);
+		QueryDocument fresh = doc("obs", "patient-A", "Glucose: 8.1 mmol/L (10:00)", null);
+		fresh.setLastModified(t2);
+		assertTrue(backend.upsert(fresh).isSucceeded());
+		assertTrue(backend.delete("obs", fresh.getResourceUuid()).isSucceeded());
+
+		QueryDocument stale = doc("obs", "patient-A", "Glucose: 5.4 mmol/L (09:00)", null);
+		stale.setResourceUuid(fresh.getResourceUuid());
+		stale.setLastModified(t1);
+		assertTrue("a dropped stale write still reports success", backend.upsert(stale).isSucceeded());
+
+		assertEquals(0, backend.findAllByPatient("patient-A").size());
 	}
 
 	@Test

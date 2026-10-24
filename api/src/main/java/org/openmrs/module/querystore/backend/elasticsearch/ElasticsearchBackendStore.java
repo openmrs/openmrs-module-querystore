@@ -16,9 +16,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -40,10 +42,7 @@ import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.elasticsearch._types.BulkIndexByScrollFailure;
-import co.elastic.clients.elasticsearch._types.Conflicts;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
-import co.elastic.clients.elasticsearch._types.ErrorCause;
 import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.KnnSearch;
 import co.elastic.clients.elasticsearch._types.Refresh;
@@ -55,10 +54,12 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.cluster.HealthResponse;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
-import co.elastic.clients.elasticsearch.core.DeleteByQueryResponse;
+import co.elastic.clients.elasticsearch.core.GetResponse;
+import co.elastic.clients.elasticsearch.core.MgetResponse;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem;
 
 /**
  * Elasticsearch reference {@link BackendStore} (Decision 3, "large" tier). One ES index per
@@ -66,6 +67,14 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
  * and BM25 text. The durable+visible contract is satisfied by {@code refresh=wait_for} on every
  * write; the conditional-upsert-by-version invariant is enforced via external versioning
  * ({@code version_type=external_gte} with {@code last_modified} as the version).
+ *
+ * <p>Deletes are issued at the document's own version. Elasticsearch keeps a tombstone for a deleted
+ * document ({@code index.gc_deletes}, 60 s by default) and, while it is retained, rejects a versioned
+ * write strictly below the tombstone's version; an unversioned delete would set that version one above
+ * the document's, so the same-version rewrite that a patient reindex, a merge sweep or an unvoid issues
+ * straight after the delete would be dropped as stale. At the document's own version the equal-or-newer
+ * rewrite applies, and a strictly older write does not resurrect the record for as long as the
+ * tombstone is kept.
  *
  * <p>Hybrid retrieval inherits the {@link BackendStore#hybrid(SearchRequest)} interface-default
  * RRF over {@link #bm25(SearchRequest)} and {@link #knn(SearchRequest)} the same way every tier
@@ -153,16 +162,45 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 	}
 
+	/** The stored document's version, or {@code null} when the index holds no such document. */
+	Long currentVersion(String index, String id) throws IOException {
+		GetResponse<Void> current = client().get(g -> g.index(index).id(id).source(src -> src.fetch(false)), Void.class);
+		return current.found() ? current.version() : null;
+	}
+
 	@Override
 	public WriteResult delete(String resourceType, String resourceUuid) {
 		String index = ElasticsearchSchemaManager.indexName(resourceType);
 		try {
-			client().delete(d -> d.index(index).id(resourceUuid).refresh(Refresh.WaitFor));
-			return WriteResult.success();
+			while (true) {
+				Long version = currentVersion(index, resourceUuid);
+				if (version == null) {
+					// Idempotent delete: a missing doc is the second-call no-op outcome.
+					return WriteResult.success();
+				}
+				try {
+					client().delete(d -> d.index(index).id(resourceUuid).refresh(Refresh.WaitFor)
+					        .versionType(VersionType.ExternalGte).version(version));
+					return WriteResult.success();
+				}
+				catch (ElasticsearchException e) {
+					// A write landed between the version read and the delete: the document now carries a
+					// newer version, so read it again and delete at that one. Nothing above retries a
+					// failed delete, so the retry lives here.
+					if (!isVersionConflict(e)) {
+						throw e;
+					}
+				}
+				catch (IOException e) {
+					if (!isVersionConflict(e)) {
+						throw e;
+					}
+				}
+			}
 		}
 		catch (ElasticsearchException e) {
 			if (e.status() == 404 || "index_not_found_exception".equals(e.error().type())) {
-				// Idempotent delete: missing doc or missing index is the second-call no-op outcome.
+				// Idempotent delete: a missing index is the second-call no-op outcome.
 				return WriteResult.success();
 			}
 			log.warn("delete failed for " + resourceType + "/" + resourceUuid, e);
@@ -199,17 +237,58 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		for (int start = 0; start < resourceUuids.size(); start += BATCH_SIZE) {
 			int end = Math.min(start + BATCH_SIZE, resourceUuids.size());
 			List<String> chunk = resourceUuids.subList(start, end);
-			List<BulkOperation> ops = new ArrayList<>(chunk.size());
-			for (String uuid : chunk) {
-				ops.add(BulkOperation.of(b -> b.delete(d -> d.index(index).id(uuid))));
-			}
+			// The ids whose outcome is not counted yet: the whole chunk until the read answers, then only
+			// the ids the read found and the bulk request still has to delete. A failure of either call
+			// is reported for these alone, so an id the read already settled is counted once.
+			List<String> pending = chunk;
 			try {
-				BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
-				succeeded += countBulkSuccess(resp, resourceType, failures);
+				List<BulkOperation> ops = new ArrayList<>(chunk.size());
+				List<String> awaitingDelete = new ArrayList<>(chunk.size());
+				MgetResponse<Void> current = client().mget(m -> m.index(index).ids(chunk).source(src -> src.fetch(false)),
+				    Void.class);
+				for (MultiGetResponseItem<Void> item : current.docs()) {
+					if (item.isFailure()) {
+						if ("index_not_found_exception".equals(item.failure().error().type())) {
+							// Idempotent delete: a missing index is the second-call no-op outcome, as delete()
+							// treats it. mget reports it per item rather than throwing.
+							succeeded++;
+							continue;
+						}
+						// A per-id read failure (a shard problem, typically) is transient from the caller's view;
+						// a request Elasticsearch rejects outright (an empty id) is not.
+						boolean retryable = !"illegal_argument_exception".equals(item.failure().error().type());
+						failures.add(new DocFailure(resourceType, item.failure().id(), item.failure().error().reason(), retryable));
+						continue;
+					}
+					if (!item.result().found()) {
+						// Idempotent delete: a missing doc is the second-call no-op outcome.
+						succeeded++;
+						continue;
+					}
+					Long version = item.result().version();
+					ops.add(BulkOperation.of(b -> b.delete(d -> d.index(index).id(item.result().id())
+					        .versionType(VersionType.ExternalGte).version(version))));
+					awaitingDelete.add(item.result().id());
+				}
+				pending = awaitingDelete;
+				if (!ops.isEmpty()) {
+					BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
+					succeeded += countBulkSuccess(resp, resourceType, failures, false);
+				}
 			}
-			catch (ElasticsearchException | IOException e) {
+			catch (ElasticsearchException e) {
+				if (e.status() == 404 || "index_not_found_exception".equals(e.error().type())) {
+					succeeded += pending.size();
+					continue;
+				}
 				log.warn("bulkDelete chunk failed for " + resourceType, e);
-				for (String uuid : chunk) {
+				for (String uuid : pending) {
+					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
+				}
+			}
+			catch (IOException e) {
+				log.warn("bulkDelete chunk failed for " + resourceType, e);
+				for (String uuid : pending) {
 					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
 				}
 			}
@@ -219,41 +298,60 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public BulkWriteResult bulkDeleteByPatient(String patientUuid) {
-		// Single cross-index call — ES handles the querystore_* wildcard natively, no per-type loop.
-		// wait_for_completion + refresh=true together satisfy the durable+visible contract.
+		// Read the patient's documents with their versions and delete each at that version, a page at a
+		// time, until a read finds none left. A document rewritten between the read and the delete
+		// conflicts and is read again at its new version on the next pass; the loop stops when a pass
+		// deletes nothing, and reports that pass's failures. Each pass that deletes something shrinks
+		// what remains, so with no concurrent writer the passes are bounded by the number of documents;
+		// a writer that keeps reinserting the patient's records keeps the loop going, and the callers
+		// (a merge, a void cascade) run with no such writer.
+		Set<String> matched = new HashSet<>();
+		int deleted = 0;
 		List<DocFailure> failures = new ArrayList<>();
-		long deleted = 0;
-		long matched = 0;
 		try {
-			DeleteByQueryResponse resp = client().deleteByQuery(d -> d
-			        .index(ALL_INDICES_PATTERN)
-			        .allowNoIndices(true)
-			        .ignoreUnavailable(true)
-			        .query(Query.of(q -> q.term(t -> t.field(ElasticsearchFieldNames.PATIENT_UUID).value(patientUuid))))
-			        .refresh(true)
-			        .waitForCompletion(true)
-			        .conflicts(Conflicts.Proceed));
-			deleted = resp.deleted() == null ? 0L : resp.deleted();
-			matched = resp.total() == null ? deleted : resp.total();
-			if (resp.failures() != null) {
-				for (BulkIndexByScrollFailure scrollFailure : resp.failures()) {
-					String type = scrollFailure.index() == null ? null : BackendDocs.stripPrefix(scrollFailure.index());
-					ErrorCause cause = scrollFailure.cause();
-					String reason = cause == null ? null : cause.reason();
-					failures.add(new DocFailure(type, scrollFailure.id(), reason,
-					        isRetryableStatus(scrollFailure.status())));
+			while (true) {
+				SearchResponse<Void> page = client().search(s -> s
+				        .index(ALL_INDICES_PATTERN)
+				        .allowNoIndices(true)
+				        .ignoreUnavailable(true)
+				        // A search some shards did not answer would delete the readable records and then
+				        // report the patient's chart gone; such a search fails instead.
+				        .allowPartialSearchResults(false)
+				        .size(FULL_CHART_MAX_HITS)
+				        .trackTotalHits(t -> t.enabled(false))
+				        .version(true)
+				        .source(src -> src.fetch(false))
+				        .query(Query.of(q -> q.term(t -> t.field(ElasticsearchFieldNames.PATIENT_UUID).value(patientUuid)))),
+				    Void.class);
+				List<co.elastic.clients.elasticsearch.core.search.Hit<Void>> hits = page.hits().hits();
+				if (hits.isEmpty()) {
+					break;
+				}
+				List<BulkOperation> ops = new ArrayList<>(hits.size());
+				for (co.elastic.clients.elasticsearch.core.search.Hit<Void> hit : hits) {
+					matched.add(hit.index() + "/" + hit.id());
+					Long version = hit.version();
+					ops.add(BulkOperation.of(b -> b.delete(d -> d.index(hit.index()).id(hit.id())
+					        .versionType(VersionType.ExternalGte).version(version))));
+				}
+				BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
+				List<DocFailure> passFailures = new ArrayList<>();
+				int passDeleted = countBulkSuccess(resp, null, passFailures, false);
+				deleted += passDeleted;
+				if (passDeleted == 0) {
+					failures.addAll(passFailures);
+					break;
 				}
 			}
 		}
 		catch (ElasticsearchException | IOException e) {
 			log.warn("bulkDeleteByPatient failed for " + patientUuid, e);
 			// Call-level failure: no per-doc telemetry available, so resourceType/resourceUuid stay
-			// null. totalRequested stays 0 — the call didn't get far enough to know.
+			// null. totalRequested and succeeded keep what the completed passes counted; a failure on
+			// the first read leaves them 0.
 			failures.add(new DocFailure(null, null, e.getMessage(), isRetryable(e)));
 		}
-		int deletedInt = (int) Math.min(Integer.MAX_VALUE, deleted);
-		int matchedInt = (int) Math.min(Integer.MAX_VALUE, matched);
-		return new BulkWriteResult(matchedInt, deletedInt, failures);
+		return new BulkWriteResult(matched.size(), deleted, failures);
 	}
 
 	@Override
@@ -491,7 +589,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 		try {
 			BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
-			return countBulkSuccess(resp, null, failures);
+			return countBulkSuccess(resp, null, failures, true);
 		}
 		catch (ElasticsearchException | IOException e) {
 			log.warn("bulkUpsert chunk failed", e);
@@ -502,22 +600,25 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 	}
 
-	private int countBulkSuccess(BulkResponse resp, String fallbackType, List<DocFailure> failures) {
+	/** Counts the items a bulk call confirmed. A 409 on an upsert is a conditional-upsert "skipped as
+	 *  stale", which counts as success per the SPI invariant; a 409 on a delete means the document
+	 *  moved to a newer version after it was read and is reported as a retryable failure. */
+	private int countBulkSuccess(BulkResponse resp, String fallbackType, List<DocFailure> failures,
+	        boolean conflictIsStaleUpsert) {
 		int succeeded = 0;
 		for (BulkResponseItem item : resp.items()) {
 			if (item.error() == null) {
 				succeeded++;
 				continue;
 			}
-			if (item.status() == 409) {
-				// Conditional-upsert "skipped as stale" — counts as success per SPI invariant.
+			if (item.status() == 409 && conflictIsStaleUpsert) {
 				succeeded++;
 				continue;
 			}
 			String type = fallbackType != null ? fallbackType
 			        : (item.index() == null ? null : BackendDocs.stripPrefix(item.index()));
 			failures.add(new DocFailure(type, item.id(), item.error().reason(),
-			        isRetryableStatus(item.status())));
+			        item.status() == 409 || isRetryableStatus(item.status())));
 		}
 		return succeeded;
 	}
