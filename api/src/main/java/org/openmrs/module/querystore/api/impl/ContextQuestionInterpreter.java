@@ -49,7 +49,7 @@ final class ContextQuestionInterpreter {
 	private static final Map<Pattern, String[]> TYPE_CUES;
 	static {
 		Map<Pattern, String[]> m = new LinkedHashMap<Pattern, String[]>();
-		// Kept entry for entry with ChartSearchAI's QueryScopeRouter, the one caller that sends
+		// Kept entry for entry with ChartSearchAI's QueryScopeRouter, a caller that sends
 		// interpret=true: "regimen" and "what she takes" are how a clinician words the question
 		// (its Decision 180), and a cue read there and not here answers a long ART history from
 		// whichever orders similarity ranks.
