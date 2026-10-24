@@ -462,6 +462,20 @@ public class TypeBootstrapperTest {
 	}
 
 	@Test
+	public void runForPatient_rewritesATypeWhoseVersionDoesNotTrackItsContent() {
+		// A stopped order keeps its dateCreated version, so the patient walk rewrites it too.
+		Instant created = Instant.parse("2025-01-01T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.versionTracksContent = false;
+		b.patientPages = new ArrayList<>(Arrays.asList(Arrays.asList(new TestEntity("stopped", created))));
+		service.storedVersions.put("stopped", created);
+
+		b.runForPatient("patient-A", service, embedder);
+
+		assertEquals(Collections.singletonList("stopped"), indexedUuids());
+	}
+
+	@Test
 	public void runForPatient_stopsWhenAPageDoesNotAdvancePastTheCursor() {
 		FakeBootstrapper b = new FakeBootstrapper();
 		// A failed fetch leaves half-loaded rows in the session; they come back unhydrated, at the same
