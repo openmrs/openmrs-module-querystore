@@ -250,6 +250,22 @@ public class QueryStoreRestControllerTest {
 	}
 
 	@Test
+	public void indexingStatus_aRegisteredTypeThatNeverStartedIsNotComplete() {
+		authenticate();
+		BootstrapService bootstrap = mock(BootstrapService.class);
+		org.openmrs.module.querystore.bootstrap.BootstrapProgress obs =
+		        new org.openmrs.module.querystore.bootstrap.BootstrapProgress("obs");
+		obs.setStatus(org.openmrs.module.querystore.bootstrap.BootstrapStatus.COMPLETED);
+		when(bootstrap.getStatus()).thenReturn(Collections.singletonList(obs));
+		when(bootstrap.getResourceTypeNames()).thenReturn(Arrays.asList("obs", "condition"));
+		controller.setBootstrapService(bootstrap);
+
+		Map<?, ?> body = (Map<?, ?>) controller.getIndexingStatus().getBody();
+
+		assertEquals("condition has no row yet, so indexing is not complete", Boolean.FALSE, body.get("complete"));
+	}
+
+	@Test
 	public void reindex_withPatient_reprojectsThatPatientAndReturnsTheDocumentCount() {
 		authenticate();
 		// Adapter contract: a per-patient body reprojects that one patient (not a global launch) and

@@ -86,7 +86,7 @@ public class QueryStoreRestController {
 	public ResponseEntity<Object> getIndexingStatus() {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
-		BootstrapService bootstrap = Context.getService(BootstrapService.class);
+		BootstrapService bootstrap = bootstrapService();
 		BootstrapStatusReport report = BootstrapStatusReport.from(
 				bootstrap.getStatus(), bootstrap.getResourceTypeNames());
 
