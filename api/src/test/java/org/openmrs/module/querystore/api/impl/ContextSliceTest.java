@@ -802,6 +802,181 @@ public class ContextSliceTest {
 		assertEquals("Does have any kidney problems?", backend.lastQueryText);
 	}
 
+	@Test
+	public void similarityLeg_diversifiesRepeatedConceptsAndSkipsPolicyClaimedRecords() {
+		// Longitudinal repeats of a single concept (e.g. Pregnancy status: No x 3) and records
+		// already claimed by higher-priority policy tiers must not crowd out distinct concepts
+		// (e.g. Serum creatinine) from the similarity budget.
+		QueryDocument preg1 = doc("obs", "preg-1", "Pregnancy status: No", LocalDate.of(2026, 6, 1));
+		preg1.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		preg1.putMetadata(QueryStoreConstants.FIELD_VALUE_CODED_UUID, "coded-no");
+		QueryDocument preg2 = doc("obs", "preg-2", "Pregnancy status: No", LocalDate.of(2026, 5, 1));
+		preg2.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		preg2.putMetadata(QueryStoreConstants.FIELD_VALUE_CODED_UUID, "coded-no");
+		QueryDocument preg3 = doc("obs", "preg-3", "Pregnancy status: No", LocalDate.of(2026, 4, 1));
+		preg3.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		preg3.putMetadata(QueryStoreConstants.FIELD_VALUE_CODED_UUID, "coded-no");
+		QueryDocument creat = doc("obs", "creat-1", "Serum creatinine (umol/L): 193.7 umol/L",
+		        LocalDate.of(2026, 3, 1));
+		creat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+
+		backend.chart.addAll(Arrays.asList(preg1, preg2, preg3, creat));
+		// Ranked hits: mandatory record first (already claimed by mandatory tier), then 3
+		// repeats of pregnancy status, then serum creatinine. With similarityLimit=2, mandatory is
+		// skipped and preg-1 and creat-1 are selected first and second, ahead of preg-2/3, while
+		// keeping their own search ranks 2 and 5.
+		backend.hits = Arrays.asList(backend.chart.get(0), preg1, preg2, preg3, creat);
+
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(2);
+
+		ContextSlice slice = service.getContextSlice(PATIENT, "Does the patient have any kidney issues?", request);
+
+		Map<String, String> tiers = tiersByUuid(slice);
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("preg-1"));
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-1"),
+		        "distinct concept must not be starved by repeated longitudinal observations; got " + tiers);
+		assertFalse(tiers.containsKey("preg-2"));
+		assertFalse(tiers.containsKey("preg-3"));
+	}
+
+	/** Rankers never see dates (Decision 7), so of identical repeats the slot goes to the newest. */
+	@Test
+	public void similarityLeg_givesARepeatedValuesSlotToItsNewestRecord() {
+		QueryDocument older = doc("obs", "creat-old", "Serum creatinine (umol/L): 88 umol/L", LocalDate.of(2025, 1, 1));
+		older.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+		QueryDocument newer = doc("obs", "creat-new", "Serum creatinine (umol/L): 88 umol/L", LocalDate.of(2026, 6, 25));
+		newer.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+		backend.chart.add(1, newer);
+		backend.chart.add(older);
+		backend.hits = Arrays.asList(older, newer);
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(1);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "What is the creatinine?", request));
+
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-new"), "got " + tiers);
+		assertFalse(tiers.containsKey("creat-old"), "got " + tiers);
+	}
+
+	/** A limit whose tripling wraps an int still fetches every candidate rather than the floor. */
+	@Test
+	public void similarityLeg_fetchesEveryCandidateWhenTheLimitIsTooLargeToTriple() {
+		List<QueryDocument> hits = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 40; i++) {
+			QueryDocument record = doc("obs", "record-" + i, "Finding " + i + ": " + i, LocalDate.of(2026, 1, 1).plusDays(i));
+			record.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-" + i);
+			hits.add(record);
+		}
+		backend.chart.addAll(hits);
+		backend.hits = hits;
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(715827883);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "Any findings?", request));
+
+		for (int i = 0; i < 40; i++) {
+			assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("record-" + i), "got " + tiers);
+		}
+	}
+
+	/** The newest repeat is the newest of the fetched candidates: one ranked below the pool is not seen. */
+	@Test
+	public void similarityLeg_givesARepeatsSlotToTheNewestFetchedCandidate() {
+		List<QueryDocument> hits = new ArrayList<QueryDocument>();
+		for (int i = 0; i < 37; i++) {
+			// The 37th hit, outside the 36-candidate pool, is the newest reading of all.
+			LocalDate date = i == 36 ? LocalDate.of(2026, 6, 30) : LocalDate.of(2025, 1, 1).plusDays(i);
+			QueryDocument reading = doc("obs", "repeat-" + i, "Weight (kg): 70 kg", date);
+			reading.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-weight");
+			hits.add(reading);
+		}
+		// The chart is newest first, as the backend reads it.
+		List<QueryDocument> newestFirst = new ArrayList<QueryDocument>(hits);
+		newestFirst.sort((a, b) -> b.getDate().compareTo(a.getDate()));
+		backend.chart.addAll(newestFirst);
+		backend.hits = hits;
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(1);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "What is her weight?", request));
+
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("repeat-35"), "got " + tiers);
+		assertFalse(tiers.containsKey("repeat-36"), "got " + tiers);
+	}
+
+	/** Distinct values of one concept are a series, not repeats: a trend question keeps them. */
+	@Test
+	public void similarityLeg_keepsANumericSeriesWhenConceptsOutnumberSlots() {
+		List<QueryDocument> hits = new ArrayList<QueryDocument>();
+		String[] values = { "88", "120", "193.7" };
+		for (int i = 0; i < values.length; i++) {
+			QueryDocument creat = doc("obs", "creat-" + i, "Serum creatinine (umol/L): " + values[i] + " umol/L",
+			        LocalDate.of(2026, 3 + i, 1));
+			creat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+			hits.add(creat);
+		}
+		for (int i = 0; i < 3; i++) {
+			QueryDocument other = doc("obs", "other-" + i, "Other " + i + ": 1", LocalDate.of(2025, 1, 1 + i));
+			other.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-other-" + i);
+			hits.add(other);
+		}
+		backend.chart.addAll(hits);
+		backend.hits = hits;
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(3);
+
+		Map<String, String> tiers = tiersByUuid(
+		        service.getContextSlice(PATIENT, "How has her creatinine changed this year?", request));
+
+		for (int i = 0; i < values.length; i++) {
+			assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-" + i), "got " + tiers);
+		}
+	}
+
+	/** A hit past the Elasticsearch chart cap is in the index but not in the chart the slice is
+	 *  built from, so it could never fill the slot it took; the next candidate gets it. */
+	@Test
+	public void similarityLeg_skipsAHitTheChartDoesNotHold() {
+		QueryDocument beyondTheCap = doc("obs", "ghost-1", "Serum creatinine (umol/L): 180 umol/L",
+		        LocalDate.of(2016, 1, 1));
+		QueryDocument held = doc("obs", "creat-1", "Serum creatinine (umol/L): 193.7 umol/L", LocalDate.of(2026, 3, 1));
+		backend.chart.add(held);
+		backend.hits = Arrays.asList(beyondTheCap, held);
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(1);
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "kidney issues?", request));
+
+		assertEquals(QueryStoreConstants.TIER_SIMILARITY, tiers.get("creat-1"), "got " + tiers);
+		assertFalse(tiers.containsKey("ghost-1"));
+	}
+
+	/** A diversified pick keeps each record's own search rank, so budgeting by rank drops by relevance. */
+	@Test
+	public void similarityLeg_aDiversifiedPickCarriesTheRecordsOwnSearchRank() {
+		QueryDocument first = doc("obs", "preg-1", "Pregnancy status: No", LocalDate.of(2026, 6, 1));
+		first.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		QueryDocument repeat = doc("obs", "preg-2", "Pregnancy status: No", LocalDate.of(2026, 5, 1));
+		repeat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-preg");
+		QueryDocument creat = doc("obs", "creat-1", "Serum creatinine (umol/L): 193.7 umol/L", LocalDate.of(2026, 3, 1));
+		creat.putMetadata(QueryStoreConstants.FIELD_CONCEPT_UUID, "concept-creat");
+		backend.chart.addAll(Arrays.asList(first, repeat, creat));
+		backend.hits = Arrays.asList(first, repeat, creat);
+		ContextSliceRequest request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		request.setSimilarityLimit(2);
+
+		Map<String, Integer> ranks = new LinkedHashMap<String, Integer>();
+		for (ContextSliceRecord record : service.getContextSlice(PATIENT, "kidney issues?", request).getRecords()) {
+			if (QueryStoreConstants.TIER_SIMILARITY.equals(record.getTier())) {
+				ranks.put(record.getDocument().getResourceUuid(), record.getRank());
+			}
+		}
+
+		assertEquals(Integer.valueOf(1), ranks.get("preg-1"), "got " + ranks);
+		assertEquals(Integer.valueOf(3), ranks.get("creat-1"), "got " + ranks);
+	}
+
 	/** Scripted backend: canned chart + canned similarity hits, everything else inert. */
 	private static final class FakeBackendStore implements BackendStore {
 
@@ -841,8 +1016,10 @@ public class ContextSliceTest {
 			if (throwOnSearch) {
 				throw new RuntimeException("simulated backend search failure");
 			}
+			// Honour the requested limit as a real backend would, so a slice that stops fetching
+			// the deeper candidate pool loses the records it needs and the tests see it.
 			List<Hit> out = new ArrayList<Hit>();
-			for (int i = 0; i < hits.size(); i++) {
+			for (int i = 0; i < Math.min(hits.size(), req.getLimit()); i++) {
 				out.add(new Hit(hits.get(i), 1.0 - i * 0.1, i + 1));
 			}
 			return new SearchResult(out);

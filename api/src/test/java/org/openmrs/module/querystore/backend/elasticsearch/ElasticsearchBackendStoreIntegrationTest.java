@@ -399,7 +399,7 @@ public class ElasticsearchBackendStoreIntegrationTest {
 		QueryDocument near = doc("obs", "patient-A", "near", new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f });
 		backend.upsert(near);
 
-		for (int limit : new int[] { 834, 2_501 }) {
+		for (int limit : new int[] { 834, 2_501, 10_008 }) {
 			SearchResult result = backend.knn(SearchRequest.builder().resourceType("obs")
 			        .queryVector(new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f }).limit(limit)
 			        .filter(Filter.patientScope("patient-A")).build());

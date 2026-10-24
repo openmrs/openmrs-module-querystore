@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.api.impl;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -519,39 +520,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		Set<String> withheldTypes = chartRead.getWithheldTypes();
 		effectiveTypes.removeAll(withheldTypes);
 
-
-		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (the patient
-		// left out, lab panels expanded; Decision 18) runs HERE on every slice, interpretation or
-		// not, at the owner of the embedder — idempotent for callers that already expand panels. A
-		// failure degrades to the policy tiers alone —
-		// selection must never block on the ranking layer.
-		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
-		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
-			try {
-				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
-				// The chart read above already ran any cold touch; a failed one is not run twice.
-				for (QueryDocument hit : rankedPatientSearch(patientUuid, retrievalQuestion,
-				        request.getSimilarityLimit())) {
-					if (hit != null && hit.getResourceUuid() != null
-					        && !similarityRanks.containsKey(hit.getResourceUuid())) {
-						similarityRanks.put(hit.getResourceUuid(),
-						        Integer.valueOf(similarityRanks.size() + 1));
-					}
-				}
-			}
-			catch (RuntimeException e) {
-				log.warn("Context-slice ranked search failed for patient " + patientUuid
-				        + " — proceeding with policy tiers only", e);
-			}
-		}
-
 		int anchor = temporal ? request.getRecencyAnchorSize() : 0;
 		Map<String, Boolean> exactSignals = exactSignals(question);
-		List<ContextSliceRecord> selected = new ArrayList<>();
-		Set<String> selectedUuids = new HashSet<>();
+		Map<String, String> policyTiers = new LinkedHashMap<>();
 		for (int i = 0; i < chart.size(); i++) {
 			QueryDocument doc = chart.get(i);
-			if (doc == null || doc.getResourceUuid() == null) {
+			if (doc == null || doc.getResourceUuid() == null || policyTiers.containsKey(doc.getResourceUuid())) {
 				continue;
 			}
 			String tier = null;
@@ -563,7 +537,46 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 				tier = QueryStoreConstants.TIER_TYPED;
 			} else if (i < anchor) {
 				tier = QueryStoreConstants.TIER_RECENCY_ANCHOR;
-			} else if (similarityRanks.containsKey(doc.getResourceUuid())) {
+			}
+			if (tier != null) {
+				policyTiers.put(doc.getResourceUuid(), tier);
+			}
+		}
+
+		// Ranked-search hits are the semantic catch-all tier. Retrieval preprocessing (the patient
+		// left out, lab panels expanded; Decision 18) runs HERE on every slice, interpretation or
+		// not, at the owner of the embedder — idempotent for callers that already expand panels. A
+		// failure degrades to the policy tiers alone —
+		// selection must never block on the ranking layer. Over-fetch candidates so records
+		// already claimed by higher-priority policy tiers and identical repeats of one value do not
+		// starve other records of similarity slots. A series of distinct values of one concept still
+		// takes one slot per value (thirty different BP readings can fill thirty slots).
+		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
+		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
+			try {
+				String retrievalQuestion = ContextQuestionInterpreter.preprocess(question);
+				// Tripled in long arithmetic: a limit above a third of Integer.MAX_VALUE would wrap.
+				int candidateLimit = (int) Math.max(Math.min(request.getSimilarityLimit() * 3L, Integer.MAX_VALUE), 36);
+				// The chart read above already ran any cold touch; a failed one is not run twice.
+				List<QueryDocument> hits = rankedPatientSearch(patientUuid, retrievalQuestion, candidateLimit);
+				similarityRanks = selectDiversifiedSimilarityRanks(
+				        hits, policyTiers.keySet(), chartPositions(chart), request.getSimilarityLimit());
+			}
+			catch (RuntimeException e) {
+				log.warn("Context-slice ranked search failed for patient " + patientUuid
+				        + " — proceeding with policy tiers only", e);
+			}
+		}
+
+		List<ContextSliceRecord> selected = new ArrayList<>();
+		Set<String> selectedUuids = new HashSet<>();
+		for (int i = 0; i < chart.size(); i++) {
+			QueryDocument doc = chart.get(i);
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			String tier = policyTiers.get(doc.getResourceUuid());
+			if (tier == null && similarityRanks.containsKey(doc.getResourceUuid())) {
 				tier = QueryStoreConstants.TIER_SIMILARITY;
 			}
 			if (tier != null && selectedUuids.add(doc.getResourceUuid())) {
@@ -578,6 +591,82 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		        chartRead.isProjectionComplete(), effectiveTypes, temporal,
 		        PatientChartFingerprint.snapshotId(chart, chartRead.isTruncated(),
 		                chartRead.isProjectionComplete()), withheldTypes);
+	}
+
+	/**
+	 * Picks up to {@code limit} similarity records one repeat-group at a time, so identical repeats
+	 * of one value share a slot instead of starving other records of slots. A group is a concept and
+	 * its rendered value: identical repeats ("Pregnancy status: No" three times) share one slot, while
+	 * distinct values of one concept stay separate, so a trend keeps one record per value. Within a
+	 * group the newest of the fetched candidates comes first, since rankers never see dates
+	 * (Decision 7) and a repeat's slot must report its latest date; a newer repeat ranked below the
+	 * candidate pool is not seen. Records a policy tier already claimed are skipped, as is a
+	 * hit the chart does not hold (past the Elasticsearch cap): it could never fill the slot it took,
+	 * and the next candidate can. Each pick keeps its own 1-based search rank.
+	 */
+	private static Map<String, Integer> selectDiversifiedSimilarityRanks(List<QueryDocument> hits,
+	        Set<String> policyClaimedUuids, Map<String, Integer> chartPositions, int limit) {
+		Map<String, Integer> searchRanks = new HashMap<>();
+		Map<String, List<String>> groups = new LinkedHashMap<>();
+		Set<String> seenUuids = new HashSet<>(policyClaimedUuids);
+		for (int i = 0; i < hits.size(); i++) {
+			QueryDocument hit = hits.get(i);
+			if (hit == null || hit.getResourceUuid() == null || !chartPositions.containsKey(hit.getResourceUuid())
+			        || !seenUuids.add(hit.getResourceUuid())) {
+				continue;
+			}
+			searchRanks.put(hit.getResourceUuid(), Integer.valueOf(i + 1));
+			String key = repeatKey(hit);
+			List<String> group = groups.get(key);
+			if (group == null) {
+				group = new ArrayList<>();
+				groups.put(key, group);
+			}
+			group.add(hit.getResourceUuid());
+		}
+		for (List<String> group : groups.values()) {
+			group.sort(Comparator.comparingInt(uuid -> chartPositions.getOrDefault(uuid, Integer.MAX_VALUE)));
+		}
+		Map<String, Integer> ranks = new LinkedHashMap<>();
+		int depth = 0;
+		boolean addedInPass = true;
+		while (ranks.size() < limit && addedInPass) {
+			addedInPass = false;
+			for (List<String> group : groups.values()) {
+				if (depth < group.size()) {
+					String uuid = group.get(depth);
+					ranks.put(uuid, searchRanks.get(uuid));
+					addedInPass = true;
+					if (ranks.size() >= limit) {
+						break;
+					}
+				}
+			}
+			depth++;
+		}
+		return ranks;
+	}
+
+	/** Each chart record's index in the {@code record_date}-desc chart: lower is newer. */
+	private static Map<String, Integer> chartPositions(List<QueryDocument> chart) {
+		Map<String, Integer> positions = new HashMap<>();
+		for (int i = 0; i < chart.size(); i++) {
+			QueryDocument doc = chart.get(i);
+			if (doc != null && doc.getResourceUuid() != null && !positions.containsKey(doc.getResourceUuid())) {
+				positions.put(doc.getResourceUuid(), Integer.valueOf(i));
+			}
+		}
+		return positions;
+	}
+
+	/** A record's concept and its rendered value; a record without a concept is its own group. */
+	private static String repeatKey(QueryDocument doc) {
+		Object conceptUuid = doc.getMetadata().get(QueryStoreConstants.FIELD_CONCEPT_UUID);
+		String concept = conceptUuid == null ? "" : conceptUuid.toString().trim();
+		if (concept.isEmpty()) {
+			return "resource:" + doc.getResourceUuid();
+		}
+		return "concept:" + concept + "\n" + (doc.getText() == null ? "" : doc.getText().trim());
 	}
 
 	/**
