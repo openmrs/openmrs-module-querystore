@@ -10,7 +10,9 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_CONCEPT_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
@@ -350,6 +352,29 @@ public class TypeBootstrapperTest {
 	}
 
 	@Test
+	public void run_aTopUpRewritesATypeWhoseVersionDoesNotTrackItsContent() {
+		// An order stopped since it was stored keeps its version (dateCreated), so only a rewrite
+		// carries its date_stopped.
+		Instant created = Instant.parse("2025-01-01T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.versionTracksContent = false;
+		b.queuePage(entity("stopped", created));
+		service.storedVersions.put("stopped", created);
+
+		b.run(new BootstrapProgress("test"), service, embedder, progressDao, true);
+
+		assertEquals(Collections.singletonList("stopped"), indexedUuids());
+	}
+
+	@Test
+	public void ordersAreTheTypesWhoseVersionDoesNotTrackTheirContent() {
+		assertFalse(new DrugOrderBootstrapper(null, null).versionTracksContent());
+		assertFalse(new TestOrderBootstrapper(null, null).versionTracksContent());
+		assertFalse(new ReferralOrderBootstrapper(null, null).versionTracksContent());
+		assertTrue(new ObsBootstrapper(null, null).versionTracksContent());
+	}
+
+	@Test
 	public void run_aForcedReprojectionEmbedsEveryRecordEvenAtItsStoredVersion() {
 		// A resync re-projects on purpose (drift, or new fields an upgrade added), so it never skips.
 		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
@@ -454,6 +479,8 @@ public class TypeBootstrapperTest {
 		@Override protected ClinicalRecordSerializer<TestEntity> getSerializer() { return serializer; }
 		@Override protected Instant getDateChanged(TestEntity e) { return e.ts; }
 		@Override protected String getUuid(TestEntity e) { return e.uuid; }
+		boolean versionTracksContent = true;
+		@Override protected boolean versionTracksContent() { return versionTracksContent; }
 
 		@Override
 		protected List<TestEntity> fetchPage(Instant afterDateChanged, String afterUuid, int pageSize) {
