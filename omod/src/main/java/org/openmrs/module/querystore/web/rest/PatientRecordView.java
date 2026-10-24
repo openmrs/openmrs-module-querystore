@@ -70,7 +70,7 @@ final class PatientRecordView {
 	 */
 	static Map<String, Object> page(String endpointUrl, List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
 	        Integer totalCount, String baseParams, String snapshotId, Boolean chartTruncated,
-	        Boolean projectionComplete, int maximumResultWindow) {
+	        Boolean projectionComplete, java.util.Set<String> withheldTypes, int maximumResultWindow) {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>(docs.size());
 		for (int i = 0; i < docs.size(); i++) {
 			results.add(toMap(docs.get(i), ranked ? Integer.valueOf(startIndex + i + 1) : null));
@@ -86,6 +86,11 @@ final class PatientRecordView {
 		}
 		if (projectionComplete != null) {
 			env.put("projectionComplete", projectionComplete);
+		}
+		if (withheldTypes != null) {
+			List<String> withheld = new ArrayList<String>(withheldTypes);
+			Collections.sort(withheld);
+			env.put("withheldTypes", withheld);
 		}
 
 		List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
@@ -171,9 +176,15 @@ final class PatientRecordView {
 		return PatientChartFingerprint.snapshotId(docs, chartTruncated, projectionComplete);
 	}
 
-	/** A page-specific strong ETag, derived from the complete snapshot and paging parameters. */
-	static String pageEtag(String snapshotId, int startIndex, int limit) {
-		return "\"" + PatientChartFingerprint.sha256(snapshotId + "|" + startIndex + "|" + limit) + "\"";
+	/**
+	 * A page-specific strong ETag, derived from the complete snapshot, the types withheld from the
+	 * caller and the paging parameters, so a caller whose read privileges changed gets the new page.
+	 */
+	static String pageEtag(String snapshotId, java.util.Set<String> withheldTypes, int startIndex, int limit) {
+		List<String> withheld = new ArrayList<String>(withheldTypes);
+		Collections.sort(withheld);
+		return "\"" + PatientChartFingerprint.sha256(snapshotId + "|" + withheld + "|" + startIndex + "|" + limit)
+		        + "\"";
 	}
 
 	private static String metadataString(QueryDocument doc, String key) {

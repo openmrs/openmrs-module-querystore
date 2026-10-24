@@ -225,6 +225,7 @@ public class QueryStoreRestController {
 		String pageEtag = null;
 		Boolean chartTruncated = null;
 		Boolean projectionComplete = null;
+		java.util.Set<String> withheldTypes = null;
 		if (patientUuid != null && query == null) {
 			// Full chart: enumerate (Decision 15 returns the whole set), then page in memory.
 			PatientChartRead chartRead = queryStoreService().getPatientChartRead(patientUuid);
@@ -232,10 +233,12 @@ public class QueryStoreRestController {
 			totalCount = Integer.valueOf(all.size());
 			chartTruncated = Boolean.valueOf(chartRead.isTruncated());
 			projectionComplete = Boolean.valueOf(chartRead.isProjectionComplete());
+			withheldTypes = chartRead.getWithheldTypes();
 			page = slice(all, from, size);
 			snapshotId = PatientRecordView.snapshotId(all, chartRead.isTruncated(),
 			        chartRead.isProjectionComplete());
-			pageEtag = PatientRecordView.pageEtag(snapshotId, from, size);
+			// The withheld types depend on the caller, not the chart, so they key the page's ETag only.
+			pageEtag = PatientRecordView.pageEtag(snapshotId, withheldTypes, from, size);
 			if (etagMatches(ifNoneMatch, pageEtag)) {
 				return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
 				        .eTag(pageEtag)
@@ -254,7 +257,7 @@ public class QueryStoreRestController {
 		}
 
 		Map<String, Object> body = PatientRecordView.page(request.getRequestURL().toString(), page, ranked, from, size, totalCount,
-		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete, maximum);
+		        baseParams.toString(), snapshotId, chartTruncated, projectionComplete, withheldTypes, maximum);
 		if (pageEtag != null) {
 			return ResponseEntity.ok()
 			        .eTag(pageEtag)
