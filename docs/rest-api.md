@@ -54,7 +54,8 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   registered resource type has completed a bootstrap; a type whose earlier bootstrap completed
   still counts while a restart's top-up walks it again, and a type being reset or resynced does
   not. An older `QueryStoreService` implementation that cannot prove this reports false.
-  Full-chart reads also carry a stable
+  Full-chart reads also name in `withheldTypes` every core type the caller holds no core read
+  privilege for, whose records the chart left out, and carry a stable
   `snapshotId` for the complete materialized chart. Ranked top-K reads use `null` because the
   service does not expose a browseable total.
 - **Records:** `resourceType`, `resourceUuid`, ISO `date` (the record's sort date),
@@ -80,7 +81,8 @@ selection and its effective interpretation, so an external client can reject pag
 context slices. It is not a full-chart snapshot, an HTTP cache validator, or a promise that the
 underlying chart is complete. Context pages are question-dependent and are not cached.
 
-For a full-chart page, the response has a strong page-specific `ETag` and
+For a full-chart page, the response has a strong page-specific `ETag`, which also changes with
+the types withheld from the caller, and
 `Cache-Control: private, no-cache, must-revalidate`. Send that token as `If-None-Match` on the
 same page request: an unchanged page returns `304 Not Modified` with no clinical payload. The
 `snapshotId` covers the materialized records and their completeness state, so a multi-page consumer

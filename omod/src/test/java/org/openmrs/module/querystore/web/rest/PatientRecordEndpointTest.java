@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -299,6 +300,27 @@ public class PatientRecordEndpointTest {
 		assertEquals(Boolean.TRUE, body(complete).get("projectionComplete"));
 		assertFalse(body(incomplete).get("snapshotId").equals(body(complete).get("snapshotId")));
 		assertFalse(incomplete.getHeaders().getETag().equals(complete.getHeaders().getETag()));
+	}
+
+	@Test
+	public void fullChart_namesTheTypesWithheldFromTheCallerAndKeysTheEtagOnThem() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		QueryDocument record = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
+		        new PatientChartRead(Arrays.asList(record), false, true, Collections.singleton("allergy")),
+		        new PatientChartRead(Arrays.asList(record), false, true, Collections.<String> emptySet()));
+
+		ResponseEntity<Object> withheld = controller.getPatientRecords(request, PATIENT, null, null, null, null);
+		ResponseEntity<Object> granted = controller.getPatientRecords(request,
+		        PATIENT, null, null, null, withheld.getHeaders().getETag());
+
+		assertEquals(Collections.singletonList("allergy"), body(withheld).get("withheldTypes"));
+		assertEquals("the same chart read with the privilege granted is not a 304", HttpStatus.OK,
+		    granted.getStatusCode());
+		assertEquals(Collections.emptyList(), body(granted).get("withheldTypes"));
+		assertEquals(body(withheld).get("snapshotId"), body(granted).get("snapshotId"));
 	}
 
 	@Test
