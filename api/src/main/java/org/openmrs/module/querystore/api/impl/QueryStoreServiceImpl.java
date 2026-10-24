@@ -695,8 +695,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 
 	/**
 	 * The mandatory clinical core (Decision 17 tier 1): the patient demographics record, every
-	 * allergy, and every condition/diagnosis whose {@code clinical_status} metadata is ACTIVE.
-	 * Safety context every slice carries regardless of the caller's typed scope.
+	 * allergy, and every condition/diagnosis whose {@code clinical_status} metadata is ACTIVE,
+	 * RECURRENCE or RELAPSE, the statuses core's {@code ConditionService.getActiveConditions} counts
+	 * as active since TRUNK-6170. Safety context every slice carries regardless of the caller's typed
+	 * scope.
 	 */
 	private static boolean isMandatoryCore(QueryDocument doc) {
 		String type = doc.getResourceType();
@@ -704,8 +706,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			return true;
 		}
 		if ("condition".equals(type) || "diagnosis".equals(type)) {
+			// The statuses core's ConditionService.getActiveConditions counts as active (TRUNK-6170).
 			Object status = doc.getMetadata().get(QueryStoreConstants.FIELD_CLINICAL_STATUS);
-			return status != null && "ACTIVE".equalsIgnoreCase(status.toString());
+			String clinicalStatus = status == null ? null : status.toString();
+			return "ACTIVE".equalsIgnoreCase(clinicalStatus) || "RECURRENCE".equalsIgnoreCase(clinicalStatus)
+			        || "RELAPSE".equalsIgnoreCase(clinicalStatus);
 		}
 		return false;
 	}

@@ -227,6 +227,20 @@ public class ContextSliceTest {
 		assertEquals(Collections.singleton("allergy"), slice.getWithheldTypes());
 	}
 
+	/** A recurrence or relapse is active to core (TRUNK-6170), so it rides the mandatory tier too. */
+	@Test
+	public void mandatoryCore_carriesARecurringOrRelapsedCondition() {
+		backend.chart.add(condition("cond-recurrence", "Condition: Tuberculosis", LocalDate.of(2025, 1, 1), "RECURRENCE"));
+		backend.chart.add(condition("cond-relapse", "Condition: Malaria", LocalDate.of(2025, 2, 1), "RELAPSE"));
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, "Shoe size?",
+		    new ContextSliceRequest(Collections.<String> emptySet(), false)));
+
+		assertEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("cond-recurrence"), "got " + tiers);
+		assertEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("cond-relapse"), "got " + tiers);
+		assertNotEquals(QueryStoreConstants.TIER_MANDATORY, tiers.get("cond-old"), "got " + tiers);
+	}
+
 	@Test
 	public void mandatoryCore_ridesEverySlice_regardlessOfTypesAndSimilarity() {
 		JsonNode fixtureCase = fixtureCase("context_policy", "context.enumerated-medications-are-complete");
