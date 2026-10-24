@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.bootstrap;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -121,6 +122,19 @@ public abstract class TypeBootstrapper<T> {
 
 	public final void run(BootstrapProgress progress, QueryStoreService service, EmbeddingProvider embedder,
 	                      BootstrapProgressDao progressDao) {
+		run(progress, service, embedder, progressDao, false);
+	}
+
+	/**
+	 * As {@link #run(BootstrapProgress, QueryStoreService, EmbeddingProvider, BootstrapProgressDao)};
+	 * with {@code skipUnchanged}, a record the store already holds at its current version is neither
+	 * serialized, embedded nor written. A restart's top-up walks every record changed since the last
+	 * checkpoint, and steady-state sync has indexed most of them already, so re-embedding is the whole
+	 * cost of the window in which the type is RUNNING. A forced re-projection must not skip: it exists
+	 * to rewrite records whose stored version is current.
+	 */
+	public final void run(BootstrapProgress progress, QueryStoreService service, EmbeddingProvider embedder,
+	                      BootstrapProgressDao progressDao, boolean skipUnchanged) {
 		progress.setStatus(BootstrapStatus.RUNNING);
 		if (progress.getStartedAt() == null) {
 			progress.setStartedAt(Instant.now());
@@ -133,6 +147,9 @@ public abstract class TypeBootstrapper<T> {
 				PageResult<T> page = nextPage(progress.getCursorDateChanged(), progress.getCursorUuid(), PAGE_SIZE);
 				if (page == null) {
 					break;
+				}
+				if (skipUnchanged) {
+					page = page.withEntities(withoutStoredAtCurrentVersion(page.entities, service));
 				}
 				// Batch the writes: one bulkIndex per page instead of one index() per record avoids the
 				// per-doc commit (MySQL per-row txn+fsync, Lucene segment-per-doc) that dominates backfill
@@ -158,6 +175,43 @@ public abstract class TypeBootstrapper<T> {
 			progressDao.save(progress);
 			throw e;
 		}
+	}
+
+	/**
+	 * Whether this type's version changes whenever its content does, so a record stored at its
+	 * current version can be skipped by a top-up. Orders answer false: {@code Order.hbm.xml} maps no
+	 * {@code dateChanged}, so stopping an order (revise, discontinue) leaves its version at
+	 * {@code dateCreated}, and core raises no event for the stopped order (openmrs-core #6197). A
+	 * top-up must rewrite such a record or the stopped order keeps reading as active.
+	 */
+	protected boolean versionTracksContent() {
+		return true;
+	}
+
+	/** The entities whose stored version differs from their own, or that are not stored at all. */
+	private List<T> withoutStoredAtCurrentVersion(List<T> entities, QueryStoreService service) {
+		if (!versionTracksContent()) {
+			return entities;
+		}
+		List<String> uuids = new ArrayList<String>(entities.size());
+		for (T entity : entities) {
+			String uuid = getUuid(entity);
+			if (uuid != null) {
+				uuids.add(uuid);
+			}
+		}
+		Map<String, Instant> stored = service.findStoredVersions(getResourceType(), uuids);
+		if (stored.isEmpty()) {
+			return entities;
+		}
+		List<T> changed = new ArrayList<T>(entities.size());
+		for (T entity : entities) {
+			Instant version = stored.get(getUuid(entity));
+			if (version == null || !version.equals(getDateChanged(entity))) {
+				changed.add(entity);
+			}
+		}
+		return changed;
 	}
 
 	/**
@@ -294,6 +348,11 @@ public abstract class TypeBootstrapper<T> {
 			this.entities = entities;
 			this.nextCursorDate = nextCursorDate;
 			this.nextCursorUuid = nextCursorUuid;
+		}
+
+		/** The same page and cursor with only {@code kept} left to project. */
+		PageResult<E> withEntities(List<E> kept) {
+			return new PageResult<E>(kept, nextCursorDate, nextCursorUuid);
 		}
 	}
 }

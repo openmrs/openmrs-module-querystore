@@ -37,8 +37,10 @@ import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
  * PurgeServiceEvent}; every other event passes {@code false} and lets the entity's own state decide.
  *
  * <p><b>Synchronous serialize, asynchronous write.</b> Serialization runs on the caller's thread
- * (inside the originating transaction, so lazy navigations resolve against an open session); the
- * embed + index/delete is handed to {@code dispatcher} to run after commit. Per-node failures inside
+ * (inside the originating transaction, so lazy navigations resolve against an open session and the
+ * associations the serializer reads are initialized); the embed + index/delete is handed to
+ * {@code dispatcher} to run after commit, which serializes the same nodes again so the write holds
+ * what the save committed (see {@link #committedDocument}). Per-node failures inside
  * the dispatched task are caught so one poison record cannot skip its siblings.
  */
 public final class RecordProjector {
@@ -48,10 +50,39 @@ public final class RecordProjector {
 	private RecordProjector() {
 	}
 
+	/**
+	 * The document to write after commit. The save event publishes before the save stamps the audit
+	 * dates and runs its save handlers, so the event-time serialization holds pre-save content: a new
+	 * condition, diagnosis, allergy or patient has no {@code record_date}, and a new record has no
+	 * version. The saved node is the same instance and now holds what was committed, so it is
+	 * serialized again. If that fails (a lazy association outside its session), the event-time
+	 * document is written as it is. A new record's has no version, so the bootstrap top-up rewrites
+	 * it from core. An edited record's keeps the previous save's version, which the top-up rewrites
+	 * unless the edit fell in that save's second, the case a {@code resyncType} repairs; clearing it
+	 * would make the Elasticsearch write unversioned, which moves the stored version past that
+	 * second and refuses even the resync's rewrite. Returns {@code null} when the committed node has
+	 * nothing to index or was voided since the event.
+	 */
+	static <T extends BaseOpenmrsData> QueryDocument committedDocument(ClinicalRecordSerializer<T> serializer,
+	        T node, QueryDocument eventTime) {
+		try {
+			if (Boolean.TRUE.equals(node.getVoided())) {
+				return null;
+			}
+			return serializer.serialize(node);
+		}
+		catch (RuntimeException e) {
+			log.debug("Could not serialize the committed " + serializer.getResourceType() + "/" + node.getUuid()
+			        + "; writing the event-time document", e);
+			return eventTime;
+		}
+	}
+
 	public static <T extends BaseOpenmrsData> void project(ClinicalRecordSerializer<T> serializer, T root,
 	        boolean purge, RecordIndexer indexer, AfterCommitDispatcher dispatcher) {
 		List<T> tree = serializer.collectTree(root);
 		List<QueryDocument> toIndex = new ArrayList<>(tree.size());
+		List<T> indexedNodes = new ArrayList<>(tree.size());
 		List<String> toDelete = new ArrayList<>(purge ? tree.size() : 0);
 		for (T node : tree) {
 			if (purge || node.getVoided()) {
@@ -60,6 +91,7 @@ public final class RecordProjector {
 				QueryDocument doc = serializer.serialize(node);
 				if (doc != null) {
 					toIndex.add(doc);
+					indexedNodes.add(node);
 				}
 			}
 		}
@@ -70,36 +102,84 @@ public final class RecordProjector {
 			return;
 		}
 		String resourceType = serializer.getResourceType();
-		dispatcher.dispatch(() -> {
-			// Per-entity failure isolation: a single poison document (e.g., embedder throws on a
-			// pathological text) must not skip its sibling members. The dispatcher's outer guard
-			// remains as a last-resort catch for anything that escapes here.
-			for (QueryDocument doc : toIndex) {
-				try {
-					indexer.index(doc);
-				}
-				catch (RuntimeException e) {
-					log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
-					        + " due to failure", e);
+		dispatcher.dispatchPrepared(() -> {
+			// On the committing thread, right after the commit: the documents of the committed state.
+			// The pool worker that embeds and writes runs later, when the same instances may already
+			// carry a change a later transaction made and rolled back, so it reads no entity.
+			List<QueryDocument> committed = new ArrayList<>(toIndex.size());
+			List<String> voided = new ArrayList<>();
+			List<QueryDocument> replacements = new ArrayList<>();
+			for (int i = 0; i < toIndex.size(); i++) {
+				T node = indexedNodes.get(i);
+				QueryDocument doc = committedDocument(serializer, node, toIndex.get(i));
+				if (doc != null) {
+					committed.add(doc);
+				} else if (Boolean.TRUE.equals(node.getVoided())) {
+					// The save voided the node its event carried: its document goes (Decision 10) and
+					// whatever the save wrote in its place is indexed, which no event of its own announces.
+					voided.add(node.getUuid());
+					try {
+						for (T replacement : serializer.replacementsOf(node)) {
+							QueryDocument replacementDoc = serializer.serialize(replacement);
+							if (replacementDoc != null) {
+								replacements.add(replacementDoc);
+							}
+						}
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping the replacement of " + resourceType + "/" + node.getUuid()
+						        + " due to failure", e);
+					}
 				}
 			}
-			for (String uuid : toDelete) {
-				try {
-					indexer.delete(resourceType, uuid);
+			return () -> {
+				// Per-entity failure isolation: a single poison document (e.g., embedder throws on a
+				// pathological text) must not skip its sibling members. The dispatcher's outer guard
+				// remains as a last-resort catch for anything that escapes here.
+				for (QueryDocument doc : committed) {
+					try {
+						indexer.index(doc);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
+						        + " due to failure", e);
+					}
 				}
-				catch (RuntimeException e) {
-					log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+				for (String uuid : voided) {
+					try {
+						indexer.delete(resourceType, uuid);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+					}
 				}
-			}
-			if (bulkDeletePatientUuid != null) {
-				try {
-					indexer.bulkDeleteByPatient(bulkDeletePatientUuid);
+				for (QueryDocument doc : replacements) {
+					try {
+						indexer.index(doc);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
+						        + " due to failure", e);
+					}
 				}
-				catch (RuntimeException e) {
-					log.warn("Skipping bulk-delete-by-patient for " + bulkDeletePatientUuid
-					        + " due to failure", e);
+				for (String uuid : toDelete) {
+					try {
+						indexer.delete(resourceType, uuid);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+					}
 				}
-			}
+				if (bulkDeletePatientUuid != null) {
+					try {
+						indexer.bulkDeleteByPatient(bulkDeletePatientUuid);
+					}
+					catch (RuntimeException e) {
+						log.warn("Skipping bulk-delete-by-patient for " + bulkDeletePatientUuid
+						        + " due to failure", e);
+					}
+				}
+			};
 		});
 	}
 }

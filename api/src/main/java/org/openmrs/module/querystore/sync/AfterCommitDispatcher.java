@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.sync;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -68,6 +69,42 @@ public class AfterCommitDispatcher {
 			});
 		} else {
 			executor.submit(guarded);
+		}
+	}
+
+	/**
+	 * Runs {@code prepare} on the committing thread right after the commit, while the entities still
+	 * hold what was committed and the session is open, and submits the task it returns to the pool.
+	 * Serialization belongs in {@code prepare}: a task that read the entity later on the pool thread
+	 * could see a change a later transaction made and rolled back. Outside a transaction, {@code
+	 * prepare} runs at once.
+	 */
+	public void dispatchPrepared(Supplier<Runnable> prepare) {
+		if (TransactionSynchronizationManager.isSynchronizationActive()) {
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCommit() {
+					Runnable task = prepared(prepare);
+					if (task != null) {
+						executor.submit(wrap(task));
+					}
+				}
+			});
+		} else {
+			Runnable task = prepared(prepare);
+			if (task != null) {
+				dispatch(task);
+			}
+		}
+	}
+
+	private static Runnable prepared(Supplier<Runnable> prepare) {
+		try {
+			return prepare.get();
+		}
+		catch (RuntimeException e) {
+			log.warn("After-commit projection could not be prepared; swallowing per ADR Decision 12", e);
+			return null;
 		}
 	}
 
