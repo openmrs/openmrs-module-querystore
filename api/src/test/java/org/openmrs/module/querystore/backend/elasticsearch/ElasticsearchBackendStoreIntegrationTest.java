@@ -394,6 +394,21 @@ public class ElasticsearchBackendStoreIntegrationTest {
 	}
 
 	@Test
+	public void knnServesALimitAboveTheCandidatesElasticsearchAccepts() {
+		// Elasticsearch refuses num_candidates above 10,000, which four times a ranked read of 2,501 asks for.
+		QueryDocument near = doc("obs", "patient-A", "near", new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f });
+		backend.upsert(near);
+
+		for (int limit : new int[] { 834, 2_501 }) {
+			SearchResult result = backend.knn(SearchRequest.builder().resourceType("obs")
+			        .queryVector(new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f }).limit(limit)
+			        .filter(Filter.patientScope("patient-A")).build());
+
+			assertEquals("limit " + limit, 1, result.getHits().size());
+		}
+	}
+
+	@Test
 	public void knnReturnsResultsRankedByCosineSimilarity() {
 		QueryDocument near = doc("obs", "patient-A", "near", new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f });
 		QueryDocument far = doc("obs", "patient-A", "far", new float[] { 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f });

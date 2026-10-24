@@ -103,6 +103,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 	// Mirror Lucene's HNSW candidate-width floor. Wider than k for better recall on small limits.
 	private static final long KNN_NUM_CANDIDATES_FLOOR = 100L;
 
+	/** Elasticsearch refuses a {@code num_candidates} above this. */
+	private static final long KNN_NUM_CANDIDATES_MAX = 10_000L;
+
 	private final ElasticsearchClientFactory clientFactory;
 
 	private final ElasticsearchSchemaManager schemaManager;
@@ -580,7 +583,8 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		List<String> indexes = resolveIndexes(req);
 		Query filter = ElasticsearchFilterTranslator.toQuery(req.getFilters());
 		List<Float> vector = toFloatList(req.getQueryVector());
-		long numCandidates = Math.max((long) req.getLimit() * 4L, KNN_NUM_CANDIDATES_FLOOR);
+		long numCandidates = Math.min(Math.max((long) req.getLimit() * 4L, KNN_NUM_CANDIDATES_FLOOR),
+		        KNN_NUM_CANDIDATES_MAX);
 		KnnSearch knn = KnnSearch.of(k -> {
 			k.field(ElasticsearchFieldNames.EMBEDDING)
 			        .queryVector(vector)
