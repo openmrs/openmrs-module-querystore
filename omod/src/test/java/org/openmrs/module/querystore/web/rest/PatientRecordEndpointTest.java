@@ -181,6 +181,22 @@ public class PatientRecordEndpointTest {
 	}
 
 	@Test
+	public void contextMode_leavesInterpretationOffWhenNotAsked() {
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		org.mockito.ArgumentCaptor<org.openmrs.module.querystore.model.ContextSliceRequest> captor =
+		        org.mockito.ArgumentCaptor.forClass(org.openmrs.module.querystore.model.ContextSliceRequest.class);
+		when(queryStore.getContextSlice(eq(PATIENT), eq("meds?"), captor.capture()))
+		        .thenReturn(new org.openmrs.module.querystore.model.ContextSlice(
+		                new ArrayList<org.openmrs.module.querystore.model.ContextSliceRecord>(), 0, false));
+
+		controller.getPatientRecords(request, PATIENT, "meds?", null, null, "context", null, null, null);
+
+		assertFalse("interpretation is opt-in", captor.getValue().isInterpretQuestion());
+	}
+
+	@Test
 	public void fullChart_returnsAllMaterializedRecordsPaged_andNoEmbedding() {
 		authenticate();
 		wire();
