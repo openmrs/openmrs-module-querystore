@@ -367,10 +367,11 @@ public class TypeBootstrapperTest {
 	}
 
 	@Test
-	public void ordersAreTheTypesWhoseVersionDoesNotTrackTheirContent() {
+	public void ordersAndPatientsAreTheTypesWhoseVersionDoesNotTrackTheirContent() {
 		assertFalse(new DrugOrderBootstrapper(null, null).versionTracksContent());
 		assertFalse(new TestOrderBootstrapper(null, null).versionTracksContent());
 		assertFalse(new ReferralOrderBootstrapper(null, null).versionTracksContent());
+		assertFalse(new PatientBootstrapper(null, null).versionTracksContent());
 		assertTrue(new ObsBootstrapper(null, null).versionTracksContent());
 	}
 

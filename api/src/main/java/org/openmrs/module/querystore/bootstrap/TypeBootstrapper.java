@@ -182,7 +182,10 @@ public abstract class TypeBootstrapper<T> {
 	 * current version can be skipped by a top-up. Orders answer false: {@code Order.hbm.xml} maps no
 	 * {@code dateChanged}, so stopping an order (revise, discontinue) leaves its version at
 	 * {@code dateCreated}, and core raises no event for the stopped order (openmrs-core #6197). A
-	 * top-up must rewrite such a record or the stopped order keeps reading as active.
+	 * top-up must rewrite such a record or the stopped order keeps reading as active. Patients answer
+	 * false too: an identifier saved through {@code savePatientIdentifier} (REST's
+	 * {@code POST /patient/{uuid}/identifier}) raises no event a serializer resolves and leaves the
+	 * patient's version unchanged, so only a top-up's rewrite carries the new identifier.
 	 */
 	protected boolean versionTracksContent() {
 		return true;

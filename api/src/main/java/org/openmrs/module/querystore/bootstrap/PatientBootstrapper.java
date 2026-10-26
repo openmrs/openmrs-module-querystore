@@ -40,6 +40,12 @@ public class PatientBootstrapper extends HibernateTypeBootstrapper<Patient> {
 	}
 
 	@Override
+	protected boolean versionTracksContent() {
+		// Saving an identifier leaves the patient's version unchanged; see TypeBootstrapper#versionTracksContent.
+		return false;
+	}
+
+	@Override
 	protected String patientAssociationExpr() {
 		// Patient is the entity itself — no patient association to traverse. Filter by uuid; the
 		// per-patient page returns at most one row.
