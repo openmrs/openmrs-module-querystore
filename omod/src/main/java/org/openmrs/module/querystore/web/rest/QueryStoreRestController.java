@@ -111,12 +111,13 @@ public class QueryStoreRestController {
 	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;            -&gt; full chart (getPatientChart), date desc, paged
 	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;q=&lt;text&gt; -&gt; hybrid-ranked top-K (searchByPatient)
 	 * GET /ws/rest/v1/querystore/patientrecord?q=&lt;text&gt;                  -&gt; cross-patient ranked top-K (search; coarse gate)
-	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;mode=context[&amp;q=&lt;text&gt;][&amp;types=&lt;t1,t2&gt;][&amp;temporal=true]
+	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;mode=context[&amp;q=&lt;text&gt;][&amp;types=&lt;t1,t2&gt;][&amp;temporal=true][&amp;interpret=true]
 	 *                                                                   -&gt; tiered context slice (getContextSlice), paged
 	 * </pre>
 	 *
 	 * <p>{@code mode=context} requires a patient; {@code types} and {@code temporal} are the caller's
-	 * reading of the question and are accepted only with it. Each record carries the tier that
+	 * reading of the question, {@code interpret=true} asks the module to read it as well, and all
+	 * three are accepted only with it. Each record carries the tier that
 	 * selected it; a slice page carries its source chart's {@code chartSnapshotId} and no HTTP ETag.
 	 *
 	 * <p>Gated by {@code Get Patients} — the same privilege the read methods carry. The {@code embedding}
