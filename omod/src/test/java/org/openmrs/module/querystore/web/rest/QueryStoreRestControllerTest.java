@@ -256,8 +256,8 @@ public class QueryStoreRestControllerTest {
 		org.openmrs.module.querystore.bootstrap.BootstrapProgress obs =
 		        new org.openmrs.module.querystore.bootstrap.BootstrapProgress("obs");
 		obs.setStatus(org.openmrs.module.querystore.bootstrap.BootstrapStatus.COMPLETED);
-		when(bootstrap.getStatus()).thenReturn(Collections.singletonList(obs));
-		when(bootstrap.getResourceTypeNames()).thenReturn(Arrays.asList("obs", "condition"));
+		when(bootstrap.getStatusReport()).thenReturn(org.openmrs.module.querystore.bootstrap.BootstrapStatusReport
+		        .from(Collections.singletonList(obs), Arrays.asList("obs", "condition"), null));
 		controller.setBootstrapService(bootstrap);
 
 		Map<?, ?> body = (Map<?, ?>) controller.getIndexingStatus().getBody();

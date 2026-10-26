@@ -87,9 +87,7 @@ public class QueryStoreRestController {
 	public ResponseEntity<Object> getIndexingStatus() {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
-		BootstrapService bootstrap = bootstrapService();
-		BootstrapStatusReport report = BootstrapStatusReport.from(
-				bootstrap.getStatus(), bootstrap.getResourceTypeNames());
+		BootstrapStatusReport report = bootstrapService().getStatusReport();
 
 		// Response shape (keys + values) is produced and unit-tested in BootstrapStatusReport.toMap();
 		// the controller stays a thin adapter so the JSON contract isn't hand-typed untested here.

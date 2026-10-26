@@ -661,7 +661,7 @@ public class QueryStoreServiceImplTest {
 
 		assertTrue(service.getPatientChartRead("patient-uuid").isProjectionComplete());
 		assertFalse("the status endpoint stays strict for an export",
-		        BootstrapStatusReport.from(bootstrap.status, bootstrap.resourceTypes).isComplete());
+		        bootstrap.getStatusReport().isComplete());
 	}
 
 	/** A reset or resync clears completion, so a type being rewritten is not complete. */
@@ -861,6 +861,7 @@ public class QueryStoreServiceImplTest {
 		java.util.function.Consumer<String> onEnsureIndexed;
 		List<BootstrapProgress> status = Collections.emptyList();
 		List<String> resourceTypes = Collections.emptyList();
+		String backendName;
 		final java.util.Set<String> incompletePatients = new java.util.HashSet<>();
 
 		@Override public boolean isPatientProjectionIncomplete(String patientUuid) {
@@ -879,6 +880,9 @@ public class QueryStoreServiceImplTest {
 		@Override public void reindexPatient(String patientUuid) { }
 		@Override public List<BootstrapProgress> getStatus() { return status; }
 		@Override public BootstrapProgress getStatus(String resourceType) { return null; }
+		@Override public BootstrapStatusReport getStatusReport() {
+			return BootstrapStatusReport.from(status, resourceTypes, backendName);
+		}
 		@Override public org.openmrs.module.querystore.bootstrap.DriftReport getDrift() { return null; }
 		@Override public void onStartup() { }
 		@Override public void onShutdown() { }

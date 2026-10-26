@@ -109,6 +109,13 @@ public interface BootstrapService extends OpenmrsService {
 	BootstrapProgress getStatus(String resourceType);
 
 	/**
+	 * {@link #getStatus()} as a report over every registered resource type, counting only the rows
+	 * written for the current {@code querystore.backend}: after a backend switch, rows the previous
+	 * backend completed say nothing about what the current one holds.
+	 */
+	BootstrapStatusReport getStatusReport();
+
+	/**
 	 * Read-only drift snapshot for every resource type (ADR: Sync reliability and reconciliation):
 	 * the core "expected" count ({@link TypeBootstrapper#countIndexable()}) versus the live index count
 	 * ({@link org.openmrs.module.querystore.backend.BackendStore#countByType(String)}). Detection only

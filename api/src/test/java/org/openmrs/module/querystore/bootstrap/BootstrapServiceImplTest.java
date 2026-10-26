@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -249,6 +250,21 @@ public class BootstrapServiceImplTest {
 		        new EmptyPageBootstrapper("encounter")));
 		assertTrue("registered core bootstrapper types are listed",
 		        service.getResourceTypeNames().containsAll(Arrays.asList("obs", "encounter")));
+	}
+
+	@Test
+	public void getStatusReport_doesNotCountARowAnotherBackendCompleted() {
+		BootstrapProgress prior = new BootstrapProgress("obs");
+		prior.setStatus(BootstrapStatus.COMPLETED);
+		prior.setCompletedAt(Instant.parse("2025-03-15T09:00:00Z"));
+		prior.setBackend("elasticsearch");
+		dao.store.put("obs", prior);
+		service.setBootstrappers(Collections.singletonList(new EmptyPageBootstrapper("obs")));
+
+		service.setBackendNameSupplierOverride(() -> "lucene");
+		assertFalse(service.getStatusReport().isProjected());
+		service.setBackendNameSupplierOverride(() -> "elasticsearch");
+		assertTrue(service.getStatusReport().isProjected());
 	}
 
 	@Test

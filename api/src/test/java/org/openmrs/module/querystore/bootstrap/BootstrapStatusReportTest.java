@@ -63,12 +63,30 @@ public class BootstrapStatusReportTest {
 	}
 
 	@Test
+	public void from_aRowAnotherBackendCompletedCountsAsNotStarted() {
+		// After a querystore.backend switch every row still reads COMPLETED until the next bootstrap
+		// resets it, yet the current backend holds none of those documents.
+		BootstrapProgress topUp = row("condition", BootstrapStatus.RUNNING, 4451, null);
+		topUp.setCompletedAt(Instant.parse("2026-05-31T20:23:40Z"));
+		List<BootstrapProgress> rows = java.util.Arrays.asList(
+		        row("obs", BootstrapStatus.COMPLETED, 278396, null), topUp);
+
+		BootstrapStatusReport report = BootstrapStatusReport.from(rows,
+		        java.util.Arrays.asList("obs", "condition"), "elasticsearch");
+
+		assertFalse(report.isComplete());
+		assertFalse("neither the completed row nor the top-up is the current backend's", report.isProjected());
+		assertTrue("the same rows count for the backend that wrote them", BootstrapStatusReport.from(rows,
+		        java.util.Arrays.asList("obs", "condition"), "lucene").isProjected());
+	}
+
+	@Test
 	public void from_shouldReportIncompleteWhenAnExpectedTypeHasNoProgressRow() {
 		List<BootstrapProgress> rows = Collections.singletonList(
 		        row("obs", BootstrapStatus.COMPLETED, 278396, null));
 
 		BootstrapStatusReport report = BootstrapStatusReport.from(rows,
-		        java.util.Arrays.asList("obs", "condition"));
+		        java.util.Arrays.asList("obs", "condition"), "lucene");
 
 		assertFalse("an interrupted bootstrap must not hide a type it never started", report.isComplete());
 		assertEquals("the report must identify the missing type, not just return an unexplained false",

@@ -133,6 +133,11 @@ public class RecordingMergeListener extends CoreServiceEventListener {
 		}
 
 		@Override
+		public org.openmrs.module.querystore.bootstrap.BootstrapStatusReport getStatusReport() {
+			return org.openmrs.module.querystore.bootstrap.BootstrapStatusReport.from(getStatus());
+		}
+
+		@Override
 		public DriftReport getDrift() {
 			return null;
 		}

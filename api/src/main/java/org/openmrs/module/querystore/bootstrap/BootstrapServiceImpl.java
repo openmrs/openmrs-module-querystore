@@ -278,6 +278,11 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 	}
 
 	@Override
+	public BootstrapStatusReport getStatusReport() {
+		return BootstrapStatusReport.from(getStatus(), getResourceTypeNames(), currentBackendName());
+	}
+
+	@Override
 	public DriftReport getDrift() {
 		Map<String, ResourceTypeProvider> providers = discoverProviders();
 		BackendStore store = backendSelector != null ? backendSelector.getStore() : null;
