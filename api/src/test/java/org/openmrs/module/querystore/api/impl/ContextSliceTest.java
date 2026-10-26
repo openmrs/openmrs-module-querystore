@@ -518,6 +518,22 @@ public class ContextSliceTest {
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("bid-1"));
 	}
 
+	/** US style puts a comma or period inside the closing quote; it is not part of the phrase. */
+	@Test
+	public void punctuationInsideTheClosingQuoteIsNotPartOfThePhrase() {
+		backend.chart.add(doc("obs", "chest-1", "Chief complaint: chest pain on exertion", LocalDate.of(2022, 1, 1)));
+		backend.chart.add(doc("obs", "fever-1", "Symptom: fever", LocalDate.of(2022, 1, 2)));
+		backend.chart.add(doc("obs", "cough-1", "Symptom: cough", LocalDate.of(2022, 1, 3)));
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT,
+		        "Was \"chest pain,\" \"fever,\" or \"cough\" recorded?",
+		        new ContextSliceRequest(Collections.<String> emptySet(), false)));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("chest-1"), "got " + tiers);
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("fever-1"), "got " + tiers);
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("cough-1"), "got " + tiers);
+	}
+
 	/** Curly quotes, the default on macOS and iOS keyboards, open a quoted phrase too. */
 	@Test
 	public void curlyQuotesOpenAQuotedPhrase() {
