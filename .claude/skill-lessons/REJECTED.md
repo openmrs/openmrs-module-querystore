@@ -5846,8 +5846,8 @@ records it rests on: #527, #402/PR544, #562 and #564.
   named them" (:5144-5149), filed under "Observed, no remedy owed" (:5143).
 - On 2026-10-07 :5242-5250 advanced it under "Parked counts advanced" (:5207), with no reopen condition.
 - :5149 left the #527 example "not re-checked".
-- The window block above read these moves as losses (:5587). Its correction (:5593-5594) and the
-  addendum (:5619-5627) re-derived the move without citing either entry.
+- The window block above read these moves as losses (:5751). Its correction (:5757-5758) and the
+  addendum (:5783-5791) re-derived the move without citing either entry.
 
 **APPLIED after revision · pr-harden 0.41.1 and resolve-ticket 0.29.1, `evidence.md`: the #527 example
 is deleted from the list that supports "Take neither name from anywhere else", and a note records why.**
@@ -5888,7 +5888,7 @@ transcript up by its session id before reading it as gone).**
 - **Bar (a) is not met.**
   - The four records carry the stale paths, not the lesson.
   - Both sightings of the lesson are reader passes: the 2026-09-25 owner-directed pass and the
-    2026-10-23 window's retro (:5584-5587). That retro's misreading of all four was one script run.
+    2026-10-23 window's retro (:5748-5751). That retro's misreading of all four was one script run.
   - Step 1 admits run records only (:1502, :2148-2150).
   - :5144 owed the shape no remedy, and :5242 advanced it with no reopen condition.
 - **The draft's first sentence is false of the store.** It read: "A record's `transcript:` line is
@@ -5935,7 +5935,7 @@ runs never state them, and the gate found that statement holds only after harden
   `artifacts/2026-10-23-harden-phase1-confirming-pass/relocated-addendum/`, each with a README.
 
 **PARKED by the gate · a harden 0.45.0 proposal: each gate states its required content instead of a
-fill-in template.** :5562's REOPEN ("a proposal to delete or replace those sentences") was met, and
+fill-in template.** :5726's REOPEN ("a proposal to delete or replace those sentences") was met, and
 the proposal does not survive the facts.
 
 - **Before 0.34.0** (`6f15b1c`, 2026-09-22). The pool's stream logs, 2026-08-26 to 2026-09-17, cover 13
@@ -5943,7 +5943,7 @@ the proposal does not survive the facts.
   - 8 of them state the Transition gate's sentences in their literal form.
   - 6 answer at least 4 of its 6 integration questions in one block (`gate-sentences-pre034.out`,
     `integ-pre034.out`).
-- **After 0.34.0.** The 61 transcripts behind :5552-5565 do neither: 0 and 0. The most any reaches is
+- **After 0.34.0.** The 61 transcripts behind :5716-5729 do neither: 0 and 0. The most any reaches is
   3 topics (`integ-post034.out`). So the Transition gate's content went with its wording.
 - **Three changes coincide.** harden 0.34.0 moved the verdict into `gate-state harden-set`. All 13
   earlier runs ran on Opus 5 or Sonnet 5, and all 61 later ones on Opus 5.5. The 61 ran on Claude Code
@@ -5956,13 +5956,13 @@ the proposal does not survive the facts.
 - **REOPEN ON:** the owner deciding again on these facts, or a measurement that separates harden
   0.34.0 from the model change.
 
-**Corrections to :5552-5565.**
+**Corrections to :5716-5729.**
 - Its title and counts hold for its population, which is the runs after 0.34.0, and not before.
 - `harden/evidence.md`:214's "the phase gates demand verbatim sentences and get them" held for the
   period it was written in (`5bc2d71`, 2026-08-17). The pool logs bear it out.
-- :5559's "for this population" was the right limit.
+- :5723's "for this population" was the right limit.
 
-**Re-run · the harden confirming-pass measurement, with the moved runs** (:5645's "Affected, not
+**Re-run · the harden confirming-pass measurement, with the moved runs** (:5809's "Affected, not
 re-run"):
 
 - Three moved runs, #527, #562 and #564, add 8 traversals to the note's 127.
@@ -5972,6 +5972,22 @@ re-run"):
 - Over 135 traversals (`combined-rates.out`):
   - first traversals escalated after a re-review in 72%, and after a mechanical check or nothing in 65%;
   - resumed traversals, 47% and 54%.
-- The note's reading stands, and its addendum records this. :5539's park and REOPEN are unchanged.
+- The note's reading stands, and its addendum records this. :5703's park and REOPEN are unchanged.
+
+**Running parked counts:** unchanged.
+
+## 2026-10-26 (window: no run record since 2026-10-23) — 0 proposed, 0 applied, 0 killed; no refutation round (nothing to refute); linter 17 files, 0 findings; **no skill file changed**
+
+The store matched `origin/main` at `eeb9648` before the read. Its two files dated 2026-10-22 or later
+were both already counted: the PR 100 record is the whole 2026-10-22 window above, and the harden
+confirming-pass note was read in the 2026-10-23 passes. No remote branch and no pool slot held a newer
+record. `confidential/` was read for names only.
+
+**Correction: citations shifted by the 2026-10-22 window's cherry-pick.** That window was written
+on a branch and landed (`eeb9648`) after the four 2026-10-23 sections, ahead of them in date order. Its
+164 lines moved every line those sections cite inside themselves, so ten citations there were shifted
+by +164 — :5539→:5703, :5552-5565→:5716-5729, :5559→:5723, :5562→:5726, :5584-5587→:5748-5751,
+:5587→:5751, :5593-5594→:5757-5758, :5619-5627→:5783-5791, :5645→:5809. Each new target was checked
+equal to the old one at `7eb600c`. Citations below :5421 did not move.
 
 **Running parked counts:** unchanged.
