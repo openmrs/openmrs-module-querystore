@@ -91,7 +91,7 @@ public class PatientRecordEndpointTest {
 	public void pagingLinks_preserveTheRequestedWebappUrlThroughHttp() throws Exception {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(new PatientChartRead(Arrays.asList(
 		        doc("obs", "o-1", LocalDate.of(2026, 1, 1), "Weight: 71 kg"),
 		        doc("obs", "o-2", LocalDate.of(2025, 1, 1), "Weight: 73 kg")), false, true));
@@ -142,7 +142,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_returnsAllMaterializedRecordsPaged_andNoEmbedding() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(new PatientChartRead(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L"),
 		        doc("condition", "r2", LocalDate.of(2025, 12, 1), "Condition: Type 2 Diabetes. Status: ACTIVE")), false, true));
@@ -172,7 +172,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_exposesExplicitClinicalDateFreshnessAndConditionalSnapshot() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		QueryDocument first = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
 		first.putMetadata(FIELD_CLINICAL_DATE, "2026-01-15");
 		first.putMetadata(FIELD_DATE_KIND, "clinical_event");
@@ -200,7 +200,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_snapshotChangesWhenARecordRepresentationChanges() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		QueryDocument before = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
 		QueryDocument after = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 59 kg");
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
@@ -220,7 +220,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_snapshotChangesWhenCompletenessChanges() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		QueryDocument record = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
 		        PatientChartRead.complete(Arrays.asList(record)),
@@ -243,7 +243,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_snapshotChangesWhenProjectionCompletenessChanges() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		QueryDocument record = doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg");
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(
 		        new PatientChartRead(Arrays.asList(record), false, false),
@@ -264,7 +264,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_etagIsSpecificToTheRequestedPageOfOneSnapshot() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
 		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg"))));
@@ -284,7 +284,7 @@ public class PatientRecordEndpointTest {
 	public void patientAndQuery_dispatchesToRankedSearch_withRankAndNullTotal() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE)).thenReturn(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Fasting blood glucose: 11.2 mmol/L"),
 		        doc("obs", "r2", LocalDate.of(2025, 6, 1), "Random glucose: 9.0 mmol/L")));
@@ -303,7 +303,7 @@ public class PatientRecordEndpointTest {
 	public void rankedPages_areSlicesOfOneRankingWhateverDepthTheFusionWouldReorderAt() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		QueryDocument p = doc("obs", "P", LocalDate.of(2026, 1, 1), "P");
 		QueryDocument q = doc("obs", "Q", LocalDate.of(2026, 1, 2), "Q");
 		QueryDocument r = doc("obs", "R", LocalDate.of(2026, 1, 3), "R");
@@ -331,7 +331,7 @@ public class PatientRecordEndpointTest {
 	public void rankedSearch_clampsLimitToOpenMrsAbsoluteMaximum() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE))
 		        .thenReturn(new ArrayList<QueryDocument>());
 
@@ -353,7 +353,7 @@ public class PatientRecordEndpointTest {
 		AdministrationService admin = mock(AdministrationService.class);
 		installAdministrationService(admin);
 		when(admin.getGlobalProperty(RestConstants.MAX_RESULTS_ABSOLUTE_GLOBAL_PROPERTY_NAME)).thenReturn("250");
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.searchByPatient(PATIENT, "glucose", 250)).thenReturn(new ArrayList<QueryDocument>());
 
 		// startIndex 120 + limit 50 fits inside the configured 250 and not inside the framework default of 100.
@@ -368,7 +368,7 @@ public class PatientRecordEndpointTest {
 	public void rankedReads_declineSharedCaching() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.searchByPatient(PATIENT, "glucose", TEST_MAXIMUM_PAGE_SIZE)).thenReturn(new ArrayList<QueryDocument>());
 
 		ResponseEntity<Object> ranked = controller.getPatientRecords(request, PATIENT, "glucose", null, null);
@@ -382,7 +382,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_hugeLimitDoesNotOverflowThePageEnd() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(PatientChartRead.complete(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg"),
 		        doc("obs", "r2", LocalDate.of(2026, 1, 14), "Weight: 57 kg"))));
@@ -398,7 +398,7 @@ public class PatientRecordEndpointTest {
 	public void rankedSearch_rejectsAnOffsetBeyondTheBoundedResultWindow() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 
 		ResponseEntity<Object> response = controller.getPatientRecords(request, PATIENT, "glucose", Integer.valueOf(1),
 		        Integer.valueOf(TEST_MAXIMUM_PAGE_SIZE));
@@ -425,7 +425,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_pagesWithStartIndexAndEmitsPrevNextLinks() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		List<QueryDocument> five = new ArrayList<QueryDocument>();
 		for (int i = 0; i < 5; i++) {
 			five.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "rec " + i));
@@ -448,7 +448,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_exactFinalPageDoesNotEmitEmptyNextPageLink() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		List<QueryDocument> four = new ArrayList<QueryDocument>();
 		for (int i = 0; i < 4; i++) {
 			four.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "rec " + i));
@@ -469,7 +469,7 @@ public class PatientRecordEndpointTest {
 	public void fullChart_surfacesBackendConfirmedTruncation() {
 		authenticate();
 		wire();
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(new PatientChartRead(Arrays.asList(
 		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 58 kg")), true));
 
@@ -517,6 +517,22 @@ public class PatientRecordEndpointTest {
 		verify(queryStore, never()).getPatientChart(anyString());
 	}
 
+	@Test
+	public void fullChart_readsWithThePatientsStoredUuid() {
+		// MySQL finds the patient for an uppercased uuid; Lucene and Elasticsearch would find no records.
+		authenticate();
+		wire();
+		when(patients.getPatientByUuid("PATIENT-UUID")).thenReturn(storedPatient());
+		when(queryStore.getPatientChartRead(PATIENT)).thenReturn(new PatientChartRead(Arrays.asList(
+		        doc("obs", "r1", LocalDate.of(2026, 1, 15), "Weight: 71 kg")), false, true));
+
+		ResponseEntity<Object> response = controller.getPatientRecords(request, "PATIENT-UUID", null, null, null);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(Integer.valueOf(1), body(response).get("totalCount"));
+		verify(queryStore).getPatientChartRead(PATIENT);
+	}
+
 	@Test(expected = ContextAuthenticationException.class)
 	public void requiresGetPatientsPrivilege() {
 		// The endpoint reads patient data; a caller lacking Get Patients must be rejected up front.
@@ -528,6 +544,12 @@ public class PatientRecordEndpointTest {
 			}
 		});
 		controller.getPatientRecords(request, PATIENT, null, null, null);
+	}
+
+	private static Patient storedPatient() {
+		Patient patient = new Patient();
+		patient.setUuid(PATIENT);
+		return patient;
 	}
 
 	private static QueryDocument doc(String type, String uuid, LocalDate date, String text) {
@@ -547,7 +569,7 @@ public class PatientRecordEndpointTest {
 		authenticate();
 		wire();
 		controller.setMaximumPageSize(5);
-		when(patients.getPatientByUuid(PATIENT)).thenReturn(new Patient());
+		when(patients.getPatientByUuid(PATIENT)).thenReturn(storedPatient());
 		List<QueryDocument> ranked = new ArrayList<QueryDocument>();
 		for (int i = 0; i < 5; i++) {
 			ranked.add(doc("obs", "r" + i, LocalDate.of(2026, 1, 1), "glucose " + i));

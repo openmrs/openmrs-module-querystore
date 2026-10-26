@@ -18,6 +18,7 @@ import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.StringUtils;
+import org.openmrs.Patient;
 import org.openmrs.api.APIAuthenticationException;
 import org.openmrs.api.APIException;
 import org.openmrs.api.PatientService;
@@ -143,8 +144,14 @@ public class QueryStoreRestController {
 			return errorResponse(HttpStatus.BAD_REQUEST, "patient or q is required");
 		}
 		// 404 a bogus patient up front — correct status, and it avoids a wasted cold-touch projection.
-		if (patientUuid != null && patientService().getPatientByUuid(patientUuid) == null) {
-			return errorResponse(HttpStatus.NOT_FOUND, "No patient with uuid '" + patientUuid + "'");
+		// Read with the stored uuid: MySQL matches the caller's case-insensitively, Lucene and
+		// Elasticsearch exactly, so an uppercased uuid would otherwise read as an empty, complete chart.
+		if (patientUuid != null) {
+			Patient found = patientService().getPatientByUuid(patientUuid);
+			if (found == null) {
+				return errorResponse(HttpStatus.NOT_FOUND, "No patient with uuid '" + patientUuid + "'");
+			}
+			patientUuid = found.getUuid();
 		}
 		StringBuilder baseParams = new StringBuilder();
 		if (patientUuid != null) {
