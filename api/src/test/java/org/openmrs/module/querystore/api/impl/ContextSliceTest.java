@@ -534,6 +534,24 @@ public class ContextSliceTest {
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("cough-1"), "got " + tiers);
 	}
 
+	/** Each exact signal is scanned against every record, so a question's signals are capped at 32. */
+	@Test
+	public void aQuestionsExactSignalsAreCapped() {
+		backend.chart.add(doc("encounter", "visit-32", "Visit on 2026-02-01", LocalDate.of(2026, 2, 1)));
+		backend.chart.add(doc("encounter", "visit-33", "Visit on 2026-02-02", LocalDate.of(2026, 2, 2)));
+		StringBuilder question = new StringBuilder("Was there a visit on");
+		LocalDate date = LocalDate.of(2026, 1, 1);
+		for (int i = 0; i < 33; i++) {
+			question.append(' ').append(date.plusDays(i));
+		}
+
+		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT, question.toString(),
+		        new ContextSliceRequest(Collections.<String> emptySet(), false)));
+
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("visit-32"), "got " + tiers);
+		assertFalse(tiers.containsKey("visit-33"), "the 33rd date is past the cap: " + tiers);
+	}
+
 	/** Curly quotes, the default on macOS and iOS keyboards, open a quoted phrase too. */
 	@Test
 	public void curlyQuotesOpenAQuotedPhrase() {

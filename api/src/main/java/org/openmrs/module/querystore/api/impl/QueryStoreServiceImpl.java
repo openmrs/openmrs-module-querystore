@@ -74,6 +74,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	                + "|(?<![\\p{L}\\p{N}])\\u2018([^\\u2018\\u2019\\s](?:[^\\u2018\\u2019]|\\u2019(?=[\\p{L}\\p{N}]))"
 	                + "{0,200}[^\\u2018\\u2019\\s.,;:!?])[.,;:!?]*\\u2019(?![\\p{L}\\p{N}])");
 
+	/**
+	 * Each exact signal is scanned against every chart record, so a question's signals are capped: a
+	 * question listing about 550 dates took 3 to 4 s over a 10,000-record chart, against about 50 ms.
+	 */
+	private static final int MAX_EXACT_SIGNALS = 32;
+
 	private static final Pattern ISO_DATE = Pattern.compile("\\b\\d{4}-\\d{2}-\\d{2}\\b");
 
 	private static final Pattern UUID = Pattern.compile(
@@ -590,7 +596,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	private static void collectMatches(Pattern pattern, String question, Map<String, Boolean> sink,
 	        boolean firstNonEmptyGroup, boolean identifier) {
 		Matcher matcher = pattern.matcher(question);
-		while (matcher.find()) {
+		while (sink.size() < MAX_EXACT_SIGNALS && matcher.find()) {
 			String value = matcher.group();
 			if (firstNonEmptyGroup) {
 				value = null;
