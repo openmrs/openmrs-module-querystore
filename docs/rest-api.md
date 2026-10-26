@@ -46,11 +46,12 @@ Returns query-store records through the existing `QueryStoreService` behavior:
   past that maximum returns `400`, because ranked windows are not paged past the maximum result
   count.
 - **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also include
-  `chartTruncated`, set only from the backend's explicit completeness signal. It is `true` when a
-  documented cap or handled backend read failure may have omitted records. For full-chart reads,
+  `chartTruncated`. It is `true` when a documented cap or handled backend read failure may have
+  omitted records, or while this patient's last projection has left records out; that mark is held
+  in memory and does not survive a restart. For full-chart reads,
   `totalCount` is the number of records materialized by the configured backend, so clients must not
   infer completeness from the count. `projectionComplete` is true only when every currently
-  registered resource type has completed a bootstrap; a type whose earlier bootstrap completed
+  registered resource type has completed a bootstrap into the configured backend; a type whose earlier bootstrap completed
   still counts while a restart's top-up walks it again, and a type being reset or resynced does
   not. An older `QueryStoreService` implementation that cannot prove this reports false.
   Full-chart reads also carry a stable
@@ -87,7 +88,9 @@ unknown patient returns `404`; failed authentication/authorization returns `401`
 ## GET `/ws/rest/v1/querystore/indexingstatus`
 
 Returns the per-resource-type bootstrap (initial-backfill) status, plus a single derived
-`complete` flag answering **"is this deployment fully indexed?"**.
+`complete` flag answering **"is this deployment fully indexed?"**. A row written for another
+`querystore.backend` counts as not started: the next bootstrap resets it, and the configured
+backend holds none of its documents.
 
 - **Privilege:** `Get Patients` — a `failureMessage` can contain internal record/patient
   identifiers, so it is gated like the query store's read API.
@@ -166,7 +169,8 @@ have *some* documents.
 If any record could not be re-projected (a type failed, or a record could not be embedded or
 written), the call returns `500` with the same `patient` and `documentsIndexed` (what did project
 stays indexed) and an `error` naming how many types and records failed. Full-chart reads of that
-patient then report `chartTruncated: true` until a projection completes.
+patient then report `chartTruncated: true` until a projection completes, or until a restart, since
+the mark is held in memory.
 
 ```bash
 curl -s -X POST -u admin:Admin123 -H 'Content-Type: application/json' \
