@@ -524,13 +524,17 @@ public class ContextSliceTest {
 		backend.chart.add(doc("obs", "chest-1", "Chief complaint: chest pain on exertion", LocalDate.of(2022, 1, 1)));
 		backend.chart.add(doc("obs", "fever-1", "Symptom: fever", LocalDate.of(2022, 1, 2)));
 		backend.chart.add(doc("obs", "cough-1", "Symptom: cough", LocalDate.of(2022, 1, 3)));
+		backend.chart.add(doc("obs", "nausea-1", "Symptom: nausea", LocalDate.of(2022, 1, 4)));
+		backend.chart.add(doc("obs", "headache-1", "Symptom: headache", LocalDate.of(2022, 1, 5)));
 
 		Map<String, String> tiers = tiersByUuid(service.getContextSlice(PATIENT,
-		        "Was \"chest pain,\" \"fever,\" or \"cough\" recorded?",
+		        "Was \"chest pain,\" \u201Cfever,\u201D 'nausea.' \u2018headache,\u2019 or \"cough\" recorded?",
 		        new ContextSliceRequest(Collections.<String> emptySet(), false)));
 
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("chest-1"), "got " + tiers);
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("fever-1"), "got " + tiers);
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("nausea-1"), "got " + tiers);
+		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("headache-1"), "got " + tiers);
 		assertEquals(QueryStoreConstants.TIER_EXACT, tiers.get("cough-1"), "got " + tiers);
 	}
 
