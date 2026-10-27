@@ -29,7 +29,7 @@ import java.util.Objects;
  * (and deploy pipelines that seed via SQL dump, which bypasses the live indexing path) can verify
  * completion instead of guessing. The derivation lives in the api layer so it is unit-testable and
  * reusable; deployment-completeness callers pass the registered resource types to
- * {@link #from(List, Collection)} so a type that never acquired a progress row cannot be
+ * {@link #from(List, Collection, String)} so a type that never acquired a progress row cannot be
  * mistaken for complete.
  */
 public class BootstrapStatusReport {
