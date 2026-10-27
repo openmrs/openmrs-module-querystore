@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 8247,
-      "to": 8374,
-      "why": "Step 2's re-review sentence defines an approach already argued out as a concrete alternative named in the thread and answered with a need of the underlying problem that the alternative cannot meet, where it said \"the author answered, or a maintainer endorsed it\"; a property of the approach restated as a need does not count, an unweighed alternative that the same need rules out leaves it closed, and line-level rounds and \"nothing in the code blocks this\", the reviewer's own included, leave it open, so Step 2 runs in full; Step 1's last-reviewed diff now scopes only the line-level pass. On openmrs-core #6355 a re-review read three months of the maintainer's hardening rounds, and a SonarCloud finding answered with \"it must be deterministic\", as settling a deterministic reset password and skipped the comparison that finds core's random, expiring setUserActivationKey; a maintainer closed the PR within the hour, and the service derived the same password on every reset of an account"
+      "from": 8374,
+      "to": 8430,
+      "why": "Step 2's \"The ticket is evidence, not a spec\" paragraph holds a mechanism the ticket prescribes to the need test the re-review rule applies to an answer in the thread, and has the reviewer check the ticket's own stated reason for it against the obvious alternative: in a blind re-run of openmrs-core #6355 as it stood on 2026-08-28, under 0.23.0 with its #6355 example removed, the reviewer blocked on the PR's separate credential but kept the deterministic value the ticket prescribed, whose stated reason (no plain-text storage) a random password stored hashed meets as well"
     },
     "pr-review/posting.md": {
       "from": 2049,
@@ -71,7 +71,7 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8374,
+    "pr-review": 8430,
     "pr-review/posting.md": 2070,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
