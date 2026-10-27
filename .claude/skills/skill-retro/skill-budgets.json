@@ -33,14 +33,14 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 8172,
-      "to": 8247,
-      "why": "Step 4's suggestion-block bullet says that where CI checks formatting, suggested code is the formatter's output from a worktree at the PR head, not hand-typed: an author committed a hand-typed suggestion from the GitHub UI and spotless:check failed on a line one column over the formatter's limit, though the fix had been tested at runtime under a build that skips spotless, and the author asked for suggestions formatted to the project's Spotless convention"
+      "from": 8247,
+      "to": 8374,
+      "why": "Step 2's re-review sentence defines an approach already argued out as a concrete alternative named in the thread and answered with a need of the underlying problem that the alternative cannot meet, where it said \"the author answered, or a maintainer endorsed it\"; a property of the approach restated as a need does not count, an unweighed alternative that the same need rules out leaves it closed, and line-level rounds and \"nothing in the code blocks this\", the reviewer's own included, leave it open, so Step 2 runs in full; Step 1's last-reviewed diff now scopes only the line-level pass. On openmrs-core #6355 a re-review read three months of the maintainer's hardening rounds, and a SonarCloud finding answered with \"it must be deterministic\", as settling a deterministic reset password and skipped the comparison that finds core's random, expiring setUserActivationKey; a maintainer closed the PR within the hour, and the service derived the same password on every reset of an account"
     },
     "pr-review/posting.md": {
-      "from": 2030,
-      "to": 2049,
-      "why": "the second gate line says that where CI checks formatting, any code suggested is the formatter's output at the PR head, so a local run recites it before it posts or stages; the rule itself lives in SKILL.md, which the @claude review Action loads alone"
+      "from": 2049,
+      "to": 2070,
+      "why": "the first gate line's best-fix clause covers a re-review too, with a slot for the reply that argued the approach out, or none, so a run that scoped the approach out of a re-review has to name the reply it relied on before it posts or stages; the rule itself lives in SKILL.md, which the @claude review Action loads alone"
     },
     "ticket-pool": {
       "from": 5084,
@@ -71,8 +71,8 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8247,
-    "pr-review/posting.md": 2049,
+    "pr-review": 8374,
+    "pr-review/posting.md": 2070,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2835,
