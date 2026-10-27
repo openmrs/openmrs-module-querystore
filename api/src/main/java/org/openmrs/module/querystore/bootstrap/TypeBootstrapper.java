@@ -185,7 +185,9 @@ public abstract class TypeBootstrapper<T> {
 	 * top-up must rewrite such a record or the stopped order keeps reading as active. Patients answer
 	 * false too: an identifier saved through {@code savePatientIdentifier} (REST's
 	 * {@code POST /patient/{uuid}/identifier}) raises no event a serializer resolves and leaves the
-	 * patient's version unchanged, so only a top-up's rewrite carries the new identifier.
+	 * patient's version unchanged, so only a top-up's rewrite carries the new identifier. So do
+	 * visits: saving an encounter into one (REST's {@code POST /encounter}) raises no Visit event
+	 * and leaves the visit's version unchanged.
 	 */
 	protected boolean versionTracksContent() {
 		return true;
