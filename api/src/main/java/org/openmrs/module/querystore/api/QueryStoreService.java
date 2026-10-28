@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.openmrs.annotation.Authorized;
 import org.openmrs.api.OpenmrsService;
@@ -208,5 +209,16 @@ public interface QueryStoreService extends OpenmrsService {
 	@Authorized(PrivilegeConstants.GET_PATIENTS)
 	default ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request) {
 		throw new UnsupportedOperationException("Context slices are not supported by this QueryStoreService implementation");
+	}
+
+	/**
+	 * The core resource types the calling user holds no core read privilege for, which every read
+	 * here withholds from them (ADR Decision 14 point 4), in a stable order. A consumer whose chart
+	 * reaches its reader through another account, such as an agent with its own QueryStore login,
+	 * asks this before handing that reader the caller's question.
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default Set<String> getTypesWithheldFromCaller() {
+		throw new UnsupportedOperationException("Withheld types are not reported by this QueryStoreService implementation");
 	}
 }

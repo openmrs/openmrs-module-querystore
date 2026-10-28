@@ -228,6 +228,28 @@ public class ContextSliceTest {
 		assertEquals(Collections.singleton("allergy"), slice.getWithheldTypes());
 	}
 
+	/** A consumer reading the chart through another account learns from this what the caller is refused. */
+	@Test
+	public void theTypesWithheldFromTheCallerAreReportedWithoutAChartRead() {
+		org.openmrs.api.context.Context.setUserContext(new org.openmrs.api.context.UserContext(null) {
+			@Override
+			public boolean hasPrivilege(String privilege) {
+				return !org.openmrs.util.PrivilegeConstants.GET_ALLERGIES.equals(privilege)
+				        && !org.openmrs.util.PrivilegeConstants.GET_ORDERS.equals(privilege);
+			}
+		});
+		java.util.Set<String> withheld;
+		try {
+			withheld = service.getTypesWithheldFromCaller();
+		}
+		finally {
+			org.openmrs.api.context.Context.clearUserContext();
+		}
+
+		assertEquals(Arrays.asList("allergy", "drug_order", "referral_order", "test_order"),
+		    new java.util.ArrayList<String>(withheld));
+	}
+
 	/** A recurrence or relapse is active to core (TRUNK-6170), so it rides the mandatory tier too. */
 	@Test
 	public void mandatoryCore_carriesARecurringOrRelapsedCondition() {

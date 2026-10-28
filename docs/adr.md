@@ -1431,7 +1431,9 @@ budgeting, and question interpretation.
    holds no core read privilege for (Decision 14 point 4), requested or not, is left out of
    `effectiveTypes` and named in `withheldTypes`, so a consumer that marks every effective type
    complete, or reads the mandatory tier's allergies as all of them, does not take an empty tier
-   for a patient without such records.
+   for a patient without such records. `getTypesWithheldFromCaller()` reports the same types
+   without a read, for a consumer whose reader reaches the chart through another account and
+   so would be shown what the caller is refused.
 
 ### Rationale
 1. **Selection is retrieval.** The tiers are query semantics over fields this store owns

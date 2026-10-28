@@ -47,4 +47,11 @@ public class QueryStoreServiceCompatibilityTest {
 		        () -> legacy.getContextSlice("patient-1", "question",
 		                new ContextSliceRequest(Collections.<String> emptySet(), false)));
 	}
+
+	@Test
+	public void defaultWithheldTypesFailExplicitlyRatherThanReportNone() {
+		QueryStoreService legacy = mock(QueryStoreService.class, Answers.CALLS_REAL_METHODS);
+
+		assertThrows(UnsupportedOperationException.class, legacy::getTypesWithheldFromCaller);
+	}
 }

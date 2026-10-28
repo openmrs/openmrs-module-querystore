@@ -384,6 +384,11 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		        typesWithheldFromCaller(CORE_READ_PRIVILEGES.keySet()));
 	}
 
+	@Override
+	public Set<String> getTypesWithheldFromCaller() {
+		return typesWithheldFromCaller(CORE_READ_PRIVILEGES.keySet());
+	}
+
 	/**
 	 * The read privilege core's own {@code get<Type>ByUuid} is {@code @Authorized} with, per core
 	 * resource type (verified against openmrs-api 2.9). A caller holding Get Patients but not one of
