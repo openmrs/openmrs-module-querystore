@@ -27,10 +27,4 @@ public class VisitBootstrapper extends HibernateTypeBootstrapper<Visit> {
 	protected ClinicalRecordSerializer<Visit> getSerializer() {
 		return serializer;
 	}
-
-	@Override
-	protected boolean versionTracksContent() {
-		// Saving an encounter into a visit leaves the visit's version unchanged; see TypeBootstrapper#versionTracksContent.
-		return false;
-	}
 }

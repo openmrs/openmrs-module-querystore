@@ -367,13 +367,19 @@ public class TypeBootstrapperTest {
 	}
 
 	@Test
-	public void ordersPatientsAndVisitsAreTheTypesWhoseVersionDoesNotTrackTheirContent() {
+	public void onlyObsConditionsDiagnosesAndDispensesAreTheTypesWhoseVersionTracksTheirContent() {
+		assertTrue(new ObsBootstrapper(null, null).versionTracksContent());
+		assertTrue(new ConditionBootstrapper(null, null).versionTracksContent());
+		assertTrue(new DiagnosisBootstrapper(null, null).versionTracksContent());
+		assertTrue(new MedicationDispenseBootstrapper(null, null).versionTracksContent());
 		assertFalse(new DrugOrderBootstrapper(null, null).versionTracksContent());
 		assertFalse(new TestOrderBootstrapper(null, null).versionTracksContent());
 		assertFalse(new ReferralOrderBootstrapper(null, null).versionTracksContent());
 		assertFalse(new PatientBootstrapper(null, null).versionTracksContent());
 		assertFalse(new VisitBootstrapper(null, null).versionTracksContent());
-		assertTrue(new ObsBootstrapper(null, null).versionTracksContent());
+		assertFalse(new AllergyBootstrapper(null, null).versionTracksContent());
+		assertFalse(new PatientProgramBootstrapper(null, null).versionTracksContent());
+		assertFalse(new EncounterBootstrapper(null, null).versionTracksContent());
 	}
 
 	@Test

@@ -1224,6 +1224,7 @@ public class BootstrapServiceImplTest {
 		@Override public String getResourceType() { return "obs"; }
 		@Override protected Instant getDateChanged(String e) { return VERSION; }
 		@Override protected String getUuid(String e) { return e; }
+		@Override protected boolean versionTracksContent() { return true; }
 
 		@Override
 		protected List<String> fetchPage(Instant afterDateChanged, String afterUuid, int pageSize) {

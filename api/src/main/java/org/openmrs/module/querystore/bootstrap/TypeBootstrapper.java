@@ -179,18 +179,22 @@ public abstract class TypeBootstrapper<T> {
 
 	/**
 	 * Whether this type's version changes whenever its content does, so a record stored at its
-	 * current version can be skipped by a top-up. Orders answer false: {@code Order.hbm.xml} maps no
-	 * {@code dateChanged}, so stopping an order (revise, discontinue) leaves its version at
+	 * current version can be skipped by a top-up. A type opts in only when that holds, so a new or
+	 * SPI type is rewritten until it is shown to. It does not hold for orders: {@code Order.hbm.xml}
+	 * maps no {@code dateChanged}, so stopping an order (revise, discontinue) leaves its version at
 	 * {@code dateCreated}, and core raises no event for the stopped order (openmrs-core #6197). A
-	 * top-up must rewrite such a record or the stopped order keeps reading as active. Patients answer
-	 * false too: an identifier saved through {@code savePatientIdentifier} (REST's
+	 * top-up must rewrite such a record or the stopped order keeps reading as active. Nor for
+	 * patients: an identifier saved through {@code savePatientIdentifier} (REST's
 	 * {@code POST /patient/{uuid}/identifier}) raises no event a serializer resolves and leaves the
-	 * patient's version unchanged, so only a top-up's rewrite carries the new identifier. So do
-	 * visits: saving an encounter into one (REST's {@code POST /encounter}) raises no Visit event
-	 * and leaves the visit's version unchanged.
+	 * patient's version unchanged, so only a top-up's rewrite carries the new identifier. Nor for
+	 * visits: saving an encounter into one (REST's {@code POST /encounter}) raises no Visit event and
+	 * leaves the visit's version unchanged. Nor for allergies, programs and encounters: an added
+	 * allergy reaction, a non-terminal program state change or a replaced encounter provider leaves
+	 * the version unchanged, so if that change's sync task is dropped only a top-up's rewrite
+	 * carries it.
 	 */
 	protected boolean versionTracksContent() {
-		return true;
+		return false;
 	}
 
 	/** The entities whose stored version differs from their own, or that are not stored at all. */
