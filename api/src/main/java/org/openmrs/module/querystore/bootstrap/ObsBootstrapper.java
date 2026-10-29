@@ -29,6 +29,12 @@ public class ObsBootstrapper extends HibernateTypeBootstrapper<Obs> {
 	}
 
 	@Override
+	protected boolean versionTracksContent() {
+		// Every save that changes this record changes its version; see TypeBootstrapper#versionTracksContent.
+		return true;
+	}
+
+	@Override
 	protected String cursorDateExpr() {
 		// Obs.hbm.xml does not map dateChanged (OpenMRS 2.8.x); cursor uses dateCreated alone.
 		return "e.dateCreated";

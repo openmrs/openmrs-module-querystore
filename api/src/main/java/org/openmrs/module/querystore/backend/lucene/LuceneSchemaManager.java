@@ -77,6 +77,19 @@ final class LuceneSchemaManager implements AutoCloseable {
 		deleteRecursive(dir);
 	}
 
+	/**
+	 * Whether {@code resourceType} has an index, open in this session or on disk from a previous
+	 * one. Checks that one directory only: unlike {@link #listAllIndexes()} it neither enumerates the
+	 * index root nor opens writers. An invalid resource-type name has no index.
+	 */
+	boolean hasIndex(String resourceType) {
+		if (resourceType == null || !QueryStoreConstants.RESOURCE_TYPE_PATTERN.matcher(resourceType).matches()) {
+			return false;
+		}
+		String name = indexName(resourceType);
+		return writers.containsKey(name) || Files.isDirectory(indexRoot.resolve(name));
+	}
+
 	Set<String> knownIndexNames() {
 		return new HashSet<>(writers.keySet());
 	}

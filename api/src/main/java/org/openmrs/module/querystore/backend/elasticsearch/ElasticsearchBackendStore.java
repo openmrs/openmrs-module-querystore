@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -451,6 +452,43 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			log.warn("existsByPatient failed for " + patientUuid, e);
 			return false;
 		}
+	}
+
+	@Override
+	@SuppressWarnings("rawtypes")
+	public Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		if (resourceUuids.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		String index = ElasticsearchSchemaManager.indexName(resourceType);
+		Map<String, Instant> found = new HashMap<>();
+		try {
+			for (int start = 0; start < resourceUuids.size(); start += BATCH_SIZE) {
+				List<String> chunk = resourceUuids.subList(start, Math.min(start + BATCH_SIZE, resourceUuids.size()));
+				co.elastic.clients.elasticsearch.core.MgetResponse<Map> resp = client().mget(m -> m
+				        .index(index).ids(chunk).sourceIncludes(ElasticsearchFieldNames.LAST_MODIFIED), Map.class);
+				for (co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem<Map> item : resp.docs()) {
+					if (!item.isResult() || !item.result().found() || item.result().source() == null) {
+						continue;
+					}
+					String lastModified = asString(item.result().source().get(ElasticsearchFieldNames.LAST_MODIFIED));
+					if (lastModified != null) {
+						found.put(item.result().id(), Instant.parse(lastModified));
+					}
+				}
+			}
+		}
+		catch (ElasticsearchException e) {
+			if (e.status() != 404 && !"index_not_found_exception".equals(e.error().type())) {
+				log.warn("findLastModified failed for " + resourceType, e);
+			}
+			return Collections.emptyMap();
+		}
+		catch (IOException | RuntimeException e) {
+			log.warn("findLastModified failed for " + resourceType, e);
+			return Collections.emptyMap();
+		}
+		return found;
 	}
 
 	@Override

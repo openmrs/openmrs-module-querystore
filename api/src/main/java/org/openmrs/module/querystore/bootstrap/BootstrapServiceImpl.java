@@ -332,7 +332,12 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				resetProgressForBackend(progress, currentBackend);
 				progressDao.save(progress);
 			}
-			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao);
+			// Only a top-up of a completed walk skips records the store holds at their current version.
+			// A reset leaves the row NOT_STARTED, and an unfinished row may be a resync or a backend
+			// reset that was interrupted: nothing but the row says so, and resuming it must keep
+			// rewriting every record, or the rest of the resync is skipped while the row ends COMPLETED.
+			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao,
+			        progress.getStatus() == BootstrapStatus.COMPLETED);
 		}
 	}
 

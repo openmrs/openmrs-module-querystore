@@ -641,6 +641,91 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void bootstrapSkipsARecordStoredAtItsVersionAndResyncReprojectsIt() {
+		AtomicInteger writes = new AtomicInteger();
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				writes.incrementAndGet();
+				return org.openmrs.module.querystore.backend.WriteResult.success();
+			}
+
+			@Override
+			public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+				return Collections.singletonMap("obs-1", OneStoredRecordBootstrapper.VERSION);
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneStoredRecordBootstrapper()));
+		BootstrapProgress completed = new BootstrapProgress("obs");
+		completed.setBackend("test-backend");
+		completed.setStatus(BootstrapStatus.COMPLETED);
+		dao.save(completed);
+
+		service.bootstrap("obs");
+		assertEquals("a top-up leaves a record stored at its version alone", 0, writes.get());
+
+		service.resyncType("obs");
+		assertEquals("a resync re-projects it", 1, writes.get());
+	}
+
+	@Test
+	public void anInterruptedResyncResumedByABootstrapKeepsRewriting() {
+		// Nothing but the row records that a resync was under way when it stopped: the next bootstrap()
+		// resumes it from the cursor, and must not skip the records the resync had left to rewrite.
+		AtomicInteger writes = new AtomicInteger();
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				writes.incrementAndGet();
+				return org.openmrs.module.querystore.backend.WriteResult.success();
+			}
+
+			@Override
+			public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+				return Collections.singletonMap("obs-1", OneStoredRecordBootstrapper.VERSION);
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneStoredRecordBootstrapper()));
+		BootstrapProgress interrupted = new BootstrapProgress("obs");
+		interrupted.setBackend("test-backend");
+		interrupted.setStatus(BootstrapStatus.FAILED);
+		dao.save(interrupted);
+
+		service.bootstrap("obs");
+
+		assertEquals("the resumed walk rewrites the record stored at its version", 1, writes.get());
+		assertEquals(BootstrapStatus.COMPLETED, dao.find("obs").getStatus());
+	}
+
+	@Test
+	public void aBackendChangeWalksTheCorpusAfreshWithoutSkipping() {
+		// A flip back to a backend that still holds a previous session's documents must not skip
+		// them: serializers may have changed since, and the reset exists to walk the corpus afresh.
+		AtomicInteger writes = new AtomicInteger();
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				writes.incrementAndGet();
+				return org.openmrs.module.querystore.backend.WriteResult.success();
+			}
+
+			@Override
+			public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+				return Collections.singletonMap("obs-1", OneStoredRecordBootstrapper.VERSION);
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneStoredRecordBootstrapper()));
+		BootstrapProgress previous = new BootstrapProgress("obs");
+		previous.setBackend("previous-backend");
+		previous.setStatus(BootstrapStatus.COMPLETED);
+		dao.save(previous);
+
+		service.bootstrap("obs");
+
+		assertEquals("the reset re-projects the record the store holds", 1, writes.get());
+	}
+
+	@Test
 	public void ensureIndexed_iteratesEveryRegisteredType() {
 		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
 		EmptyPageBootstrapper enc = new EmptyPageBootstrapper("encounter");
@@ -1098,7 +1183,7 @@ public class BootstrapServiceImplTest {
 		@Override public TypeBootstrapper<?> getBootstrapper() { return bootstrapper; }
 	}
 
-	private static final class NullQueryStoreService implements QueryStoreService {
+	private static class NullQueryStoreService implements QueryStoreService {
 		@Override
 		public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
 			return org.openmrs.module.querystore.backend.WriteResult.success();
@@ -1130,5 +1215,37 @@ public class BootstrapServiceImplTest {
 		}
 
 		@Override public void save(BootstrapProgress p) { store.put(p.getResourceType(), p); }
+	}
+
+	/** One obs record at a fixed version, on every scan. */
+	private static final class OneStoredRecordBootstrapper extends TypeBootstrapper<String> {
+		static final Instant VERSION = Instant.parse("2026-01-01T00:00:00Z");
+
+		@Override public String getResourceType() { return "obs"; }
+		@Override protected Instant getDateChanged(String e) { return VERSION; }
+		@Override protected String getUuid(String e) { return e; }
+		@Override protected boolean versionTracksContent() { return true; }
+
+		@Override
+		protected List<String> fetchPage(Instant afterDateChanged, String afterUuid, int pageSize) {
+			return afterUuid == null ? Collections.singletonList("obs-1") : Collections.<String> emptyList();
+		}
+
+		@Override
+		protected ClinicalRecordSerializer<String> getSerializer() {
+			return new ClinicalRecordSerializer<String>() {
+				@Override public String getResourceType() { return "obs"; }
+				@Override public Class<String> getSupportedType() { return String.class; }
+				@Override public QueryDocument serialize(String uuid) {
+					QueryDocument doc = new QueryDocument();
+					doc.setResourceType("obs");
+					doc.setResourceUuid(uuid);
+					doc.setPatientUuid("patient-uuid");
+					doc.setText("Weight: 70 kg");
+					doc.setLastModified(VERSION);
+					return doc;
+				}
+			};
+		}
 	}
 }
