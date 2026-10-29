@@ -588,7 +588,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		KnnSearch knn = KnnSearch.of(k -> {
 			k.field(ElasticsearchFieldNames.EMBEDDING)
 			        .queryVector(vector)
-			        .k((long) req.getLimit())
+			        .k((long) windowOf(req))
 			        .numCandidates(numCandidates);
 			if (filter != null) {
 				k.filter(Collections.singletonList(filter));
@@ -702,7 +702,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				// allowNoIndices + ignoreUnavailable preserve the Lucene/MySQL "search a never-written
 				// type returns zero hits" semantics. Without these, ES throws index_not_found on the
 				// explicit named-type path; the wildcard path was already implicitly tolerant.
-				s.index(indexes).size(req.getLimit()).trackTotalHits(t -> t.enabled(false))
+				s.index(indexes).size(windowOf(req)).trackTotalHits(t -> t.enabled(false))
 				        .allowNoIndices(true).ignoreUnavailable(true);
 				queryShaper.apply(s);
 				if (knn != null) {
@@ -722,6 +722,16 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		catch (ElasticsearchException | IOException e) {
 			throw new IllegalStateException("ES search failed on " + indexes, e);
 		}
+	}
+
+	/**
+	 * The hits a search may ask for: the requested limit, cut at Elasticsearch's result window
+	 * ({@code index.max_result_window}, 10,000), which a request past it is refused with rather
+	 * than answered. The hybrid default triples the limit for each leg, so a raised similarity limit
+	 * reached the window and the slice fell back to its policy tiers.
+	 */
+	private static int windowOf(SearchRequest req) {
+		return Math.min(req.getLimit(), FULL_CHART_MAX_HITS);
 	}
 
 	private List<String> resolveIndexes(SearchRequest req) {
