@@ -111,12 +111,13 @@ public class QueryStoreRestController {
 	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;            -&gt; full chart (getPatientChart), date desc, paged
 	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;q=&lt;text&gt; -&gt; hybrid-ranked top-K (searchByPatient)
 	 * GET /ws/rest/v1/querystore/patientrecord?q=&lt;text&gt;                  -&gt; cross-patient ranked top-K (search; coarse gate)
-	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;mode=context[&amp;q=&lt;text&gt;][&amp;types=&lt;t1,t2&gt;][&amp;temporal=true]
+	 * GET /ws/rest/v1/querystore/patientrecord?patient=&lt;uuid&gt;&amp;mode=context[&amp;q=&lt;text&gt;][&amp;types=&lt;t1,t2&gt;][&amp;temporal=true][&amp;interpret=true]
 	 *                                                                   -&gt; tiered context slice (getContextSlice), paged
 	 * </pre>
 	 *
 	 * <p>{@code mode=context} requires a patient; {@code types} and {@code temporal} are the caller's
-	 * reading of the question and are accepted only with it. Each record carries the tier that
+	 * reading of the question, {@code interpret=true} asks the module to read it as well, and all
+	 * three are accepted only with it. Each record carries the tier that
 	 * selected it; a slice page carries its source chart's {@code chartSnapshotId} and no HTTP ETag.
 	 *
 	 * <p>Gated by {@code Get Patients} — the same privilege the read methods carry. The {@code embedding}
@@ -136,6 +137,7 @@ public class QueryStoreRestController {
 	        @RequestParam(value = "mode", required = false) String mode,
 	        @RequestParam(value = "types", required = false) String types,
 	        @RequestParam(value = "temporal", required = false) Boolean temporal,
+	        @RequestParam(value = "interpret", required = false) Boolean interpret,
 	        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
 		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
 
@@ -159,8 +161,8 @@ public class QueryStoreRestController {
 			return errorResponse(HttpStatus.BAD_REQUEST,
 			        "Unknown mode '" + requestedMode + "'; the only supported mode is \"context\"");
 		}
-		if (!contextMode && (types != null || temporal != null)) {
-			return errorResponse(HttpStatus.BAD_REQUEST, "types and temporal require mode=context");
+		if (!contextMode && (types != null || temporal != null || interpret != null)) {
+			return errorResponse(HttpStatus.BAD_REQUEST, "types, temporal and interpret require mode=context");
 		}
 		if (contextMode && patientUuid == null) {
 			return errorResponse(HttpStatus.BAD_REQUEST, "mode=context requires a patient");
@@ -207,6 +209,7 @@ public class QueryStoreRestController {
 				}
 			}
 			ContextSliceRequest sliceRequest = new ContextSliceRequest(typeSet, Boolean.TRUE.equals(temporal));
+			sliceRequest.setInterpretQuestion(Boolean.TRUE.equals(interpret));
 			ContextSlice slice = queryStoreService().getContextSlice(patientUuid, query, sliceRequest);
 			baseParams.append("mode=context&");
 			if (StringUtils.isNotBlank(types)) {
@@ -214,6 +217,9 @@ public class QueryStoreRestController {
 			}
 			if (temporal != null) {
 				baseParams.append("temporal=").append(temporal).append('&');
+			}
+			if (interpret != null) {
+				baseParams.append("interpret=").append(interpret).append('&');
 			}
 			Map<String, Object> sliceBody = PatientRecordView.contextPage(slice, from, size,
 			        request.getRequestURL().toString(), baseParams.toString());
@@ -277,13 +283,19 @@ public class QueryStoreRestController {
 
 	/** Convenience seam retained for existing direct controller tests. */
 	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex) {
-		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, null);
+		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, null, null);
 	}
 
 	/** Convenience seam retained for existing conditional-read controller tests. */
 	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex,
 	        String ifNoneMatch) {
-		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, ifNoneMatch);
+		return getPatientRecords(request, patient, q, limit, startIndex, null, null, null, null, ifNoneMatch);
+	}
+
+	/** Convenience seam for the context-mode controller tests (no interpret flag). */
+	ResponseEntity<Object> getPatientRecords(HttpServletRequest request, String patient, String q, Integer limit, Integer startIndex,
+	        String mode, String types, Boolean temporal, String ifNoneMatch) {
+		return getPatientRecords(request, patient, q, limit, startIndex, mode, types, temporal, null, ifNoneMatch);
 	}
 
 	private static boolean etagMatches(String ifNoneMatch, String pageEtag) {
