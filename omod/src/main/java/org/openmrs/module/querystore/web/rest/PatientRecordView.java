@@ -15,16 +15,11 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.model.PatientChartFingerprint;
@@ -75,7 +70,7 @@ final class PatientRecordView {
 	 */
 	static Map<String, Object> page(String endpointUrl, List<QueryDocument> docs, boolean ranked, int startIndex, int limit,
 	        Integer totalCount, String baseParams, String snapshotId, Boolean chartTruncated,
-	        Boolean projectionComplete, int maximumResultWindow) {
+	        Boolean projectionComplete, java.util.Set<String> withheldTypes, int maximumResultWindow) {
 		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>(docs.size());
 		for (int i = 0; i < docs.size(); i++) {
 			results.add(toMap(docs.get(i), ranked ? Integer.valueOf(startIndex + i + 1) : null));
@@ -91,6 +86,11 @@ final class PatientRecordView {
 		}
 		if (projectionComplete != null) {
 			env.put("projectionComplete", projectionComplete);
+		}
+		if (withheldTypes != null) {
+			List<String> withheld = new ArrayList<String>(withheldTypes);
+			Collections.sort(withheld);
+			env.put("withheldTypes", withheld);
 		}
 
 		List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
@@ -114,14 +114,77 @@ final class PatientRecordView {
 		return env;
 	}
 
+	/**
+	 * The context-slice envelope (ADR Decision 17 §4): {@code {results (each with tier),
+	 * totalCount, chartSize, chartTruncated, projectionComplete, effectiveTypes, temporalApplied, chartSnapshotId,
+	 * sliceId}}, paged
+	 * in memory. {@code sliceId} fingerprints the complete ordered selection so an external
+	 * client can reject mixed pages. {@code chartSnapshotId} identifies the complete source-chart
+	 * materialization; context pages themselves do not use it as an HTTP ETag.
+	 */
+	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
+	        int startIndex, int limit) {
+		return contextPage(slice, startIndex, limit, null, null);
+	}
+
+	static Map<String, Object> contextPage(org.openmrs.module.querystore.model.ContextSlice slice,
+	        int startIndex, int limit, String endpointUrl, String baseParams) {
+		List<org.openmrs.module.querystore.model.ContextSliceRecord> all = slice.getRecords();
+		List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
+		int pageSize = startIndex >= all.size() ? 0 : Math.min(limit, all.size() - startIndex);
+		for (int i = startIndex; i < startIndex + pageSize; i++) {
+			org.openmrs.module.querystore.model.ContextSliceRecord record = all.get(i);
+			Map<String, Object> m = toMap(record.getDocument(), null);
+			m.put("tier", record.getTier());
+			if (record.getRank() != null) {
+				m.put("rank", record.getRank());
+			}
+			results.add(m);
+		}
+		Map<String, Object> env = new LinkedHashMap<String, Object>();
+		env.put("results", results);
+		env.put("totalCount", Integer.valueOf(all.size()));
+		env.put("chartSize", Integer.valueOf(slice.getChartSize()));
+		env.put("chartTruncated", Boolean.valueOf(slice.isChartTruncated()));
+		env.put("projectionComplete", Boolean.valueOf(slice.isProjectionComplete()));
+		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
+		Collections.sort(effectiveTypes);
+		env.put("effectiveTypes", effectiveTypes);
+		List<String> withheldTypes = new ArrayList<String>(slice.getWithheldTypes());
+		Collections.sort(withheldTypes);
+		env.put("withheldTypes", withheldTypes);
+		env.put("temporalApplied", Boolean.valueOf(slice.isTemporalApplied()));
+		env.put("chartSnapshotId", slice.getChartSnapshotId());
+		env.put("sliceId", PatientChartFingerprint.sliceId(slice));
+		if (baseParams != null) {
+			List<Map<String, Object>> links = new ArrayList<Map<String, Object>>(2);
+			if (startIndex > 0) {
+				links.add(link("prev", endpointUrl, baseParams, Math.max(0, startIndex - limit), limit));
+			}
+			if (startIndex <= Integer.MAX_VALUE - limit && startIndex + pageSize < all.size()) {
+				links.add(link("next", endpointUrl, baseParams, startIndex + limit, limit));
+			}
+			if (!links.isEmpty()) {
+				env.put("links", links);
+			}
+		}
+		return env;
+	}
+
 	/** Stable identity for an entire ordered chart, including completeness and canonical metadata. */
 	static String snapshotId(List<QueryDocument> docs, boolean chartTruncated, boolean projectionComplete) {
 		return PatientChartFingerprint.snapshotId(docs, chartTruncated, projectionComplete);
 	}
 
-	/** A page-specific strong ETag, derived from the complete snapshot and paging parameters. */
-	static String pageEtag(String snapshotId, int startIndex, int limit) {
-		return "\"" + sha256(snapshotId + "|" + startIndex + "|" + limit) + "\"";
+	/**
+	 * A page-specific strong ETag, derived from the complete snapshot, the types withheld from the
+	 * caller and the paging parameters, so a caller whose read privileges changed gets the new page.
+	 */
+	static String pageEtag(String snapshotId, java.util.Set<String> withheldTypes, int startIndex, int limit) {
+		List<String> withheld = new ArrayList<String>(withheldTypes);
+		Collections.sort(withheld);
+		return "\"" + PatientChartFingerprint.sha256(snapshotId + "|" + withheld + "|" + startIndex + "|" + limit)
+		        + "\"";
 	}
 
 	private static String metadataString(QueryDocument doc, String key) {
@@ -132,23 +195,6 @@ final class PatientRecordView {
 	private static String dateKind(QueryDocument doc) {
 		String value = metadataString(doc, FIELD_DATE_KIND);
 		return value == null ? DATE_KIND_UNKNOWN : value;
-	}
-
-	private static String sha256(String value) {
-		try {
-			byte[] digest = MessageDigest.getInstance("SHA-256")
-			        .digest(value.getBytes(StandardCharsets.UTF_8));
-			StringBuilder hex = new StringBuilder(digest.length * 2);
-			for (byte b : digest) {
-				int unsignedByte = b & 0xff;
-				hex.append(Character.forDigit(unsignedByte >>> 4, 16));
-				hex.append(Character.forDigit(unsignedByte & 0x0f, 16));
-			}
-			return hex.toString();
-		}
-		catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("SHA-256 is unavailable", e);
-		}
 	}
 
 	private static Map<String, Object> link(String rel, String endpointUrl, String baseParams, int startIndex, int limit) {

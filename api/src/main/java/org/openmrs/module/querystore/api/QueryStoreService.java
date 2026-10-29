@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.openmrs.annotation.Authorized;
 import org.openmrs.api.OpenmrsService;
@@ -21,6 +22,8 @@ import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.DocFailure;
 import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.WriteResult;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.util.PrivilegeConstants;
 
@@ -183,5 +186,39 @@ public interface QueryStoreService extends OpenmrsService {
 		// A legacy implementation can preserve its complete record list but cannot prove that every
 		// configured resource type finished projecting. Fail closed on that separate claim.
 		return new PatientChartRead(getPatientChart(patientUuid), false, false);
+	}
+
+	/**
+	 * Returns the tier-tagged context slice for one patient and question — the single
+	 * implementation of the provider-neutral context-selection invariants (ADR Decision 17;
+	 * conformance family {@code context_policy} in dual-provider-conformance.v1). Selection
+	 * tiers, by priority: {@code mandatory} (patient record, allergies, active conditions),
+	 * {@code exact} (explicit UUIDs, dates, namespaced codes, labeled identifiers, and quoted phrases),
+	 * {@code typed} (caller-declared typed-complete resource types), {@code recency_anchor}
+	 * (newest chart records, only when {@code request.temporal}), {@code similarity}
+	 * (ranked-search hits for {@code question}), {@code panel} (obs-group family completion).
+	 * Records keep {@link #getPatientChart}'s {@code record_date}-desc order, each appearing
+	 * once under its highest tier.
+	 *
+	 * <p>Prompt composition and token budgeting stay in the consumer; {@code mandatory},
+	 * {@code exact}, {@code typed}, and {@code panel} records are protected there. A ranked-search
+	 * failure or blank question degrades to the policy tiers alone; cold-patient lazy bootstrap
+	 * and the ES full-chart cap behave exactly as {@link #getPatientChart} (a capped chart is
+	 * surfaced via {@link org.openmrs.module.querystore.model.ContextSlice#isChartTruncated}).
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request) {
+		throw new UnsupportedOperationException("Context slices are not supported by this QueryStoreService implementation");
+	}
+
+	/**
+	 * The core resource types the calling user holds no core read privilege for, which every read
+	 * here withholds from them (ADR Decision 14 point 4), in a stable order. A consumer whose chart
+	 * reaches its reader through another account, such as an agent with its own QueryStore login,
+	 * asks this before handing that reader the caller's question.
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default Set<String> getTypesWithheldFromCaller() {
+		throw new UnsupportedOperationException("Withheld types are not reported by this QueryStoreService implementation");
 	}
 }

@@ -23,10 +23,35 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-/** Canonical fingerprint for one complete, ordered patient-chart materialization. */
+/**
+ * Canonical fingerprints: {@link #snapshotId} for one complete, ordered patient-chart
+ * materialization, {@link #sliceId} for one context slice selected from it. One canonical form
+ * serves both, so a value's kind or a new field cannot change one identity and not the other.
+ */
 public final class PatientChartFingerprint {
 
 	private PatientChartFingerprint() {
+	}
+
+	/** Fingerprint of the complete ordered context selection, including every selection input and result. */
+	public static String sliceId(ContextSlice slice) {
+		StringBuilder canonical = new StringBuilder();
+		appendValue(canonical, Integer.valueOf(slice.getChartSize()));
+		appendValue(canonical, Boolean.valueOf(slice.isChartTruncated()));
+		appendValue(canonical, Boolean.valueOf(slice.isProjectionComplete()));
+		List<String> effectiveTypes = new ArrayList<String>(slice.getEffectiveTypes());
+		Collections.sort(effectiveTypes);
+		appendValue(canonical, effectiveTypes);
+		List<String> withheldTypes = new ArrayList<String>(slice.getWithheldTypes());
+		Collections.sort(withheldTypes);
+		appendValue(canonical, withheldTypes);
+		appendValue(canonical, Boolean.valueOf(slice.isTemporalApplied()));
+		for (ContextSliceRecord record : slice.getRecords()) {
+			appendValue(canonical, record.getTier());
+			appendValue(canonical, record.getRank());
+			appendDocument(canonical, record.getDocument());
+		}
+		return sha256(canonical.toString());
 	}
 
 	public static String snapshotId(List<QueryDocument> documents, boolean chartTruncated,
@@ -35,18 +60,22 @@ public final class PatientChartFingerprint {
 		appendValue(canonical, Boolean.valueOf(chartTruncated));
 		appendValue(canonical, Boolean.valueOf(projectionComplete));
 		for (QueryDocument document : documents) {
-			appendValue(canonical, document.getResourceType());
-			appendValue(canonical, document.getResourceUuid());
-			appendValue(canonical, document.getDate() == null ? null : document.getDate().toString());
-			appendValue(canonical, metadataString(document, FIELD_CLINICAL_DATE));
-			String dateKind = metadataString(document, FIELD_DATE_KIND);
-			appendValue(canonical, dateKind == null ? DATE_KIND_UNKNOWN : dateKind);
-			appendValue(canonical, document.getText());
-			appendValue(canonical,
-			        document.getLastModified() == null ? null : document.getLastModified().toString());
-			appendValue(canonical, document.getMetadata());
+			appendDocument(canonical, document);
 		}
 		return sha256(canonical.toString());
+	}
+
+	private static void appendDocument(StringBuilder canonical, QueryDocument document) {
+		appendValue(canonical, document.getResourceType());
+		appendValue(canonical, document.getResourceUuid());
+		appendValue(canonical, document.getDate() == null ? null : document.getDate().toString());
+		appendValue(canonical, metadataString(document, FIELD_CLINICAL_DATE));
+		String dateKind = metadataString(document, FIELD_DATE_KIND);
+		appendValue(canonical, dateKind == null ? DATE_KIND_UNKNOWN : dateKind);
+		appendValue(canonical, document.getText());
+		appendValue(canonical,
+		        document.getLastModified() == null ? null : document.getLastModified().toString());
+		appendValue(canonical, document.getMetadata());
 	}
 
 	private static String metadataString(QueryDocument document, String key) {
@@ -54,7 +83,8 @@ public final class PatientChartFingerprint {
 		return value instanceof String ? (String) value : null;
 	}
 
-	private static String sha256(String value) {
+	/** The hex SHA-256 of {@code value}: the digest of every identity here and of the REST ETag. */
+	public static String sha256(String value) {
 		try {
 			byte[] digest = MessageDigest.getInstance("SHA-256")
 			        .digest(value.getBytes(StandardCharsets.UTF_8));

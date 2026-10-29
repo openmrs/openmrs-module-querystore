@@ -13,9 +13,15 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -35,6 +41,10 @@ import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.model.ContextSlice;
+import org.openmrs.module.querystore.model.ContextSliceRecord;
+import org.openmrs.module.querystore.model.ContextSliceRequest;
+import org.openmrs.module.querystore.model.PatientChartFingerprint;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.util.PrivilegeConstants;
 
@@ -47,6 +57,41 @@ import org.openmrs.util.PrivilegeConstants;
 public class QueryStoreServiceImpl extends BaseOpenmrsService implements QueryStoreService {
 
 	private static final Log log = LogFactory.getLog(QueryStoreServiceImpl.class);
+
+	/**
+	 * A phrase of at least two characters inside straight or curly double quotes, or inside single
+	 * quotes that open and close at a word edge. The phrase starts and ends on a non-space, so the
+	 * closing quote of one phrase and the opening quote of the next never enclose the words between
+	 * them. An apostrophe inside a word (patient's) neither opens nor closes a single-quoted phrase,
+	 * and punctuation just inside the closing quote ("fever," or "chest pain.") is not part of it.
+	 * The single-quote loops are bounded: each repetition of a group with alternatives is a recursive
+	 * call in Java's regex engine, so an unbounded one overflows the stack on a long question.
+	 */
+	private static final Pattern QUOTED_PHRASE = Pattern.compile(
+	        "\"([^\"\\s][^\"]*[^\"\\s.,;:!?])[.,;:!?]*\""
+	                + "|\\u201C([^\\u201C\\u201D\\s][^\\u201C\\u201D]*[^\\u201C\\u201D\\s.,;:!?])[.,;:!?]*\\u201D"
+	                + "|(?<![\\p{L}\\p{N}])'([^'\\s](?:[^']|'(?=[\\p{L}\\p{N}])){0,200}[^'\\s.,;:!?])[.,;:!?]*'(?![\\p{L}\\p{N}])"
+	                + "|(?<![\\p{L}\\p{N}])\\u2018([^\\u2018\\u2019\\s](?:[^\\u2018\\u2019]|\\u2019(?=[\\p{L}\\p{N}]))"
+	                + "{0,200}[^\\u2018\\u2019\\s.,;:!?])[.,;:!?]*\\u2019(?![\\p{L}\\p{N}])");
+
+	/**
+	 * Each exact signal is scanned against every chart record, so a question's signals are capped: a
+	 * question listing about 550 dates took 3 to 4 s over a 10,000-record chart, against about 50 ms.
+	 */
+	private static final int MAX_EXACT_SIGNALS = 32;
+
+	private static final Pattern ISO_DATE = Pattern.compile("\\b\\d{4}-\\d{2}-\\d{2}\\b");
+
+	private static final Pattern UUID = Pattern.compile(
+	        "\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b",
+	        Pattern.CASE_INSENSITIVE);
+
+	private static final Pattern LABELED_IDENTIFIER = Pattern.compile(
+	        "\\b(?:mrn|id|identifier|code)(?:\\s+is\\s+|\\s*[:=#]\\s*)((?=[a-z._/-]*\\d)[a-z0-9][a-z0-9._/-]{2,})\\b",
+	        Pattern.CASE_INSENSITIVE);
+
+	private static final Pattern NAMESPACE_CODE = Pattern.compile(
+	        "\\b[a-z][a-z0-9_-]{1,15}:[a-z0-9][a-z0-9._-]{0,31}\\b", Pattern.CASE_INSENSITIVE);
 
 	private BackendStore backend;
 
@@ -186,6 +231,12 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (needsColdTouch(patientUuid)) {
 			ensureIndexedSafely(patientUuid);
 		}
+		return rankedPatientSearch(patientUuid, query, limit);
+	}
+
+	/** The ranked read of one patient's indexed documents, without the cold touch. The context slice
+	 *  runs it after its own chart read has touched the patient, so a failed touch is not repeated. */
+	private List<QueryDocument> rankedPatientSearch(String patientUuid, String query, int limit) {
 		List<QueryDocument> hits = readableByCaller(runHybrid(query, limit, Filter.patientScope(patientUuid)));
 		emitRetrievalLog(query, hits);
 		return hits;
@@ -329,7 +380,13 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		}
 		PatientChartRead chartRead = backend.findPatientChart(patientUuid);
 		return new PatientChartRead(readableByCaller(chartRead.getDocuments()),
-		        chartRead.isTruncated() || coldTouchFailed, isProjectionComplete());
+		        chartRead.isTruncated() || coldTouchFailed, isProjectionComplete(),
+		        typesWithheldFromCaller(CORE_READ_PRIVILEGES.keySet()));
+	}
+
+	@Override
+	public Set<String> getTypesWithheldFromCaller() {
+		return typesWithheldFromCaller(CORE_READ_PRIVILEGES.keySet());
 	}
 
 	/**
@@ -358,9 +415,28 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 	}
 
 	/**
+	 * The types among {@code types} the calling user may not read through core, in a stable order.
+	 * With no user context bound nothing is withheld, as {@link #readableByCaller} refuses nothing.
+	 */
+	private static Set<String> typesWithheldFromCaller(Set<String> types) {
+		Set<String> withheld = new TreeSet<String>();
+		if (types.isEmpty() || !Context.isSessionOpen()) {
+			return withheld;
+		}
+		for (String type : types) {
+			String privilege = CORE_READ_PRIVILEGES.get(type);
+			if (privilege != null && !Context.hasPrivilege(privilege)) {
+				withheld.add(type);
+			}
+		}
+		return withheld;
+	}
+
+	/**
 	 * The documents whose type the calling user may read through core. With no user context bound
 	 * there is no caller to check, and nothing reaches one: a call through the service proxy is refused
-	 * by its {@code @Authorized} gate before it gets here. Each type's privilege is asked once per read.
+	 * by its {@code @Authorized} gate before it gets here. Each type's privilege is asked once in this
+	 * filtering pass; {@link #typesWithheldFromCaller} asks again to report what was refused.
 	 */
 	private List<QueryDocument> readableByCaller(List<QueryDocument> documents) {
 		if (documents.isEmpty() || !Context.isSessionOpen()) {
@@ -426,5 +502,290 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		List<QueryDocument> out = new ArrayList<>(result.getHits().size());
 		result.getHits().forEach(h -> out.add(h.getDocument()));
 		return out;
+	}
+
+	@Override
+	public ContextSlice getContextSlice(String patientUuid, String question, ContextSliceRequest request) {
+		if (request == null) {
+			request = new ContextSliceRequest(Collections.<String> emptySet(), false);
+		}
+		// Composed over the sibling complete-chart read so cold-bootstrap, ordering, and any
+		// backend-documented cap behave identically (Decision 17 §3).
+		PatientChartRead chartRead = getPatientChartRead(patientUuid);
+		List<QueryDocument> chart = chartRead.getDocuments();
+
+		Set<String> effectiveTypes = new HashSet<>(request.getTypes());
+		boolean temporal = request.isTemporal();
+		// Every type the caller cannot read through core is withheld and named, requested or not: in the
+		// scope it would come back as an empty typed tier, and in the mandatory tier (which carries
+		// every allergy unasked) as no records, either of which reads as a patient without such
+		// records, down to the sliceId.
+		Set<String> withheldTypes = chartRead.getWithheldTypes();
+		effectiveTypes.removeAll(withheldTypes);
+
+		// Ranked-search hits are the semantic catch-all tier. A failure degrades to the policy
+		// tiers alone — selection must never block on the ranking layer.
+		Map<String, Integer> similarityRanks = new LinkedHashMap<>();
+		if (patientUuid != null && StringUtils.isNotBlank(question) && request.getSimilarityLimit() > 0) {
+			try {
+				// The chart read above already ran any cold touch; a failed one is not run twice.
+				for (QueryDocument hit : rankedPatientSearch(patientUuid, question,
+				        request.getSimilarityLimit())) {
+					if (hit != null && hit.getResourceUuid() != null
+					        && !similarityRanks.containsKey(hit.getResourceUuid())) {
+						similarityRanks.put(hit.getResourceUuid(),
+						        Integer.valueOf(similarityRanks.size() + 1));
+					}
+				}
+			}
+			catch (RuntimeException e) {
+				log.warn("Context-slice ranked search failed for patient " + patientUuid
+				        + " — proceeding with policy tiers only", e);
+			}
+		}
+
+		int anchor = temporal ? request.getRecencyAnchorSize() : 0;
+		Map<String, Boolean> exactSignals = exactSignals(question);
+		List<ContextSliceRecord> selected = new ArrayList<>();
+		Set<String> selectedUuids = new HashSet<>();
+		for (int i = 0; i < chart.size(); i++) {
+			QueryDocument doc = chart.get(i);
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			String tier = null;
+			if (isMandatoryCore(doc)) {
+				tier = QueryStoreConstants.TIER_MANDATORY;
+			} else if (matchesExactSignal(doc, exactSignals)) {
+				tier = QueryStoreConstants.TIER_EXACT;
+			} else if (doc.getResourceType() != null && effectiveTypes.contains(doc.getResourceType())) {
+				tier = QueryStoreConstants.TIER_TYPED;
+			} else if (i < anchor) {
+				tier = QueryStoreConstants.TIER_RECENCY_ANCHOR;
+			} else if (similarityRanks.containsKey(doc.getResourceUuid())) {
+				tier = QueryStoreConstants.TIER_SIMILARITY;
+			}
+			if (tier != null && selectedUuids.add(doc.getResourceUuid())) {
+				Integer rank = QueryStoreConstants.TIER_SIMILARITY.equals(tier)
+				        ? similarityRanks.get(doc.getResourceUuid()) : null;
+				selected.add(new ContextSliceRecord(doc, tier, rank));
+			}
+		}
+		selected = completePanelFamilies(chart, selected, selectedUuids);
+
+		return new ContextSlice(selected, chart.size(), chartRead.isTruncated(),
+		        chartRead.isProjectionComplete(), effectiveTypes, temporal,
+		        PatientChartFingerprint.snapshotId(chart, chartRead.isTruncated(),
+		                chartRead.isProjectionComplete()), withheldTypes);
+	}
+
+	/**
+	 * The exact signals in {@code question}, each with whether it is an identifier: an identifier or
+	 * code is bounded by {@link #continuesIdentifier}, so {@code ABC-123} is not found inside
+	 * {@code ABC-123-4}, while a quoted phrase or a date is bounded by letters and digits alone, so
+	 * {@code "vomiting"} is found in {@code nausea/vomiting} and {@code "COVID"} in {@code COVID-19}.
+	 */
+	private static Map<String, Boolean> exactSignals(String question) {
+		Map<String, Boolean> signals = new HashMap<>();
+		if (StringUtils.isBlank(question)) {
+			return signals;
+		}
+		collectMatches(QUOTED_PHRASE, question, signals, true, false);
+		collectMatches(ISO_DATE, question, signals, false, false);
+		collectMatches(UUID, question, signals, false, true);
+		collectMatches(LABELED_IDENTIFIER, question, signals, true, true);
+		collectMatches(NAMESPACE_CODE, question, signals, false, true);
+		return signals;
+	}
+
+	private static void collectMatches(Pattern pattern, String question, Map<String, Boolean> sink,
+	        boolean firstNonEmptyGroup, boolean identifier) {
+		Matcher matcher = pattern.matcher(question);
+		while (sink.size() < MAX_EXACT_SIGNALS && matcher.find()) {
+			String value = matcher.group();
+			if (firstNonEmptyGroup) {
+				value = null;
+				for (int group = 1; group <= matcher.groupCount(); group++) {
+					if (StringUtils.isNotBlank(matcher.group(group))) {
+						value = matcher.group(group);
+						break;
+					}
+				}
+			}
+			if (StringUtils.isNotBlank(value)) {
+				String signal = value.trim().toLowerCase(Locale.ROOT);
+				sink.put(signal, Boolean.valueOf(identifier || Boolean.TRUE.equals(sink.get(signal))));
+			}
+		}
+	}
+
+	private static boolean matchesExactSignal(QueryDocument doc, Map<String, Boolean> signals) {
+		if (signals.isEmpty()) {
+			return false;
+		}
+		StringBuilder values = new StringBuilder();
+		appendValue(values, doc.getResourceUuid());
+		appendValue(values, doc.getDate());
+		appendValue(values, doc.getText());
+		appendValue(values, doc.getMetadata());
+		String searchable = values.toString().toLowerCase(Locale.ROOT);
+		for (Map.Entry<String, Boolean> signal : signals.entrySet()) {
+			if (containsBounded(searchable, signal.getKey(), signal.getValue().booleanValue())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static void appendValue(StringBuilder sink, Object value) {
+		if (value instanceof Map) {
+			for (Object child : ((Map<?, ?>) value).values()) {
+				appendValue(sink, child);
+			}
+		} else if (value instanceof Iterable) {
+			for (Object child : (Iterable<?>) value) {
+				appendValue(sink, child);
+			}
+		} else if (value != null) {
+			sink.append(value).append('\n');
+		}
+	}
+
+	/**
+	 * Whether {@code signal} occurs in {@code searchable} with no letter or digit on either side,
+	 * nor, for an identifier, a connector that continues it ({@link #continuesIdentifier}).
+	 * A date signal is also bounded by the {@code t} of an ISO date-time ({@code 2024-03-05t10:15}),
+	 * so a question naming the day a visit ended matches its {@code end_date_time}.
+	 */
+	private static boolean containsBounded(String searchable, String signal, boolean identifier) {
+		boolean dateSignal = ISO_DATE.matcher(signal).matches();
+		int from = 0;
+
+		while (from <= searchable.length() - signal.length()) {
+			int index = searchable.indexOf(signal, from);
+			if (index < 0) {
+				return false;
+			}
+			int end = index + signal.length();
+			boolean leftBounded = index == 0 || !continues(searchable, index - 1, -1, identifier);
+			boolean rightBounded = end == searchable.length()
+					|| !continues(searchable, end, 1, identifier)
+					|| (dateSignal && searchable.charAt(end) == 't' && end + 1 < searchable.length()
+					        && Character.isDigit(searchable.charAt(end + 1)));
+			if (leftBounded && rightBounded) {
+				return true;
+			}
+			from = index + 1;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the character at {@code at} continues the signal: for an identifier, as
+	 * {@link #continuesIdentifier} says; for a quoted phrase, a letter or digit.
+	 */
+	private static boolean continues(String searchable, int at, int step, boolean identifier) {
+		return identifier ? continuesIdentifier(searchable, at, step)
+		        : Character.isLetterOrDigit(searchable.charAt(at));
+	}
+
+	/**
+	 * Whether the character at {@code at} continues an identifier beyond the signal: a letter or digit,
+	 * or a connector such as {@code -} or {@code .} with a letter or digit beyond it, so that
+	 * {@code ABC-123} is not found inside {@code ABC-123-4} while {@code CIEL:60.} at a sentence end
+	 * still matches.
+	 */
+	private static boolean continuesIdentifier(String searchable, int at, int step) {
+		char c = searchable.charAt(at);
+		if (Character.isLetterOrDigit(c)) {
+			return true;
+		}
+		int beyond = at + step;
+		return (c == '-' || c == '.' || c == '_' || c == '/' || c == ':') && beyond >= 0
+		        && beyond < searchable.length() && Character.isLetterOrDigit(searchable.charAt(beyond));
+	}
+
+	/**
+	 * The mandatory clinical core (Decision 17 tier 1): the patient demographics record, every
+	 * allergy, and every condition/diagnosis whose {@code clinical_status} metadata is ACTIVE,
+	 * RECURRENCE or RELAPSE, the statuses core's {@code ConditionService.getActiveConditions} counts
+	 * as active since TRUNK-6170. Safety context every slice carries regardless of the caller's typed
+	 * scope.
+	 */
+	private static boolean isMandatoryCore(QueryDocument doc) {
+		String type = doc.getResourceType();
+		if ("patient".equals(type) || "allergy".equals(type)) {
+			return true;
+		}
+		if ("condition".equals(type) || "diagnosis".equals(type)) {
+			// The statuses core's ConditionService.getActiveConditions counts as active (TRUNK-6170).
+			Object status = doc.getMetadata().get(QueryStoreConstants.FIELD_CLINICAL_STATUS);
+			String clinicalStatus = status == null ? null : status.toString();
+			return "ACTIVE".equalsIgnoreCase(clinicalStatus) || "RECURRENCE".equalsIgnoreCase(clinicalStatus)
+			        || "RELAPSE".equalsIgnoreCase(clinicalStatus);
+		}
+		return false;
+	}
+
+	/**
+	 * Obs-group family completion (Decision 17 tier {@code panel}): when a group parent or any
+	 * member is already selected, the whole family joins — panel values live in member obs whose
+	 * text carries no panel name, so ranking can match the parent and miss every value. Returns a
+	 * REBUILT list scanned from the chart so joined members keep chart order instead of being
+	 * appended after unrelated newer records.
+	 */
+	private static List<ContextSliceRecord> completePanelFamilies(List<QueryDocument> chart,
+	        List<ContextSliceRecord> selected, Set<String> selectedUuids) {
+		Set<String> families = new HashSet<>();
+		for (QueryDocument doc : chart) {
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			Object group = doc.getMetadata().get(QueryStoreConstants.FIELD_OBS_GROUP_UUID);
+			if (group == null) {
+				continue;
+			}
+			String groupUuid = group.toString();
+			if (selectedUuids.contains(doc.getResourceUuid()) || selectedUuids.contains(groupUuid)) {
+				families.add(groupUuid);
+			}
+		}
+		if (families.isEmpty()) {
+			return selected;
+		}
+		Map<String, ContextSliceRecord> byUuid = new LinkedHashMap<>();
+		for (ContextSliceRecord record : selected) {
+			byUuid.put(record.getDocument().getResourceUuid(), record);
+		}
+		List<ContextSliceRecord> completed = new ArrayList<>();
+		for (QueryDocument doc : chart) {
+			if (doc == null || doc.getResourceUuid() == null) {
+				continue;
+			}
+			Object group = doc.getMetadata().get(QueryStoreConstants.FIELD_OBS_GROUP_UUID);
+			boolean inFamily = (group != null && families.contains(group.toString()))
+			        || families.contains(doc.getResourceUuid());
+			ContextSliceRecord already = byUuid.get(doc.getResourceUuid());
+			if (already != null) {
+				if (inFamily && !isProtectedTier(already.getTier())) {
+					completed.add(new ContextSliceRecord(doc, QueryStoreConstants.TIER_PANEL,
+					        already.getRank()));
+				} else {
+					completed.add(already);
+				}
+				continue;
+			}
+			if (inFamily) {
+				completed.add(new ContextSliceRecord(doc, QueryStoreConstants.TIER_PANEL));
+			}
+		}
+		return completed;
+	}
+
+	private static boolean isProtectedTier(String tier) {
+		return QueryStoreConstants.TIER_MANDATORY.equals(tier)
+		        || QueryStoreConstants.TIER_EXACT.equals(tier)
+		        || QueryStoreConstants.TIER_TYPED.equals(tier)
+		        || QueryStoreConstants.TIER_PANEL.equals(tier);
 	}
 }

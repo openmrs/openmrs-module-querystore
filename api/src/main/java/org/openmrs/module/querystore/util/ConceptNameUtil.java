@@ -243,6 +243,40 @@ public final class ConceptNameUtil {
 		return result;
 	}
 
+	/**
+	 * The concept's live reference-term codes, each namespaced by its source as {@code SOURCE:CODE}
+	 * ({@code CIEL:857}, {@code LOINC:14937-7}, {@code SNOMED-CT:72341003}, whitespace in a source
+	 * name written as a hyphen), so a question naming a code can match the record
+	 * exactly (ADR Decision 17 §2). A code is kept whether or not its term carries a name: SNOMED
+	 * terms on demo deployments carry codes alone. Retired terms, terms without a source, and blank
+	 * sources or codes are skipped; the result is de-duplicated and sorted, and not capped: only exact
+	 * matching reads codes, so the index-size reason for capping names does not carry over, and an
+	 * alphabetical cut cost a concept with many mappings its later-sorting codes (Cough's SNOMED CT
+	 * code, behind twelve others). Not embedded, as {@link #getMappingNames} is not.
+	 */
+	public static List<String> getMappingCodes(Concept concept) {
+		if (concept == null || concept.getConceptMappings() == null
+				|| concept.getConceptMappings().isEmpty()) {
+			return Collections.emptyList();
+		}
+		TreeSet<String> sorted = new TreeSet<>();
+		for (ConceptMap m : concept.getConceptMappings()) {
+			ConceptReferenceTerm term = m == null ? null : m.getConceptReferenceTerm();
+			if (term == null || Boolean.TRUE.equals(term.getRetired()) || term.getConceptSource() == null) {
+				continue;
+			}
+			String source = term.getConceptSource().getName();
+			String code = term.getCode();
+			if (source == null || source.trim().isEmpty() || code == null || code.trim().isEmpty()) {
+				continue;
+			}
+			// A question names a code as one token, so whitespace inside a source name becomes a
+			// hyphen: CIEL's "SNOMED CT" is stored, and matched, as SNOMED-CT.
+			sorted.add(source.trim().replaceAll("\\s+", "-") + ":" + code.trim());
+		}
+		return new ArrayList<>(sorted);
+	}
+
 	private static Locale resolveLocale() {
 		// LocaleUtility.getDefaultLocale() guards Context.isSessionOpen() internally and falls
 		// back to en_GB when no Context is available — safe to call from event handlers,
