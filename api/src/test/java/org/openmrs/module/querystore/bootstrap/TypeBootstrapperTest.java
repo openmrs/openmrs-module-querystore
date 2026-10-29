@@ -442,6 +442,74 @@ public class TypeBootstrapperTest {
 		}
 	}
 
+	@Test
+	public void runForPatient_skipsRecordsStoredAtTheirCurrentVersion() {
+		// A patient whose projection keeps failing is sent back through this walk on every read, so
+		// the records already stored at their version must not be embedded again each time.
+		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
+		Instant later = Instant.parse("2025-01-02T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.patientPages = new ArrayList<>(Arrays.asList(
+		    Arrays.asList(new TestEntity("same", earlier), new TestEntity("changed", later))));
+		service.storedVersions.put("same", earlier);
+		service.storedVersions.put("changed", earlier);
+
+		int failed = b.runForPatient("patient-A", service, embedder);
+
+		assertEquals(0, failed);
+		assertEquals(Collections.singletonList("changed"), indexedUuids());
+		assertEquals(1, embedder.inputs.size());
+	}
+
+	@Test
+	public void runForPatient_rewritesATypeWhoseVersionDoesNotTrackItsContent() {
+		// A stopped order keeps its dateCreated version, so the patient walk rewrites it too.
+		Instant created = Instant.parse("2025-01-01T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.versionTracksContent = false;
+		b.patientPages = new ArrayList<>(Arrays.asList(Arrays.asList(new TestEntity("stopped", created))));
+		service.storedVersions.put("stopped", created);
+
+		b.runForPatient("patient-A", service, embedder);
+
+		assertEquals(Collections.singletonList("stopped"), indexedUuids());
+	}
+
+	@Test
+	public void runForPatient_stopsWhenAPageDoesNotAdvancePastTheCursor() {
+		FakeBootstrapper b = new FakeBootstrapper();
+		// A failed fetch leaves half-loaded rows in the session; they come back unhydrated, at the same
+		// epoch cursor, on every later fetch.
+		b.stuckPatientPage = Arrays.asList(new TestEntity("cond-1", Instant.EPOCH));
+
+		try {
+			b.runForPatient("patient-A", service, embedder);
+			fail("a page that never advances must stop the walk");
+		}
+		catch (IllegalStateException expected) {
+			assertEquals(2, b.patientFetches);
+			assertTrue(expected.getMessage(), expected.getMessage().contains("patient-A"));
+		}
+	}
+
+	@Test
+	public void runForPatient_stopsWhenAStaleRowOnAPageBoundaryWouldCycleTheWalk() {
+		FakeBootstrapper b = new FakeBootstrapper();
+		// Page one ends at a real cursor; page two ends on an unhydrated row at the epoch, which sends the
+		// next fetch back to page one. Each page differs from the cursor just before it.
+		b.cyclingPatientPages = Arrays.asList(
+		    Arrays.asList(new TestEntity("cond-1", Instant.parse("2026-01-01T00:00:00Z"))),
+		    Arrays.asList(new TestEntity("cond-stale", Instant.EPOCH)));
+
+		try {
+			b.runForPatient("patient-A", service, embedder);
+			fail("a walk that returns to an earlier page must stop");
+		}
+		catch (IllegalStateException expected) {
+			assertEquals(2, b.patientFetches);
+		}
+	}
+
 	private static final class FakeBootstrapper extends TypeBootstrapper<TestEntity> {
 		private final Deque<List<TestEntity>> pages = new ArrayDeque<>();
 		private int pageNumber = 0;
@@ -449,6 +517,11 @@ public class TypeBootstrapperTest {
 		private RuntimeException failureCause;
 		String poisonUuid;
 		private final List<FetchCall> fetchCalls = new ArrayList<>();
+		List<TestEntity> stuckPatientPage;
+		List<List<TestEntity>> cyclingPatientPages;
+		/** Pages served in order to a per-patient walk; an empty page follows the last. */
+		List<List<TestEntity>> patientPages;
+		int patientFetches;
 		private final TestSerializer serializer = new TestSerializer() {
 			@Override
 			public org.openmrs.module.querystore.model.QueryDocument serialize(TestEntity record) {
@@ -498,6 +571,21 @@ public class TypeBootstrapperTest {
 				throw failureCause;
 			}
 			return pages.isEmpty() ? Collections.emptyList() : pages.poll();
+		}
+
+		@Override
+		protected List<TestEntity> fetchPageForPatient(String patientUuid, Instant afterDateChanged, String afterUuid,
+		        int pageSize) {
+			if (++patientFetches > 4) {
+				throw new AssertionError("the per-patient walk fetched " + patientFetches + " pages without stopping");
+			}
+			if (cyclingPatientPages != null) {
+				return cyclingPatientPages.get((patientFetches - 1) % cyclingPatientPages.size());
+			}
+			if (patientPages != null) {
+				return patientPages.isEmpty() ? Collections.<TestEntity> emptyList() : patientPages.remove(0);
+			}
+			return stuckPatientPage;
 		}
 
 		@Override

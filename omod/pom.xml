@@ -43,6 +43,14 @@
             <artifactId>openmrs-web</artifactId>
             <type>jar</type>
             <scope>provided</scope>
+            <exclusions>
+                <!-- Spring MockMvc requires the Servlet 3 response contract. OpenMRS supplies the
+                     container API at runtime; javax.servlet-api below is provided. -->
+                <exclusion>
+                    <groupId>javax.servlet</groupId>
+                    <artifactId>servlet-api</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.openmrs.api</groupId>
@@ -67,6 +75,12 @@
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>3.1.0</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

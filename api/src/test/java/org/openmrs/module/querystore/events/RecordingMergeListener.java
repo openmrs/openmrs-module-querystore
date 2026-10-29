@@ -118,6 +118,11 @@ public class RecordingMergeListener extends CoreServiceEventListener {
 		}
 
 		@Override
+		public boolean isPatientProjectionIncomplete(String patientUuid) {
+			return false;
+		}
+
+		@Override
 		public List<BootstrapProgress> getStatus() {
 			return Collections.emptyList();
 		}
@@ -125,6 +130,11 @@ public class RecordingMergeListener extends CoreServiceEventListener {
 		@Override
 		public BootstrapProgress getStatus(String resourceType) {
 			return null;
+		}
+
+		@Override
+		public org.openmrs.module.querystore.bootstrap.BootstrapStatusReport getStatusReport() {
+			return org.openmrs.module.querystore.bootstrap.BootstrapStatusReport.from(getStatus());
 		}
 
 		@Override

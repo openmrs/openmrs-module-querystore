@@ -10,12 +10,14 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -210,6 +212,27 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void resyncType_clearsTheEarlierCompletionWhileItReWalks() {
+		// A read counts a RUNNING type as complete only while its row still carries an earlier
+		// completion, which is what a restart's top-up looks like. A resync rewrites the type, so the
+		// row it walks under must have that completion cleared, or reads would accept it mid-rewrite.
+		BootstrapProgress prior = new BootstrapProgress("obs");
+		prior.setStatus(BootstrapStatus.COMPLETED);
+		prior.setCompletedAt(Instant.parse("2026-10-20T23:11:08Z"));
+		prior.setBackend("lucene");
+		dao.store.put("obs", prior);
+		service.setBackendNameSupplierOverride(() -> "lucene");
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		final List<Instant> completedAtDuringWalk = new ArrayList<>();
+		obs.onFetch = type -> completedAtDuringWalk.add(dao.find(type).getCompletedAt());
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		service.resyncType("obs");
+
+		assertEquals(Collections.singletonList((Instant) null), completedAtDuringWalk);
+	}
+
+	@Test
 	public void resyncType_unknownType_throws() {
 		service.setBootstrappers(Collections.singletonList(new EmptyPageBootstrapper("obs")));
 		try {
@@ -227,6 +250,21 @@ public class BootstrapServiceImplTest {
 		        new EmptyPageBootstrapper("encounter")));
 		assertTrue("registered core bootstrapper types are listed",
 		        service.getResourceTypeNames().containsAll(Arrays.asList("obs", "encounter")));
+	}
+
+	@Test
+	public void getStatusReport_doesNotCountARowAnotherBackendCompleted() {
+		BootstrapProgress prior = new BootstrapProgress("obs");
+		prior.setStatus(BootstrapStatus.COMPLETED);
+		prior.setCompletedAt(Instant.parse("2025-03-15T09:00:00Z"));
+		prior.setBackend("elasticsearch");
+		dao.store.put("obs", prior);
+		service.setBootstrappers(Collections.singletonList(new EmptyPageBootstrapper("obs")));
+
+		service.setBackendNameSupplierOverride(() -> "lucene");
+		assertFalse(service.getStatusReport().isProjected());
+		service.setBackendNameSupplierOverride(() -> "elasticsearch");
+		assertTrue(service.getStatusReport().isProjected());
 	}
 
 	@Test
@@ -748,11 +786,98 @@ public class BootstrapServiceImplTest {
 		EmptyPageBootstrapper ok = new EmptyPageBootstrapper("encounter");
 		service.setBootstrappers(Arrays.asList(failing, ok));
 
-		service.ensureIndexed("patient-uuid");
+		assertColdTouchFails("patient-uuid");
 
 		assertEquals(1, failing.fetchForPatientCount);
-		assertEquals("non-failing type still ran after the failure",
+		assertEquals("non-failing type still ran before the failure was reported",
 		        1, ok.fetchForPatientCount);
+	}
+
+	@Test
+	public void ensureIndexed_aRecordTheEmbedderCannotEmbedFailsTheTouch() {
+		// The embedder is down and the patient was never indexed: every record is skipped and
+		// nothing is written, so the touch must not read as a projection that succeeded.
+		service.setEmbeddingProvider(new EmbeddingProvider() {
+			@Override public int getDimensions() { return 8; }
+			@Override public float[] embed(String text) { throw new IllegalStateException("embedder unavailable"); }
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneRecordBootstrapper(false)));
+
+		assertColdTouchFails("patient-uuid");
+	}
+
+	@Test
+	public void ensureIndexed_aWriteTheBackendRejectsFailsTheTouch() {
+		service.setQueryStoreService(new NullQueryStoreService() {
+			@Override
+			public org.openmrs.module.querystore.backend.WriteResult index(QueryDocument document) {
+				return org.openmrs.module.querystore.backend.WriteResult.failed(
+				        new org.openmrs.module.querystore.backend.DocFailure(document.getResourceType(),
+				                document.getResourceUuid(), "simulated backend failure", true));
+			}
+		});
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneRecordBootstrapper(false)));
+
+		assertColdTouchFails("patient-uuid");
+	}
+
+	@Test
+	public void ensureIndexed_aRecordWithNothingToIndexIsNotAFailure() {
+		// A null serialization (a group-obs parent) is a skip by design, not a failed projection.
+		service.setBootstrappers(Collections.<TypeBootstrapper<?>> singletonList(new OneRecordBootstrapper(true)));
+
+		service.ensureIndexed("patient-uuid");
+	}
+
+	private void assertColdTouchFails(String patientUuid) {
+		try {
+			service.ensureIndexed(patientUuid);
+			fail("a cold touch that failed to project records must report it");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue(expected.getMessage(), expected.getMessage().contains(patientUuid));
+		}
+	}
+
+	@Test
+	public void ensureIndexed_aPatientWhoseTouchLeftRecordsOutIsProjectedAgain() {
+		// One type projects and another fails: the patient now has documents, so the existence
+		// probe alone would read the chart as complete from then on. The incomplete touch must keep
+		// the patient cold, so a later call (a second read, or a waiter on the per-patient lock)
+		// projects it again and reports the gap again instead of returning as if indexed.
+		EmptyPageBootstrapper failing = new EmptyPageBootstrapper("condition");
+		failing.perPatientFailure = new RuntimeException("serializer bug");
+		EmptyPageBootstrapper ok = new EmptyPageBootstrapper("obs");
+		service.setBootstrappers(Arrays.<TypeBootstrapper<?>> asList(failing, ok));
+		CountingBackendStore backend = installBackend();
+		backend.hasDocuments = false;
+
+		assertColdTouchFails("patient-uuid");
+		assertTrue(service.isPatientProjectionIncomplete("patient-uuid"));
+		backend.hasDocuments = true; // the obs the touch did project
+
+		assertColdTouchFails("patient-uuid");
+		assertEquals("the incomplete patient was projected again", 2, failing.fetchForPatientCount);
+
+		failing.perPatientFailure = null;
+		service.ensureIndexed("patient-uuid");
+		assertEquals(3, failing.fetchForPatientCount);
+		assertTrue("a complete projection clears the mark",
+		        !service.isPatientProjectionIncomplete("patient-uuid"));
+
+		service.ensureIndexed("patient-uuid");
+		assertEquals("a complete patient with documents is not projected again", 3, failing.fetchForPatientCount);
+	}
+
+	private CountingBackendStore installBackend() {
+		final CountingBackendStore backend = new CountingBackendStore(Collections.<String, Long> emptyMap());
+		service.setBackendSelector(new BackendStoreSelector(Collections.<String, BackendStore> emptyMap()) {
+			@Override
+			public BackendStore getStore() {
+				return backend;
+			}
+		});
+		return backend;
 	}
 
 	@Test
@@ -915,10 +1040,23 @@ public class BootstrapServiceImplTest {
 		EmptyPageBootstrapper ok = new EmptyPageBootstrapper("encounter");
 		service.setBootstrappers(Arrays.asList(failing, ok));
 
-		service.reindexPatient("patient-uuid");
+		try {
+			service.reindexPatient("patient-uuid");
+			fail("a re-projection that left records out must report it");
+		}
+		catch (IllegalStateException expected) {
+			assertTrue(expected.getMessage(), expected.getMessage().contains("patient-uuid"));
+		}
 
 		assertEquals(1, qs.bulkDeleteCount);
 		assertEquals("a per-type projection failure must not abort the rest", 1, ok.fetchForPatientCount);
+		assertTrue("the patient stays marked incomplete for its reads",
+		        service.isPatientProjectionIncomplete("patient-uuid"));
+
+		failing.perPatientFailure = null;
+		service.reindexPatient("patient-uuid");
+		assertTrue("a complete re-projection clears the mark",
+		        !service.isPatientProjectionIncomplete("patient-uuid"));
 	}
 
 	// ---------- fakes ----------
@@ -975,6 +1113,9 @@ public class BootstrapServiceImplTest {
 
 		private final Set<String> failing;
 
+		/** What {@link #existsByPatient} answers for every patient; {@code null} leaves it out of scope. */
+		Boolean hasDocuments;
+
 		CountingBackendStore(Map<String, Long> counts) {
 			this(counts, Collections.<String> emptySet());
 		}
@@ -1029,7 +1170,10 @@ public class BootstrapServiceImplTest {
 
 		@Override
 		public boolean existsByPatient(String patientUuid) {
-			throw new UnsupportedOperationException();
+			if (hasDocuments == null) {
+				throw new UnsupportedOperationException();
+			}
+			return hasDocuments;
 		}
 
 		@Override
@@ -1195,6 +1339,43 @@ public class BootstrapServiceImplTest {
 		@Override public List<QueryDocument> getPatientChart(String patientUuid) { return Collections.emptyList(); }
 		@Override public void onStartup() { }
 		@Override public void onShutdown() { }
+	}
+
+	/** One per-patient record, serialized to a document or, with {@code nothingToIndex}, to null. */
+	private static final class OneRecordBootstrapper extends TypeBootstrapper<String> {
+		private final boolean nothingToIndex;
+
+		OneRecordBootstrapper(boolean nothingToIndex) { this.nothingToIndex = nothingToIndex; }
+
+		@Override public String getResourceType() { return "obs"; }
+		@Override protected Instant getDateChanged(String e) { return Instant.EPOCH; }
+		@Override protected String getUuid(String e) { return e; }
+		@Override protected List<String> fetchPage(Instant a, String u, int p) { return Collections.emptyList(); }
+
+		@Override
+		protected List<String> fetchPageForPatient(String patientUuid, Instant afterDateChanged, String afterUuid,
+		                                           int pageSize) {
+			return afterUuid == null ? Collections.singletonList("obs-1") : Collections.<String> emptyList();
+		}
+
+		@Override
+		protected ClinicalRecordSerializer<String> getSerializer() {
+			return new ClinicalRecordSerializer<String>() {
+				@Override public String getResourceType() { return "obs"; }
+				@Override public Class<String> getSupportedType() { return String.class; }
+				@Override public QueryDocument serialize(String uuid) {
+					if (nothingToIndex) {
+						return null;
+					}
+					QueryDocument doc = new QueryDocument();
+					doc.setResourceType("obs");
+					doc.setResourceUuid(uuid);
+					doc.setPatientUuid("patient-uuid");
+					doc.setText("Weight: 70 kg");
+					return doc;
+				}
+			};
+		}
 	}
 
 	private static final class ZeroEmbedder implements EmbeddingProvider {

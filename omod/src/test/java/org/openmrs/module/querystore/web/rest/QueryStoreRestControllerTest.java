@@ -14,6 +14,9 @@ import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -31,10 +34,14 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.DriftReport;
+import org.openmrs.module.querystore.bootstrap.IncompleteProjectionException;
 import org.openmrs.module.querystore.model.QueryDocument;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
  * Guards the controller's {@code @ExceptionHandler} mapping: a thrown exception must surface as a
@@ -85,6 +92,30 @@ public class QueryStoreRestControllerTest {
 		        new HttpMessageNotReadableException("bad json"));
 		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
 		assertEquals("Malformed request body", errorOf(response));
+	}
+
+	@Test
+	public void handleMalformedQueryParameter_shouldReturn400() {
+		ResponseEntity<Object> response = controller.handleBadParameter(
+		        new TypeMismatchException("abc", Integer.class));
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertEquals("Malformed request parameter", errorOf(response));
+	}
+
+	@Test
+	public void malformedTypedParameters_shouldRouteThroughTheHttpExceptionHandler() throws Exception {
+		MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+		String[][] malformed = {
+		        { "limit", "abc" },
+		        { "startIndex", "1e9" }
+		};
+		for (String[] parameter : malformed) {
+			mvc.perform(get("/rest/v1/querystore/patientrecord")
+			        .param("patient", "patient-uuid")
+			        .param(parameter[0], parameter[1]))
+			        .andExpect(status().isBadRequest())
+			        .andExpect(content().string("{\"error\":\"Malformed request parameter\"}"));
+		}
 	}
 
 	@Test
@@ -219,6 +250,22 @@ public class QueryStoreRestControllerTest {
 	}
 
 	@Test
+	public void indexingStatus_aRegisteredTypeThatNeverStartedIsNotComplete() {
+		authenticate();
+		BootstrapService bootstrap = mock(BootstrapService.class);
+		org.openmrs.module.querystore.bootstrap.BootstrapProgress obs =
+		        new org.openmrs.module.querystore.bootstrap.BootstrapProgress("obs");
+		obs.setStatus(org.openmrs.module.querystore.bootstrap.BootstrapStatus.COMPLETED);
+		when(bootstrap.getStatusReport()).thenReturn(org.openmrs.module.querystore.bootstrap.BootstrapStatusReport
+		        .from(Collections.singletonList(obs), Arrays.asList("obs", "condition"), null));
+		controller.setBootstrapService(bootstrap);
+
+		Map<?, ?> body = (Map<?, ?>) controller.getIndexingStatus().getBody();
+
+		assertEquals("condition has no row yet, so indexing is not complete", Boolean.FALSE, body.get("complete"));
+	}
+
+	@Test
 	public void reindex_withPatient_reprojectsThatPatientAndReturnsTheDocumentCount() {
 		authenticate();
 		// Adapter contract: a per-patient body reprojects that one patient (not a global launch) and
@@ -244,6 +291,30 @@ public class QueryStoreRestControllerTest {
 		    body.get("documentsIndexed"));
 		verify(bootstrap).reindexPatient("patient-uuid");
 		assertEquals("a per-patient reindex must not also launch a global bootstrap", 0, launcher.launches);
+	}
+
+	@Test
+	public void reindex_withPatient_reportsAReprojectionThatLeftRecordsOut() {
+		authenticate();
+		BootstrapService bootstrap = mock(BootstrapService.class);
+		org.mockito.Mockito.doThrow(new IncompleteProjectionException(
+		        "Re-projection for patient patient-uuid was incomplete: 1 type(s) failed, 0 record(s) not projected"))
+		        .when(bootstrap).reindexPatient("patient-uuid");
+		QueryStoreService queryStore = mock(QueryStoreService.class);
+		when(queryStore.getPatientChart("patient-uuid")).thenReturn(Arrays.asList(new QueryDocument()));
+		controller.setBootstrapService(bootstrap);
+		controller.setQueryStoreService(queryStore);
+
+		ResponseEntity<Object> response = controller.reindex(Collections.singletonMap("patient", "patient-uuid"));
+
+		assertEquals("a partial re-projection is not a success", HttpStatus.INTERNAL_SERVER_ERROR,
+		    response.getStatusCode());
+		Map<?, ?> body = (Map<?, ?>) response.getBody();
+		assertEquals("patient-uuid", body.get("patient"));
+		assertEquals("what did project is still counted", Integer.valueOf(1), body.get("documentsIndexed"));
+		assertEquals(
+		    "Re-projection for patient patient-uuid was incomplete: 1 type(s) failed, 0 record(s) not projected",
+		    body.get("error"));
 	}
 
 	@Test
