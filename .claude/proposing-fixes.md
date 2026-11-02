@@ -23,8 +23,13 @@ the last one. A proposal that changes under a bare "are you sure?" was offered b
   trade-off. Then stop iterating and ask.
 - **Each rejected shape, with the evidence against it**: a figure, a decision number, or a `file:line`.
 - **What would prove the pick wrong**, and that you looked for it.
-- **What is still unchecked**, named plainly. An unchecked step means the proposal is not finished. Say so instead of
-  presenting it as final.
+- **Nothing checkable stays unchecked.** Before presenting, run every item you would list as unchecked. An item may
+  stay only with one of three reasons, written in these words: it **needs the implementation** (for example, a UI change
+  verified in the browser), it **needs your decision**, or it **needs access** you don't have. "Not yet", "costly" and
+  "slow" are not reasons. The Stop hook `unchecked-items-gate.py` refuses an unchecked list whose items carry none of
+  the three.
+- **A passing check counts only with a control.** For tests, change the code under test and confirm a test goes red.
+  For data, confirm the sample contains the shapes the pick touches. A green run that reaches nothing proves nothing.
 
 ## When challenged
 
