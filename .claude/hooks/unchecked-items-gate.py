@@ -29,6 +29,8 @@ REASONS = re.compile(
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*)$")
 BOLD = re.compile(r"^\s*(?:[-*]\s+|\d+[.)]\s+)?\*\*(.+?)\*\*(.*)$")
 ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
+# A code span names a file or a symbol, never a label: `unchecked-items-gate.py` in a bold run is not one (2026-11-02).
+CODE = re.compile(r"`[^`]*`")
 
 
 def final_reply(transcript_path):
@@ -73,11 +75,11 @@ def labels_with_items(text):
             continue
         label, trailing = None, ""
         m = HEADING.match(line)
-        if m and LABEL.search(m.group(1)):
+        if m and LABEL.search(CODE.sub("", m.group(1))):
             label = m.group(1)
         else:
             m = BOLD.match(line)
-            if m and LABEL.search(m.group(1)):
+            if m and LABEL.search(CODE.sub("", m.group(1))):
                 label, trailing = m.group(1), m.group(2).strip(" :.-—")
         if label is None:
             i += 1
