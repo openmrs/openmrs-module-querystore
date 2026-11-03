@@ -1028,7 +1028,7 @@ public class BootstrapServiceImplTest {
 			service.reindexPatient("patient-uuid");
 			fail("expected the encounter failure to be reported");
 		}
-		catch (PartialProjectionException expected) {
+		catch (IncompleteProjectionException expected) {
 			// a failed type still counts as done: the projection moved past it
 		}
 

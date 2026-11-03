@@ -735,10 +735,8 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		if (status != IndexStatus.INDEXED && status != IndexStatus.FAILED) {
 			if (droppedCharts.contains(patientUuid)) {
 				// Only a full reindex rebuilds a dropped chart, so start one (a waiting search then joins
-				// it below); a caller that must not start a retry starts none.
-				if (spec.isRetryFailed()) {
-					warm(patientUuid);
-				}
+				// it below).
+				warm(patientUuid);
 			} else if (!spec.isWait() && status == IndexStatus.NOT_INDEXED) {
 				warm(patientUuid);
 			}
