@@ -11,30 +11,38 @@ package org.openmrs.module.querystore.bootstrap;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A read-only, serialization-friendly summary of {@link BootstrapProgress} across all resource
- * types, with a single derived {@link #isComplete()} flag answering "is this deployment fully
- * indexed?". The bootstrap backfill populates the read store one type at a time, ordered by
+ * types, with a derived {@link #isComplete()} flag answering "is this deployment fully indexed
+ * now?" and a looser {@link #isProjected()} flag that reads use. The bootstrap backfill populates the read store one type at a time, ordered by
  * {@code dateChanged}, resuming from a persisted cursor; until every type reaches
  * {@link BootstrapStatus#COMPLETED}, reads can return stale/partial data and the lazy per-patient
  * projection cannot repair an already-partially-indexed patient. This report exists so operators
  * (and deploy pipelines that seed via SQL dump, which bypasses the live indexing path) can verify
  * completion instead of guessing. The derivation lives in the api layer so it is unit-testable and
- * reusable; the omod REST controller is a thin adapter over {@link #from(List)}.
+ * reusable; deployment-completeness callers pass the registered resource types to
+ * {@link #from(List, Collection, String)} so a type that never acquired a progress row cannot be
+ * mistaken for complete.
  */
 public class BootstrapStatusReport {
 
 	private final boolean complete;
 
+	private final boolean projected;
+
 	private final List<TypeStatus> types;
 
-	private BootstrapStatusReport(boolean complete, List<TypeStatus> types) {
+	private BootstrapStatusReport(boolean complete, boolean projected, List<TypeStatus> types) {
 		this.complete = complete;
+		this.projected = projected;
 		this.types = Collections.unmodifiableList(types);
 	}
 
@@ -44,22 +52,81 @@ public class BootstrapStatusReport {
 	 * progress table (nothing indexed yet) or any RUNNING/FAILED/NOT_STARTED type makes it false.
 	 */
 	public static BootstrapStatusReport from(List<BootstrapProgress> progress) {
-		List<TypeStatus> types = new ArrayList<TypeStatus>();
-		boolean complete = progress != null && !progress.isEmpty();
+		List<String> trackedTypes = new ArrayList<String>();
 		if (progress != null) {
 			for (BootstrapProgress p : progress) {
-				if (p.getStatus() != BootstrapStatus.COMPLETED) {
-					complete = false;
-				}
+				trackedTypes.add(p.getResourceType());
+			}
+		}
+		return from(progress, trackedTypes, false, null);
+	}
+
+	/**
+	 * Builds a deployment-completeness report. Completion requires every currently registered
+	 * resource type to have a {@link BootstrapStatus#COMPLETED} progress row written for
+	 * {@code currentBackend}. This closes the interrupted-bootstrap gap where the worker had completed
+	 * one type but had not yet created rows for the remaining types, and the backend-switch gap where
+	 * every row still reads COMPLETED for the store the deployment no longer uses: the next bootstrap
+	 * resets such a row, so until then it counts as not started.
+	 */
+	public static BootstrapStatusReport from(List<BootstrapProgress> progress,
+	        Collection<String> expectedResourceTypes, String currentBackend) {
+		return from(progress, expectedResourceTypes, true, currentBackend);
+	}
+
+	private static BootstrapStatusReport from(List<BootstrapProgress> progress,
+	        Collection<String> expectedResourceTypes, boolean scopeToBackend, String currentBackend) {
+		List<TypeStatus> types = new ArrayList<TypeStatus>();
+		Map<String, BootstrapStatus> statusByType = new HashMap<String, BootstrapStatus>();
+		Map<String, Boolean> completedBefore = new HashMap<String, Boolean>();
+		if (progress != null) {
+			for (BootstrapProgress p : progress) {
+				// Null on the stored side is a mismatch, as in BootstrapServiceImpl#runOne.
+				boolean current = !scopeToBackend || Objects.equals(p.getBackend(), currentBackend);
+				statusByType.put(p.getResourceType(), current ? p.getStatus() : BootstrapStatus.NOT_STARTED);
+				completedBefore.put(p.getResourceType(), current && p.getCompletedAt() != null);
 				types.add(new TypeStatus(p));
 			}
 		}
-		return new BootstrapStatusReport(complete, types);
+		boolean complete = expectedResourceTypes != null && !expectedResourceTypes.isEmpty();
+		boolean projected = complete;
+		if (complete) {
+			for (String expected : expectedResourceTypes) {
+				BootstrapStatus status = statusByType.get(expected);
+				if (status != BootstrapStatus.COMPLETED) {
+					complete = false;
+				}
+				// A reset clears completedAt, so a RUNNING row that keeps it is a top-up of a type whose
+				// documents are already in place, not a resync or a backend reset rewriting them.
+				if (status != BootstrapStatus.COMPLETED
+				        && !(status == BootstrapStatus.RUNNING && Boolean.TRUE.equals(completedBefore.get(expected)))) {
+					projected = false;
+				}
+				if (!statusByType.containsKey(expected)) {
+					BootstrapProgress missing = new BootstrapProgress(expected);
+					types.add(new TypeStatus(missing));
+					statusByType.put(expected, missing.getStatus());
+				}
+			}
+		}
+		return new BootstrapStatusReport(complete, projected, types);
 	}
 
-	/** True only when every tracked resource type has finished — i.e. the deployment is fully indexed. */
+	/** True only when every expected resource type has finished — i.e. the deployment is fully indexed. */
 	public boolean isComplete() {
 		return complete;
+	}
+
+	/**
+	 * Whether every expected resource type has completed a bootstrap, counting a type whose earlier
+	 * bootstrap completed while a restart's top-up walks it again: the documents it projected are in
+	 * place, but records written to core while the module was not syncing are missing until the top-up
+	 * reaches them, so a patient's chart may be incomplete meanwhile. A type being reset or resynced has
+	 * had its completion cleared and does not count. This is what a read may report as projection-complete;
+	 * {@link #isComplete()} stays strict, since an export waits on it to snapshot a finished index.
+	 */
+	public boolean isProjected() {
+		return projected;
 	}
 
 	public List<TypeStatus> getTypes() {

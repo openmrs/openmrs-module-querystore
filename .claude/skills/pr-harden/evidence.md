@@ -59,6 +59,56 @@ measured rule is not deleted without the measurement that retires it (`skill-ret
   notes, and on round 2's recorded count of 0 the run would have ended there, before its rounds 4 and
   5 found r4-1 and r5-1, false reports round 2's reviewer had not raised.
 
+## A private ticket's PR
+
+*Added 0.40.0 — the rule it supports:* “Brief every reviewer and every fixer that the PR is private”
+
+The policy and the measurements are in `resolve-ticket`'s evidence.md, under *When the ticket is
+private* and *Step 1*, the lookup's included. What is this skill's own: once a PR names no ticket, the
+brief's key "carried in the PR title or branch name" finds nothing, so the key has to come from
+somewhere the public PR does not show, and `PRS`, kept on this machine, is that place. The amend or
+squash it allows touches only commits no reviewer has seen, so the chain of rounds *COMMIT* protects is
+intact; the commits are the fixer's (`fixer.md`), which is why the rule reaches it through its own
+file and the brief rather than through the orchestrator's memory.
+
+*Added 0.40.0 — the rule it supports:* “Before every push, count the key in what the push publishes, and rewrite whatever it counts first”
+
+Measured in scratch repositories on 2026-10-21. A first form, over commit messages and the net diff,
+printed 0 for a clean branch and 1 for each of a key in a commit message, in a changeSet id in the
+diff and in a lowercased branch name (`sec-…`, hence `-i`), and `-w` kept a longer key that merely
+starts with the same characters from counting. It missed two cases the published form catches: a key
+one commit adds and a later one removes, which `git log -p` counts (2), and any input carrying one
+non-UTF-8 byte, a Latin-1 `.properties` file among them, where the Bash tool's `grep`, a shell
+function, printed no count at all, where a clean branch prints 0, until `-a`. Counted from `@{u}`,
+the form printed 0 for a fork checkout whose upstream is a URL rather than a remote-tracking branch
+(`@{u}` does not resolve, as after `gh pr checkout` of a fork PR), and a `reset --soft` onto a base
+that a sibling's fetch had moved wrote a commit deleting another author's file; counting from
+`git merge-base` of the fetched PR head prints nothing at all when the ref does not resolve, and its
+squash held only the branch's own change where the range held no merge; across a local merge of the
+base it carried another author's file as the PR's own, which `git rev-list --merges` detects. A later
+fetch rewrites `FETCH_HEAD`: a base fetch after the PR head's, and `pr-review`'s base-first fetch,
+each left it at the base tip (measured), which is why the check fetches for itself. The count is a
+regex on the key's two halves, `<P>[-_]?<N>([^0-9]|$)`, because `-w` cannot see `KEY_suffix`, `_`
+being a word character, nor a hyphenless key in a test name (legacyui's `DWRConceptServiceTest`
+carries `…RegressionTestForTRUNK…`); on scratch input it counted seven spellings and none of five
+near-misses. The squash is one chained call with its merge test because `$from` does not outlive a
+call, and an empty `$from` makes `git rev-list --merges` print nothing, the no-merge answer; with a
+merge in range the chained call exited 1 and left HEAD alone (measured). The already-public read
+adds `pulls/<n>/comments`, since `gh pr view --json comments,reviews` returns no line comments: a
+word found only in one counted 0 there and 1 through `gh api` (querystore PR 88). A clean round counted that way printed 0 even where the
+pushed history already named the key, which is why what GitHub already shows is reported at Step 0
+rather than rewritten. It is a check rather than a memory because
+a run can lose the fact that its ticket is private before anything records it: one run compacted
+mid-`/harden`, before its first push (`2026-09-17-openmrs-module-chartsearchai-445.md`:4).
+
+*Added 0.40.0 — the rule it supports:* “Record a pairing”
+
+The lookup is keyed on the PR's URL, which `gh pr view --json url` returns as the base repository's
+even for a cross-repository PR (`resolve-ticket`'s evidence.md, *When the ticket is private*). A `gh`
+failure, measured with a bad token, stops the `&&` chain with exit 1 instead of handing `awk` an
+empty URL that would read as public. `chmod`, because `mkdir -p -m 700` left an existing directory
+at `drwxr-xr-x` (measured), and a run record can create `confidential/` before a pairing does.
+
 ## The round
 
 ### 1 — REVIEW
@@ -924,6 +974,49 @@ for another 36 minutes with nothing whatsoever running. The harness reports the 
 excuse for waiting out a timeout. The one-hour bound and the no-`since`-reads-as-dead rule are
 backstops, not the mechanism.
 
+*Added 0.41.0 — the rule it supports:* “And where `CLAUDE_CODE_RETRY_WATCHDOG` is on, a live agent can outlast the bound.”
+
+`resolve-ticket` 0.29.0's Step 1 recommends that variable through an alias, which reaches every
+session its user starts, a standalone `/pr-harden` or `/harden` among them. Measured against a stub
+that answers like a claude.ai limit
+(`~/.claude/skill-lessons/artifacts/2026-10-21-retry-watchdog-limit/`), a request at the limit waits
+under it for the reset, and in a run that had spawned a background agent first, the agent's requests
+waited the same way. The harness reports a background agent stalled once it has gone
+`CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` without progress, 600 s unset in the 2.1.306 binary unless
+its stream idle timeout is raised, and a waiting agent was not reported: at 20 s, the control, it
+was reported `Agent stalled: no progress for 20s` at +21 s; at 45 s it waited out a 100 s limit and
+completed; at the default it waited out an 11-minute one and completed. What kept it alive is read,
+not seen: in the binary each message the agent's query yields, a few bookkeeping kinds aside,
+re-arms that timer and the watchdog waits in 30 s steps, while the stream shows the agent's first
+retry line only, so the 20 s and 45 s cases bracket a 30 s step rather than show one. So an agent
+can be alive and unreported past the gates' hour, and the gate then blocks the yield as a run that
+stopped (the artifact's `gate-await-ttl.sh`, an entry in phase `building`: allowed at 600 s, blocked
+at 7200 s). Re-dispatching the phase there starts a second agent in the worktree the first is still
+working in; recorded again, the await gives the first another hour to report. The same script
+recorded it again through `gate-state await` and the gate allowed the yield, and blocked that entry
+with the new await taken out. Nothing in the session marks the hour: in the agent case the main
+thread's three requests carried the same five messages across the wait. And past the bound each
+gate's block handed back its phase's own text, "spawn a fresh reviewer agent", "Run Phase 2 once",
+"Continue the phases", which is the re-dispatch this rule forbids; two Phase 2 reviewers found it.
+So every block reached past the bound now opens on the await, its age and its agents (both
+`gate-test.sh`, each case run against a mutant of the gate it must fail, the note removed, appended,
+replacing the reason, or set with no `since` or no await, by the artifact's `gate-calibrate.py`; a
+Phase 1 reviewer found the first cases passed a note appended at the end too, so they now check that
+it opens the reason, and a Phase 2 one that this entry had called every case calibrated against the
+gate without the note, which six that read the reason then passed). The command that recorded the
+await is the one that records it again, because `--only` decides which gate's entry gets it and
+`--run` which harden run's. `await` appends, so with one await per agent a name listed twice is the
+record of the once, and past it the agent is stopped before the retry, which would otherwise start
+beside an agent waiting at a second limit. `resolve-ticket`'s Step 7 example had recorded Phase 2's
+four agents under one name, which the same reviewer found listed four times before any of them had
+had its once; it now records one await per agent. Once, because an agent that hung where the harness
+cannot see it would otherwise be re-recorded for as long as the run lasted, and the bound is the
+backstop for exactly that agent. Only where the variable is on, because without it the stub's first
+429 ended every run at once, the one with an agent included. The rule moved here from
+`resolve-ticket`'s Step 1, which first pointed to it; once the gates' block named it where it
+applies, that pointer went as a cost every run paid for nothing it acted on. No run has met it yet:
+it comes from the measurement, not an incident.
+
 *Cut down, R4-14 — the rule it supports:* “And this session must not busy-wait either”
 
 **And this session must not busy-wait either.** *Wait on a CONDITION, never on a clock* is written into
@@ -994,10 +1087,18 @@ the transcript, which carries the ground truth a retro can measure instead. The 
 bookkeeping: the uuid is `$CLAUDE_CODE_SESSION_ID`, and the transcript is the one file
 `ls ~/.claude/projects/*/"$CLAUDE_CODE_SESSION_ID".jsonl` prints. Take neither name from anywhere else:
 the pool's headless `claude -p` runs have had no scratchpad path; #305, resumed from `~`, had its
-scratchpad under that folder and its transcript under its worktree's; #527 recorded the folder of the
-worktree it had moved into; and #514/PR524's third loop and #505/PR529 took their uuid from a directory
-listing, which named another session. `no compaction · peak not surfaced` is the expected
-reading and is worth writing for the same reason a clean run still gets a record — a field filled in
-only when something went wrong biases every retro that reads it, in the direction of the runs that
-went badly. Derive nothing from it here: whether context pressure costs quality is a claim about many
-runs, and no run can settle it about itself.
+scratchpad under that folder and its transcript under its worktree's; and #514/PR524's third loop and
+#505/PR529 took their uuid from a directory listing, which named another session. `no compaction · peak
+not surfaced` is the expected reading and is worth writing for the same reason a clean run still gets a
+record — a field filled in only when something went wrong biases every retro that reads it, in the
+direction of the runs that went badly. Derive nothing from it here: whether context pressure costs
+quality is a claim about many runs, and no run can settle it about itself.
+
+*Corrected 0.41.1:* until 2026-10-23 this list also named #527, as having “recorded the folder of the
+worktree it had moved into”. That path was right when it was written.
+- #527 started in the main checkout and entered its worktree with `EnterWorktree`.
+- From inside the worktree, it looked its own session id up, found that folder, and wrote it into its
+  record.
+- Claude Code moved the transcript back to the main checkout's folder when the worktree session exited.
+- Sources: the transcript `ebc78818…` at L5, L119, L3120, L3125, L3161 and L3165, and
+  `skill-lessons/artifacts/2026-10-23-retro-window/relocations.out`.

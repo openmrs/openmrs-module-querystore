@@ -93,6 +93,9 @@ public final class ConceptNameUtil {
 	 * it is NOT included in {@link QueryDocument#getEmbeddingInput()} to avoid the asymmetric-bias
 	 * concern documented in chartsearchai's {@code ChartSearchAiUtils.extractCategoryHints}.
 	 *
+	 * <p><b>Exclusion first:</b> a description beginning "Question on encounter form" (case
+	 * insensitive) describes the form, not the concept, and is skipped before either rule below.
+	 *
 	 * <p><b>Precedence:</b> (1) first description whose locale language matches the active
 	 * locale's language; (2) otherwise first non-empty description encountered in
 	 * {@code concept.getDescriptions()} iteration order. The fallback's iteration order is
@@ -107,22 +110,33 @@ public final class ConceptNameUtil {
 			return "";
 		}
 		String localeLanguage = resolveLocale().getLanguage();
-		ConceptDescription fallback = null;
+		String fallback = null;
 		for (ConceptDescription cd : concept.getDescriptions()) {
 			String text = cd.getDescription();
-			if (text == null || text.trim().isEmpty()) {
+			if (text == null) {
+				continue;
+			}
+			String trimmed = text.trim();
+			if (trimmed.isEmpty() || isFormPromptBoilerplate(trimmed)) {
 				continue;
 			}
 			if (cd.getLocale() != null
 					&& cd.getLocale().getLanguage().equals(localeLanguage)) {
-				return text.trim();
+				return trimmed;
 			}
 			if (fallback == null) {
-				fallback = cd;
+				fallback = trimmed;
 			}
 		}
-		return fallback != null && fallback.getDescription() != null
-				? fallback.getDescription().trim() : "";
+		return fallback != null ? fallback : "";
+	}
+
+	/** Starts a form-prompt boilerplate description, which describes the form rather than the concept. */
+	private static final String FORM_PROMPT_DESCRIPTION_PREFIX = "Question on encounter form";
+
+	private static boolean isFormPromptBoilerplate(String description) {
+		return description.regionMatches(true, 0,
+				FORM_PROMPT_DESCRIPTION_PREFIX, 0, FORM_PROMPT_DESCRIPTION_PREFIX.length());
 	}
 
 	/**
@@ -241,6 +255,40 @@ public final class ConceptNameUtil {
 			result.add(n);
 		}
 		return result;
+	}
+
+	/**
+	 * The concept's live reference-term codes, each namespaced by its source as {@code SOURCE:CODE}
+	 * ({@code CIEL:857}, {@code LOINC:14937-7}, {@code SNOMED-CT:72341003}, whitespace in a source
+	 * name written as a hyphen), so a question naming a code can match the record
+	 * exactly (ADR Decision 17 §2). A code is kept whether or not its term carries a name: SNOMED
+	 * terms on demo deployments carry codes alone. Retired terms, terms without a source, and blank
+	 * sources or codes are skipped; the result is de-duplicated and sorted, and not capped: only exact
+	 * matching reads codes, so the index-size reason for capping names does not carry over, and an
+	 * alphabetical cut cost a concept with many mappings its later-sorting codes (Cough's SNOMED CT
+	 * code, behind twelve others). Not embedded, as {@link #getMappingNames} is not.
+	 */
+	public static List<String> getMappingCodes(Concept concept) {
+		if (concept == null || concept.getConceptMappings() == null
+				|| concept.getConceptMappings().isEmpty()) {
+			return Collections.emptyList();
+		}
+		TreeSet<String> sorted = new TreeSet<>();
+		for (ConceptMap m : concept.getConceptMappings()) {
+			ConceptReferenceTerm term = m == null ? null : m.getConceptReferenceTerm();
+			if (term == null || Boolean.TRUE.equals(term.getRetired()) || term.getConceptSource() == null) {
+				continue;
+			}
+			String source = term.getConceptSource().getName();
+			String code = term.getCode();
+			if (source == null || source.trim().isEmpty() || code == null || code.trim().isEmpty()) {
+				continue;
+			}
+			// A question names a code as one token, so whitespace inside a source name becomes a
+			// hyphen: CIEL's "SNOMED CT" is stored, and matched, as SNOMED-CT.
+			sorted.add(source.trim().replaceAll("\\s+", "-") + ":" + code.trim());
+		}
+		return new ArrayList<>(sorted);
 	}
 
 	private static Locale resolveLocale() {

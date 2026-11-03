@@ -1,0 +1,5 @@
+$ gate_sentences.py controls/empty.tsv <the five transcripts transcript-presence.out lists as RELOCATED>
+HIT /Users/danielkayiwa/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai/ebc78818-5b31-4fed-9943-24ca301a3943.jsonl
+   L2733 [p2gate] All four fifth-pass lenses returned no findings.  **Phase 2 ran once, over 4 agents.** Substantive findings: none. Edits made: 0. Deferred: none. Two pre-existing inconsistencies on `main`, outs
+named: 5 | read: 5 | loading the template: 3 | of those, with the Termination gate's: 3 | with an assistant hit: 1 | assistant hits: {'stop': 0, 'integ': 0, 'tests': 0, 'p2gate': 1, 'term': 0} | template blocks: 3
+exit=0

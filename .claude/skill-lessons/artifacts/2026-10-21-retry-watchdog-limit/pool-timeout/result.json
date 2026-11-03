@@ -1,0 +1,12 @@
+{
+  "exit": 143,
+  "seconds": 65,
+  "killed_for": "exceeded the ticket timeout of 1m00s",
+  "paused_for": null,
+  "rate_limit": null,
+  "start": 1792620114.1637197,
+  "reset": 1792620214.1637197,
+  "quiet_s": 45,
+  "timeout_s": 60,
+  "watchdog": true
+}

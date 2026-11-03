@@ -10,6 +10,9 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.junit.Assert.assertEquals;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
 import static org.junit.Assert.assertNull;
 import static org.openmrs.module.querystore.serialization.ConceptFixtures.concept;
 import static org.openmrs.module.querystore.serialization.ConceptFixtures.conceptName;
@@ -176,6 +179,31 @@ public class DiagnosisRecordSerializerTest {
 
 		assertEquals("patient-uuid", doc.getPatientUuid());
 		assertEquals("diagnosis-uuid", doc.getResourceUuid());
+	}
+
+	@Test
+	public void serialize_datesTheRecordByItsCreationAndTheEventByItsEncounter() {
+		Diagnosis diagnosis = diagnosis(coded(concept("Tuberculosis")));
+		diagnosis.setDateCreated(java.sql.Timestamp.valueOf("2026-03-04 10:00:00"));
+		Encounter encounter = new Encounter();
+		encounter.setEncounterDatetime(java.sql.Timestamp.valueOf("2025-11-20 09:30:00"));
+		diagnosis.setEncounter(encounter);
+
+		QueryDocument doc = serializer.serialize(diagnosis);
+
+		assertEquals(java.time.LocalDate.of(2026, 3, 4), doc.getDate());
+		assertEquals("2025-11-20", doc.getMetadata().get(FIELD_CLINICAL_DATE));
+		assertEquals(DATE_KIND_ADMINISTRATIVE, doc.getMetadata().get(FIELD_DATE_KIND));
+	}
+
+	@Test
+	public void serialize_leavesTheEventUndatedWithoutAnEncounter() {
+		Diagnosis diagnosis = diagnosis(coded(concept("Tuberculosis")));
+		diagnosis.setDateCreated(java.sql.Timestamp.valueOf("2026-03-04 10:00:00"));
+
+		QueryDocument doc = serializer.serialize(diagnosis);
+
+		assertNull(doc.getMetadata().get(FIELD_CLINICAL_DATE));
 	}
 
 	private static Diagnosis diagnosis(CodedOrFreeText cft) {

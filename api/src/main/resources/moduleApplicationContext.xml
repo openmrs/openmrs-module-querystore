@@ -41,7 +41,8 @@
     </bean>
 
     <bean id="querystore.embedding.onnx"
-          class="org.openmrs.module.querystore.embedding.OnnxEmbeddingProvider"/>
+          class="org.openmrs.module.querystore.embedding.OnnxEmbeddingProvider"
+          destroy-method="close"/>
 
     <bean id="querystore.embedding.dispatcher"
           class="org.openmrs.module.querystore.embedding.ConfiguredEmbeddingProvider"/>

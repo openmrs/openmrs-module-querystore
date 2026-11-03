@@ -31,6 +31,7 @@ import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 import org.openmrs.module.querystore.spi.ResourceTypeNames;
 import org.openmrs.module.querystore.spi.ResourceTypeProvider;
@@ -80,6 +81,12 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 	Object patientLock(String patientUuid) {
 		return patientLockStripes[Math.floorMod(patientUuid.hashCode(), PATIENT_LOCK_STRIPES)];
 	}
+
+	// Patients whose last per-patient projection left records out. Such a patient has documents, so
+	// the existence probe alone would read its chart as complete; this set keeps it cold until a
+	// projection completes. In-memory like patientLocks: a restart forgets it, and the next global
+	// bootstrap or reindex is then the repair path.
+	private final Set<String> incompletePatients = ConcurrentHashMap.newKeySet();
 
 	private BootstrapProgressDao progressDao;
 
@@ -146,6 +153,11 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			try {
 				runOne(resourceType, providers, false);
 			}
+			catch (EmbeddingProviderClosedException e) {
+				// Closed by a module stop or context shutdown: every remaining type would fail the same way
+				// and be marked FAILED, so the run ends at the type it interrupted.
+				throw e;
+			}
 			catch (RuntimeException e) {
 				SafeLog.warn(BootstrapServiceImpl.class, "Bootstrap of " + resourceType + " failed; continuing with remaining types", e);
 			}
@@ -191,12 +203,33 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			// the late waiter short-circuit. existsByPatient is sub-linear (Decision 3 SPI
 			// invariant 2), so the cost of this guard is negligible compared to even one
 			// re-projection avoided.
-			if (backendSelector != null && backendSelector.getStore().existsByPatient(patientUuid)) {
+			// A patient whose last projection left records out is still cold even though it has
+			// documents, so a waiter that queued behind a failed touch projects it again too.
+			if (!incompletePatients.contains(patientUuid) && backendSelector != null
+			        && backendSelector.getStore().existsByPatient(patientUuid)) {
 				return false;
 			}
-			throwIfAnyFailed(projectAllTypesForPatient(patientUuid));
+			reportProjection(patientUuid, projectAllTypesForPatient(patientUuid), "Cold-touch projection");
 			return true;
 		}
+	}
+
+	@Override
+	public boolean isPatientProjectionIncomplete(String patientUuid) {
+		return patientUuid != null && incompletePatients.contains(patientUuid);
+	}
+
+	/** Records whether a per-patient projection completed and reports one that did not. Reported
+	 *  AFTER every type has run, so one failure still leaves the rest projected; the caller then
+	 *  discloses the gap rather than reading this patient's chart as complete. */
+	private void reportProjection(String patientUuid, String failures, String projection) {
+		if (failures == null) {
+			incompletePatients.remove(patientUuid);
+			return;
+		}
+		incompletePatients.add(patientUuid);
+		throw new IncompleteProjectionException(projection + " for patient " + patientUuid + " was incomplete: "
+		        + failures);
 	}
 
 	@Override
@@ -214,26 +247,23 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			// elsewhere in this class): a null here is a wiring fault that must fail loudly, not
 			// silently skip the delete and leave stale docs alongside the re-projected ones.
 			queryStoreService.bulkDeleteByPatient(patientUuid);
-			throwIfAnyFailed(projectAllTypesForPatient(patientUuid));
-		}
-	}
-
-	private static void throwIfAnyFailed(List<String> failedTypes) {
-		if (!failedTypes.isEmpty()) {
-			throw new PartialProjectionException(failedTypes);
+			reportProjection(patientUuid, projectAllTypesForPatient(patientUuid), "Re-projection");
 		}
 	}
 
 	/** The per-type per-patient projection loop shared by {@link #ensureIndexed} and
 	 *  {@link #reindexPatient}. Per-type and per-record failures are isolated and logged so one
 	 *  type's failure doesn't abort the rest. Caller holds the per-patient lock.
-	 *  @return the types that failed, so the caller can report an incomplete chart */
-	private List<String> projectAllTypesForPatient(String patientUuid) {
-		List<String> failedTypes = new ArrayList<>();
+	 *
+	 *  @return what was not projected, as "N type(s) failed, M record(s) not projected", or
+	 *          {@code null} when every type ran and every record was written */
+	private String projectAllTypesForPatient(String patientUuid) {
 		Map<String, ResourceTypeProvider> providers = discoverProviders();
+		int failedTypes = 0;
+		int failedRecords = 0;
 		for (String resourceType : allResourceTypes(providers)) {
 			try {
-				runOneForPatient(resourceType, patientUuid, providers);
+				failedRecords += runOneForPatient(resourceType, patientUuid, providers);
 			}
 			catch (UnsupportedOperationException noPerPatientImpl) {
 				// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
@@ -249,10 +279,13 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				SafeLog.warn(BootstrapServiceImpl.class, "Per-patient projection of " + resourceType
 				        + " failed; continuing with remaining types (patient uuid at DEBUG)", e);
 				log.debug("Per-patient projection of " + resourceType + " failed for patient " + patientUuid);
-				failedTypes.add(resourceType);
+				failedTypes++;
 			}
 		}
-		return failedTypes;
+		if (failedTypes == 0 && failedRecords == 0) {
+			return null;
+		}
+		return failedTypes + " type(s) failed, " + failedRecords + " record(s) not projected";
 	}
 
 	@Override
@@ -263,6 +296,11 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 	@Override
 	public BootstrapProgress getStatus(String resourceType) {
 		return progressDao.find(resourceType);
+	}
+
+	@Override
+	public BootstrapStatusReport getStatusReport() {
+		return BootstrapStatusReport.from(getStatus(), getResourceTypeNames(), currentBackendName());
 	}
 
 	@Override
@@ -357,7 +395,12 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				resetProgressForBackend(progress, currentBackend);
 				progressDao.save(progress);
 			}
-			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao);
+			// Only a top-up of a completed walk skips records the store holds at their current version.
+			// A reset leaves the row NOT_STARTED, and an unfinished row may be a resync or a backend
+			// reset that was interrupted: nothing but the row says so, and resuming it must keep
+			// rewriting every record, or the rest of the resync is skipped while the row ends COMPLETED.
+			bootstrapper.run(progress, queryStoreService, embeddingProvider, progressDao,
+			        progress.getStatus() == BootstrapStatus.COMPLETED);
 		}
 	}
 
@@ -395,11 +438,12 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 		p.setBackend(backend);
 	}
 
-	private void runOneForPatient(String resourceType, String patientUuid,
-	                              Map<String, ResourceTypeProvider> providers) {
+	private int runOneForPatient(String resourceType, String patientUuid,
+	                             Map<String, ResourceTypeProvider> providers) {
 		// Callers iterate allResourceTypes, which already filters providers with a null bootstrapper
 		// — so for every resourceType reaching here, resolveBootstrapper returns non-null. No guard needed.
-		resolveBootstrapper(resourceType, providers).runForPatient(patientUuid, queryStoreService, embeddingProvider);
+		return resolveBootstrapper(resourceType, providers).runForPatient(patientUuid, queryStoreService,
+		        embeddingProvider);
 	}
 
 	/**

@@ -10,6 +10,9 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.junit.Assert.assertEquals;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
 import static org.junit.Assert.assertNull;
 import static org.openmrs.module.querystore.serialization.ConceptFixtures.concept;
 import static org.openmrs.module.querystore.serialization.ConceptFixtures.conceptName;
@@ -281,6 +284,32 @@ public class AllergyRecordSerializerTest {
 
 		assertEquals("patient-uuid", doc.getPatientUuid());
 		assertEquals("allergy-uuid", doc.getResourceUuid());
+	}
+
+	@Test
+	public void serialize_datesTheRecordByItsCreationAndTheEventByItsEncounter() {
+		Allergy allergy = allergy(allergen(AllergenType.DRUG, concept("Penicillin"), null));
+		allergy.setDateCreated(java.sql.Timestamp.valueOf("2026-03-04 10:00:00"));
+		Encounter encounter = new Encounter();
+		encounter.setEncounterDatetime(java.sql.Timestamp.valueOf("2025-11-20 09:30:00"));
+		allergy.setEncounter(encounter);
+
+		QueryDocument doc = serializer.serialize(allergy);
+
+		assertEquals(java.time.LocalDate.of(2026, 3, 4), doc.getDate());
+		assertEquals("2025-11-20", doc.getMetadata().get(FIELD_CLINICAL_DATE));
+		assertEquals(DATE_KIND_ADMINISTRATIVE, doc.getMetadata().get(FIELD_DATE_KIND));
+	}
+
+	@Test
+	public void serialize_leavesTheEventUndatedWithoutAnEncounter() {
+		Allergy allergy = allergy(allergen(AllergenType.DRUG, concept("Penicillin"), null));
+		allergy.setDateCreated(java.sql.Timestamp.valueOf("2026-03-04 10:00:00"));
+
+		QueryDocument doc = serializer.serialize(allergy);
+
+		assertEquals(java.time.LocalDate.of(2026, 3, 4), doc.getDate());
+		assertNull(doc.getMetadata().get(FIELD_CLINICAL_DATE));
 	}
 
 	private static Allergy allergy(Allergen allergen) {

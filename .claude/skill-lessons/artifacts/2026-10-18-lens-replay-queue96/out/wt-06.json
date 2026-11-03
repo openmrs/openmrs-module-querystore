@@ -1,0 +1,56 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 41,
+      "where": "inline (also a reply to denniskigen's 2026-07-03 approval, whose rationale for the advice this head drops)",
+      "disposition": "blocking",
+      "claim": "The merge commit narrowed the advice to purgeVisit only, so on this head the ticket's actual symptom (deleting a visit with voidVisit leaves its queue entries active) depends again on VisitWithQueueEntriesSaveHandler's `visit.getVoided()` guard (VisitWithQueueEntriesSaveHandler.java:62). That guard only passes if core's BaseVoidHandler happens to run first, and the Javadoc at lines 30-34 says the opposite.",
+      "failure_mode": "If merged as-is, any deployment where the tied @Handler order puts VisitWithQueueEntriesSaveHandler before BaseVoidHandler (the order Dennis observed live on the RefApp) still shows the O3-5459 bug after a visit delete, and nothing reports it, because the handler skips its void branch without logging or throwing. The PR then closes the ticket without fixing its main symptom.",
+      "evidence": "Temporary probe ZzProbeTest in integration-tests (deleted afterwards), run with `mvn -o -B test -pl integration-tests -am -Dtest=ZzProbeTest` under JDK 8 at head ae7f8fa: voidVisit_defaultOrder (test-env order [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler]) passes, while voidVisit_queueHandlerFirst (the same cached HandlerUtil list with the queue handler moved first) fails: entry 3 is not voided. Core 2.7.4: HandlerUtil.getHandlersForType sorts only by @Handler.order (both are Integer.MAX_VALUE by default) over ServiceContext.getRegisteredComponents, which copies into a `new HashMap<>(...)`, so ties fall into HashMap order and that order depends on which VoidHandler beans exist in the deployment. main's own test VisitWithQueueEntriesSaveHandlerTest.java:122 admits that it 'depends on it running after core's BaseVoidHandler'. Fix verified: I temporarily restored a voidVisit branch in the advice that copies visit.getVoidReason/getVoidedBy/getDateVoided. These are already set when the advice runs, because RequiredDataAdvice is a pre-interceptor (applicationContext-service.xml serviceInterceptors) and the added advice sits behind the TransactionInterceptor. With it, voidVisit_queueHandlerFirst passes, and VisitWithQueueEntriesSaveHandlerTest (7), PatientWithQueueEntriesVoidHandlerTest (13), VisitWithQueueEntriesDeleteAdviceTest (2) and VisitWithQueueEntriesValidatorTest (8) all still pass. Copying the visit's own stamp also answers the merge message's worry about stamps. Core 2.7.4 PatientDataVoidHandler does not void visits, and PatientWithQueueEntriesUnvoidHandler.shouldRestore skips entries on voided visits, so the patient void/unvoid pairing is not affected either way. Not run: an actual RefApp deployment at this head.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 52,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The advice proxies Get Queue Entries and Manage Queue Entries, but then calls QueueEntryService.purgeQueueEntry, which is @Authorized(PURGE_QUEUE_ENTRIES) (QueueEntryService.java:132). So the privilege grant that the comment at lines 49-50 promises does not cover the call the advice makes.",
+      "failure_mode": "If merged as-is, a non-superuser who holds Purge Visits but not Purge Queue Entries gets APIAuthenticationException 'Privileges required: Purge Queue Entries' when purging a visit that has queue entries. The PR's tests run as admin, so CI cannot see this. Fix: also add and remove PrivilegeConstants.PURGE_QUEUE_ENTRIES.",
+      "evidence": "Temporary probe ZzProbeTest in integration-tests (deleted afterwards), run with `mvn -o -B test -pl integration-tests -am -Dtest=ZzProbeTest` under JDK 8 at head ae7f8fa: purgeVisit_userWithPurgeVisitsOnly (Context.becomeUser(\"3-4\") with PURGE_VISITS, GET_VISITS and GET_ENCOUNTERS proxied) errors with `APIAuthenticationException: Privileges required: Purge Queue Entries`. The positive control purgeVisit_asAdmin passes. With PURGE_QUEUE_ENTRIES added to the advice's proxy set (temporary mutation, since restored), the same test passes. Core 2.7.4 VisitService.purgeVisit is @Authorized(PURGE_VISITS).",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": "integration-tests/src/test/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdviceTest.java",
+      "line": 75,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The purge tests never flush, so they never reach the queue_entry to visit foreign key that the PR exists to fix. They assert only that the entity is gone from the session. Adding Context.flushSession() after each purgeVisit makes them assert the real failure.",
+      "failure_mode": "",
+      "evidence": "Calibrated both ways by temporary edits (since restored): with flushSession() added and the advice registered, both tests pass. With flushSession() added and the advice registration removed, both error with `ConstraintViolationException: could not execute batch`. Without the flush and without the advice, they fail only on assertFalse(...isPresent()) at lines 78/90, so they are valid regression tests but not of the FK path.",
+      "confidence": "high"
+    },
+    {
+      "id": "F4",
+      "file": null,
+      "line": null,
+      "where": "PR-level",
+      "disposition": "nit",
+      "claim": "The title ('Void and purge...') and the description (advice intercepts voidVisit, 'All 98 integration tests pass') describe commit 36b2040, not head ae7f8fa, whose advice is purge-only. Update them to match whatever the head does after F1.",
+      "failure_mode": "",
+      "evidence": "Read pr96-body-at-round1.md against `git diff 36b2040 ae7f8fa -- .../VisitWithQueueEntriesDeleteAdvice.java` and the merge commit message, which says the advice is now purge-only and 119 integration tests.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Not ready to merge. The merge of main left the advice purge-only, so voiding a deleted visit's queue entries (the ticket's main symptom) again depends on a @Handler tie that core breaks in HashMap order. The new purge cascade also misses the Purge Queue Entries privilege.",
+  "what_i_swept": "Confirmed the diff stat (3 files, +170/-0, identical for main...HEAD and main HEAD, so there is no drift). Read the ticket, O3-5461, the PR body and the whole conversation (Dennis's approval of 36b2040, Roshan's transactional question), then diffed the approved commit 36b2040 against head to see what the merge changed. Traced outward into main's O3-5955 changes (VisitWithQueueEntriesSaveHandler, the Patient void/unvoid handlers and their tests) and into core 2.7.4 sources: HandlerUtil.getHandlersForType, ServiceContext.getRegisteredComponents/addAdvice, RequiredDataAdvice.before/recursivelyHandle, the visitService TransactionProxyFactoryBean and its serviceInterceptors, VisitServiceImpl.voidVisit/purgeVisit, VisitService @Authorized, and PatientDataVoidHandler. Checked QueueEntry's FKs (no self-FK to entries; visit_queue_entries is dropped by liquibase) and the purge privilege on QueueEntryService. I ran probe tests for the handler order and for privileges, with positive controls, plus mutation runs of the proposed fixes and a flush calibration of the PR's tests. Transactional safety (Roshan's question): the advice is appended behind the TransactionInterceptor, so a purgeVisit that throws Visit.purge.inUse after the advice ran rolls back the purged entries. This comes from reading the config; I did not run it. Sweep dimensions: solution fit (F1), correctness (F1, F2), tests (F3), security/authorization (F2), performance (one search per purge, fine), conventions (proxy-privilege pattern matches siblings).",
+  "could_not_verify": [
+    "I did not deploy to a Reference Application at head ae7f8fa. So the claim that the queue handler runs before BaseVoidHandler there comes from Dennis's live verification against queue 3.0.0, plus core's HashMap-based tie-breaking, which I read. O3-5955 added new VoidHandler beans, which can change that HashMap order. F1 is therefore shown as a mechanism (by forcing the order in a probe), not as observed RefApp behaviour.",
+    "I did not run the rollback when purgeVisit throws Visit.purge.inUse after the advice has purged the entries. Module tests run inside one test transaction, so they cannot show a commit or rollback boundary. The claim rests on reading core's TransactionProxyFactoryBean/preInterceptors config."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 found F1 (merge dropped the voidVisit branch) and F2. Pass 2 calibrated the PR's tests and found F3. Pass 3 rechecked the patient void/unvoid pairing argument, FKs and transaction placement, and found nothing new. The merge commit's reason for dropping the void branch (voidQueueEntry stamps a different date/user) is fixed by copying the visit's own void stamp in the advice, not by deleting the branch. Dennis's suggestion 1 (retire the order-dependent handler void branch) went the other way in this merge. All temporary edits were restored, and `git status --porcelain` was clean before reporting."
+}

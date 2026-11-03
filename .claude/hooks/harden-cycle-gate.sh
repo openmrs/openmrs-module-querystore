@@ -41,7 +41,9 @@
 # section carries the measurement). Issue #310 ended so on 2026-08-26, in Phase 2 pass 3 at 1365
 # turns and $76.72 with committed work, no PR and ten orphaned worktrees. The allow is therefore
 # scoped to attended sessions; see the marker check below.
-# Same field, same semantics as pr-harden-gate.sh, which solved this first.
+# Same field, same semantics as pr-harden-gate.sh, which solved this first -- including that a block
+# reached past AWAIT_TTL leads with the awaits and their age (STALE_NOTE) where the newest has a
+# `since`, since a usage-limit wait can hold a live agent that long.
 #
 # run stamped, no phase1 -> a run is in flight and has stated no verdict. Block.
 # phase1 == open        -> another Phase 1 pass is required; this hook blocks the turn from ending.
@@ -75,12 +77,26 @@ set -uo pipefail
 
 STATE="$HOME/.claude/harden-state.json"
 STALE_AFTER=21600   # 6h; a harden run older than this is abandoned, not in flight
-AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long is dead, not running.
+AWAIT_TTL=3600      # 1h; an awaited subagent that has not returned in this long is taken for dead.
                     # Generous on purpose: a Phase 2 agent may run a full root build and drive
                     # mutations. Still far under STALE_AFTER, so a forgotten `awaiting` cannot outlive
-                    # the run that wrote it.
+                    # the run that wrote it. A usage-limit wait can hold a live one past it: see
+                    # STALE_NOTE.
 
 allow() { exit 0; }
+
+# A block reached past the await bound leads with STALE_NOTE, set where the await is read below.
+# The prefix must never cost the block itself: if rewriting it fails, it goes out as it was.
+STALE_NOTE=""
+with_note() {
+  local out; out=$(cat)
+  if [ -n "$STALE_NOTE" ] && jq -c --arg n "$STALE_NOTE" '.reason = $n + .reason' <<<"$out" 2>/dev/null; then
+    return 0
+  fi
+  printf '%s\n' "$out"
+}
+# The awaited agents' names, for a block to quote.
+await_agents() { jq -r '[(.awaiting // [])[] | (.agent // "?")] | join(", ")' <<<"$ENTRY" 2>/dev/null || echo "?"; }
 
 [ -f "$STATE" ] || allow
 command -v jq >/dev/null 2>&1 || allow
@@ -233,7 +249,7 @@ if [ "$AWAITING" -gt 0 ]; then
   case "$NEWEST" in ''|*[!0-9]*) NEWEST=0 ;; esac
   if [ "$((NOW - NEWEST))" -lt "$AWAIT_TTL" ]; then
     [ "$UNATTENDED" = "true" ] || allow
-    AGENTS=$(jq -r '[(.awaiting // [])[] | (.agent // "?")] | join(", ")' <<<"$ENTRY" 2>/dev/null) || AGENTS="?"
+    AGENTS=$(await_agents)
     jq -n --arg a "$AGENTS" '{
       decision: "block",
       reason: ("This run is UNATTENDED and you ended your turn with a background agent outstanding: "
@@ -248,6 +264,15 @@ if [ "$AWAITING" -gt 0 ]; then
         + ") — past 600 s the run exits with them; collect them in-turn")
     }'
     exit 0
+  fi
+  # Past the bound. Every block below hands back its phase's own text, which has the run dispatch
+  # that phase again -- beside a live agent, where a wait at a usage limit under
+  # CLAUDE_CODE_RETRY_WATCHDOG held it this long, and nothing in the run's context marks the hour,
+  # because that wait happened inside one request. Only this hook measures an await's age, so it
+  # says so first. An await with no `since` reads as dead and gets no note. The rule is
+  # pr-harden's State, and its measurement is pr-harden's evidence (0.41.0).
+  if [ "$NEWEST" -gt 0 ]; then
+    STALE_NOTE="The newest await recorded here is $(( (NOW - NEWEST) / 60 )) min old, past the one-hour bound (awaiting: $(await_agents)). If CLAUDE_CODE_RETRY_WATCHDOG is on and the harness has reported no outcome for an agent named there, it may still be waiting at a usage limit: record its await again with the command that recorded it, once, as pr-harden's State says, rather than dispatching its phase again; one whose name is listed twice has had that once, so stop it (TaskStop) before its phase is dispatched. Otherwise: "
   fi
 fi
 
@@ -299,7 +324,7 @@ if [ -z "$RUN" ] && [ -z "$PHASE1" ]; then
       + "command plus --override --reason, never by editing the state file, which is shared with "
       + "every live session and only `gate-state` serialises."),
     systemMessage: ("harden: cycle " + $c + " made " + $e + " edit(s) — another cycle is required")
-  }'
+  }' | with_note
   exit 0
 fi
 
@@ -351,5 +376,5 @@ jq -n --arg c "$CYCLE" --arg w "$WHAT" --arg d "$DO" '{
     + "section and record it with that same command plus --override --reason, never by editing the "
     + "state file, which is shared with every live session and only `gate-state` serialises."),
   systemMessage: ("harden: " + $w)
-}'
+}' | with_note
 exit 0

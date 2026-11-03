@@ -27,4 +27,10 @@ public class MedicationDispenseBootstrapper extends HibernateTypeBootstrapper<Me
 	protected ClinicalRecordSerializer<MedicationDispense> getSerializer() {
 		return serializer;
 	}
+
+	@Override
+	protected boolean versionTracksContent() {
+		// Every save that changes this record changes its version; see TypeBootstrapper#versionTracksContent.
+		return true;
+	}
 }

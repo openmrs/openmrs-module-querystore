@@ -1,0 +1,24 @@
+1. S1 search; control, PROTOCOL.md hits: 4
+   wt-01 arm=P findings=2 finding-hits=[] whole-file-hits=0
+   wt-02 arm=R findings=2 finding-hits=[] whole-file-hits=1
+   wt-03 arm=R findings=2 finding-hits=[] whole-file-hits=0
+   wt-04 arm=R findings=2 finding-hits=[] whole-file-hits=0
+   wt-05 arm=P findings=1 finding-hits=[] whole-file-hits=3
+   wt-06 arm=P findings=2 finding-hits=[] whole-file-hits=0
+2. could_not_verify rollback items; control, PROTOCOL.md hits: 21
+   wt-01 arm=B items=2 rollback-item=False
+   wt-02 arm=T items=2 rollback-item=True
+   wt-03 arm=C items=2 rollback-item=False
+   wt-04 arm=B items=2 rollback-item=False
+   wt-05 arm=T items=3 rollback-item=False
+   wt-06 arm=C items=2 rollback-item=True
+   wt-07 arm=T items=2 rollback-item=True
+   wt-08 arm=B items=1 rollback-item=False
+   wt-09 arm=C items=2 rollback-item=False
+   wt-10 arm=V items=3 rollback-item=True
+   wt-11 arm=V items=2 rollback-item=True
+   wt-12 arm=V items=2 rollback-item=True
+   runs with one, by arm: {'B': 0, 'T': 2, 'C': 1, 'V': 3} total: 6
+3. 2026-10-18-heldout-6551 L04: [('wt-01', 'M', 'question'), ('wt-02', 'K', 'question'), ('wt-04', 'C', 'question'), ('wt-05', 'M', 'question'), ('wt-06', 'K', 'question'), ('wt-07', 'M', 'question')] {'question': 6}
+3. 2026-10-18-lens-replay-queue96 K1: [('wt-02', 'T', 'blocking'), ('wt-03', 'C', 'suggestion'), ('wt-04', 'B', 'blocking'), ('wt-05', 'T', 'blocking'), ('wt-06', 'C', 'blocking'), ('wt-07', 'T', 'blocking'), ('wt-08', 'B', 'blocking'), ('wt-11', 'V', 'blocking')] {'blocking': 7, 'suggestion': 1}
+4. union-routing-556 risks by (arm, class): [(('C', 'NOISE'), 6), (('C', 'REAL'), 1), (('U', 'NOISE'), 13), (('U', 'None'), 1), (('U', 'REAL'), 4)]

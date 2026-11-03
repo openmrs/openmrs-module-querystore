@@ -28,6 +28,12 @@ public class DiagnosisBootstrapper extends HibernateTypeBootstrapper<Diagnosis> 
 		return serializer;
 	}
 
+	@Override
+	protected boolean versionTracksContent() {
+		// Every save that changes this record changes its version; see TypeBootstrapper#versionTracksContent.
+		return true;
+	}
+
 	/**
 	 * {@link org.openmrs.Diagnosis#getEncounter() Diagnosis.encounter} is
 	 * {@code @ManyToOne(optional=false)} and eagerly fetched, so a SQL-dump load that leaves a

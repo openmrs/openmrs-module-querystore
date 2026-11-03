@@ -1,0 +1,6 @@
+await 600s old: allow
+await 7200s old: block - resolve-ticket: mid-run, no PR opened yet — the run is not finished | reason opens: The newest await recorded here is 120 min old, past the one-hour bound (awaiting: an agent). If CLAUDE_CODE_RETRY_WATCHDOG is on and the harness has r
+awaiting: an agent (pr)
+awaits now: an agent 7200s old, an agent 0s old | owner: None
+the same await recorded again: allow
+that entry less the await recorded again: block - resolve-ticket: mid-run, no PR opened yet — the run is not finished | reason opens: The newest await recorded here is 120 min old, past the one-hour bound (awaiting: an agent). If CLAUDE_CODE_RETRY_WATCHDOG is on and the harness has r

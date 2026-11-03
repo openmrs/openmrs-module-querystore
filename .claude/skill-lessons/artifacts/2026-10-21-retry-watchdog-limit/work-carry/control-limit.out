@@ -1,0 +1,6 @@
+control-limit: probes=3 subagent_writes=0 (first at +Nones) silence_at_end=426s nudges=1 at +25.5s
+   said: ! run-overdue (past-its-bound): o/r#1 has been running 16m44s, past its 0m04s bound — it is NOT killed
+   said: ! run-overdue (quiet): o/r#1 has written nothing for 6m44s — it may be waiting for you, or wedged
+   said: o/r#1 is stopped: the account is refusing requests and did not say when it will stop. This session will be told to continue as soon as the account ser
+   said: the account is serving requests again — told o/r#1's session to continue where it stopped
+   nudge: {'type': 'user', 'from': 'pool-run', 'priority': 'next', 'session_id': 'session-of-8426', 'message': {'content': 'The claude.ai usage limit that stopp

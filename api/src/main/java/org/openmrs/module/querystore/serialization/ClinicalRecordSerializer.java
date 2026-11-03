@@ -57,4 +57,16 @@ public interface ClinicalRecordSerializer<T> {
 	default String bulkDeletePatientUuidFor(T root) {
 		return null;
 	}
+
+	/**
+	 * The records a save created in place of {@code voided}, when the save voided the record its event
+	 * carried and wrote the edit as a new record without an event of its own. Default none.
+	 * {@code Condition} overrides: core's {@code saveCondition} edits that way, linking the new
+	 * condition back through {@code previousVersion}. Consulted by
+	 * {@link org.openmrs.module.querystore.sync.RecordProjector} after commit, for a node the save left
+	 * voided.
+	 */
+	default List<T> replacementsOf(T voided) {
+		return Collections.emptyList();
+	}
 }

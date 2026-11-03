@@ -65,6 +65,24 @@ public class AfterCommitDispatcherTest {
 	}
 
 	@Test
+	public void dispatchPrepared_withActiveSynchronization_preparesOnlyAfterCommit() {
+		TransactionSynchronizationManager.initSynchronization();
+		AtomicBoolean prepared = new AtomicBoolean();
+
+		dispatcher.dispatchPrepared(() -> {
+			prepared.set(true);
+			return () -> {};
+		});
+
+		assertFalse("prepare waits for the commit, when the save has stamped its version", prepared.get());
+		for (TransactionSynchronization s : TransactionSynchronizationManager.getSynchronizations()) {
+			s.afterCommit();
+		}
+		assertTrue(prepared.get());
+		assertEquals(1, executor.submitted.size());
+	}
+
+	@Test
 	public void dispatch_withoutSynchronization_submitsImmediately() {
 		AtomicBoolean taskRan = new AtomicBoolean();
 		dispatcher.dispatch(() -> taskRan.set(true));

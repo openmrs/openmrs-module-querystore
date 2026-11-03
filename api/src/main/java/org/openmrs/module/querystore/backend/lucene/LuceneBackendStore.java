@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,6 +67,7 @@ import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.HealthStatus;
 import org.openmrs.module.querystore.backend.Hit;
 import org.openmrs.module.querystore.backend.MetadataCodec;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -284,6 +286,29 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 	}
 
 	@Override
+	public Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		if (resourceUuids.isEmpty() || !schemaManager.hasIndex(resourceType)) {
+			return Collections.emptyMap();
+		}
+		IndexWriter writer = schemaManager.ensureWriter(resourceType);
+		Map<String, Instant> found = new HashMap<>();
+		try (DirectoryReader reader = DirectoryReader.open(writer)) {
+			IndexSearcher searcher = new IndexSearcher(reader);
+			for (String uuid : resourceUuids) {
+				Long millis = storedLastModified(reader, searcher, new Term(LuceneFieldNames.RESOURCE_UUID, uuid));
+				if (millis != null) {
+					found.put(uuid, Instant.ofEpochMilli(millis));
+				}
+			}
+		}
+		catch (IOException e) {
+			SafeLog.warn(LuceneBackendStore.class, "findLastModified failed for " + resourceType, e);
+			return Collections.emptyMap();
+		}
+		return found;
+	}
+
+	@Override
 	public long countByType(String resourceType) {
 		// Drift detection (ADR: Sync reliability and reconciliation). No index for this type yet →
 		// indexed nothing (0); a count that errors → unknown (-1). Don't create a writer for a type
@@ -310,12 +335,22 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public List<QueryDocument> findAllByPatient(String patientUuid) {
+		return findPatientChart(patientUuid).getDocuments();
+	}
+
+	@Override
+	public PatientChartRead findPatientChart(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
-		Set<String> indexNames = allIndexNames();
-		if (indexNames.isEmpty()) {
-			return Collections.emptyList();
+		// An index the enumerator found but could not open never enters indexNames, so the
+		// per-index loop below cannot see it; only the enumeration this read is built from knows.
+		LuceneSchemaManager.Enumeration enumeration = schemaManager.enumerateIndexes();
+		Set<String> indexNames = new HashSet<>(enumeration.names);
+		indexNames.addAll(schemaManager.knownIndexNames());
+		boolean incomplete = !enumeration.skipped.isEmpty();
+		if (indexNames.isEmpty() && !incomplete) {
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		TermQuery patientQuery = new TermQuery(new Term(LuceneFieldNames.PATIENT_UUID, patientUuid));
 		List<QueryDocument> all = new ArrayList<>();
@@ -325,15 +360,14 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 				collectAllByPatient(resourceType, patientQuery, all);
 			}
 			catch (IOException e) {
-				// One index failing should not strand the LLM caller — partial chart beats throwing.
-				// Mirrors the per-table tolerance in MysqlBackendStore.findAllByPatient and the
-				// per-index tolerance in existsByPatient: missing data converges to indexing on the
-				// next probe rather than poisoning the read path.
+				incomplete = true;
+				// One index failing should not strand the LLM caller: partial chart beats throwing, and
+				// the read reports itself incomplete.
 				SafeLog.warn(LuceneBackendStore.class, "findAllByPatient probe failed for " + indexName, e);
 			}
 		}
 		all.sort(BackendDocs.CHART_ORDER);
-		return all;
+		return new PatientChartRead(all, incomplete);
 	}
 
 	// Fields the chart consumer actually reads. EMBEDDING_STORED is deliberately excluded — the
@@ -355,7 +389,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 		CHART_LOAD_FIELDS = Collections.unmodifiableSet(fields);
 	}
 
-	private void collectAllByPatient(String resourceType, TermQuery patientQuery,
+	protected void collectAllByPatient(String resourceType, TermQuery patientQuery,
 	        List<QueryDocument> sink) throws IOException {
 		IndexWriter writer = schemaManager.ensureWriter(resourceType);
 		try (DirectoryReader reader = DirectoryReader.open(writer)) {
@@ -498,24 +532,28 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 
 	private Long findStoredLastModified(IndexWriter writer, Term uuidTerm) throws IOException {
 		try (DirectoryReader reader = DirectoryReader.open(writer)) {
-			IndexSearcher searcher = new IndexSearcher(reader);
-			TopDocs hits = searcher.search(new TermQuery(uuidTerm), 1);
-			if (hits.scoreDocs.length == 0) {
-				return null;
-			}
-			ScoreDoc hit = hits.scoreDocs[0];
-			int leafIdx = leafContextOf(reader, hit.doc);
-			NumericDocValues values = reader.leaves().get(leafIdx).reader()
-			        .getNumericDocValues(LuceneFieldNames.LAST_MODIFIED);
-			if (values == null) {
-				return null;
-			}
-			int localDocId = hit.doc - reader.leaves().get(leafIdx).docBase;
-			if (!values.advanceExact(localDocId)) {
-				return null;
-			}
-			return values.longValue();
+			return storedLastModified(reader, new IndexSearcher(reader), uuidTerm);
 		}
+	}
+
+	private static Long storedLastModified(DirectoryReader reader, IndexSearcher searcher, Term uuidTerm)
+	        throws IOException {
+		TopDocs hits = searcher.search(new TermQuery(uuidTerm), 1);
+		if (hits.scoreDocs.length == 0) {
+			return null;
+		}
+		ScoreDoc hit = hits.scoreDocs[0];
+		int leafIdx = leafContextOf(reader, hit.doc);
+		NumericDocValues values = reader.leaves().get(leafIdx).reader()
+		        .getNumericDocValues(LuceneFieldNames.LAST_MODIFIED);
+		if (values == null) {
+			return null;
+		}
+		int localDocId = hit.doc - reader.leaves().get(leafIdx).docBase;
+		if (!values.advanceExact(localDocId)) {
+			return null;
+		}
+		return values.longValue();
 	}
 
 	private static int leafContextOf(DirectoryReader reader, int globalDocId) {

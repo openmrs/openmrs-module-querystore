@@ -1,0 +1,35 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+      "line": 268,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The javadoc of statedPartners, SafetyWarning.rowsOfPartner and the ADR Decision 100 amendment all say an issue #477 finding's orders are 'stated only by their printed name/display'. That is false whenever the same answer also cites an interaction-rule finding that prints the same order, because statedPartners unions rows across findings by the comparable key.",
+      "failure_mode": "",
+      "evidence": "Throwaway case in CitedFindingPartnerCompletionTest (OverShippedData, shipped KB), restored afterwards. Orders 'Isoniazid 300mg tablet' (J04AC01) and 'Isoniazid / pyrazinamide / rifampin' (J04AM05), question 'Can I give her warfarin?'. The rule finding [4] names the combination with rifampicin rows [9384], and the #477 duplicate-therapy finding [6] names both orders with rows [[],[]]. An answer citing only [6] gives {named:2, stated:0}. An answer citing [4] and [6] that writes 'rifampin' gives {named:3, stated:2}, and the appended sentence lists only 'Isoniazid 300mg tablet'. So the #477 finding's combination order was stated through rows that its own finding does not carry. The behaviour itself looks defensible, since 'rifampin' identifies that order uniquely. The fix is to keep the union and reword the three sentences to say an order is stated by its display or by the rows of any cited rule finding that prints the same order.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/reference/DrugSafetyValidator.java",
+      "line": 4615,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "A combination prescription that a rule finding prints by its own display (for example 'Isoniazid / pyrazinamide / rifampin') is now stated by an answer that names only the one constituent that rule is about. On base it was appended as 'not named above'. No test pins this behaviour change and no doc names it. Was it intended?",
+      "failure_mode": "",
+      "evidence": "Throwaway case over the shipped KB with the single order 'Isoniazid / pyrazinamide / rifampin' and the question 'Can I give her alprazolam?'. That gives two findings that both print the combination: [3] with isoniazid rows [6038] and [4] with rifampicin rows [9384]. 'It interacts with her isoniazid [3].' gives {1,1} with nothing appended, and 'her rifampicin [3]' gives {1,0} with the sentence appended. Base uses comparable(answer).contains(comparable(partner)) only, so a constituent name never stated the combination there. README's wording ('the reference data's entry that order was resolved to') technically covers this case, but the README and ADR list only the shared-alias case as a silence-direction residue.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Ready to merge: it fixes all three of the issue's shapes through one shared decision (statedPartners) and the drug-name prose rule, with tests that redden under mutation. The only issues are a doc claim about the #477 residue that the cross-finding row union falsifies, and one undocumented combination-order behaviour change.",
+  "what_i_swept": "Diff stat checked against the brief (15 files, +493/-69). Read the PR body, issue #555, the full production diff, the test diff, and the README/ADR changes. Read reference/CLAUDE.md in full; the 'Matching a drug name' rule is the one the approach leans on, and namesThePartner mirrors namesTheEndedOrderDrug and namesTheFindingsSubject. Outward trace: every 'new RecordMapping(' and 'new SafetyWarning(' site in api/src/main (no copy path drops the new field; every with* copy threads partnerRows). Checked that chip namedPartners keys equal the partnerName/chipPartnerName used as the rows-map key in both arms, and that the merged chip uses member.partnerName. All three withUnstatedPartnersNamed/measure call sites, including the module-composed answer, pass the validator. Checked the sibling InteractionClaimPairFidelityCheck on the issue's answers: judged=1, unfounded=0, so the same symptom does not arrive by that path. Checked exception and performance exposure of getAll() scans (rows exist only after the injector has loaded the dataset; the scan is the same shape as namesTheFindingsSubject). Ran probes over combination prescriptions and #477 findings through the real search() with the shipped KB. Ran CitedFindingPartnerCompletionTest, SharedMechanismChipCollapseTest, ArchitectureGuardTest, ProjectInstructionsGuardTest, FindingPartnerLogDisclosureTest and InteractionClaimPairFidelityTest at head: 128 tests, 0 failures. Mutations: turning off the prose-rule arm reddened the 4 new #555 cases; dropping the merge union reddened only the merged ivosidenib case. Approach compared against two alternatives: stripping the parenthetical (rightly rejected by the CLAUDE.md matching rule) and crediting via getFindingBridgeNames containment (not index-aligned with partners for a merged finding, and fails on order displays carrying a strength).",
+  "could_not_verify": [
+    "The issue's dolutegravir question was not reproduced. It goes through the same drug-in-play arm as the tested alprazolam case, but no test or probe drove it.",
+    "No live standalone or llama-server run was possible. Verification is through the module's tests, with only the model stubbed.",
+    "The PR's claim that a full 'mvn -o clean install' is green was not re-run. Only the targeted test classes listed above were run."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 read the diff and the docs and found the union and residue question. Pass 2 confirmed F1 and F2 with probes and checked the sibling check, exception paths and mutations. Pass 3 rechecked doc and javadoc sentences and call sites and found nothing new. All probe and mutation edits were restored with git checkout, and the working copy is clean."
+}

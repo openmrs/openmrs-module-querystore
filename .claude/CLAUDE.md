@@ -7,6 +7,10 @@
   comparison of the candidates with the pick buried in it.
 - A reply to a forum post, an issue comment or a PR thread matches or undercuts the length of what it
   is answering.
+- Proposing a fix or a design follows the procedure below. Its rejected shapes, each with its evidence,
+  come after the pick on line 1. That list is the evidence for the pick, not a "survey of alternatives".
+
+@proposing-fixes.md
 
 # Verification before claiming
 

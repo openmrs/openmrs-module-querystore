@@ -1,0 +1,57 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 129,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The native `delete from user_location` leaves any in-session User whose `locations` collection still holds the purged Location, and the next flush throws TransientPropertyValueException, so the purge fails. The in-code comment says the only effect is a stale view and that no caller holds a loaded User, and both statements are wrong: the PR's own getAllowedLocations re-reads the user via dao.getUser, which puts exactly such a User into the session.",
+      "failure_mode": "",
+      "evidence": "Temporary probe test (since deleted) in api/src/test/java/org/openmrs/api, run with `mvn -o -B -pl api -am test -Dtest=ZzReviewProbeTest#...`. (a) Assign location 6 to user 1, flush, purgeLocation(6), flush, with no session clear: IllegalStateException/TransientPropertyValueException 'Persistent instance of org.openmrs.User references an unsaved transient instance of org.openmrs.Location [User.locations -> Location]' at the flush. (b) Same steps with Context.clearSession() before the purge: location and user_location rows go to 0. (c) clearSession, then getAllowedLocations(new User(1), tag), then purgeLocation(6) and flush: the same TransientPropertyValueException at the flush line. Fix: drop the native SQL and detach the location through the ORM, e.g. `select u from User u join u.locations l where l = :location`, then `u.getLocations().remove(location)` for each result before session.remove(location). That keeps the persistence context consistent and makes the caveat comment unnecessary.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/test/java/org/openmrs/api/LocationServiceTest.java",
+      "line": 557,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "purgeLocation_shouldDeleteLocationAssignedToAUser never flushes, so the DELETE never reaches the FK and the test still passes with the fix removed. It cannot catch the regression it was added for.",
+      "failure_mode": "",
+      "evidence": "Mutation probe: deleted the two native-delete lines in HibernateLocationDAO.deleteLocation, then ran `-Dtest=LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser,ZzReviewProbeTest#probeE6_sessionCleared`. The author's test PASSED. The flushing control failed with H2 'Referential integrity constraint violation: FK... USER_LOCATION FOREIGN KEY(LOCATION_ID) REFERENCES LOCATION(LOCATION_ID) (6)'. Restored with git checkout. getLocation() returns null for an entity scheduled for removal in the same session, so the assertion holds without a flush. Fix: call Context.flushSession() after purgeLocation (and preferably assert on a fresh read).",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/main/java/org/openmrs/api/impl/UserServiceImpl.java",
+      "line": 869,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Purging the only location a restricted user is assigned to quietly makes that user unrestricted: the cascade empties their user_location rows, and 'empty set = unrestricted' then hands them every tagged location. Is that intended? Retiring the same location has the opposite effect: the user gets an empty list, because getLocationsByTag drops retired locations.",
+      "failure_mode": "",
+      "evidence": "Probe: tag locations 1, 2 and 6, assign user 1 only location 6, clear the session. getAllowedLocations returned [Unknown Location]. After purgeLocation(6), flush and clear, it returned [Test Level A Child Location 1, Test Parent Location], and the location-6 row count was 0. No exception and no log. The ticket defines 'no rows = unrestricted' but says nothing about purge, and its proposed schema used plain FKs, which would block the purge instead. Options: block the purge while assignments exist (keep the FK RESTRICT), or record restriction explicitly rather than inferring it from an empty set.",
+      "confidence": "high"
+    },
+    {
+      "id": "F4",
+      "file": "api/src/main/java/org/openmrs/api/UserService.java",
+      "line": 668,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "getAllowedLocations requires only Get Locations, yet it accepts any User and reads that user's assignments through dao.getUser, skipping the Get Users privilege that UserService.getUser requires. Any caller with Get Locations can therefore see which locations another user is restricted to. Is that exposure intended, or should a caller other than the authenticated user also need Get Users?",
+      "failure_mode": "",
+      "evidence": "Read UserService.java:668 and UserServiceImpl.java:856 (@Authorized(GET_LOCATIONS)), UserService.getUser at line 154 (@Authorized({GET_USERS})), and UserServiceImpl calling dao.getUser, which has no AOP authorization. I did not run this as a low-privilege user. How much is actually exposed depends on the companion REST PR, which is out of scope here.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Close but not quite ready. The model, changeset and resolution logic match the ticket, and the changeset applies on MariaDB. The purge fix is the weak spot: the native delete breaks the purge whenever an in-session User holds the purged location (F1), and its regression test passes even with the fix removed (F2).",
+  "what_i_swept": "Read the ticket with its comments, the PR body and the full diff (8 files, +216/-6, confirmed against master...HEAD), plus the full changed methods and their neighbours. Solution fit: the ticket's acceptance criteria (table, intersection versus all-tagged resolution, no change for unpopulated deployments, tests) are covered in core; the REST endpoints are deferred to webservices.rest#762 as the PR states. Outward trace: HibernateUserDAO.saveUser (roles management; the locations collection has no cascade) and deleteUser (purgeUser with assignments removes the join rows; probe went 2 -> 0 rows); LocationServiceImpl.getLocationsByTag (excludes retired) and purgeLocation; Location.childLocations cascade; the Envers audit-table initializer (User and Location are both @Audited, and audit tables are auto-generated); the unit-test schema, which comes from hbm2ddl and not Liquibase, so only the DatabaseIT exercises the changeset. Ran `mvn -o -B -pl api -am test -Pintegration-test -Ddatabase=mariadb -DargLine=-Ddatabase=mariadb -Dtest=DatabaseUpdaterDatabaseIT`: 1 run, 0 failures, so the new changeset applies and the 917 count holds. The mariadb:10.11.7 image was the only DB image present before and after the run, so I infer it ran on MariaDB. Security: authorization on the new API (F4). Performance: tried to measure whether the native executeUpdate evicts the second-level cache; the positive control failed (nothing was cached even before the purge in the test context), so I dropped it. Three probe passes ran: the first found F1/F2/F3 candidates, the second confirmed them cleanly on a top-level location, and the third swept auth, conventions and the IT with nothing new.",
+  "could_not_verify": [
+    "Whether the native delete invalidates unrelated second-level cache regions in production: in the unit-test context, the cache-presence control returned false before any purge, so the experiment could not discriminate. Not reported.",
+    "F4 was not executed as a non-superuser. It is based on reading the @Authorized annotations and the DAO call.",
+    "DatabaseUpdaterDatabaseIT was not run on MySQL 5.7 or PostgreSQL. The mysql:5.7.39 and postgres images are not present locally, and I ran only the MariaDB variant."
+  ],
+  "passes_run": 3,
+  "notes": "F1 is a loud failure (an exception plus rollback), not silent, and purge is a rare admin operation, so I kept it a suggestion rather than blocking. If the author takes the ORM-removal fix for F1, F2's test needs the flush to actually guard it. The F1 child-location probe (location 4) was confounded by Location.childLocations cascade=ALL resurrecting the child on flush, which is pre-existing behaviour, so the reported evidence uses top-level location 6. Working copy restored, with the probe test deleted and the mutation reverted via git checkout."
+}

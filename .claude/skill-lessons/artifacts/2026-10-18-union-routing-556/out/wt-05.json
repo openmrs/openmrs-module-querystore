@@ -1,0 +1,35 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+      "line": 282,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "No test pins the cross-finding union in statedPartners (computeIfAbsent(...).addAll): replacing it with a put that overwrites leaves every selected test green, although on a reachable arrangement it brings back the exact #555 symptom.",
+      "failure_mode": "",
+      "evidence": "Mutated line 282 to rowsByPartner.put(comparable(...), new LinkedHashSet<>(partnerRows.get(i))). CitedFindingPartnerCompletionTest, FindingPartnerLogDisclosureTest, LlmInferenceServiceAnswerFromFindingsContextTest, SharedMechanismChipCollapseTest and SubstanceInSeveralActiveOrdersTest were all still green (15/6/27/7/13 run, 0 failures). Throwaway probe test, orders \"Rifampicin 150mg\" (J04AB02) and \"Isoniazid / rifampicin\" (J04AM02), question \"Can I give her rifampicin?\", over the shipped KB via CitedFindingPartnerCompletionTest's own OverShippedData (real injector, real search; only the model stubbed): the injector writes finding 4 (rule chip) partners=[Isoniazid / rifampicin] rows=[[6038]] (row 6038 = Isoniazid) and finding 5 (#477) partners=[Rifampicin 150mg, Isoniazid / rifampicin] rows=[[], []]. The answer 'Rifampicin can be given; it interacts with her isoniazid [4][5].' At head, nothing is appended to it for Isoniazid / rifampicin and coverage is {named=3, stated=2}. Under the mutation, '... not named above: active order Isoniazid / rifampicin and active order Rifampicin 150mg.' is appended and coverage is {named=3, stated=0}. A case built on this arrangement would pin it. Mutation restored with git checkout.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+      "line": 269,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The statedPartners javadoc, the ADR Decision 100 #555 amendment (docs/adr.md:7810) and the PR body all say that issue #477's findings' orders are stated only by their printed name. That is false whenever a cited interaction rule finding prints the same order: the union keyed on the printed name hands that finding's rows to the #477 partner too.",
+      "failure_mode": "",
+      "evidence": "Same probe (F1's arrangement) at head, no mutation: the #477 finding 5 carries rows [[], []], yet its partner 'Isoniazid / rifampicin' counts as stated (stated=2 of named=3) for an answer that writes only 'isoniazid', through finding 4's rows [6038 Isoniazid]. Containment cannot account for it, because the answer does not contain 'isoniazid/rifampicin' in comparable form. The README sentence and the ChartSearchService.FindingPartnerCoverage javadoc ('an order an interaction RULE finding names is also stated\u2026') are accurate. The three places that overclaim should say the residue holds only where no cited rule finding names the same order. They could also note that the #477 rationale ('has not said which of those orders it meant') is then not enforced for that order.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Close to merge-ready: the fix resolves #555 through the drug-name prose rule over structurally carried rows (a sound approach that matches namesTheEndedOrderDrug), the issue's alprazolam, dolutegravir and screening cases now read stated == named, and the only findings are an unpinned cross-finding union and a residue claim it falsifies.",
+  "what_i_swept": "Read the PR body, issue #555, the reference CLAUDE.md in full and the whole production diff. Checked that the stat matches (15 files, +493/-69). Step 2: compared against the sibling predicates namesTheEndedOrderDrug and namesTheFindingsSubject (same getAll/id-scan and matchesText shape) and against the rejected parenthetical-strip and bridge-name alternatives; the approach holds. Traced outward: every SafetyWarning copy method carries partnerRows; namedPartners keys match the withPartnerRows keys at the drug-in-play, screening and merged-chip sites; there are no RecordMapping copy sites outside the injector; the module-composed answer path; InteractionClaimPairFidelityCheck (handles the label through bridge names); the ArchitectureGuardTest descriptor guards. Ran CitedFindingPartnerCompletionTest at head (14/14). Ran ArchitectureGuardTest, ProjectInstructionsGuardTest and InteractionClaimPairFidelityTest (all green). A throwaway probe over the shipped KB covered the issue's dolutegravir question ({2,2}), subject-only answers (no false stating) and the combination/#477 collisions. Mutation probes: the statedPartners union (survives, F1) and collapseSharedMechanisms' withPartnerRows (reddens the merged case, as the PR claims). All mutations and the probe were restored; git status is clean.",
+  "could_not_verify": [
+    "No live OpenMRS/llama-server run, by constraint. The issue's 6-of-22 figure on a real model was not reproduced; only the module tests with a stubbed model were run.",
+    "I did not run the full `mvn clean install` the PR cites; only the targeted classes listed in what_i_swept.",
+    "Unverified hypothesis, kept out of findings: when StatedInteractionChips drops a second rule chip that restates a combination order's sentence, that chip's partner rows are dropped with it, so which constituent's name states the order may depend on rule order. I did not build an arrangement for it."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 covered the diff and the approach. Pass 2 (the outward trace plus the probe) found F1/F2. Pass 3 checked the docs, the guards and the PR's own mutation claims and found nothing new that is substantive. The PR's claim that mutating the merge site reddens the merged case is confirmed (anOrderOfAMergedFindingTheAnswerNamedWithoutItsLabelsParentheticalIsNotListedAgain fails). The probe also showed DDInter rows carrying combination aliases (e.g. Rifampicin row 9384 carries 'isoniazid / rifampin'), the matchesText residue the PR documents."
+}

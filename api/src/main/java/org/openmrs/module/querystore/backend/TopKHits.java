@@ -28,8 +28,9 @@ public final class TopKHits {
 
 	public static PriorityQueue<Hit> heap(int limit) {
 		// Min-heap on rawScore so the smallest-score outlier sits at the head — that's the one we
-		// evict when a stronger hit arrives.
-		return new PriorityQueue<>(limit + 1, (a, b) -> Double.compare(a.getRawScore(), b.getRawScore()));
+		// evict when a stronger hit arrives. No initial capacity: limit + 1 wraps at Integer.MAX_VALUE,
+		// and a large limit would allocate its whole array before the first hit.
+		return new PriorityQueue<>((a, b) -> Double.compare(a.getRawScore(), b.getRawScore()));
 	}
 
 	public static void offer(PriorityQueue<Hit> heap, Hit hit, int limit) {

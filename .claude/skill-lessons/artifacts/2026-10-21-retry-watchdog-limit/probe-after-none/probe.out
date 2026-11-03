@@ -1,0 +1,5 @@
+{"case": "case-after-none", "reset_ahead_s": 400.0, "watchdog_in_launcher_env": "unset", "answer": ["refused", null], "seconds": 0.5}
+   probe stream: system/init, assistant/, result/success is_error=True
+   probe stderr: (empty)
+   stub: +   0.6s 429
+exit=0

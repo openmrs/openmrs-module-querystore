@@ -1,0 +1,68 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 133,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The user_location cleanup only deletes rows for the location passed to deleteLocation, but Location.childLocations is mapped cascade=ALL/orphanRemoval=true (Location.java:140), so descendants that Hibernate deletes by cascade keep their user_location rows and the purge fails on the FK.",
+      "failure_mode": "If merged as-is, purging a parent location (e.g. a department) whose child is assigned to a user throws ConstraintViolationException on the user_location_to_location FK, because Hibernate cascades the child delete without passing through deleteLocation. The ticket says user_location stores resolved leaf locations under departments, so this is exactly the hierarchy deployments will have. The same applies when a child is removed via orphanRemoval.",
+      "evidence": "Temporary probe in LocationServiceTest (reverted): create parent+child via parent.addChildLocation, saveLocation, flush; assign child to user 1, saveUser, flush+clear; purgeLocation(parent); flushSession -> ConstraintViolationException 'Referential integrity constraint violation: FKC0WEUGWTYIDBYTMDYE09CP0GL: PUBLIC.USER_LOCATION FOREIGN KEY(LOCATION_ID) REFERENCES PUBLIC.LOCATION(LOCATION_ID) (11)'. Control (same setup without the assignment) passes. Run: mvn -o -B -pl api -am test -Dtest='LocationServiceTest#probe*+purgeLocation*'. Fix options: delete user_location rows for the location and its descendants (the DAO already has a recursive CTE in getDescendantIds), or put ON DELETE CASCADE on the location_id FK in the changeset (note the unit-test H2 schema comes from hbm2ddl, FK name is Hibernate-generated, so a Liquibase-only cascade would not be exercised by unit tests).",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 134,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The native delete declares no synchronized query space, so Hibernate invalidates every second-level cache region (users, concepts, ...) on each purgeLocation; adding .addSynchronizedQuerySpace(\"user_location\") scopes it.",
+      "failure_mode": "",
+      "evidence": "Probe: load User 1 and Concept 3 into L2, clear session, purgeLocation(location 6), check sessionFactory.getCache().containsEntity: PR head prints 'user true->false concept true->false'; with the native delete removed prints 'true->true' (calibration); with .addSynchronizedQuerySpace(\"user_location\") added prints 'true->true' and all purgeLocation* tests still pass (Hibernate 7.4.7, hibernate.cache.use_second_level_cache=true in hibernate.default.properties:33). User.locations has no @Cache, so no collection region needs evicting.",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/test/java/org/openmrs/api/LocationServiceTest.java",
+      "line": 546,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "purgeLocation_shouldDeleteLocationAssignedToAUser never flushes, so it passes with the user_location fix removed and does not guard the regression it was added for.",
+      "failure_mode": "",
+      "evidence": "Mutation run: removed the native delete in HibernateLocationDAO.deleteLocation; purgeLocation_shouldDeleteLocationAssignedToAUser still passed, while a variant that does flushSession()+clearSession() after saveUser and flushSession() after purgeLocation failed with the user_location FK violation (and passes with the fix in place). Adding only a flush to the test as written (user still loaded in session) fails at flush with TransientPropertyValueException 'Persistent instance of org.openmrs.User references an unsaved transient instance of org.openmrs.Location [User.locations]' even with the fix, i.e. the test itself holds a loaded User across the purge, the exact situation the new comment at HibernateLocationDAO.java:129-132 says no caller does.",
+      "confidence": "high"
+    },
+    {
+      "id": "F4",
+      "file": "api/src/main/java/org/openmrs/User.java",
+      "line": 372,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "User.locations is LAZY and is not hydrated where roles/userProperties/privileges are (HibernateContextDAO.authenticate ~L166-168, UserContext.becomeUser ~L184-195), so getLocations() on Context.getAuthenticatedUser() throws LazyInitializationException in any later session; is that intended given the companion REST PR exposes locations on the user resource?",
+      "failure_mode": "",
+      "evidence": "Probe: flushSession+clearSession, then Context.getAuthenticatedUser(): getAllRoles().size() returns 1 (control), getLocations().size() throws org.hibernate.LazyInitializationException. Core itself does not call getLocations on the authenticated user (getAllowedLocations re-reads via dao.getUser), so no in-repo breakage; whether the REST companion (#762) serializes it could not be checked here.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F5",
+      "file": "api/src/main/java/org/openmrs/api/UserService.java",
+      "line": 668,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "getAllowedLocations takes an arbitrary User and requires only GET_LOCATIONS, and loads it via dao.getUser, so a caller without GET_USERS can learn any user's location assignments; should it require GET_USERS for another user, or be scoped to the authenticated user?",
+      "failure_mode": "",
+      "evidence": "Read UserService.java:668-669 (@Authorized(GET_LOCATIONS)) vs UserService.getUser @Authorized(GET_USERS) at UserService.java:86-87; UserServiceImpl.java:860 calls dao.getUser directly. Not run: whether the REST layer adds its own check is in the companion PR.",
+      "confidence": "low"
+    }
+  ],
+  "verdict": "Not ready: the user_location FK cleanup misses locations deleted by Hibernate's child-location cascade, so purging a parent location with an assigned descendant fails, and the added regression test cannot catch either this or the original bug because it never flushes.",
+  "what_i_swept": "Read the PR body and TRUNK-6669 snapshot; confirmed diff stat 8 files +216/-6 and no drift vs base. Read full changed hunks plus User mapping, Location.childLocations mapping, HibernateUserDAO.saveUser/deleteUser, UserContext.becomeUser and HibernateContextDAO.authenticate hydration, BaseOpenmrsObject.equals, LocationServiceImpl.getLocationsByTag/purgeLocation, EnversAuditTableInitializer (Location and User both @Audited, envers off by default), Liquibase ON DELETE conventions. Outward trace: other paths that delete Location rows (cascade/orphanRemoval), user purge path (owner side, verified OK), second-level cache effect of the native query, authenticated-user lazy loading, privilege model. Ran: DatabaseUpdaterDatabaseIT on H2 with -Pintegration-test (pass, 917); temporary probe tests in LocationServiceTest on PR head and with the native delete mutated out and with a query-space variant (all reverted). Approach: native delete vs DB ON DELETE CASCADE vs mapping-level cleanup weighed; native delete is acceptable if it covers descendants and declares its query space. Ticket match: core part (table, resolution logic) matches; REST endpoints are in the companion PR as stated.",
+  "could_not_verify": [
+    "Liquibase changeset and DatabaseUpdaterDatabaseIT on MySQL/PostgreSQL (only H2 run; container DB not attempted offline on a busy machine)",
+    "Companion REST PR openmrs-module-webservices.rest#762 behaviour (lazy locations on authenticated user, privilege checks) not inspected",
+    "Whether any production caller holds a managed User across purgeLocation (the documented caveat) was not exhaustively searched beyond core callers of deleteLocation"
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 found F1-F3 via probes; pass 2 (user purge, auth-user hydration, privilege, envers, cache fix validation) found F4/F5 questions and cleared user purge; pass 3 (Liquibase/IT, equals, merge of detached locations, ticket acceptance criteria) found nothing new. Working copy restored; git status --porcelain clean. Ticket proposed a surrogate user_location_id PK; PR uses composite PK like user_role, judged fine."
+}

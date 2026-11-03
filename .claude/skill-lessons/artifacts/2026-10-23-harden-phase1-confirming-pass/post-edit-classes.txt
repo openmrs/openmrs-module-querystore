@@ -1,0 +1,140 @@
+# One line per block of post-edit-digest.txt, in its order: <block index> <class>.
+# Classified from the block's prose and tool calls, after its last edit since the previous converged
+# write. Rubric, fixed before the second half was read:
+#   R   an evidenced re-review: a tool call after the last substantive edit that re-reads the diff, a
+#       file or prose, sweeps for false or stale claims or other homes, or traces outward to readers;
+#       or the last pass was such a review and its only later edits were cosmetic
+#   Rc  a re-review the prose claims, with no tool call in the window that shows it
+#   M   mechanical checks only after the last edit: build, tests, mutation probes and positive
+#       controls, the orphaned-javadoc detector, runtime probes
+#   N   nothing after the last edit, or only a check of that one edit, or an edit stated right
+#       before the converged write
+#   0   no edit in the traversal: one review pass found nothing
+#   U   cannot tell from the window (a silent gap, or edits the extractor did not see)
+1 M
+2 R
+3 M
+4 N
+5 R
+6 M
+7 U
+8 U
+9 N
+10 U
+11 U
+12 M
+13 N
+14 Rc
+15 R
+16 M
+17 M
+18 R
+19 R
+20 N
+21 M
+22 N
+23 M
+24 R
+25 U
+26 R
+27 M
+28 U
+29 R
+30 N
+31 R
+32 M
+33 U
+34 0
+35 N
+36 M
+37 N
+38 R
+39 N
+40 N
+41 R
+42 0
+43 0
+44 R
+45 N
+46 M
+47 0
+48 N
+49 N
+50 U
+51 Rc
+52 R
+53 R
+54 R
+55 Rc
+56 R
+57 Rc
+58 R
+59 Rc
+60 R
+61 R
+62 N
+63 R
+64 N
+65 R
+66 U
+67 U
+68 Rc
+69 0
+70 Rc
+71 M
+72 R
+73 R
+74 M
+75 R
+76 M
+77 R
+78 Rc
+79 R
+80 R
+81 Rc
+82 Rc
+83 M
+84 R
+85 N
+86 R
+87 M
+88 R
+89 M
+90 R
+91 M
+92 R
+93 N
+94 R
+95 N
+96 0
+97 R
+98 0
+99 Rc
+100 U
+101 R
+102 R
+103 R
+104 U
+105 U
+106 U
+107 M
+108 R
+109 M
+110 M
+111 M
+112 Rc
+113 M
+114 R
+115 Rc
+116 0
+117 Rc
+118 Rc
+119 M
+120 R
+121 M
+122 R
+123 Rc
+124 U
+125 M
+126 N
+127 M

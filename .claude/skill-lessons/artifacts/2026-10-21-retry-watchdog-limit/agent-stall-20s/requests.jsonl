@@ -1,0 +1,5 @@
+{"t": 1792620824.517547, "method": "POST", "path": "/v1/messages", "status": 200, "served": "tool_use:Agent", "n_messages": 2, "last": "text:# Environment\nYou have been invoked in t", "has_agent_tool": true}
+{"t": 1792620824.609512, "method": "POST", "path": "/v1/messages", "status": 429, "stream": true, "max_tokens": 128000, "n_messages": 2, "last": "text:The following deferred tools are now ava", "has_agent_tool": true}
+{"t": 1792620824.6482313, "method": "POST", "path": "/v1/messages", "status": 429, "stream": true, "max_tokens": 128000, "n_messages": 5, "last": "text:<total_tokens>14999970 tokens left</tota", "has_agent_tool": true}
+{"t": 1792620923.0179896, "method": "POST", "path": "/v1/messages", "status": 200, "stream": true, "max_tokens": 128000, "n_messages": 5, "last": "text:<total_tokens>14999970 tokens left</tota", "has_agent_tool": true}
+{"t": 1792620923.077048, "method": "POST", "path": "/v1/messages", "status": 200, "stream": true, "max_tokens": 128000, "n_messages": 7, "last": "text:<system-reminder>\n[SYSTEM NOTIFICATION -", "has_agent_tool": true}

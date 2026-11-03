@@ -9,17 +9,32 @@
  */
 package org.openmrs.module.querystore.events;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.openmrs.module.querystore.events.EventsTestSupport.registryOf;
+
+import java.util.Arrays;
+import java.util.HashSet;
 
 import org.junit.Test;
 import org.openmrs.Encounter;
 import org.openmrs.Obs;
+import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 import org.openmrs.module.querystore.serialization.EncounterRecordSerializer;
 import org.openmrs.module.querystore.serialization.ObsRecordSerializer;
 
 public class SerializerRegistryTest {
+
+	@Test
+	public void resourceTypeNames_includeContributedSerializersWithoutBootstrap() {
+		ClinicalRecordSerializer<?> billing = mock(ClinicalRecordSerializer.class);
+		when(billing.getResourceType()).thenReturn("billing_bill");
+		SerializerRegistry registry = registryOf(new ObsRecordSerializer(), billing);
+		assertEquals(new HashSet<String>(Arrays.asList("obs", "billing_bill")), registry.getResourceTypeNames());
+	}
 
 	@Test
 	public void resolve_matchesEntityToItsSerializerByType() {

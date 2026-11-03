@@ -1,0 +1,6 @@
+wt-01: model=claude-opus-5-5 subtype=success is_error=False segments=1 turns=27 tools=26 min=17.0 cost=$1.94 in(all)=2,685,372 out=22,670
+wt-02: model=claude-opus-5-5 subtype=success is_error=False segments=1 turns=28 tools=27 min=15.7 cost=$1.72 in(all)=2,285,756 out=21,110
+wt-03: model=claude-opus-5-5 subtype=success is_error=False segments=1 turns=31 tools=30 min=17.1 cost=$2.06 in(all)=2,835,544 out=25,486
+wt-04: model=claude-opus-5-5 subtype=success is_error=False segments=1 turns=27 tools=26 min=16.3 cost=$1.69 in(all)=2,177,482 out=19,709
+wt-05: model=claude-opus-5-5 subtype=success is_error=False segments=1 turns=53 tools=52 min=34.6 cost=$3.62 in(all)=6,995,406 out=41,681
+wt-06: model=claude-opus-5-5 subtype=success is_error=False segments=1 turns=27 tools=26 min=22.0 cost=$2.51 in(all)=3,277,427 out=27,568

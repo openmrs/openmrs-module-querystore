@@ -5417,3 +5417,577 @@ anything runs the restored code from `target/` or cites its reports.**
 
 **Not a lesson:** TRUNK-6826's Spring 7 `UrlHandlerFilter` behaviour, #607's llama-server thread and
 cgroup readings, and 3787's `routes.json` ranges are target-repo domain evidence.
+
+## 2026-10-22 (window: 1 run record — querystore PR 100, a standalone `/harden` 0.43.2 on an open PR, converged at cycle 7 after 10 h 35 min, captured by hand) — 2 proposed, both applied after revision, 0 killed; two refutation rounds, the second over the staged diff; linter 17 files, 0 findings against `1ed1eaa`; **harden 0.45.0, skill-retro 0.7.1**
+
+Step 6's pre-read comparison had no live side in this cloud container. It holds no
+`~/.claude/skill-lessons`, `~/.claude/hooks` or `~/.claude/CLAUDE.md`, and its `~/.claude/skills` holds
+none of these skills. The store read was this checkout's `.claude/skill-lessons/` at `1ed1eaa`, PR 100's
+head. Its merge base with `origin/main` is `origin/main` itself (`a829dcd`, re-fetched in Step 6), so
+the read missed nothing pushed. The cmp steps are owed where a live copy exists: on the operator's
+machine, once this lands.
+
+This branch is stacked on PR 100. `--against origin/main` reports harden's rise as 7403→7538, because
+this raise replaces PR 100's 7403→7429 entry, as `budget_ratchet`'s docstring says a second rise does.
+Against `1ed1eaa`, the head this retro started from, it reports nothing. Step 6's zero against
+`origin/main` is still owed: once PR 100 merges at harden's 7429, re-run `skill-lint.py --against
+origin/main`.
+
+The one record corroborates nothing by itself. Each proposal rests on it together with a record from an
+earlier window, and each answers a REOPEN ON this ledger held. The proposals, the gate's replies and the
+revisions are in `proposals/2026-10-22-window-pr100.md`.
+
+**APPLIED after revision · harden 0.45.0 *Reporting*: a `/harden` invoked on its own appends its run
+record, in `pr-harden`'s *Write the run record* format and file name, with the branch (any `/` replaced by `-`) where the slice
+has no ticket or PR. skill-retro 0.7.1: its opening names that run beside the two skills, and Step 1's
+"writes none" is dated to the versions before.**
+- It reopens the 2026-09-16 KILLED P1 (:3041-3058) on that kill's REOPEN ON, "a second
+  standalone-`harden` record". #435 was the first standalone record, and PR 100 is the second. The gate
+  found no other standalone record between them. Bar (a): #435:5-7 and :84, and pr100:5-6.
+- The kill's prevention objection (:3056-3057) is answered by where the rule lives: the record is written
+  in the run, not in how a retro reads the store.
+- The first gate raised five objections, all non-blocking, and each is settled:
+  - the kill's grounds are described as bar (c), with the prevention objection as its own paragraph;
+  - the file name falls back to the branch;
+  - skill-retro:10 names the run;
+  - the version pin was re-checked: harden is 0.43.2 on `origin/main` and 0.44.0 at `1ed1eaa`, and PR
+    100 is open at `1ed1eaa` (REST API, 2026-10-22), so 0.45.0 holds if PR 100 merges at 0.44.0;
+  - the budget raises are made.
+- The second gate added two non-blocking objections, both applied:
+  - the branch's `/` becomes `-`, since a `/` makes `>>` fail or files the record where the store's
+    `*.md` does not look;
+  - evidence.md's "often before either exists" becomes "can be", since both standalone records had an
+    open PR (#435:85, pr100:5-6).
+- It prunes nothing. Net +61 words in harden and +12 in skill-retro.
+
+**APPLIED after revision · harden 0.45.0 *Termination*: an edit that rewrites a test owes the
+revert-check on the mutations that test caught before the edit.**
+- It reopens the 2026-10-14 park (:5392-5394) on that park's REOPEN ON, "a second record". Bar (a):
+  - TRUNK-6826:24: a Phase 2 helper merge introduced an overload ambiguity, "caught only by re-running
+    the ordering mutation".
+  - PR 100: cycle 5's Phase 2 commit `a7cb1dc` folded a launch into the `--work` environment case, and
+    had the case inherit the marker a carried launch sets.
+- It would have caught PR 100's defect a cycle earlier:
+  - the case caught `nomark` before the edit (L3869-3870), and L4353 still lists that mutant;
+  - the run after the edit ran four mutants, two of them new and none of them `nomark` (L5447-5448);
+  - cycle 6's first Phase 1 pass found the gap with that mutant (L5525).
+- **Blocking at the first gate, settled by revision:** the drafted evidence said the run "re-ran four
+  mutants", but two of the four were new.
+- Its non-blocking objections were also applied:
+  - "owes that check" now names its target;
+  - the Step 4 note's "committed with the build green" is in no text, since TRUNK-6826:24 does not
+    say it.
+- The second gate's one objection here was to the `raises` why: "only a re-run mutation showed it"
+  overstated PR 100, whose reviewer named the gap by reading the fixture and then confirmed it with the
+  mutant (L5525). It now reads "and a re-run mutation showed it".
+- It subsumes nothing. The bullet before it covers an edit that FIXES a behaviour or ADDS a guard, and a
+  rewritten test does neither. Net +48 words.
+
+**Corrections the first gate found, now made in the record and listed in the proposals file's
+revisions.**
+- "Cycles 5-7, each opened by a one-line fix" is false for cycle 5, which three findings opened, one of
+  them a runtime change. Cycles 1-4 took 5 h 24 min, and cycles 5-7 took 5 h 12 min.
+- `d7cfefa` changed no words in pr-harden's evidence.md, because it was a reflow. `git log -S` names it
+  anyway, which is the failure :3036-3037 records.
+- Both evidence sentences whose escalations opened cycles 5 and 6 were written in `db9fe91`, under cycle
+  3's state write (L3348).
+- Both of cycle 6's first-pass findings came from `a7cb1dc`, not one.
+- The record's context line counts two compactions, not one.
+
+**Corrections the second gate found, made in the record, this block and the proposals file.**
+- **Blocking: no harden Stop gate was registered in this container.**
+  - `~/.claude/launcher-settings.json` registers one Stop hook, `stop-hook-git-check.sh`, and there is
+    no user or project `settings.json`.
+  - Each of the transcript's 56 `stop_hook_summary` events (L696-L7054) counts one hook and names it.
+  - The record's "the gate's attended allow carried the yields" was false, and so was this block's
+    first draft of it.
+- **Blocking: the delta-only premise was false.** Each escalating evidence sentence was inside the diff
+  of the Phase 2 that found it:
+  - `d7cfefa`'s reflow put both in `c5111fe..6e8b512`, cycle 4's Phase 2;
+  - `bd1b5b2`'s edit put the second in `6e8b512..d5dcea8`, cycle 5's.
+
+  The first gate had endorsed the premise.
+- **Blocking: the record's "each cost about an hour"** was false for cycle 6, which took 3 h 09 min.
+- The record now states its cycle convention: each range runs from the cycle's first agent dispatch, and
+  the run's `--cycle` writes open each cycle earlier. Its corrections anchor on those writes.
+
+**REOPEN ON met, no text owed · a `run_in_background: false` spawn answered "Async agent launched"
+(:4364-4367): 2 records.**
+- PR 100 is the new record. It was attended and cost 0.
+  - Inside the run, each of 37 `Agent` calls passed `false`, and each was answered "Async agent launched
+    successfully" (transcript L1457-L6026; the session spanned harness 2.1.306 to 2.1.308).
+  - No harden Stop gate was registered in this container, so no yield on outstanding agents could be
+    refused (the second gate's corrections, above).
+- The clause met is "a second post-0.30.0 record". No text is owed:
+  - `pr-harden`'s *Collecting in the same turn* (:679-683) is headed "where the harness allows it". It
+    already names this answer and the unattended fallback: "where a spawn still answers "Async agent
+    launched", an unattended run keeps the turn alive with a bounded foreground wait".
+  - harden's Phase 2 points there.
+- The first gate's count, "34 of 36", did not reproduce. The condition is met either way.
+- **REOPEN ON:** one that cost a turn or a Stop refusal, or one from a session with a harden or
+  pr-harden Stop gate registered, which PR 100's was not.
+
+**Parked counts advanced.**
+- **Phase 2 escalating repeatedly on the run's own fixes: 32 records.**
+  - +PR 100: six of seven Phase 2 passes escalated, and this was the record's main cost.
+  - Three remedies were weighed against its REOPEN ON and not proposed. **Correcting a Phase 2 finding
+    in place** was killed before the gate on 2026-09-24 (:4068-4076), and PR 100 repeats the kill's
+    reason. Cycle 5's Phase 2 found one evidence sentence. The Phase 1 it reopened found four
+    substantive items in cycle 6, two of them introduced by `a7cb1dc`.
+  - **Exempting `evidence.md` from escalation** is the same remedy narrowed to one file, and loses the
+    same four.
+  - **A delta-only Phase 2 after an escalation** is not refuted by this record. `d7cfefa`'s reflow and
+    `bd1b5b2`'s edit put both sentences' lines in the diff of the Phase 2 that found each. A proposal
+    would have to show, finding by finding across the records, what each escalating Phase 2 found
+    inside its delta and what it reached only by tracing outward from it.
+  - REOPEN unchanged.
+- **Prose the change made false, found by a fresh agent: 34 records.**
+  - +PR 100: cycle 4's Phase 1 found two unchanged passages the slice falsified.
+  - The Phase 2 passes of cycles 4 and 5 each found a false `evidence.md` sentence that the slice
+    wrote.
+  - Cycle 6's first Phase 1 pass found two documents that `a7cb1dc` made false.
+  - PR 100 is open, so none reached a merged head. REOPEN unchanged.
+- **Usage-limit interruption: 3 records** (:4004).
+  - +PR 100: a claude.ai usage limit at 00:11Z killed the four cycle-3 Phase 2 agents, and the user
+    resumed at 00:21Z. No convergence was lost.
+  - The session ran without `CLAUDE_CODE_RETRY_WATCHDOG`, which is PR 100's own subject.
+- **Not advanced, on the first gate's objection:** *harden's full cycle as a fixed cost on a small fix*
+  (:4063) stays at #408 alone. That class is a 2-line change with lenses under a minute each. PR 100
+  was 19 files, +810, with Phase 2 passes of 25-35 min, and its cost belongs to the escalation park.
+
+**Parked, new, 1 record each.**
+- **A `/harden` run in a cloud container had no harden Stop gate registered** (PR 100).
+  - The container's one Stop hook was `stop-hook-git-check.sh`. The run recorded its state with the
+    repo's vendored `gate-state` (L1037), which no hook read, so nothing enforced its termination or
+    its yields.
+  - Cost: none observed, since the run was attended and converged.
+  - **REOPEN ON:** a second record, or a cloud run that ended with Phase 1 open or agents outstanding.
+- **A container restart killed an in-flight Phase 1 reviewer** (PR 100). The reviewer was launched at
+  03:39Z, killed at 03:44Z and re-run at 03:45Z, a cost of minutes. **REOPEN ON:** a second record, or
+  one that cost a cycle.
+- **pool-test's `live_session_fixture` leaves an orphan `sleep 300` per case** (PR 100).
+  - The orphans held a harness's captured stdout pipe for about 10 min. Writing to a file avoids it.
+  - This is a test defect, not a skill rule.
+  - **REOPEN ON:** a second record, or one in a pipeline run.
+- **The budgets' unit, `LC_ALL=C wc -w`, is not the linter's count on GNU coreutils 9.4.**
+  - `skill-budgets.json`'s `unit` and `skill-lint.py`'s `words()` docstring say the two agree.
+  - In this container they differ: `LC_ALL=C wc -w` counts harden at `1ed1eaa` as 7322, and the
+    linter counts it as 7429.
+  - GNU `wc` skips a token made only of non-ASCII bytes. `printf 'a — b'` counts as 2 words there, and
+    as 3 under Python's `bytes.split()`.
+  - This window used the linter's count, at no cost. The tool on the operator's machine was not
+    measured.
+  - **REOPEN ON:** a second record, or a budget set from `wc` that the linter then failed.
+
+**Not a lesson:** PR 100's measurements of Claude Code's limit handling. They are the slice's own domain
+evidence, in its artifact: the retry line every 30 s, a `0` in `settings.json` overriding an alias's
+`=1`, and 2.1.307 passing `background_tasks` to the Stop hook.
+## 2026-10-23 (window: no run record — five measurement notes, four `pr-review` replays dated 2026-10-18 and one `harden` measurement dated 2026-10-23) — 1 applied (bar (c)), 0 killed, every ledger entry revised at the first gate, parked below; two refutation rounds, the second over the staged diff; linter 17 files, 0 findings; **harden 0.44.1**
+
+**Step 6's pre-read comparison.**
+
+- `origin/main` (`72df9d9`) and this store agreed on all 415 shared files.
+- They agreed on all 43 governance files (`skills/`, `hooks/`, `CLAUDE.md`, `bin/`, `pipeline/`).
+- Each gate's skill copy matched its hook copy.
+- The five notes were local-only, and this ledger named none of them.
+- Nothing was drawn from `confidential/`. Only its file names and `PRS` were read, as Step 1 allows.
+
+No run record is newer than `LAST`, so nothing here corroborates a lesson. A measurement "is admissible
+as argument … and has never counted as corroboration" (:2148-2150). The one skill edit is a bar-(c)
+correction.
+
+- The proposals, both gates' verbatim replies and the revisions are in
+  `proposals/2026-10-23-window-five-measurements.md`.
+- This pass's instruments and their outputs are in `artifacts/2026-10-23-retro-window/`. Its README
+  says which output backs which figure below.
+
+**Re-derived rather than taken from the notes.**
+
+- The 6551, queue96 and union-556 notes' own `scripts/score.py` print their tables.
+- The reviewer-brief-556 note has no adjudication. Its "S1: R 0 of 3, P 0 of 3" holds under a search
+  whose pattern hits that note's protocol (`notes-checks.out` 1).
+- The harden note's `rederive.sh` reproduced all three of its stages before the deletion recorded
+  below. After it, the rates still re-derive.
+
+**APPLIED · harden 0.44.1, Transition gate: "say BOTH out loud" now reads "say these out loud".**
+
+- Bar (c). :77's "BOTH" stood over three blockquoted sentences, against :85's "ALL THREE sentences".
+  - `01d1cd2` (2026-05-20) wrote "BOTH" when the gate had two sentences.
+  - `c18bf29` (2026-05-20) added the third sentence and changed :85, but not :77.
+- "these" replaces the draft's "them", at the gate's suggestion: "them" reads back to the stop
+  conditions at :72-75.
+- The edit is word-neutral: 7429 words, the budget.
+- `evidence.md` has no Transition gate entry, so nothing moved.
+- `skill-lint.py` did not flag the stale count; see the linter entry below.
+
+**Measured and not adopted: skill-text candidates the 2026-10-18 notes tested.** Each one is recorded in
+its own note. REOPEN ON for each: a measurement on another PR where the candidate moves a
+pre-registered outcome.
+
+- **(a) A verification-techniques file beside `pr-review`, with a Step 3 pointer** (6551, arm K).
+  - The file was read in 3 of 3 runs, the non-admin probe run in 1, `NOT_SUPPORTED` in 0.
+  - L04 filed blocking: 0 of 3, against the control's 0 of 3.
+- **(b) A *Trace outward* thread naming transaction, flush, handler order and required privilege**
+  (queue96, arm T). Its runs asked the transaction question in 3 of 3 runs and answered it wrongly in
+  3 of 3 (K7 0 of 3), on the subject the text was written from.
+- **(c) The per-condition mutation sentence** (queue96 T, 6551 M).
+  - T's unique REAL defect, the unpinned `purgeVisit` guard (2 of 3 runs), was not a pre-registered
+    target.
+  - On 6551, M found 0 of its targets (L06/L08), and the mutation-shaped finding there came from C and
+    K.
+- **(d) "A concern is cleared by the same bar a finding has to meet"** (queue96, arm V,
+  `…-queue96.md`:28-30, added after waves 1-2). K7 0 of 3, and wt-12 cleared it "by reading the proxy
+  chain only, so not raised" (:65-66).
+- **(e) "A claim in the review conversation about runtime or framework behaviour is a lead to verify,
+  whoever made it"** (queue96 `PROTOCOL.md`:115-117). Tested by withholding the conversation (arm B):
+  K7 0 of 3.
+- **(f) `pr-harden/reviewer.md`'s "never against the PR description" sentence, ported into
+  `pr-review`** (556, arm P, with "agent" read as "person"). S1 0 of 3.
+  - The pipeline's own round-1 brief with today's `reviewer.md` (arm R) also found S1 in 0 of 3.
+  - So its 2026-09-29 catch rests on one run.
+
+**Parked, measurements only, 0 run records.**
+
+- **A demonstrated privilege bypass filed below blocking.**
+  - On 6551, all 6 L04 findings were filed as questions (`notes-checks.out` 3). One of them is
+    wt-02's, filed after it ran the exploit with a positive control.
+  - The 2026-09-11 A/B's control filed L04 as a suggestion (`…-ab.md`:46-47).
+  - `pr-review`:152 sends "uncertainty about an observed side effect" to a question and names no
+    exposure case. :158 makes a written failure mode the blocking test.
+  - The candidate rule, "a privilege bypass you have demonstrated is blocking", rode untested in 556's
+    arm U, because nothing in 556 is an exposure.
+  - **REOPEN ON:** a run record where a demonstrated exposure was filed below blocking, or a
+    measurement of the rule on a PR that holds one.
+- **Routing `could_not_verify` to the author.**
+  - 556: 25 risk items over all nine runs, 19 of them NOISE. Arm U's pairs held 18, 13 of them NOISE
+    (`notes-checks.out` 4). Routing alone reached neither S1 nor S3.
+  - queue96: 6 of 12 runs put K7's unobserved rollback in that field and raised nothing (C 1, T 2,
+    B 0, V 3).
+  - `could_not_verify` is a field of the measurement briefs only. `pr-harden/reviewer.md`:26-33
+    returns `findings` and `notes`, and no live skill names the field.
+  - **REOPEN ON:** a pre-registered measurement where routing reaches a blocker the findings missed,
+    or a run record where a reviewer's `notes` held a blocker the round did not raise.
+- **A union of two independent single-context reviewers** (556, arm U).
+  - S3 surfaced in 1 of 3 pairs, against 0 of 3 controls, below the pre-registered bar.
+  - U bundled the union with routing and the disposition rule, and the one S3 came from a single
+    reviewer (wt-07).
+  - It is not per-dimension fan-out, so it does not meet P-A's condition.
+  - **REOPEN ON:** a pre-registered measurement where a union clears its bar.
+- **A limitation the PR declares, accepted as scope** (556).
+  - S1, and S3 in its narrow form, sit inside limitations the description declared, and all nine
+    `pr-review` replays accepted them.
+  - The run whose round-1 head they replayed did not. #555's r1 raised S1 regardless
+    (`2026-09-29-…-555.md`:17, :31), a record the 2026-09-29 window counted. r1 and r2 missed S3, and
+    the record names no cause (:19).
+  - The closest tested remedy is (f) above, at S1 0 of 3.
+  - **REOPEN ON:** a run record where a declared limitation hid a blocker.
+- **Agent-tool subagents load the project's memory index.** That goes beyond what `pr-harden`:42-44
+  says a non-fork subagent reads ("Any other subagent type starts clean. It still reads `CLAUDE.md`
+  and the repo's skills").
+  - Two observations: queue96's canary (`PROTOCOL.md`:69-72), and this pass's own refuter, whose
+    transcript holds the `MEMORY.md` index as an `AutoMem` record.
+  - **REOPEN ON:** a run record where a reviewer's or refuter's loaded memory carried content about
+    the change under review.
+
+**P-A (:2143, :2307-2327): parking reason qualified, condition unchanged.**
+
+- In the 2026-09-11 A/B's run 1, fan-out found "no blocker the single context missed", partly because
+  its control found L02 (`artifacts/ab-6551/arm-A-control.json` A1, filed blocking).
+- At `pr-review` 0.19.0, L02 was found by 0 of 3 controls and 3 of 9 runs. So that half of "measured
+  twice, no blocker yield either time" rests on a control draw that later measured 0 of 3.
+- That later measurement also used a later skill version and a different harness. The A/B ran
+  Agent-tool subagents (`…-queue96.md`:82-83); 2026-10-18 ran headless clones without project memory.
+- queue96 at `ae7f8fa2` is a subject the condition can use: single contexts missed K7 12 times in 12.
+- No fan-out arm ran in any of the four measurements.
+
+**Phase 2 escalating repeatedly on the run's own fixes (:5378, 31 records; REOPEN at :3998-4000).**
+
+- The remedy "enforce Phase 1's confirming pass" was measured observationally, over 57 public runs and
+  127 classified traversals.
+- After a re-review, 71% of first traversals and 45% of resumed ones escalated. After a mechanical
+  check or nothing, 67% and 54% did.
+- The count and REOPEN are unchanged, since a measurement adds no record. A proposal of this remedy has
+  to show an effect this comparison did not.
+- Limits (`…-confirming-pass.md`:99-101, :107):
+  - the comparison is observational;
+  - one classifier, neither blinded nor independent, sorted every traversal;
+  - 55 of the 57 runs are chartsearchai, from about one week.
+
+**Observed: harden's gate sentences are not said in their literal form** (`gate-sentences-after-deletion.out`,
+with `controls.out`).
+
+- 58 public-record transcripts load harden, all of them on a version carrying every gate. Of those:
+  - 0 state the Transition gate's three sentences or the Termination gate's;
+  - 1 states the Phase 2 gate's (`2026-09-23-…-477.md`'s transcript).
+- Runs announce convergence in their own words ("Harden Phase 1 has converged.").
+- For this population, that contradicts `harden/evidence.md`:214, "the phase gates demand verbatim
+  sentences and get them", which is the Termination gate's stated rationale.
+- 1 measurement.
+- **REOPEN ON:** a proposal to delete or replace those sentences. This count is evidence that they are
+  not said, not that they do nothing.
+- **Corrected the same day (addendum below):** 61 transcripts load harden, not 58; 0 and 2 of them, not
+  0 and 1.
+
+**Linter: `stated_counts` did not flag harden:77.** Three things missed it (`skill-lint.py`:16-18, :27,
+:36): no noun from `NOUNS` followed "BOTH", "both" is not in `WORDS`, and blockquote items are not
+counted.
+
+- A widening run in scratch (`count-widening-before-harden-0.44.1.out`), counting the number words one
+  to ten and "both" with `>` items, gave 15 hits on 13 lines, 1 of them true.
+- "both" alone gave 3 hits, 1 true.
+- A capitals-only "BOTH" gave 1 hit, 1 true, but it is fitted to the one instance.
+- **REOPEN ON:** a second stale count the linter missed.
+
+**Observed, operator action recommended (not a skill change): the transcripts records cite are
+disappearing.**
+
+- During this pass, two transcripts named by public records were deleted: `b2cc1733…` (the 2026-09-16
+  PR440 record) and `56821ae1…` (the 2026-09-21 PR465 record).
+- Claude Code 2.1.309's settings schema describes `cleanupPeriodDays` as "Number of days to retain chat
+  transcripts before automatic cleanup (default: 30)". `~/.claude/settings.json` does not set it.
+- 77 of the 141 distinct paths on public records' `transcript:` lines are gone
+  (`transcript-presence.out`). Five of those belong to records under 30 days old:
+  - one is a `<cwd-slug>` placeholder;
+  - four have lost their whole project directory too, and what removed them was not established.
+- Costs so far:
+  - #250's step attribution can no longer be checked (:5346);
+  - queue96's 2026-09-16 handler-order miss cannot be explained (`…-queue96.md`:80-81);
+  - the harden note's first two stages no longer re-derive.
+- The action is the operator's: a long `cleanupPeriodDays` in `~/.claude/settings.json`.
+- **Corrected the same day (addendum below):** none of those five is lost. Four were relocated by
+  Claude Code, and the fifth's transcript was never moved. 72 of the 77 are gone.
+
+**Observed, no remedy owed.**
+
+- reviewer-brief-556's isolation finding (`…-reviewer-brief-556.md`:43-49): earlier briefs left the
+  scratchpad's other folders readable. A scan of 30 earlier transcripts found no read. This is
+  measurement hygiene, not a skill.
+- queue96's round-1 handler-order miss does not reproduce: 12 of 12 runs found K6
+  (`…-queue96.md`:50).
+
+**Running parked counts:** unchanged. The window holds no run record.
+
+## 2026-10-23 (addendum to the window above, operator-directed: the lost transcripts re-measured by session id) — 2 entries corrected, 1 parked; no skill file changed; **Step 5 not run**
+
+The owner asked, after the window, to "dig into the lost project folders". The re-measure is in
+`artifacts/2026-10-23-retro-window/`, and its README says what each output shows:
+- `transcript_presence.py`, which now also searches every folder by session id, with its output in
+  `transcript-presence.out`;
+- `relocations.py`, with its output in `relocations.out`;
+- `gate-sentences-relocated.out`.
+
+**CORRECTED · the transcript-loss entry.** The block above says four records under 30 days old had lost
+their whole project directory, by a cause not established. The transcripts of all five records under
+30 days old are on disk.
+
+- **Four, Claude Code relocated itself:** #527, #402/PR544, #562 and #564 (`relocations.out`).
+  - Each run entered its worktree with `EnterWorktree`.
+  - Each then looked its transcript up by session id from inside the worktree: #527 at L3120, #402 at
+    L2157, #562 at L2575, #564 at L1575 of its transcript.
+  - Each record names the worktree-folder path that lookup printed.
+  - In each transcript, the last `worktree-state` record shows the worktree session exited, and the
+    last `relocated` record points at the main `chartsearchai` checkout. All four now sit in that
+    checkout's folder.
+  - So each record was right when it was written, and went stale afterwards.
+- **The fifth is the 515 driver capture.** It names an unfilled `<cwd-slug>` placeholder. Its transcript
+  sits under the pipeline worktree's folder and was never relocated.
+- **What is actually gone.** 72 of the 141 paths name a transcript that is missing from every folder.
+  All 72 come from records dated 2026-08-26 to 2026-09-21, more than 30 days old
+  (`transcript-presence.out`).
+  - No mechanism beyond the 30-day cleanup is in evidence.
+  - `cleanupPeriodDays` was set to 3650 on 2026-10-23, at the operator's direction.
+
+**CORRECTED · the gate-sentences entry.**
+
+- Three of the five relocated transcripts load harden, on a version carrying every gate. #527's states
+  the Phase 2 gate's sentence (`gate-sentences-relocated.out`).
+- So the population is 61, not 58:
+  - 0 state the Transition gate's sentences or the Termination gate's;
+  - 2 state the Phase 2 gate's (#477, #527).
+- The entry's reading and its REOPEN stand.
+
+**Affected, not re-run: the harden note's population** (`…-confirming-pass.md`). That population came
+from `public-transcripts.py`, which keeps a transcript only at its recorded path, so the relocated runs
+were left out. Its escalation rates were not re-derived with them.
+
+**Parked for the next retro: the example both evidence files give of a name taken "from anywhere
+else".**
+
+- `pr-harden/evidence.md`:1090 and `resolve-ticket/evidence.md`:591 say "#527 recorded the folder of
+  the worktree it had moved into".
+- #527 found that folder by a `find` on its own session id (L3120), which is the kind of lookup the rule
+  prescribes.
+- #402/PR544, #562 and #564 recorded the same kind of path after the rule shipped (`2794d2c`,
+  2026-09-25), each from a lookup by session id.
+- The rule gives the path as it stands at write time, and Claude Code can move the file afterwards.
+  Read against this, the example looks like a relocation rather than a misnamed path.
+- Not edited here: it is skill text, and this addendum ran no refutation.
+- **REOPEN ON:** the next retro, which owes it a fresh agent's check.
+- Until then, a reader of any record's `transcript:` line should resolve it by session id:
+  `ls ~/.claude/projects/*/<uuid>.jsonl`.
+
+**Deviation, recorded because it is one:** Step 5 was not run on this addendum. Its figures come from
+the outputs it names, and its commits and evidence lines from `git log` and the files cited.
+
+## 2026-10-23 (targeted pass: the #527 example the addendum above parked) — 1 applied after revision, 1 correction found through the second gate's report, 1 parked by the gate; three refutation rounds, the second and third over the staged diff; linter 17 files, 0 findings; **pr-harden 0.41.1, resolve-ticket 0.29.1**
+
+**Step 6's pre-read comparison.** `origin/main` (`92781d1`) and this store agreed on all 590 shared files,
+and on all 43 governance files.
+
+**The window.** No record is newer than `LAST`, so the window is the addendum's parked item and the four
+records it rests on: #527, #402/PR544, #562 and #564.
+- The proposals, each gate's verbatim reply and the revisions are in
+  `proposals/2026-10-23-targeted-527-example.md`.
+- The instruments are in `artifacts/2026-10-23-targeted-527/`, beside `…-retro-window/` from the
+  addendum. Each folder's README maps its figures to their outputs.
+
+**This is not new ground.**
+- The ledger has carried this shape since 2026-10-02: "Transcript paths that moved after the record
+  named them" (:5144-5149), filed under "Observed, no remedy owed" (:5143).
+- On 2026-10-07 :5242-5250 advanced it under "Parked counts advanced" (:5207), with no reopen condition.
+- :5149 left the #527 example "not re-checked".
+- The window block above read these moves as losses (:5751). Its correction (:5757-5758) and the
+  addendum (:5783-5791) re-derived the move without citing either entry.
+
+**APPLIED after revision · pr-harden 0.41.1 and resolve-ticket 0.29.1, `evidence.md`: the #527 example
+is deleted from the list that supports "Take neither name from anywhere else", and a note records why.**
+
+- **Bar: none needed.** Deleting a false clause is a patch (:2454-2455). The note is the measurement
+  that retires the example, which Step 4 keeps in `evidence.md`.
+- **What #527 did** (transcript `ebc78818…`). It answers :5149: the example fits the move.
+  - It started in the main checkout (L5) and entered its worktree with `EnterWorktree` (L119).
+  - From inside the worktree it looked its own session id up (L3120) and wrote that path into its
+    record (L3125). `record-write.out` shows the header naming the folder that then held the transcript.
+  - Claude Code moved the transcript back to the main checkout's folder when the worktree session
+    exited (L3161, L3165).
+- **Revised at the first gate.** The note's lead follows the sibling "*Pruned 0.38.1:*"
+  (`pr-harden/evidence.md`:786), and the note cites the transcript's own lines beside `relocations.out`.
+- **The rule's own count changes.** The 2026-09-25 folder half (:4568-4570) falls from 10 records to 9,
+  which is still bar (a). The rule stands.
+- **Size.** Neither SKILL.md changes beyond its version line, and `evidence.md` has no budget.
+
+**APPLIED as a correction, found through the second gate's report · resolve-ticket 0.29.1
+`evidence.md`:115-116.**
+
+- The entry said TRUNK-6826's transcript "lives under" `core-6826`'s project folder. It now says it
+  lived there while the session worked in that worktree, with a "*Corrected 0.29.1:*" note after the
+  paragraph.
+- During this pass, that session's worktree session exited and Claude Code moved the transcript to
+  `openmrs-core`'s folder (transcript `74a2fd99…`, L1650-L1653). L1652's `cost-state` puts that at
+  2026-10-23T11:24:58Z.
+- `2026-10-11-openmrs-core-TRUNK-6826.md`:5's path is stale for the same reason. The uuid glob resolves
+  it (:5148).
+- Deleting the clause would have broken the entry's reasoning ("which is why a private ticket's slug
+  never carries its key"), so this is replacement text.
+  - It ships on the third gate's verdict: CLEAN.
+  - The note's wording and citations follow that gate's non-blocking points.
+
+**PARKED by the gate · skill-retro Step 1: a reader-side remedy for :5144's shape (look a record's
+transcript up by its session id before reading it as gone).**
+
+- **Bar (a) is not met.**
+  - The four records carry the stale paths, not the lesson.
+  - Both sightings of the lesson are reader passes: the 2026-09-25 owner-directed pass and the
+    2026-10-23 window's retro (:5748-5751). That retro's misreading of all four was one script run.
+  - Step 1 admits run records only (:1502, :2148-2150).
+  - :5144 owed the shape no remedy, and :5242 advanced it with no reopen condition.
+- **The draft's first sentence is false of the store.** It read: "A record's `transcript:` line is
+  where its transcript was when the run wrote it."
+  - #592's second header was wrong when written (below).
+  - The 515 driver capture names a placeholder.
+  - `2026-10-02-chartsearchai-592.md`:5 names a session, not a path.
+  - #505's header names another session (:4604-4606).
+- **The draft would not have reached the 2026-09-25 misreading.** That pass searched by uuid, and read
+  #527 as misnamed, not gone.
+- **Count: 2 reader sightings, 0 run records. REOPEN ON:** a run record where reading a moved
+  transcript's path as lost cost a round, or a second retro that does.
+- **The mechanism, as the gate measured it and this pass re-ran it** (`relocation-mechanism.out`,
+  calibrated in `calibrate.out`):
+  - Re-run after the TRUNK-6826 move: 767 of 767 top-level transcripts sit where their last `relocated`
+    record, or their first cwd when there is none, puts them.
+  - The 8 sessions whose `relocated` records reach outside their first cwd all called `EnterWorktree`.
+    The other 2 callers, #607 and 3787, were refused and moved nothing.
+  - 2 sessions' last `worktree-state` still names a worktree, and both sit in that worktree's folder.
+
+**Correction to :5242-5250, not a new count.**
+
+- :5249, "(`…10-05-…-592.md`:6) names the starting folder": that header was wrong when it was written.
+  - At L2582, from inside `chartsearchai-592`, it named the starting folder.
+  - The transcript was then held for the worktree, after 82 `relocated` records (`record-write.out`).
+  - The worktree session's later exit moved the file to the starting folder, so the header reads right
+    today. The exit is at L2604-L2608; L2606's `cost-state` puts it at 2026-10-08T14:01:02Z.
+- :5245-5246, "the file sits under the worktree's project folder", no longer holds, for the same reason.
+- Neither does :5163-5164, which names that transcript under `-chartsearchai-592/`.
+
+**Running parked counts:**
+- The folder half (:4568-4570) falls from 10 to 9.
+- :5144 stays "no remedy owed", and :5242 keeps no reopen condition.
+- :5149 is now answered, and :5249, :5245-5246 and :5163-5164 are corrected.
+
+## 2026-10-23 (owner-directed: harden's gate sentences, and the confirming-pass measurement re-run with the moved runs) — 1 proposal parked by the gate, 1 measurement re-run; no skill file changed; one refutation round
+
+The owner directed both. The direction on the gate sentences rested on this session's statement that
+runs never state them, and the gate found that statement holds only after harden 0.34.0.
+- The proposal, the gate's reply and what changed are in
+  `proposals/2026-10-23-owner-directed-harden-gate-sentences.md`. One line of the reply is redacted
+  there: it cited a session that belongs to a ticket whose records are confidential.
+- The evidence is in `artifacts/2026-10-23-gate-sentences-periods/` and
+  `artifacts/2026-10-23-harden-phase1-confirming-pass/relocated-addendum/`, each with a README.
+
+**PARKED by the gate · a harden 0.45.0 proposal: each gate states its required content instead of a
+fill-in template.** :5726's REOPEN ("a proposal to delete or replace those sentences") was met, and
+the proposal does not survive the facts.
+
+- **Before 0.34.0** (`6f15b1c`, 2026-09-22). The pool's stream logs, 2026-08-26 to 2026-09-17, cover 13
+  runs that load harden.
+  - 8 of them state the Transition gate's sentences in their literal form.
+  - 6 answer at least 4 of its 6 integration questions in one block (`gate-sentences-pre034.out`,
+    `integ-pre034.out`).
+- **After 0.34.0.** The 61 transcripts behind :5716-5729 do neither: 0 and 0. The most any reaches is
+  3 topics (`integ-post034.out`). So the Transition gate's content went with its wording.
+- **Three changes coincide.** harden 0.34.0 moved the verdict into `gate-state harden-set`. All 13
+  earlier runs ran on Opus 5 or Sonnet 5, and all 61 later ones on Opus 5.5. The 61 ran on Claude Code
+  2.1.280 or later, and the pool logs record no version (`models.out`). These counts cannot separate the
+  three, so the cause is not established.
+- **The gate's other blocking points lapse with the proposal:**
+  - the Phase 2 gate lost "ran once" and its edit count as a number;
+  - that gate went beyond what the owner directed;
+  - the measurement note belonged under each gate's own heading.
+- **REOPEN ON:** the owner deciding again on these facts, or a measurement that separates harden
+  0.34.0 from the model change.
+
+**Corrections to :5716-5729.**
+- Its title and counts hold for its population, which is the runs after 0.34.0, and not before.
+- `harden/evidence.md`:214's "the phase gates demand verbatim sentences and get them" held for the
+  period it was written in (`5bc2d71`, 2026-08-17). The pool logs bear it out.
+- :5723's "for this population" was the right limit.
+
+**Re-run · the harden confirming-pass measurement, with the moved runs** (:5809's "Affected, not
+re-run"):
+
+- Three moved runs, #527, #562 and #564, add 8 traversals to the note's 127.
+- A fresh agent classified them blind, with record and outcome removed, among 12 calibration blocks.
+  It agreed with the note's reader on 10 of 12 exactly, and on 11 of 12 by table group
+  (`score-blind.out`).
+- Over 135 traversals (`combined-rates.out`):
+  - first traversals escalated after a re-review in 72%, and after a mechanical check or nothing in 65%;
+  - resumed traversals, 47% and 54%.
+- The note's reading stands, and its addendum records this. :5703's park and REOPEN are unchanged.
+
+**Running parked counts:** unchanged.
+
+## 2026-10-26 (window: no run record since 2026-10-23) — 0 proposed, 0 applied, 0 killed; no refutation round (nothing to refute); linter 17 files, 0 findings; **no skill file changed**
+
+The store matched `origin/main` at `eeb9648` before the read. Its two files dated 2026-10-22 or later
+were both already counted: the PR 100 record is the whole 2026-10-22 window above, and the harden
+confirming-pass note was read in the 2026-10-23 passes. No remote branch and no pool slot held a newer
+record. `confidential/` was read for names only.
+
+**Correction: citations shifted by the 2026-10-22 window's cherry-pick.** That window was written
+on a branch and landed (`eeb9648`) after the four 2026-10-23 sections, ahead of them in date order. Its
+164 lines moved every line those sections cite inside themselves, so ten citations there were shifted
+by +164 — :5539→:5703, :5552-5565→:5716-5729, :5559→:5723, :5562→:5726, :5584-5587→:5748-5751,
+:5587→:5751, :5593-5594→:5757-5758, :5619-5627→:5783-5791, :5645→:5809. Each new target was checked
+equal to the old one at `7eb600c`. Citations below :5421 did not move.
+
+**Running parked counts:** unchanged.

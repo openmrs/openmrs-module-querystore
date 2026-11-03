@@ -35,6 +35,7 @@ import org.openmrs.module.querystore.backend.Hit;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.JdbcSupport;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -199,6 +200,32 @@ public class MysqlBackendStoreIntegrationTest {
 	public void findAllByPatient_returnsEmptyForNullOrBlankUuid() {
 		assertTrue(backend.findAllByPatient(null).isEmpty());
 		assertTrue(backend.findAllByPatient("").isEmpty());
+	}
+
+	@Test
+	public void findPatientChart_marksAHandledPerTableFailureIncomplete() {
+		QueryDocument obs = doc("obs", "patient-A", "Retained observation", null);
+		assertTrue(backend.upsert(obs).isSucceeded());
+		JdbcSupport.inTransaction(sessionFactory, conn -> {
+			try (Statement stmt = conn.createStatement()) {
+				stmt.executeUpdate("CREATE TABLE querystore_broken (id INT)");
+			}
+		});
+
+		try {
+			PatientChartRead read = new MysqlBackendStore(sessionFactory).findPatientChart("patient-A");
+
+			assertTrue("a handled per-table failure must be disclosed", read.isTruncated());
+			assertEquals(1, read.getDocuments().size());
+			assertEquals(obs.getResourceUuid(), read.getDocuments().get(0).getResourceUuid());
+		}
+		finally {
+			JdbcSupport.inTransaction(sessionFactory, conn -> {
+				try (Statement stmt = conn.createStatement()) {
+					stmt.executeUpdate("DROP TABLE IF EXISTS querystore_broken");
+				}
+			});
+		}
 	}
 
 	@Test
@@ -410,6 +437,21 @@ public class MysqlBackendStoreIntegrationTest {
 		finally {
 			dropBootstrapProgressTable();
 		}
+	}
+
+	@Test
+	public void findLastModified_reportsEachStoredRecordsVersionAndOmitsTheRest() {
+		QueryDocument versioned = doc("obs", "patient-A", "Weight: 70 kg", null);
+		versioned.setLastModified(java.time.Instant.parse("2026-01-02T03:04:05.678Z"));
+		QueryDocument unversioned = doc("obs", "patient-A", "Pulse: 80", null);
+		backend.bulkUpsert(java.util.Arrays.asList(versioned, unversioned));
+
+		java.util.Map<String, java.time.Instant> found = backend.findLastModified("obs",
+		        java.util.Arrays.asList(versioned.getResourceUuid(), unversioned.getResourceUuid(), "never-stored"));
+
+		assertEquals(java.util.Collections.singletonMap(versioned.getResourceUuid(), versioned.getLastModified()), found);
+		assertTrue("a type never written reports nothing",
+		        backend.findLastModified("medication_dispense", java.util.Collections.singletonList("x")).isEmpty());
 	}
 
 	// ---------- helpers ----------

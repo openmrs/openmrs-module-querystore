@@ -1,0 +1,31 @@
+{
+  "pr": 556,
+  "round": 1,
+  "head": "d77204bae7091579a7131f486b613d03e365609d",
+  "findings": [
+    {
+      "id": "r1-1",
+      "blocking": true,
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/reference/DrugSafetyValidator.java",
+      "line": 2136,
+      "finding": "No test pins the reporting direction of the new prose-rule arm. Nothing asserts that, with a wired dataset, an interaction-rule partner the answer does NOT name by its drug is still appended as 'not named above' and still counted unstated. Every pre-existing appending/undercount case in CitedFindingPartnerCompletionTest builds its validator with DrugReferenceTestSupport.validatorRaising(null, chips) (line 621). namesThePartner returns false at its `drugReferenceService == null` guard, so those cases never reach the prose-rule arm and do not run the production configuration. The five new cases all assert the 'stated' direction. Add a case on the OverShippedData arrangement: the answer cites the Rifampicin finding without naming rifampicin, and the test asserts the appended sentence and findingPartners {2,1}.",
+      "failure_mode": "If namesThePartner stops consulting the prose (e.g. returns true on any row-id match), the module never appends an omitted order of an interaction-rule finding, and findingPartners.stated always equals named for them. In production every resolved interaction-rule partner carries rows, so ADR Decision 100's completion and the findingPartners diagnostic are switched off for the most common finding type. The suite stays green.",
+      "evidence": "Mutation: DrugSafetyValidator.namesThePartner `if (ids.contains(row.getId()) && namesAnyOf(lower, row))` changed to `if (ids.contains(row.getId()))`. CitedFindingPartnerCompletionTest (14 tests), FindingPartnerLogDisclosureTest (6) and LlmInferenceServiceAnswerFromFindingsContextTest (27) all pass with 0 failures (surefire reports). Unmutated, a throwaway probe on the alprazolam arrangement ('\u2026active order Nevirapine [4] and with another of her orders [5].') returns the appended 'active order Rifampicin (rifampin)' and FindingPartnerCoverage{named=2, stated=1}. The production behaviour is right; it is just not pinned. File restored and git status clean."
+    },
+    {
+      "id": "r1-2",
+      "blocking": false,
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+      "line": 193,
+      "finding": "Ticket coverage check, recorded for the next round: the ticket's second question ('Can I add dolutegravir to her regimen?') has no case of its own. It goes through the same drug-in-play arm and resolves under the PR: a throwaway probe on the shipped KB with Nevirapine and Rifampicin orders returned an answer naming 'active order Rifampicin' byte for byte, with FindingPartnerCoverage{named=1, stated=1}. All three ticket shapes (alprazolam, dolutegravir, medication screen) resolve. No change required. A dolutegravir case would pin the ticket's whole list cheaply, if wanted.",
+      "failure_mode": "",
+      "evidence": "Throwaway test probeDolutegravir in CitedFindingPartnerCompletionTest (since reverted): output 'Dolutegravir needs a dose change: it interacts with active order Rifampicin [5]. | FindingPartnerCoverage{named=1, stated=1}'."
+    }
+  ],
+  "notes": [
+    "Approach: carrying the partner's resolved rows structurally and asking DrugReference.matchesText through namesThePartner mirrors the sibling namesTheFindingsSubject/namesTheEndedOrderDrug. It avoids re-resolving the printed label (#151) and a fourth name-matching rule (reference CLAUDE.md 'Matching a drug name'). It is the right shape and better than stripping the parenthetical.",
+    "Every SafetyWarning copy path (withMatchedOrderNames, withCurrentOrderDisplays, asStatedInTheAnswer, aboutSubstance, asAboutAnEndedOrder) carries partnerRows. The partnerRows keys match namedPartners at all three write sites: singletonList(partnerName) for both arms, and `partners` for the merged chip.",
+    "The changes to CitationGroundingVerifierTest, LlmInferenceServiceTest and OrderStopDateStatementTest only add the constructor's new null argument.",
+    "The condition-mediated finding's orders carry no rows and no case measures them. The ADR amendment states this; it is residue in the reporting direction."
+  ]
+}

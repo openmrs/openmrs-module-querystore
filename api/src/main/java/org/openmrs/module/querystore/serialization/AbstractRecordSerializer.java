@@ -12,6 +12,8 @@ package org.openmrs.module.querystore.serialization;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CONCEPT_CLASS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CONCEPT_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CONCEPT_UUID;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CLINICAL_DATE;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DATE_KIND;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_DESCRIPTION;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ENCOUNTER_TYPE_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ENCOUNTER_TYPE_UUID;
@@ -20,11 +22,14 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_FORM_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_FORM_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_LOCATION_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_LOCATION_UUID;
+import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_CODES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_MAPPING_NAMES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PROVIDER_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_PROVIDER_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_VISIT_UUID;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_CLINICAL_EVENT;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_UNKNOWN;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -60,6 +65,11 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 		doc.setPatientUuid(getPatientUuid(record));
 		doc.setResourceUuid(getResourceUuid(record));
 		doc.setDate(getDate(record));
+		LocalDate clinicalDate = getClinicalDate(record);
+		if (clinicalDate != null) {
+			doc.putMetadata(FIELD_CLINICAL_DATE, clinicalDate.toString());
+		}
+		doc.putMetadata(FIELD_DATE_KIND, getDateKind(record));
 		doc.setLastModified(getLastModified(record));
 		populate(record, doc);
 		String text = doc.getText();
@@ -74,6 +84,22 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 	protected abstract String getResourceUuid(T record);
 
 	protected abstract LocalDate getDate(T record);
+
+	/**
+	 * Clinical date used for explicit temporal reasoning. Most source records use their record date;
+	 * serializers with a distinct onset, enrollment, dispense, or administrative date override it.
+	 */
+	protected LocalDate getClinicalDate(T record) {
+		return getDate(record);
+	}
+
+	/**
+	 * Describes the meaning of {@link #getDate(Object)}, not whether a record contains any clinical
+	 * fact. This prevents a record-created timestamp from being presented as an encounter date.
+	 */
+	protected String getDateKind(T record) {
+		return getDate(record) == null ? DATE_KIND_UNKNOWN : DATE_KIND_CLINICAL_EVENT;
+	}
 
 	/**
 	 * Returns the source-entity timestamp the backend uses as a write-version: any concurrent write
@@ -142,12 +168,18 @@ public abstract class AbstractRecordSerializer<T> implements ClinicalRecordSeria
 	 * drug-class parents) into {@link QueryStoreConstants#FIELD_MAPPING_NAMES} as a list of
 	 * strings. Same shape and extraction rationale as {@link #putDescription}: a separate
 	 * BM25-only channel populated from external-authority vocabulary the preferred name lacks.
-	 * No-op on null concept or when no mapping carries a populated reference-term name.
+	 Writes the same mappings' {@code SOURCE:CODE} codes into
+	 * {@link QueryStoreConstants#FIELD_MAPPING_CODES}, which exact matching reads (ADR Decision 17 §2)
+	 * and which, like the names, is never embedded. Each field is written only where it has values.
 	 */
 	protected final void putMappingNames(QueryDocument doc, Concept concept) {
 		List<String> names = ConceptNameUtil.getMappingNames(concept);
 		if (!names.isEmpty()) {
 			doc.putMetadata(FIELD_MAPPING_NAMES, names);
+		}
+		List<String> codes = ConceptNameUtil.getMappingCodes(concept);
+		if (!codes.isEmpty()) {
+			doc.putMetadata(FIELD_MAPPING_CODES, codes);
 		}
 	}
 

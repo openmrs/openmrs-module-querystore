@@ -65,8 +65,9 @@ public final class BackendDocs {
 	 * Comparator.
 	 *
 	 * <p>Each backend collects its per-tier candidate set (JDBC scan, Lucene {@code SimpleCollector},
-	 * ES wildcard search — the ES tier additionally pushes a {@code (record_date desc, _doc asc)}
-	 * sort to the cluster so the 10 000-hit single-search cap keeps the most-recent slice). The
+	 * ES wildcard search — the ES tier additionally pushes the same
+	 * {@code (record_date desc, resource_type asc, resource_uuid asc)} sort to the cluster so the
+	 * 10 000-hit single-search cap keeps a deterministic most-recent slice). The
 	 * Comparator below is then re-applied in-Java on all three tiers so the final emitted order is
 	 * byte-identical across backends — the cross-tier eval cannot drift on sort-key alone.
 	 */

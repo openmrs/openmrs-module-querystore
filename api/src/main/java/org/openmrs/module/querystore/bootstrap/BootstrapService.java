@@ -23,7 +23,9 @@ import org.openmrs.api.OpenmrsService;
 public interface BootstrapService extends OpenmrsService {
 
 	/** Runs backfill for every registered resource type sequentially. A per-type failure does not
-	 *  abort the rest; failed types stay in {@link BootstrapStatus#FAILED} and can be retried. */
+	 *  abort the rest; failed types stay in {@link BootstrapStatus#FAILED} and can be retried. A closed
+	 *  embedding provider is not a per-type failure: the run ends at the type it interrupted and
+	 *  rethrows the {@code EmbeddingProviderClosedException}. */
 	void bootstrap();
 
 	/** Runs backfill for a single resource type. Resumes from the persisted cursor if a prior
@@ -66,9 +68,11 @@ public interface BootstrapService extends OpenmrsService {
 	 * <p>Idempotent: repeated calls write the same documents and rely on the Decision 3
 	 * version-protection invariant for races with concurrent steady-state writes. Concurrent calls
 	 * for the same patient serialize on a per-patient lock; concurrent calls for different patients
-	 * run in parallel. Per-record and per-type failures are isolated and logged; after attempting
-	 * every type, a type that failed is reported by throwing {@link PartialProjectionException}, so a
-	 * caller does not take an incomplete chart as indexed.
+	 * run in parallel. Per-record and per-type failures are isolated and logged, so every type is
+	 * attempted; if any record was left out the method then throws {@link IncompleteProjectionException}
+	 * naming how many types and records failed. Whatever did project stays indexed. Such a patient
+	 * stays cold (see {@link #isPatientProjectionIncomplete}): a later call projects it again even
+	 * though it has documents.
 	 *
 	 * <p>Persists no progress row — the per-patient cursor lives only for the call. A bootstrapper
 	 * that declares no per-patient story (the {@link TypeBootstrapper#fetchPageForPatient} default
@@ -90,6 +94,14 @@ public interface BootstrapService extends OpenmrsService {
 	}
 
 	/**
+	 * Whether the last per-patient projection of {@code patientUuid} ({@link #ensureIndexed} or
+	 * {@link #reindexPatient}) in this JVM left records out. The patient may already have documents,
+	 * so a reader that gates the cold touch on the backend's existence probe asks this as well,
+	 * projects the patient again, and reports the chart incomplete while the gap remains.
+	 */
+	boolean isPatientProjectionIncomplete(String patientUuid);
+
+	/**
 	 * Forces a full re-projection of one patient: deletes the patient's existing read-store
 	 * documents, then re-projects every registered resource type from core — the same per-type
 	 * projection {@link #ensureIndexed(String)} uses, but <em>unconditional</em>. Unlike
@@ -100,15 +112,21 @@ public interface BootstrapService extends OpenmrsService {
 	 *
 	 * <p>Delete and re-projection run under the same per-patient lock as {@code ensureIndexed}, so
 	 * a concurrent cold-touch projection cannot interleave with the delete and leave the patient
-	 * under-indexed. No-op for a null/blank uuid. Per-record and per-type failures are isolated and
-	 * logged, and a failed type is reported by throwing {@link PartialProjectionException}, matching
-	 * {@code ensureIndexed}.
+	 * under-indexed. No-op for a null/blank uuid. Per-record and per-type failures are isolated,
+	 * logged and then reported as an {@link IncompleteProjectionException}, matching {@code ensureIndexed}.
 	 */
 	void reindexPatient(String patientUuid);
 
 	List<BootstrapProgress> getStatus();
 
 	BootstrapProgress getStatus(String resourceType);
+
+	/**
+	 * {@link #getStatus()} as a report over every registered resource type, counting only the rows
+	 * written for the current {@code querystore.backend}: after a backend switch, rows the previous
+	 * backend completed say nothing about what the current one holds.
+	 */
+	BootstrapStatusReport getStatusReport();
 
 	/**
 	 * Read-only drift snapshot for every resource type (ADR: Sync reliability and reconciliation):

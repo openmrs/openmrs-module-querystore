@@ -1,12 +1,15 @@
 # Query Store REST API
 
-The query store's primary consumer surface is the in-process Java service
-(`QueryStoreService`); see [ADR Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface).
-These REST endpoints are **operational tooling, not the query surface** — an *observability* read
-(is this deployment fully indexed?) and *administrative maintenance* triggers (re-index one patient,
-or kick off the full backfill, without a restart). They exist because a deployment seeded by a SQL
-dump bypasses the live indexing bridge and depends on the background bootstrap completing, and that
-completion was otherwise unobservable and unrepairable on a live instance.
+The query store's primary in-JVM consumer surface is the Java `QueryStoreService`; see
+[ADR Decision 14](./adr.md#decision-14-authorization-and-consumer-api-surface). The REST API adds:
+
+- a thin read adapter for authorized non-JVM clients and external services such as med-agent-hub; and
+- operational endpoints for observing and repairing index state.
+
+The read adapter delegates to the existing service methods and applies their read policy,
+including the per-type privilege filter. Full-chart reads report the service's completeness
+signals (`chartTruncated`, `projectionComplete`); the adapter does not reconcile or repair the
+index per request.
 
 All endpoints are served under the OpenMRS REST namespace (the module requires the
 `webservices.rest` module):
@@ -19,10 +22,101 @@ Authenticate with any OpenMRS REST mechanism (HTTP Basic shown below).
 
 ---
 
+## GET `/ws/rest/v1/querystore/patientrecord`
+
+Returns query-store records through the existing `QueryStoreService` behavior:
+
+| Parameters | Service method | Ordering |
+|---|---|---|
+| `patient=<uuid>` | `getPatientChart(patient)` | Full materialized patient chart, newest first |
+| `patient=<uuid>&q=<text>` | `searchByPatient(patient, q, k)` | Ranked patient results |
+| `q=<text>` | `search(q, k)` | Ranked cross-patient results |
+| `patient=<uuid>&mode=context&q=<text>&interpret=true` | `getContextSlice(patient, q, request)` | Tiered question context in chart order |
+
+- **Privilege:** `Get Patients`. Records of a type the caller cannot read through core are
+  omitted: obs need `Get Observations`, conditions `Get Conditions`, orders `Get Orders`, and so
+  on for each core type ([ADR Decision 14](adr.md#decision-14-authorization-and-consumer-api-surface)).
+  The full chart's `totalCount` counts the records returned, and a ranked read can return fewer
+  than `limit`.
+- **Paging:** `limit` defaults to `50`; `startIndex` defaults to `0`. A `limit` above the
+  configured absolute maximum (`webservices.rest.maxResultsAbsolute`, default `100`) is clamped
+  to that maximum silently, where framework-backed resources reject it; the response's `links`
+  carry the effective page size. Paging links use the request's complete endpoint URL,
+  including the web application's context path, so clients can follow them directly.
+  A ranked read whose window (`startIndex + limit`) would extend
+  past that maximum returns `400`, because ranked windows are not paged past the maximum result
+  count.
+- **Shape:** `results`, `totalCount`, and `links`. Full-chart reads also include
+  `chartTruncated`. It is `true` when a documented cap or handled backend read failure may have
+  omitted records, or while this patient's last projection has left records out; that mark is held
+  in memory and does not survive a restart. For full-chart reads,
+  `totalCount` is the number of records materialized by the configured backend, so clients must not
+  infer completeness from the count. `projectionComplete` is true only when every currently
+  registered resource type has completed a bootstrap into the configured backend; a type whose earlier bootstrap completed
+  still counts while a restart's top-up walks it again, and a type being reset or resynced does
+  not. An older `QueryStoreService` implementation that cannot prove this reports false.
+  Full-chart reads also name in `withheldTypes` every core type the caller holds no core read
+  privilege for, whose records the chart left out, and carry a stable
+  `snapshotId` for the complete materialized chart. Ranked top-K reads use `null` because the
+  service does not expose a browseable total.
+- **Records:** `resourceType`, `resourceUuid`, ISO `date` (the record's sort date),
+  `clinicalDate` (the event date safe for temporal use, or `null`), `dateKind`
+  (`clinical_event`, `administrative`, or `unknown`), `lastModified`, `text`, and `metadata`.
+  Consumers must not treat `date` as a clinical event date when `dateKind` is not
+  `clinical_event`. Ranked records also carry a 1-based `rank`.
+- **Excluded:** embeddings and backend scores are never returned.
+
+Context mode adds a `tier` to every record. A record selected by the similarity tier carries its
+original 1-based search `rank`, and keeps it when panel completion promotes it to the protected
+`panel` tier, even though the slice itself remains in chart order. A search hit that a higher tier
+already selected carries no `rank`. The
+response returns `chartSize`, `chartTruncated`,
+`effectiveTypes`, `withheldTypes`, `temporalApplied`, `chartSnapshotId`, and `sliceId`.
+`withheldTypes` names every core type the caller holds no core read privilege for, whether or not
+it was requested; those types are left out of `effectiveTypes` and the mandatory tier, so an empty
+tier is never a type the caller was refused. The `chartSnapshotId`
+fingerprints the complete chart materialization from which the selection was made. Consumers that
+combine a full-chart ledger with a later context slice must require matching snapshot IDs and retry
+or fail when they differ. The `sliceId` fingerprints the complete ordered
+selection and its effective interpretation, so an external client can reject pages from different
+context slices. It is not a full-chart snapshot, an HTTP cache validator, or a promise that the
+underlying chart is complete. Context pages are question-dependent and are not cached.
+
+For a full-chart page, the response has a strong page-specific `ETag`, which also changes with
+the types withheld from the caller, and
+`Cache-Control: private, no-cache, must-revalidate`. Send that token as `If-None-Match` on the
+same page request: an unchanged page returns `304 Not Modified` with no clinical payload. The
+`snapshotId` covers the materialized records and their completeness state, so a multi-page consumer
+rejects pages whose snapshot does not match the first page. Ranked searches are intentionally
+uncached windows.
+
+The endpoint surfaces, but does not repair, projection completeness. Operational diagnosis and
+repair remain the responsibility of `/indexingstatus`, `/drift`, and `/reindex`; ordinary reads do
+not trigger a full patient rebuild.
+
+```bash
+curl -s -u patient-reader:secret \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&limit=500'
+
+curl -s -u patient-reader:secret \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patientrecord?patient=patient-uuid&mode=context&q=current%20medications&interpret=true&limit=100'
+```
+
+**Errors:** missing `patient` and `q`, a blank `patient`, invalid paging, or malformed parameters return `400`; an
+unknown patient returns `404`; failed authentication/authorization returns `401`/`403`.
+The `types`, `temporal`, and `interpret` parameters require `mode=context`; supplying
+them on a full-chart or ranked read returns `400` instead of silently ignoring them.
+Explicit context `types` must name registered serializers; unknown names return
+`400`. Registered module types are accepted even if they have no bootstrapper.
+
+---
+
 ## GET `/ws/rest/v1/querystore/indexingstatus`
 
 Returns the per-resource-type bootstrap (initial-backfill) status, plus a single derived
-`complete` flag answering **"is this deployment fully indexed?"**.
+`complete` flag answering **"is this deployment fully indexed?"**. A row written for another
+`querystore.backend` counts as not started: the next bootstrap resets it, and the configured
+backend holds none of its documents.
 
 - **Privilege:** `Get Patients` — a `failureMessage` can contain internal record/patient
   identifiers, so it is gated like the query store's read API.
@@ -60,8 +154,8 @@ Returns the per-resource-type bootstrap (initial-backfill) status, plus a single
 
 | Field | Meaning |
 |---|---|
-| `complete` | `true` **only** when at least one type is tracked **and every** tracked type is `COMPLETED`. Any `RUNNING`/`FAILED`/`NOT_STARTED` type — or an empty progress table — yields `false`. This is the headline "fully indexed?" answer. |
-| `types[].status` | `NOT_STARTED` \| `RUNNING` \| `COMPLETED` \| `FAILED`. |
+| `complete` | `true` **only** when every currently registered type has a `COMPLETED` progress row. Any missing, `RUNNING`, `FAILED`, or `NOT_STARTED` type — or an empty registered-type set — yields `false`. This is the headline "fully indexed?" answer. |
+| `types[].status` | `NOT_STARTED` \| `RUNNING` \| `COMPLETED` \| `FAILED`. A registered type with no persisted progress row is included as `NOT_STARTED`, so an interrupted bootstrap identifies what never began. |
 | `types[].documentsIndexed` | Documents written for that type so far. |
 | `types[].cursorDateChanged` | The backfill resume cursor (ascending `dateChanged`); records changed after this are not yet indexed. ISO-8601, or `null`. |
 | `types[].startedAt` / `completedAt` | ISO-8601 timestamps, or `null`. |
@@ -97,6 +191,12 @@ have *some* documents.
 ```json
 { "patient": "dd9836d7-1691-11df-97a5-7038c432aabf", "documentsIndexed": 154 }
 ```
+
+If any record could not be re-projected (a type failed, or a record could not be embedded or
+written), the call returns `500` with the same `patient` and `documentsIndexed` (what did project
+stays indexed) and an `error` naming how many types and records failed. Full-chart reads of that
+patient then report `chartTruncated: true` until a projection completes, or until a restart, since
+the mark is held in memory.
 
 ```bash
 curl -s -X POST -u admin:Admin123 -H 'Content-Type: application/json' \

@@ -16,9 +16,12 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -35,6 +38,7 @@ import org.openmrs.module.querystore.backend.Filter;
 import org.openmrs.module.querystore.backend.HealthStatus;
 import org.openmrs.module.querystore.backend.Hit;
 import org.openmrs.module.querystore.backend.MetadataCodec;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -42,10 +46,7 @@ import org.openmrs.module.querystore.backend.WriteResult;
 import org.openmrs.module.querystore.model.QueryDocument;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.elasticsearch._types.BulkIndexByScrollFailure;
-import co.elastic.clients.elasticsearch._types.Conflicts;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
-import co.elastic.clients.elasticsearch._types.ErrorCause;
 import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.KnnSearch;
 import co.elastic.clients.elasticsearch._types.Refresh;
@@ -57,10 +58,12 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.cluster.HealthResponse;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
-import co.elastic.clients.elasticsearch.core.DeleteByQueryResponse;
+import co.elastic.clients.elasticsearch.core.GetResponse;
+import co.elastic.clients.elasticsearch.core.MgetResponse;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem;
 
 /**
  * Elasticsearch reference {@link BackendStore} (Decision 3, "large" tier). One ES index per
@@ -68,6 +71,14 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
  * and BM25 text. The durable+visible contract is satisfied by {@code refresh=wait_for} on every
  * write; the conditional-upsert-by-version invariant is enforced via external versioning
  * ({@code version_type=external_gte} with {@code last_modified} as the version).
+ *
+ * <p>Deletes are issued at the document's own version. Elasticsearch keeps a tombstone for a deleted
+ * document ({@code index.gc_deletes}, 60 s by default) and, while it is retained, rejects a versioned
+ * write strictly below the tombstone's version; an unversioned delete would set that version one above
+ * the document's, so the same-version rewrite that a patient reindex, a merge sweep or an unvoid issues
+ * straight after the delete would be dropped as stale. At the document's own version the equal-or-newer
+ * rewrite applies, and a strictly older write does not resurrect the record for as long as the
+ * tombstone is kept.
  *
  * <p>Hybrid retrieval inherits the {@link BackendStore#hybrid(SearchRequest)} interface-default
  * RRF over {@link #bm25(SearchRequest)} and {@link #knn(SearchRequest)} the same way every tier
@@ -93,6 +104,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 
 	// Mirror Lucene's HNSW candidate-width floor. Wider than k for better recall on small limits.
 	private static final long KNN_NUM_CANDIDATES_FLOOR = 100L;
+
+	/** Elasticsearch refuses a {@code num_candidates} above this. */
+	private static final long KNN_NUM_CANDIDATES_MAX = 10_000L;
 
 	private final ElasticsearchClientFactory clientFactory;
 
@@ -157,16 +171,45 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 	}
 
+	/** The stored document's version, or {@code null} when the index holds no such document. */
+	Long currentVersion(String index, String id) throws IOException {
+		GetResponse<Void> current = client().get(g -> g.index(index).id(id).source(src -> src.fetch(false)), Void.class);
+		return current.found() ? current.version() : null;
+	}
+
 	@Override
 	public WriteResult delete(String resourceType, String resourceUuid) {
 		String index = ElasticsearchSchemaManager.indexName(resourceType);
 		try {
-			client().delete(d -> d.index(index).id(resourceUuid).refresh(Refresh.WaitFor));
-			return WriteResult.success();
+			while (true) {
+				Long version = currentVersion(index, resourceUuid);
+				if (version == null) {
+					// Idempotent delete: a missing doc is the second-call no-op outcome.
+					return WriteResult.success();
+				}
+				try {
+					client().delete(d -> d.index(index).id(resourceUuid).refresh(Refresh.WaitFor)
+					        .versionType(VersionType.ExternalGte).version(version));
+					return WriteResult.success();
+				}
+				catch (ElasticsearchException e) {
+					// A write landed between the version read and the delete: the document now carries a
+					// newer version, so read it again and delete at that one. Nothing above retries a
+					// failed delete, so the retry lives here.
+					if (!isVersionConflict(e)) {
+						throw e;
+					}
+				}
+				catch (IOException e) {
+					if (!isVersionConflict(e)) {
+						throw e;
+					}
+				}
+			}
 		}
 		catch (ElasticsearchException e) {
 			if (e.status() == 404 || "index_not_found_exception".equals(e.error().type())) {
-				// Idempotent delete: missing doc or missing index is the second-call no-op outcome.
+				// Idempotent delete: a missing index is the second-call no-op outcome.
 				return WriteResult.success();
 			}
 			SafeLog.warn(ElasticsearchBackendStore.class, "delete failed for " + resourceType + "/" + SkipLogFormat.loggableUuid(resourceType, resourceUuid), e);
@@ -203,17 +246,58 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		for (int start = 0; start < resourceUuids.size(); start += BATCH_SIZE) {
 			int end = Math.min(start + BATCH_SIZE, resourceUuids.size());
 			List<String> chunk = resourceUuids.subList(start, end);
-			List<BulkOperation> ops = new ArrayList<>(chunk.size());
-			for (String uuid : chunk) {
-				ops.add(BulkOperation.of(b -> b.delete(d -> d.index(index).id(uuid))));
-			}
+			// The ids whose outcome is not counted yet: the whole chunk until the read answers, then only
+			// the ids the read found and the bulk request still has to delete. A failure of either call
+			// is reported for these alone, so an id the read already settled is counted once.
+			List<String> pending = chunk;
 			try {
-				BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
-				succeeded += countBulkSuccess(resp, resourceType, failures);
+				List<BulkOperation> ops = new ArrayList<>(chunk.size());
+				List<String> awaitingDelete = new ArrayList<>(chunk.size());
+				MgetResponse<Void> current = client().mget(m -> m.index(index).ids(chunk).source(src -> src.fetch(false)),
+				    Void.class);
+				for (MultiGetResponseItem<Void> item : current.docs()) {
+					if (item.isFailure()) {
+						if ("index_not_found_exception".equals(item.failure().error().type())) {
+							// Idempotent delete: a missing index is the second-call no-op outcome, as delete()
+							// treats it. mget reports it per item rather than throwing.
+							succeeded++;
+							continue;
+						}
+						// A per-id read failure (a shard problem, typically) is transient from the caller's view;
+						// a request Elasticsearch rejects outright (an empty id) is not.
+						boolean retryable = !"illegal_argument_exception".equals(item.failure().error().type());
+						failures.add(new DocFailure(resourceType, item.failure().id(), item.failure().error().reason(), retryable));
+						continue;
+					}
+					if (!item.result().found()) {
+						// Idempotent delete: a missing doc is the second-call no-op outcome.
+						succeeded++;
+						continue;
+					}
+					Long version = item.result().version();
+					ops.add(BulkOperation.of(b -> b.delete(d -> d.index(index).id(item.result().id())
+					        .versionType(VersionType.ExternalGte).version(version))));
+					awaitingDelete.add(item.result().id());
+				}
+				pending = awaitingDelete;
+				if (!ops.isEmpty()) {
+					BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
+					succeeded += countBulkSuccess(resp, resourceType, failures, false);
+				}
 			}
-			catch (ElasticsearchException | IOException e) {
+			catch (ElasticsearchException e) {
+				if (e.status() == 404 || "index_not_found_exception".equals(e.error().type())) {
+					succeeded += pending.size();
+					continue;
+				}
 				SafeLog.warn(ElasticsearchBackendStore.class, "bulkDelete chunk failed for " + resourceType, e);
-				for (String uuid : chunk) {
+				for (String uuid : pending) {
+					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
+				}
+			}
+			catch (IOException e) {
+				SafeLog.warn(ElasticsearchBackendStore.class, "bulkDelete chunk failed for " + resourceType, e);
+				for (String uuid : pending) {
 					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
 				}
 			}
@@ -223,47 +307,96 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 
 	@Override
 	public BulkWriteResult bulkDeleteByPatient(String patientUuid) {
-		// Single cross-index call — ES handles the querystore_* wildcard natively, no per-type loop.
-		// wait_for_completion + refresh=true together satisfy the durable+visible contract.
+		// Read the patient's documents with their versions and delete each at that version, a page at a
+		// time, until a read finds none left. A document rewritten between the read and the delete
+		// conflicts and is read again at its new version on the next pass; the loop stops when a pass
+		// deletes nothing, and reports that pass's failures. Each pass that deletes something shrinks
+		// what remains, so with no concurrent writer the passes are bounded by the number of documents;
+		// a writer that keeps reinserting the patient's records keeps the loop going, and the callers
+		// (a merge, a void cascade) run with no such writer.
+		Set<String> matched = new HashSet<>();
+		int deleted = 0;
 		List<DocFailure> failures = new ArrayList<>();
-		long deleted = 0;
-		long matched = 0;
 		try {
-			DeleteByQueryResponse resp = client().deleteByQuery(d -> d
-			        .index(ALL_INDICES_PATTERN)
-			        .allowNoIndices(true)
-			        .ignoreUnavailable(true)
-			        .query(Query.of(q -> q.term(t -> t.field(ElasticsearchFieldNames.PATIENT_UUID).value(patientUuid))))
-			        .refresh(true)
-			        .waitForCompletion(true)
-			        .conflicts(Conflicts.Proceed));
-			deleted = resp.deleted() == null ? 0L : resp.deleted();
-			matched = resp.total() == null ? deleted : resp.total();
-			if (resp.failures() != null) {
-				for (BulkIndexByScrollFailure scrollFailure : resp.failures()) {
-					String type = scrollFailure.index() == null ? null : BackendDocs.stripPrefix(scrollFailure.index());
-					ErrorCause cause = scrollFailure.cause();
-					String reason = cause == null ? null : cause.reason();
-					failures.add(new DocFailure(type, scrollFailure.id(), reason,
-					        isRetryableStatus(scrollFailure.status())));
+			while (true) {
+				SearchResponse<Void> page = client().search(s -> s
+				        .index(ALL_INDICES_PATTERN)
+				        .allowNoIndices(true)
+				        .ignoreUnavailable(true)
+				        // A search some shards did not answer would delete the readable records and then
+				        // report the patient's chart gone; such a search fails instead.
+				        .allowPartialSearchResults(false)
+				        .size(FULL_CHART_MAX_HITS)
+				        .trackTotalHits(t -> t.enabled(false))
+				        .version(true)
+				        .source(src -> src.fetch(false))
+				        .query(Query.of(q -> q.term(t -> t.field(ElasticsearchFieldNames.PATIENT_UUID).value(patientUuid)))),
+				    Void.class);
+				List<co.elastic.clients.elasticsearch.core.search.Hit<Void>> hits = page.hits().hits();
+				if (hits.isEmpty()) {
+					break;
+				}
+				List<BulkOperation> ops = new ArrayList<>(hits.size());
+				for (co.elastic.clients.elasticsearch.core.search.Hit<Void> hit : hits) {
+					matched.add(hit.index() + "/" + hit.id());
+					Long version = hit.version();
+					ops.add(BulkOperation.of(b -> b.delete(d -> d.index(hit.index()).id(hit.id())
+					        .versionType(VersionType.ExternalGte).version(version))));
+				}
+				BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
+				List<DocFailure> passFailures = new ArrayList<>();
+				int passDeleted = countBulkSuccess(resp, null, passFailures, false);
+				deleted += passDeleted;
+				if (passDeleted == 0) {
+					failures.addAll(passFailures);
+					break;
 				}
 			}
 		}
 		catch (ElasticsearchException | IOException e) {
 			SafeLog.warn(ElasticsearchBackendStore.class, "bulkDeleteByPatient failed", e);
 			// Call-level failure: no per-doc telemetry available, so resourceType/resourceUuid stay
-			// null. totalRequested stays 0 — the call didn't get far enough to know.
+			// null. totalRequested and succeeded keep what the completed passes counted; a failure on
+			// the first read leaves them 0.
 			failures.add(new DocFailure(null, null, e.getMessage(), isRetryable(e)));
 		}
-		int deletedInt = (int) Math.min(Integer.MAX_VALUE, deleted);
-		int matchedInt = (int) Math.min(Integer.MAX_VALUE, matched);
-		return new BulkWriteResult(matchedInt, deletedInt, failures);
+		return new BulkWriteResult(matched.size(), deleted, failures);
 	}
 
 	@Override
 	public List<QueryDocument> findAllByPatient(String patientUuid) {
+		return findPatientChart(patientUuid).getDocuments();
+	}
+
+	/**
+	 * The WARN text for a full-chart read disclosed as incomplete. Nothing throws on this path and
+	 * the WARN is the only trace, so it names the signal that fired: a failed shard, a timeout or an
+	 * early termination point an operator at cluster health; only the size limit points at paging.
+	 * It names no patient, since WARN lines carry no patient uuid.
+	 */
+	static String truncationDisclosure(long total, int returned, boolean shardFailure,
+	        boolean timedOut, boolean terminatedEarly) {
+		List<String> causes = new ArrayList<String>(4);
+		if (shardFailure) {
+			causes.add("a failed shard left part of the chart out of the response");
+		}
+		if (timedOut) {
+			causes.add("the search timed out before every record was collected");
+		}
+		if (terminatedEarly) {
+			causes.add("the search terminated early before every record was collected");
+		}
+		if (total > returned) {
+			causes.add("only " + returned + " of " + total + " matching records were returned under the single-search size of "
+			        + FULL_CHART_MAX_HITS);
+		}
+		return "A full-chart read is disclosed incomplete: " + String.join("; ", causes) + ".";
+	}
+
+	@Override
+	public PatientChartRead findPatientChart(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		Query filter = Query.of(q -> q
 		        .term(t -> t.field(ElasticsearchFieldNames.PATIENT_UUID).value(patientUuid)));
@@ -271,7 +404,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			SearchResponse<Map> resp = client().search(s -> s
 			        .index(ALL_INDICES_PATTERN)
 			        .size(FULL_CHART_MAX_HITS)
-			        .trackTotalHits(t -> t.enabled(false))
+			        .trackTotalHits(t -> t.enabled(true))
 			        .allowNoIndices(true)
 			        .ignoreUnavailable(true)
 			        .query(filter)
@@ -284,49 +417,48 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			        // ES-side sort by record_date desc so any truncation at FULL_CHART_MAX_HITS keeps
 			        // the most-recent slice — aligning with chartsearchai's recency-cap prompt
 			        // convention. Missing dates land last so legacy rows that pre-date the record_date
-			        // convention don't poison the head of the chart. A secondary {@code _doc asc}
-			        // sort pins the truncation boundary deterministically when many docs share a date
-			        // (or all docs lack one — migration scenario for legacy obs without obs_datetime);
-			        // ES's per-shard secondary order is otherwise unspecified and would make the
-			        // cap's cut-off vary across calls. {@code _doc} (not {@code _id}) because ES 7+
-			        // makes {@code _id} unsortable without enabling expensive fielddata; {@code _doc}
-			        // gives Lucene-internal order which is stable within a segment and cheap to read.
-			        // The Comparator pass below re-applies the full (date, type, uuid) ordering for
-			        // byte-identical output with the other backends.
+			        // convention don't poison the head of the chart. The secondary {@code _index asc,
+			        // resource_uuid asc} keys implement the public (resource_type, resource_uuid)
+			        // tie-breaker before the cap is applied: each index is named for its resource type.
+			        // Lucene's internal {@code _doc} order changes across refreshes and segment merges, so
+			        // using it here could select a different 10,000-record subset between calls. The
+			        // Comparator pass below re-applies the same full ordering in Java.
 			        .sort(SortOptions.of(so -> so.field(f -> f
 			                .field(ElasticsearchFieldNames.RECORD_DATE)
 			                .order(SortOrder.Desc)
 			                .missing(FieldValue.of("_last")))))
 			        .sort(SortOptions.of(so -> so.field(f -> f
-			                .field("_doc")
+			                .field("_index")
+			                .order(SortOrder.Asc))))
+			        .sort(SortOptions.of(so -> so.field(f -> f
+			                .field(ElasticsearchFieldNames.RESOURCE_UUID)
 			                .order(SortOrder.Asc)))),
 			        Map.class);
 			List<co.elastic.clients.elasticsearch.core.search.Hit<Map>> hits = resp.hits().hits();
-			if (hits.size() >= FULL_CHART_MAX_HITS) {
-				// Hitting the cap is a v1 quirk of the ES tier: single-search size is bounded by
-				// max_result_window (default 10k). MySQL and Lucene have no equivalent cap because
-				// they stream from JDBC/Lucene directly. PIT+search_after pagination is the v1.1
-				// follow-up if a real consumer ever surfaces here. See ADR Decision 15 for the v1
-				// contract; the log message itself stays terse for ops dashboards.
-				log.warn("findAllByPatient returned the ES v1 cap of "
-				        + FULL_CHART_MAX_HITS + " hits; older records beyond this slice are not in"
-				        + " the result.");
+			long total = resp.hits().total() == null ? hits.size() : resp.hits().total().value();
+			boolean shardFailure = resp.shards() != null && resp.shards().failed().intValue() > 0;
+			boolean truncated = total > hits.size() || shardFailure || resp.timedOut()
+					|| Boolean.TRUE.equals(resp.terminatedEarly());
+			if (truncated) {
+				// The size limit is a v1 quirk of the ES tier: single-search size is bounded by
+				// max_result_window (default 10k). MySQL and Lucene have no equivalent because they
+				// stream from JDBC/Lucene directly. PIT+search_after pagination is the v1.1 follow-up
+				// if a real consumer ever surfaces here. See ADR Decision 15 for the v1 contract.
+				log.warn(truncationDisclosure(total, hits.size(), shardFailure, resp.timedOut(),
+				        Boolean.TRUE.equals(resp.terminatedEarly())));
 			}
 			List<QueryDocument> all = new ArrayList<>(hits.size());
 			for (co.elastic.clients.elasticsearch.core.search.Hit<Map> h : hits) {
 				all.add(readDocument(h.index(), h.source()));
 			}
 			all.sort(BackendDocs.CHART_ORDER);
-			return all;
+			return new PatientChartRead(all, truncated);
 		}
 		catch (ElasticsearchException | IOException e) {
-			// Mirror existsByPatient's stance: log + return empty rather than throwing. The service
-			// layer's caller is the LLM full-chart path; a thrown call strands a prompt mid-assembly,
-			// while an empty list lets the prompt fall back to its own absent-data handling. Tier-
-			// specific divergence from the MySQL/Lucene "partial-per-store" tolerance — see the SPI
-			// Javadoc on {@link BackendStore#findAllByPatient} for the contract that pins both shapes.
+			// Preserve the legacy non-throwing read contract, but never describe a backend failure as a
+			// complete empty chart. External consumers fail closed on the explicit incompleteness bit.
 			SafeLog.warn(ElasticsearchBackendStore.class, "findAllByPatient failed", e);
-			return Collections.emptyList();
+			return new PatientChartRead(Collections.<QueryDocument> emptyList(), true);
 		}
 	}
 
@@ -357,6 +489,43 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			SafeLog.warn(ElasticsearchBackendStore.class, "existsByPatient failed", e);
 			return false;
 		}
+	}
+
+	@Override
+	@SuppressWarnings("rawtypes")
+	public Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		if (resourceUuids.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		String index = ElasticsearchSchemaManager.indexName(resourceType);
+		Map<String, Instant> found = new HashMap<>();
+		try {
+			for (int start = 0; start < resourceUuids.size(); start += BATCH_SIZE) {
+				List<String> chunk = resourceUuids.subList(start, Math.min(start + BATCH_SIZE, resourceUuids.size()));
+				co.elastic.clients.elasticsearch.core.MgetResponse<Map> resp = client().mget(m -> m
+				        .index(index).ids(chunk).sourceIncludes(ElasticsearchFieldNames.LAST_MODIFIED), Map.class);
+				for (co.elastic.clients.elasticsearch.core.mget.MultiGetResponseItem<Map> item : resp.docs()) {
+					if (!item.isResult() || !item.result().found() || item.result().source() == null) {
+						continue;
+					}
+					String lastModified = asString(item.result().source().get(ElasticsearchFieldNames.LAST_MODIFIED));
+					if (lastModified != null) {
+						found.put(item.result().id(), Instant.parse(lastModified));
+					}
+				}
+			}
+		}
+		catch (ElasticsearchException e) {
+			if (e.status() != 404 && !"index_not_found_exception".equals(e.error().type())) {
+				SafeLog.warn(ElasticsearchBackendStore.class, "findLastModified failed for " + resourceType, e);
+			}
+			return Collections.emptyMap();
+		}
+		catch (IOException | RuntimeException e) {
+			SafeLog.warn(ElasticsearchBackendStore.class, "findLastModified failed for " + resourceType, e);
+			return Collections.emptyMap();
+		}
+		return found;
 	}
 
 	@Override
@@ -419,11 +588,12 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		List<String> indexes = resolveIndexes(req);
 		Query filter = ElasticsearchFilterTranslator.toQuery(req.getFilters());
 		List<Float> vector = toFloatList(req.getQueryVector());
-		long numCandidates = Math.max((long) req.getLimit() * 4L, KNN_NUM_CANDIDATES_FLOOR);
+		long numCandidates = Math.min(Math.max((long) req.getLimit() * 4L, KNN_NUM_CANDIDATES_FLOOR),
+		        KNN_NUM_CANDIDATES_MAX);
 		KnnSearch knn = KnnSearch.of(k -> {
 			k.field(ElasticsearchFieldNames.EMBEDDING)
 			        .queryVector(vector)
-			        .k((long) req.getLimit())
+			        .k((long) windowOf(req))
 			        .numCandidates(numCandidates);
 			if (filter != null) {
 				k.filter(Collections.singletonList(filter));
@@ -495,7 +665,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 		try {
 			BulkResponse resp = client().bulk(BulkRequest.of(b -> b.refresh(Refresh.WaitFor).operations(ops)));
-			return countBulkSuccess(resp, null, failures);
+			return countBulkSuccess(resp, null, failures, true);
 		}
 		catch (ElasticsearchException | IOException e) {
 			SafeLog.warn(ElasticsearchBackendStore.class, "bulkUpsert chunk failed", e);
@@ -506,22 +676,25 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 	}
 
-	private int countBulkSuccess(BulkResponse resp, String fallbackType, List<DocFailure> failures) {
+	/** Counts the items a bulk call confirmed. A 409 on an upsert is a conditional-upsert "skipped as
+	 *  stale", which counts as success per the SPI invariant; a 409 on a delete means the document
+	 *  moved to a newer version after it was read and is reported as a retryable failure. */
+	private int countBulkSuccess(BulkResponse resp, String fallbackType, List<DocFailure> failures,
+	        boolean conflictIsStaleUpsert) {
 		int succeeded = 0;
 		for (BulkResponseItem item : resp.items()) {
 			if (item.error() == null) {
 				succeeded++;
 				continue;
 			}
-			if (item.status() == 409) {
-				// Conditional-upsert "skipped as stale" — counts as success per SPI invariant.
+			if (item.status() == 409 && conflictIsStaleUpsert) {
 				succeeded++;
 				continue;
 			}
 			String type = fallbackType != null ? fallbackType
 			        : (item.index() == null ? null : BackendDocs.stripPrefix(item.index()));
 			failures.add(new DocFailure(type, item.id(), item.error().reason(),
-			        isRetryableStatus(item.status())));
+			        item.status() == 409 || isRetryableStatus(item.status())));
 		}
 		return succeeded;
 	}
@@ -534,7 +707,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				// allowNoIndices + ignoreUnavailable preserve the Lucene/MySQL "search a never-written
 				// type returns zero hits" semantics. Without these, ES throws index_not_found on the
 				// explicit named-type path; the wildcard path was already implicitly tolerant.
-				s.index(indexes).size(req.getLimit()).trackTotalHits(t -> t.enabled(false))
+				s.index(indexes).size(windowOf(req)).trackTotalHits(t -> t.enabled(false))
 				        .allowNoIndices(true).ignoreUnavailable(true);
 				queryShaper.apply(s);
 				if (knn != null) {
@@ -554,6 +727,16 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		catch (ElasticsearchException | IOException e) {
 			throw new IllegalStateException("ES search failed on " + indexes, e);
 		}
+	}
+
+	/**
+	 * The hits a search may ask for: the requested limit, cut at Elasticsearch's result window
+	 * ({@code index.max_result_window}, 10,000), which a request past it is refused with rather
+	 * than answered. The hybrid default triples the limit for each leg, so a raised similarity limit
+	 * reached the window and the slice fell back to its policy tiers.
+	 */
+	private static int windowOf(SearchRequest req) {
+		return Math.min(req.getLimit(), FULL_CHART_MAX_HITS);
 	}
 
 	private List<String> resolveIndexes(SearchRequest req) {

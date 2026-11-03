@@ -33,12 +33,19 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.store.FSDirectory;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.openmrs.module.querystore.QueryStoreConstants;
 import org.openmrs.module.querystore.backend.BackendCapabilities;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.Filter;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -232,6 +239,59 @@ public class LuceneBackendStoreTest {
 	public void findAllByPatient_returnsEmptyForNullOrBlankUuid() {
 		assertTrue(backend.findAllByPatient(null).isEmpty());
 		assertTrue(backend.findAllByPatient("").isEmpty());
+	}
+
+	@Test
+	public void findPatientChart_marksAHandledPerIndexFailureIncomplete() throws Exception {
+		QueryDocument obs = doc("obs", "patient-A", "Retained observation", null);
+		QueryDocument condition = doc("condition", "patient-A", "Unavailable condition", null);
+		backend.upsert(obs);
+		backend.upsert(condition);
+		backend.close();
+
+		backend = new LuceneBackendStore(indexRoot) {
+
+			@Override
+			protected void collectAllByPatient(String resourceType, TermQuery patientQuery,
+			        List<QueryDocument> sink) throws IOException {
+				if ("condition".equals(resourceType)) {
+					throw new IOException("simulated index read failure");
+				}
+				super.collectAllByPatient(resourceType, patientQuery, sink);
+			}
+		};
+
+		PatientChartRead read = backend.findPatientChart("patient-A");
+
+		assertTrue("a handled per-index failure must be disclosed", read.isTruncated());
+		assertEquals(1, read.getDocuments().size());
+		assertEquals(obs.getResourceUuid(), read.getDocuments().get(0).getResourceUuid());
+	}
+
+	@Test
+	public void findPatientChart_marksAnIndexTheEnumeratorCouldNotOpenIncomplete() throws Exception {
+		QueryDocument obs = doc("obs", "patient-A", "Retained observation", null);
+		QueryDocument condition = doc("condition", "patient-A", "Condition behind a stale lock", null);
+		backend.upsert(obs);
+		backend.upsert(condition);
+		backend.close();
+
+		// A writer from a previous JVM still holds write.lock on one index. The enumerator skips
+		// that directory, so the per-index read loop never sees it and cannot report the gap
+		// itself; the enumerator has to.
+		Path lockedIndex = indexRoot.resolve(QueryStoreConstants.INDEX_PREFIX + "condition");
+		try (IndexWriter lockHolder = new IndexWriter(FSDirectory.open(lockedIndex),
+		        new IndexWriterConfig(new StandardAnalyzer()).setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND))) {
+			assertNotNull(lockHolder);
+			backend = new LuceneBackendStore(indexRoot);
+
+			PatientChartRead read = backend.findPatientChart("patient-A");
+
+			assertTrue("an index the enumerator could not open must be disclosed as incomplete",
+			        read.isTruncated());
+			assertEquals(1, read.getDocuments().size());
+			assertEquals(obs.getResourceUuid(), read.getDocuments().get(0).getResourceUuid());
+		}
 	}
 
 	@Test
@@ -755,6 +815,32 @@ public class LuceneBackendStoreTest {
 
 		backend.deleteSchema("drug_order");
 		assertFalse("deleteSchema must remove the directory", Files.exists(dir));
+	}
+
+	@Test
+	public void findLastModified_reportsEachStoredRecordsVersionAndOmitsTheRest() {
+		QueryDocument versioned = doc("obs", "patient-A", "Weight: 70 kg", new float[] { 1f, 0f, 0f });
+		versioned.setLastModified(java.time.Instant.parse("2026-01-02T03:04:05.678Z"));
+		QueryDocument unversioned = doc("obs", "patient-A", "Pulse: 80", new float[] { 0f, 1f, 0f });
+		backend.bulkUpsert(java.util.Arrays.asList(versioned, unversioned));
+
+		java.util.Map<String, java.time.Instant> found = backend.findLastModified("obs",
+		        java.util.Arrays.asList(versioned.getResourceUuid(), unversioned.getResourceUuid(), "never-stored"));
+
+		assertEquals(java.util.Collections.singletonMap(versioned.getResourceUuid(), versioned.getLastModified()), found);
+		assertTrue("a type with no index reports nothing",
+		        backend.findLastModified("encounter", java.util.Collections.singletonList("x")).isEmpty());
+	}
+
+	/** The bootstrap asks once per page whether a type has an index; the answer must not enumerate
+	 *  the index root or open a writer for every type on disk, as the wildcard enumerator does. */
+	@Test
+	public void hasIndex_answersForOneTypeWithoutOpeningAnyIndex() {
+		try (LuceneSchemaManager inherited = new LuceneSchemaManager(indexRoot)) {
+			assertTrue("an index a previous session wrote counts", inherited.hasIndex("obs"));
+			assertFalse(inherited.hasIndex("encounter"));
+			assertTrue("no writer was opened", inherited.knownIndexNames().isEmpty());
+		}
 	}
 
 	// ---------- helpers ----------

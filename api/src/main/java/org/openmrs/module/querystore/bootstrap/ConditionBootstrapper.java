@@ -27,4 +27,10 @@ public class ConditionBootstrapper extends HibernateTypeBootstrapper<Condition> 
 	protected ClinicalRecordSerializer<Condition> getSerializer() {
 		return serializer;
 	}
+
+	@Override
+	protected boolean versionTracksContent() {
+		// Every save that changes this record changes its version; see TypeBootstrapper#versionTracksContent.
+		return true;
+	}
 }

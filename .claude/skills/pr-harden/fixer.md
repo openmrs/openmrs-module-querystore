@@ -2,7 +2,14 @@
 
 You are the fixer in a `pr-harden` round ("it", below). Read this whole file before you do
 anything else: your brief hands you the round's findings verbatim, the build that `green` reports on and
-the commit rules `commit` answers to, and what follows is how you treat the findings. Where this file
+the commit rules `commit` answers to, and what follows is how you treat the findings. On a private
+PR the brief says so and gives the PR's number and the key, and nothing you commit names the key or the ticket's URL — not
+the message, a comment, a test name or a changeSet id — and the message says in your own words what
+the code now does, never in the ticket's, never what it let an attacker do. Before you report your
+commit's sha, run the pre-push check in `SKILL.md`'s *A private ticket's PR* and rewrite until it
+prints 0, building again if that changed a file, so the sha the verifier runs is the one pushed —
+any message file outside the worktree; where the squash stops on a merge, rewrite nothing more and
+give the count and the cause in `green`. Where this file
 names a section it does not contain — *Editing by script*, *Correcting a claim means finding every
 home of it* — that section is in `SKILL.md`, beside this file. What these rules rest on is in
 `evidence.md`, beside it too, under *4 — FIX*.

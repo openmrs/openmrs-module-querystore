@@ -1,0 +1,45 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 41,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The head (merge ae7f8fa) dropped the voidVisit branch the approved revision 36b2040 had, and now relies on VisitWithQueueEntriesSaveHandler's `visit.getVoided()` guard, which only passes when core's BaseVoidHandler happens to run first; that is decided by HashMap iteration over bean names, so the ticket's own repro (delete visit in the UI -> REST DELETE /visit -> voidVisit) still leaves the patient in the queue wherever the order is unfavourable.",
+      "failure_mode": "If merged as-is, on any deployment where the VoidHandler bean map is large enough (>=24 VoidHandler beans across loaded modules, i.e. HashMap capacity >=64) or otherwise orders visitWithQueueEntriesSaveHandler before baseVoidHandler, deleting a visit voids the visit but leaves its queue entries active, which is exactly O3-5459, silently (no exception), and the ticket would be closed as fixed; the approving reviewer reported this exact no-op live on the RefApp with the handler path.",
+      "evidence": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java shows the voidVisit branch removed and the purgeVisit-only guard at line 41 added in the merge. Handler guard: VisitWithQueueEntriesSaveHandler.java:62 `visit.getVoided()`, @Handler default order. Core 2.7.4: HandlerUtil.getHandlersForType sorts by Handler.order() (default Integer.MAX_VALUE, Handler.java:72) with ties left in ServiceContext.getRegisteredComponents order, which is `new HashMap<>(context.getBeansOfType(type))` keyed by bean name. RAN a scratch integration test (since deleted) driving real HandlerUtil/RequiredDataAdvice: baseline 7 VoidHandler beans -> [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler]; after registering 17 unrelated, un-annotated VoidHandler singletons (24 total) -> [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler], and visitService.voidVisit(visit,'probe') then gave 'visit voided=true queueEntry voided=false'. Known-good control: main's VisitWithQueueEntriesSaveHandlerTest.shouldVoidQueueEntriesWhenVisitIsVoidedThroughVoidVisit passes in the 7-bean context (ran: 7 tests, 0 failures). Bucket indices (String.hashCode spread): baseVoidHandler 4/20/52, visitWithQueueEntriesSaveHandler 9/25/25 at capacity 16/32/64. REST path: webservices VisitResource1_9.delete -> Context.getVisitService().voidVisit(visit, reason). Order-independent sibling in-tree: PatientWithQueueEntriesVoidHandler (VoidHandler-only, uses its handle() args, no getVoided guard), as does core's VisitVoidHandler. Fix: restore the voidVisit branch (as in 36b2040) or add a VoidHandler<Visit>-only class shaped like PatientWithQueueEntriesVoidHandler, plus a test that fails when the handler order is reversed.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 30,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The class Javadoc states 'Voiding needs no advice - VisitWithQueueEntriesSaveHandler already voids the entries on both the saveVisit and voidVisit paths', which is false on the voidVisit path whenever the handler is ordered before BaseVoidHandler; it records the F1 bug as a guarantee for the next reader.",
+      "failure_mode": "",
+      "evidence": "Same scratch-test run as F1 (voidVisit left queue entry 3 unvoided once handler order flipped); Javadoc read at VisitWithQueueEntriesDeleteAdvice.java:29-33. Resolves with F1's fix.",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": null,
+      "line": null,
+      "where": "PR-level",
+      "disposition": "suggestion",
+      "claim": "The PR description (and so the likely squash message) still says the advice intercepts voidVisit and voids entries with the same reason, and the O3-5459 ticket comment records the PR as hooking voidVisit and approved, but the head only handles purgeVisit; the approval and the live verification were of 36b2040, not of this head.",
+      "failure_mode": "",
+      "evidence": "pr96-body-at-round1.md 'Changes' bullet for voidVisit; o3-5459 comment by Dennis Kigen 2026-07-03; pr96-conversation review commit_id 36b2040; git diff 36b2040 ae7f8fa on the advice removes voidVisit handling.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Not ready to merge: the merge commit removed the voidVisit handling, so the ticket's actual repro (deleting a visit via REST, which calls voidVisit) is fixed only where Spring's HashMap happens to order BaseVoidHandler first, and I reproduced the no-op by changing only the number of VoidHandler beans.",
+  "what_i_swept": "Read the skill, PR body, both tickets with comments, and the conversation (one approving review on 36b2040, one question). Confirmed diff stat main...HEAD = 3 files +170/-0 (same as two-dot, no drift). Read the full advice, test, config.xml change, VisitWithQueueEntriesSaveHandler, PatientWithQueueEntriesVoidHandler, and diffed the approved commit 36b2040 against the merge head. Outward trace: core 2.7.4 HandlerUtil, ServiceContext.getRegisteredComponents/addAdvice, Handler.order default, BaseVoidHandler, VisitVoidHandler, VisitServiceImpl voidVisit/purgeVisit (@Transactional class, Visit.purge.inUse check), RequiredDataAdvice dispatch, applicationContext-service.xml transaction interceptor setup; webservices VisitResource1_9 delete/purge; liquibase FKs to visit and queue_entry (visit_queue_entries dropped; no queue_entry self-FK, so purge order is not an issue). Ran VisitWithQueueEntriesDeleteAdviceTest + VisitWithQueueEntriesSaveHandlerTest at head (9 tests pass), a mutation probe removing Context.addAdvice in the PR test (both PR tests fail -> they do test the advice), and a scratch handler-order probe (F1). Cleared without posting: advice appended after TransactionInterceptor so a purge rejected for encounters rolls back the entry deletes (read, not executed); AuthorizationAdvice precedes module advice; privilege proxying matches sibling handlers; config.xml <advice><point>/<class> format.",
+  "could_not_verify": [
+    "The actual VoidHandler bean count/ordering on a deployed RefApp: no running RefApp here. The RefApp no-op is the approving reviewer's live report, not my observation; my evidence is the mechanism plus the in-test flip at 24 beans.",
+    "Rollback of advice-purged queue entries when core's purgeVisit throws Visit.purge.inUse: the test harness wraps each test in one transaction so an inner rollback is not observable; cleared by reading the proxy chain only, so not raised."
+  ],
+  "passes_run": 3,
+  "notes": "Head is a merge of main into the branch; main's O3-5955 (bdfaa72) added a voidVisit test to VisitWithQueueEntriesSaveHandlerTest that 'pins' the ordering, but it can only pin the 7-bean test context. Handler order cannot be fixed via @Handler(order) because the default is already Integer.MAX_VALUE and BaseVoidHandler uses it too. The scratch probe file and /tmp/probe12 helper were outside or removed from the working copy; git status --porcelain is clean."
+}

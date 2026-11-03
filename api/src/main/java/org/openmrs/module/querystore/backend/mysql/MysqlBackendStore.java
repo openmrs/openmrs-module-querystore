@@ -16,11 +16,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +47,7 @@ import org.openmrs.module.querystore.backend.HealthStatus;
 import org.openmrs.module.querystore.backend.Hit;
 import org.openmrs.module.querystore.backend.JdbcSupport;
 import org.openmrs.module.querystore.backend.MetadataCodec;
+import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
@@ -221,6 +224,49 @@ public class MysqlBackendStore implements BackendStore {
 	}
 
 	@Override
+	public Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		if (resourceUuids.isEmpty() || !allTables().contains(MysqlSchemaManager.tableName(resourceType))) {
+			return Collections.emptyMap();
+		}
+		String table = MysqlSchemaManager.tableName(resourceType);
+		try {
+			return JdbcSupport.inTransaction(sessionFactory, conn -> {
+				Map<String, Instant> found = new HashMap<>();
+				for (List<String> chunk : ListUtils.partition(resourceUuids, BATCH_SIZE)) {
+					StringBuilder sql = new StringBuilder("SELECT resource_uuid, last_modified FROM ").append(table)
+					        .append(" WHERE resource_uuid IN (");
+					for (int i = 0; i < chunk.size(); i++) {
+						sql.append(i == 0 ? "?" : ", ?");
+					}
+					sql.append(')');
+					try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+						for (int i = 0; i < chunk.size(); i++) {
+							ps.setString(i + 1, chunk.get(i));
+						}
+						try (ResultSet rs = ps.executeQuery()) {
+							while (rs.next()) {
+								Timestamp ts = rs.getTimestamp("last_modified", Calendar.getInstance(UTC));
+								if (ts != null) {
+									found.put(rs.getString("resource_uuid"), ts.toInstant());
+								}
+							}
+						}
+					}
+					catch (SQLException e) {
+						SafeLog.warn(MysqlBackendStore.class, "findLastModified failed for " + resourceType, e);
+						return Collections.<String, Instant> emptyMap();
+					}
+				}
+				return found;
+			});
+		}
+		catch (RuntimeException e) {
+			SafeLog.warn(MysqlBackendStore.class, "findLastModified could not acquire a session for " + resourceType, e);
+			return Collections.emptyMap();
+		}
+	}
+
+	@Override
 	public boolean existsByPatient(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
 			return false;
@@ -286,14 +332,20 @@ public class MysqlBackendStore implements BackendStore {
 
 	@Override
 	public List<QueryDocument> findAllByPatient(String patientUuid) {
+		return findPatientChart(patientUuid).getDocuments();
+	}
+
+	@Override
+	public PatientChartRead findPatientChart(String patientUuid) {
 		if (StringUtils.isBlank(patientUuid)) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		Set<String> tables = allTables();
 		if (tables.isEmpty()) {
-			return Collections.emptyList();
+			return PatientChartRead.complete(Collections.<QueryDocument> emptyList());
 		}
 		List<QueryDocument> all = new ArrayList<>();
+		boolean[] incomplete = { false };
 		try {
 			JdbcSupport.inTransaction(sessionFactory, conn -> {
 				for (String table : tables) {
@@ -311,9 +363,7 @@ public class MysqlBackendStore implements BackendStore {
 						}
 					}
 					catch (SQLException e) {
-						// One table failing should not strand the LLM caller — partial chart is
-						// preferable to a thrown call. Matches existsByPatient's table-isolation
-						// stance: missing data converges to indexing on the next probe.
+						incomplete[0] = true;
 						SafeLog.warn(MysqlBackendStore.class, "findAllByPatient probe failed for table " + table, e);
 					}
 				}
@@ -322,10 +372,10 @@ public class MysqlBackendStore implements BackendStore {
 		}
 		catch (RuntimeException e) {
 			SafeLog.warn(MysqlBackendStore.class, "findAllByPatient could not acquire session", e);
-			return Collections.emptyList();
+			return new PatientChartRead(Collections.<QueryDocument> emptyList(), true);
 		}
 		all.sort(BackendDocs.CHART_ORDER);
-		return all;
+		return new PatientChartRead(all, incomplete[0]);
 	}
 
 	@Override

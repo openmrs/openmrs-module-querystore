@@ -1,0 +1,28 @@
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 35294)
+Traceback (most recent call last):
+  File "/usr/lib/python3.13/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/server.py", line 453, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/server.py", line 419, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.13/socket.py", line 723, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 104] Connection reset by peer
+----------------------------------------
+{"case": "case-before-vars", "reset_ahead_s": 400.0, "watchdog_in_launcher_env": "1", "answer": ["refused", null], "seconds": 305.1}
+   probe stream: system/init, system/api_retry, system/api_retry, system/api_retry, system/api_retry, system/api_retry, system/api_retry, system/api_retry, system/api_retry, system/api_retry, system/api_retry, system/api_retry
+   probe stderr: (empty)
+   stub: +   0.9s 429
+exit=0

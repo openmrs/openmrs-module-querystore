@@ -295,6 +295,30 @@ public class ConceptNameUtilTest {
 	}
 
 	@Test
+	public void getDescription_skipsFormPromptInstructionBoilerplate() {
+		// CIEL Question-class concepts carry form-authoring prompt instructions ("Question on
+		// encounter form: 'Does the patient have any of the following conditions?'") that stuff
+		// conversational query words ("does", "patient", "have", "any") into the BM25 channel.
+		Concept formPromptOnly = new Concept();
+		formPromptOnly.addName(preferredName("Adult WHO condition query"));
+		formPromptOnly.addDescription(description(
+				"Question on encounter form: 'Does the patient have any of the following conditions?'",
+				Locale.ENGLISH));
+		assertEquals("", ConceptNameUtil.getDescription(formPromptOnly));
+
+		Concept withClinicalFallback = new Concept();
+		withClinicalFallback.addName(preferredName("Serum creatinine"));
+		withClinicalFallback.addDescription(description(
+				"Question on encounter form: 'Enter latest serum creatinine'", Locale.ENGLISH));
+		withClinicalFallback.addDescription(description(
+				"Laboratory test that determines a blood serum creatinine level. Often used with BUN to assess kidney function.",
+				Locale.ENGLISH));
+		assertEquals(
+				"Laboratory test that determines a blood serum creatinine level. Often used with BUN to assess kidney function.",
+				ConceptNameUtil.getDescription(withClinicalFallback));
+	}
+
+	@Test
 	public void getMappingNames_returnsEmpty_whenConceptNull() {
 		assertTrue(ConceptNameUtil.getMappingNames(null).isEmpty());
 	}
@@ -450,6 +474,64 @@ public class ConceptNameUtilTest {
 		assertEquals(10, ConceptNameUtil.getMappingNames(c).size());
 		assertEquals("name-j",
 				ConceptNameUtil.getMappingNames(c).get(9));
+	}
+
+	@Test
+	public void getMappingCodes_namespacesEachLiveCodeBySourceSortedAndDeduplicated() {
+		// SNOMED terms on the demo carry a code and no name, so the code is the only handle a
+		// question naming "SNOMED-CT:72341003" or "CIEL:857" has on the concept.
+		ConceptReferenceTerm retired = sourcedTerm("CIEL", "999", null);
+		retired.setRetired(true);
+		Concept c = conceptWithMappings("Blood urea nitrogen",
+				mappingTo(sourcedTerm("LOINC", "14937-7", "Urea nitrogen [Moles/volume] in Serum or Plasma")),
+				mappingTo(sourcedTerm("CIEL", "857", "Blood urea nitrogen")),
+				mappingTo(sourcedTerm("PIH", "857", "Urea (BUN)")),
+				mappingTo(sourcedTerm("SNOMED-CT", "72341003", null)),
+				mappingTo(sourcedTerm("CIEL", " 857 ", null)),
+				mappingTo(sourcedTerm(null, "123", null)),
+				mappingTo(sourcedTerm("CIEL", "  ", null)),
+				mappingTo(retired));
+
+		assertEquals(Arrays.asList("CIEL:857", "LOINC:14937-7", "PIH:857", "SNOMED-CT:72341003"),
+				ConceptNameUtil.getMappingCodes(c));
+		assertTrue(ConceptNameUtil.getMappingCodes(null).isEmpty());
+	}
+
+	@Test
+	public void getMappingCodes_writesASourceNameWithSpacesAsOneTypableToken() {
+		// CIEL-based dictionaries name sources "SNOMED CT" and "IMO ProblemIT". A question can only
+		// name a code as one token, so the stored namespace is that token: "SNOMED-CT:72341003".
+		Concept c = conceptWithMappings("Hypertension",
+				mappingTo(sourcedTerm("SNOMED CT", "38341003", null)),
+				mappingTo(sourcedTerm("IMO  ProblemIT", "10000", null)));
+
+		assertEquals(Arrays.asList("IMO-ProblemIT:10000", "SNOMED-CT:38341003"), ConceptNameUtil.getMappingCodes(c));
+	}
+
+	@Test
+	public void getMappingCodes_keepsEveryLiveCodeHoweverManyMappingsAConceptHas() {
+		// Only exact matching reads codes, and an alphabetical cap of ten cost Cough (13 live mappings)
+		// its SNOMED CT code on a refapp standalone, so a question naming it found no exact match.
+		ConceptMap[] mappings = new ConceptMap[13];
+		for (int i = 0; i < 12; i++) {
+			mappings[i] = mappingTo(sourcedTerm("CIEL", String.valueOf(100 + i), null));
+		}
+		mappings[12] = mappingTo(sourcedTerm("SNOMED CT", "49727002", null));
+
+		java.util.List<String> codes = ConceptNameUtil.getMappingCodes(conceptWithMappings("Cough", mappings));
+
+		assertEquals(13, codes.size());
+		assertTrue(codes.contains("SNOMED-CT:49727002"));
+	}
+
+	private static ConceptReferenceTerm sourcedTerm(String source, String code, String name) {
+		ConceptReferenceTerm t = term(name, code);
+		if (source != null) {
+			org.openmrs.ConceptSource conceptSource = new org.openmrs.ConceptSource();
+			conceptSource.setName(source);
+			t.setConceptSource(conceptSource);
+		}
+		return t;
 	}
 
 	private static ConceptReferenceTerm term(String name, String code) {

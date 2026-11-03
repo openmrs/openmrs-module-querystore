@@ -1,0 +1,30 @@
+{
+  "pr": 556,
+  "round": 1,
+  "head": "d77204bae7091579a7131f486b613d03e365609d",
+  "findings": [
+    {
+      "id": "r1-1",
+      "blocking": true,
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/reference/DrugSafetyValidator.java",
+      "line": 4615,
+      "finding": "No test pins that a finding's partner rows are the PARTNER's rows. Every new #555 case has an answer that names both the subject drug and the partner, so if the rows came from the wrong substance, the prose rule would still mark the partner as stated. Missing case: the rows are present, the answer names the subject (and the other order) but leaves this partner out, and the test expects the 'not named above' sentence plus stated < named.",
+      "failure_mode": "Suppose a later edit (an easy slip, since the variable sits right beside it) passes the subject's rows: `rows` instead of `rowsOfSubstance(orderEntries, rule.partner)` in the drug-in-play arm, or `ref` instead of `partner` in the screening arm at line 8898. Then every rule-chip partner counts as stated whenever the answer names the drug in play, which it nearly always does. The module stops appending 'Also covered by those findings and not named above: active order Rifampicin (rifampin).' for an interacting order the model left out, and findingPartners reports stated == named. The build stays green throughout. That is the opposite of the reporting direction the class javadoc and ADR Decision 100 promise.",
+      "evidence": "I applied both mutations together (drug-in-play: `Collections.singletonMap(partnerName, rows)`; screening: `rowsOfSubstance(orderDrugs, ref)`) and ran `mvn -o -B -pl api -am test -Dtest='CitedFindingPartnerCompletionTest,SharedMechanismChipCollapseTest'`. Result: CitedFindingPartnerCompletionTest 14/14 and SharedMechanismChipCollapseTest 7/7, both green. A temporary case on the alprazolam arrangement (`alprazolam()`, answer 'Alprazolam can be given, with a caution: it interacts with active order Nevirapine [4] [5].', expecting the appended Rifampicin (rifampin) sentence and coverage {2,1}) fails under the mutation: it returned the answer unchanged, and the probe showed both partners carrying the subject row id [1433868]. It passes at head, where the partners carry rows [53654] and [9384]. All files were restored afterwards; the tree is clean."
+    },
+    {
+      "id": "r1-2",
+      "blocking": false,
+      "file": "api/src/test/java/org/openmrs/module/chartsearchai/api/impl/CitedFindingPartnerCompletionTest.java",
+      "line": 404,
+      "finding": "The ticket lists 'Can I add dolutegravir to her regimen?' as one of the six failing answers, but no case covers it. The PR tests alprazolam (both paths), the medication screen and an ivosidenib merge. At head, the dolutegravir arrangement gives two separate findings, [Nevirapine] and [Rifampicin (rifampin)], and an answer naming 'Nevirapine and ... Rifampicin' is returned unchanged with findingPartners {2,2}. So the PR does fix that question; it just isn't pinned.",
+      "failure_mode": "",
+      "evidence": "Temporary probe with OverShippedData('Can I add dolutegravir to her regimen?', Nevirapine J05AG01, Rifampicin J04AB02) at head: findings 4[Nevirapine] rows [53654], 5[Rifampicin (rifampin)] rows [9384]; answer unchanged; coverage named=2, stated=2. The probe was removed afterwards."
+    }
+  ],
+  "notes": [
+    "Does it resolve the ticket: yes. I checked against issue #555's own cases: the alprazolam answer, the medication-screen {1,0}, and dolutegravir, which I probed myself. Every interaction rule chip site (the drug-in-play arm, the screening arm, and collapseSharedMechanisms' merge) now carries partner rows. Each row map's keys equal the chip's namedPartners strings, so partnerRowIds lines up.",
+    "I accept the approach: the prose rule (`matchesText`, through `namesThePartner`) over structurally carried rows, rather than stripping the parenthetical. It follows the precedent of `namesTheEndedOrderDrug` (#478) and the reference CLAUDE.md rule *Matching a drug name*.",
+    "Baseline at head: CitedFindingPartnerCompletionTest 14, ArchitectureGuardTest 30, ProjectInstructionsGuardTest 9, SharedMechanismChipCollapseTest 7, FindingPartnerLogDisclosureTest 6. All green."
+  ]
+}

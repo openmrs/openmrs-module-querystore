@@ -3,24 +3,24 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2462,
-      "to": 2532,
-      "why": "Steps 2, 4 and 6 now name the `raises` entry, the `--against` run that holds it, and that a new file's budget rises from 0, which the linter and pool-run both check"
+      "from": 2823,
+      "to": 2835,
+      "why": "the opening's list of the skills that append a run record adds a /harden invoked on its own, which harden 0.45.0 makes write one, and Step 1's \"A /harden invoked on its own writes none\" becomes \"wrote none before harden 0.45.0\", so the two do not contradict each other"
     },
     "pr-harden": {
-      "from": 9506,
-      "to": 9535,
-      "why": "State told a session running elsewhere to EnterWorktree into the checkout, and in #607 and PR 3787 the tool refused a checkout outside the session's git repository. State now says that there the gate, run in the session's directory, reads no entry keyed on the checkout, so each write is still keyed --cwd on the checkout and the report says so (+32), and Step 0's 'the Stop gate will not let the turn end' is scoped to where it reads the entry (+5). That is guidance, not enforcement. The paragraph's 'anticipated from KEY=\"$(pwd -P)\" and not yet observed' moves to evidence.md beside the 2026-10-14 gate measurement (-8)"
+      "from": 10532,
+      "to": 10625,
+      "why": "State says that where CLAUDE_CODE_RETRY_WATCHDOG is on a live agent can outlast the gates' one-hour await bound, since its requests wait at a usage limit for the reset and the harness does not report it stalled (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), and that only the gate sees that hour pass, so its block past the bound opens on that await and the run records it again with the command that recorded it, --only and --run included, rather than re-dispatching its phase beside the live agent; once, an await naming one agent so that a name listed twice is that once spent, after which the agent is stopped with TaskStop before the dead-phase contract retries its phase; the rule moves here from resolve-ticket's Step 1 because resolve-ticket's alias reaches a standalone pr-harden or harden too"
     },
     "pr-harden/fixer.md": {
-      "from": 1102,
-      "to": 1134,
-      "why": "the fixer runs its mutation probes before the build green reports on, because in #407 and #607 a probe run after that build left a failures=\"1\" surefire report that the orchestrator's step-5 spot-check read, each time costing a re-run"
+      "from": 1134,
+      "to": 1264,
+      "why": "the header says that on a private PR the brief gives the fixer the key, nothing it commits names it or the ticket's URL, in the message, a comment, a test name or a changeSet id, the message describes what the code now does in its own words, and it runs the pre-push check before reporting its sha, so the sha the verifier runs is the one pushed; it rewrites rather than only amends, building again if that changed a file; and the brief gives it the PR's number to fetch with, keeping any message file outside the worktree, and reporting a squash a merge stops instead of looping on it"
     },
     "pr-harden/reviewer.md": {
-      "from": 0,
-      "to": 510,
-      "why": "the reviewer's two standing rules, the JSON it returns and what makes a finding blocking move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, as pr-harden 0.36.0 moved the fixer's and the verifier's, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so pr-harden grows by both, for a reviewer that reads these rules as written instead of the orchestrator's paraphrase of them, which is what wave 1's briefs carried"
+      "from": 510,
+      "to": 542,
+      "why": "the header says that on a private PR the brief gives the ticket's key, and that the PR's silence about the ticket, and a body without the loop's declines, is deliberate and not a finding"
     },
     "resolve-ticket/refuter.md": {
       "from": 0,
@@ -28,37 +28,57 @@
       "why": "the plan refuter's seven questions, the JSON it returns and the rule every objection must meet move here from SKILL.md byte for byte, beneath a new header that tells it to read the file first and what its brief carries, the shape pr-harden 0.36.0 gave the fixer and the verifier, once role-file-check's wave 1 passed (2026-09-28). The header and SKILL.md's pointer are new text, so resolve-ticket grows by both, for a refuter that reads its questions as written"
     },
     "resolve-ticket": {
-      "from": 6832,
-      "to": 6860,
-      "why": "Step 5: after a mutation probe, rebuild the module it compiled before anything runs the restored code from target/ or cites its reports, because in #250 and TRUNK-6826 a restored probe's mutant, still compiled in target/classes, was run: by two probe runs and by a Jetty start"
+      "from": 7873,
+      "to": 8028,
+      "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 7775,
-      "to": 8037,
-      "why": "Step 4 gains a length rule for inline comments, thread replies and body findings (the ask, why it matters in one sentence and the fix, 60 words at most, the verification's result and not its account, a reply no longer than what it answers), subsuming 'Fewer, sharper comments beat exhaustive ones' and the 'Keep each inline comment to its finding and the fix' clause, because feedback on 2026-10-17 asked for shorter review comments and, over 649 openmrs PRs, the comments this skill posted ran a median of 131 words of prose (p90 263) against 9 for the same reviewer before the skill and 21 for other reviewers on the same PRs, with 89% of its thread replies longer than the comment they answered; no earlier version had any length rule"
+      "from": 8374,
+      "to": 8430,
+      "why": "Step 2's \"The ticket is evidence, not a spec\" paragraph holds a mechanism the ticket prescribes to the need test the re-review rule applies to an answer in the thread, and has the reviewer check the ticket's own stated reason for it against the obvious alternative: in a blind re-run of openmrs-core #6355 as it stood on 2026-08-28, under 0.23.0 with its #6355 example removed, the reviewer blocked on the PR's separate credential but kept the deterministic value the ticket prescribed, whose stated reason (no plain-text storage) a random password stored hashed meets as well"
     },
     "pr-review/posting.md": {
-      "from": 1804,
-      "to": 1984,
-      "why": "the third gate line states that length rule and the fourth holds body findings to it, so a local run checks the rule before posting as it checks the label ban; the rule itself lives in SKILL.md because the @claude review Action loads that file alone"
+      "from": 2049,
+      "to": 2070,
+      "why": "the first gate line's best-fix clause covers a re-review too, with a slot for the reply that argued the approach out, or none, so a run that scoped the approach out of a re-review has to name the reply it relied on before it posts or stages; the rule itself lives in SKILL.md, which the @claude review Action loads alone"
+    },
+    "ticket-pool": {
+      "from": 5084,
+      "to": 5111,
+      "why": "the sentence listing what a ticket argument may be says a private ticket's JIRA key is never one and not to queue one, because the pool cannot tell it from a missing key, its headless sessions cannot read it, and its driver writes a record named for the key into the store skill-retro publishes"
+    },
+    "ticket-pool/pausing.md": {
+      "from": 1612,
+      "to": 1755,
+      "why": "the paragraph on which sessions the --work carry reaches says what carries a session started by hand besides Claude Code's own wait, CLAUDE_CODE_RETRY_WATCHDOG, which resolve-ticket's Step 1 says how to set; the driver's carry says Session drops that variable and its cap from every headless session, since one waiting under them neither ends nor goes quiet, the only two points at which the driver looks for a limit, and that the driver, and --work while its carry is on, refuse to start where ~/.claude/settings.json's env turns them on, a project's own settings unread; and the --work carry says that a session it carries starts without the pair, since one idle on a background agent waiting under it reads as stopped and would be nudged as if it were (reproduced with the real watch_hand_launched), and with CLAUDE_PIPELINE_CARRY=work, so that resolve-ticket's Step 1 does not warn, and that with the carry off resolve-ticket's Step 1 says what carries the session; and that --work passes crossSessionInbound: accept only while its carry is on, since at a limit_wait_max_seconds of 0 nothing sends the nudge it lets in"
+    },
+    "harden": {
+      "from": 7429,
+      "to": 7538,
+      "why": "Reporting says a /harden invoked on its own appends its run record, in pr-harden's format and file name with the branch, any / replaced by -, where the slice has no ticket or PR, since chartsearchai #435 (ten cycles) and querystore PR 100 (seven) reached a retro only through records written by hand; and Termination's bullets add that an edit rewriting a test owes the revert-check on the mutations that test caught before the edit, since in TRUNK-6826 and PR 100 a Phase 2 rewrite of a test changed what it could detect and a re-run mutation showed it"
+    },
+    "ticket-pool/by-hand.md": {
+      "from": 1859,
+      "to": 1889,
+      "why": "the paragraph on a --work session's environment no longer says nothing else is touched: while the launcher's carry is on, the session starts without CLAUDE_CODE_RETRY_WATCHDOG and its cap and with CLAUDE_PIPELINE_CARRY=work, which pausing.md explains, and while it is off without a CLAUDE_PIPELINE_CARRY it inherited, since the marker says the launcher carries the session"
     }
   },
   "words": {
-    "harden": 7403,
+    "harden": 7538,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 9535,
-    "pr-harden/fixer.md": 1134,
-    "pr-harden/reviewer.md": 510,
+    "pr-harden": 10625,
+    "pr-harden/fixer.md": 1264,
+    "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8037,
-    "pr-review/posting.md": 1984,
-    "resolve-ticket": 6860,
+    "pr-review": 8430,
+    "pr-review/posting.md": 2070,
+    "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2532,
-    "ticket-pool": 5084,
-    "ticket-pool/by-hand.md": 1859,
-    "ticket-pool/pausing.md": 1612,
+    "skill-retro": 2831,
+    "ticket-pool": 5111,
+    "ticket-pool/by-hand.md": 1889,
+    "ticket-pool/pausing.md": 1755,
     "verify": 658,
     "verify-frontend-change": 1844
   }

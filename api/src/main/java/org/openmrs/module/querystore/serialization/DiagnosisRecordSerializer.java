@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore.serialization;
 
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CERTAINTY;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CONDITION_UUID;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_NON_CODED;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_RANK;
@@ -62,6 +63,17 @@ public class DiagnosisRecordSerializer extends AbstractRecordSerializer<Diagnosi
 	@Override
 	protected LocalDate getDate(Diagnosis diagnosis) {
 		return DateFormatUtil.toLocalDate(diagnosis.getDateCreated());
+	}
+
+	@Override
+	protected LocalDate getClinicalDate(Diagnosis diagnosis) {
+		return diagnosis.getEncounter() == null ? null
+		        : DateFormatUtil.toLocalDate(diagnosis.getEncounter().getEncounterDatetime());
+	}
+
+	@Override
+	protected String getDateKind(Diagnosis diagnosis) {
+		return DATE_KIND_ADMINISTRATIVE;
 	}
 
 	@Override

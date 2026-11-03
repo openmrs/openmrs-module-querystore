@@ -11,6 +11,12 @@ gate running old logic, which is why `skill-retro` Step 6 requires `cmp` across 
   Also carried in `.claude/skills/harden/`.
 - `pr-harden-gate.sh` — Stop hook. Same, for `pr-harden`'s phase/blocking contract. Also carried in
   `.claude/skills/pr-harden/`.
+- `unchecked-items-gate.py` — Stop hook. Enforces `proposing-fixes.md`'s "Nothing checkable stays unchecked": a final
+  reply whose heading or bold label says unchecked, unverified or not (yet) checked must give every item under it one of
+  three reasons, in these words: "needs the implementation", "needs your decision" or "needs access". Added 2026-11-02,
+  after a proposal listed two items it could have checked and did not. It checks that a reason is GIVEN, never that it
+  is true. It blocks once per stop (`stop_hook_active` allows) and allows on any read failure, because a Stop hook that
+  fails closed traps every session. No skill-side copy.
 - `no-subagent-model-override.sh` — PreToolUse(Agent). Refuses an `Agent` call that sets an explicit
   `model`, so a running session cannot downgrade a subagent per call — `harden` and `pr-harden` both
   carry the matching rule, and until 2026-09-02 `pr-harden` named a cheaper agent as the remedy for a
@@ -35,7 +41,7 @@ gate running old logic, which is why `skill-retro` Step 6 requires `cmp` across 
   `git checkout -- <path>` / `git restore <path>` runs. Vendored here 2026-08-27; it had existed only on
   one machine, which is what `21b0e7e` fixed for two skills. It has no skill-side copy.
 
-Registration lives in the user's own `~/.claude/settings.json` (`Stop` for the two gates, `PreToolUse`
+Registration lives in the user's own `~/.claude/settings.json` (`Stop` for the two gates and the unchecked-items gate, `PreToolUse`
 matcher `Bash` for the rm-shape guard and the backup, matcher `Agent` for the model guard) and is not vendored — it is user configuration, not pipeline code.
 
 Tests: `bash .claude/skills/harden/gate-test.sh .claude/hooks/harden-cycle-gate.sh` and the pr-harden

@@ -608,7 +608,8 @@ public class QueryStoreServiceQueryTest {
 		service.setBootstrapLauncher(SynchronousLaunchers.create());
 		bootstrap.onEnsureIndexed = uuid -> {
 			index(obs("cd4-1", CD4, "CD4 count: 350.0 cells/µL", 350.0, "2026-03-12"));
-			throw new org.openmrs.module.querystore.bootstrap.PartialProjectionException(Collections.singletonList("allergy"));
+			throw new org.openmrs.module.querystore.bootstrap.IncompleteProjectionException(
+			        "Cold-touch projection was incomplete: 1 type(s) failed, 0 record(s) not projected");
 		};
 		service.warm(PATIENT);
 		assertEquals(IndexStatus.FAILED, service.getIndexStatus(PATIENT));
@@ -843,6 +844,11 @@ public class QueryStoreServiceQueryTest {
 		@Override public List<BootstrapProgress> getStatus() { return Collections.emptyList(); }
 		@Override public BootstrapProgress getStatus(String resourceType) { return null; }
 		@Override public DriftReport getDrift() { return null; }
+		@Override public org.openmrs.module.querystore.bootstrap.BootstrapStatusReport getStatusReport() {
+			return org.openmrs.module.querystore.bootstrap.BootstrapStatusReport.from(Collections.<BootstrapProgress> emptyList(),
+			        getResourceTypeNames(), "test");
+		}
+		@Override public boolean isPatientProjectionIncomplete(String patientUuid) { return false; }
 		@Override public void onStartup() { }
 		@Override public void onShutdown() { }
 	}

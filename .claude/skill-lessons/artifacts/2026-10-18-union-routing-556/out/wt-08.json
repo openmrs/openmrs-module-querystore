@@ -1,0 +1,36 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/api/impl/FindingPartnerCoverageCheck.java",
+      "line": 282,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "statedPartners unions partner rows across every cited finding under one comparable() key, so a #477 finding's order is credited as stated through ANOTHER finding's rows. That makes the new statedPartners javadoc, the ADR Decision 100 amendment and the README exception wrong when they say #477's findings' orders are 'stated only by its display'.",
+      "failure_mode": "",
+      "evidence": "Throwaway @Test added to CitedFindingPartnerCompletionTest (reusing its OverShippedData: shipped KB, real injector, real search()), then restored with git checkout. Orders Nevirapine J05AG01, Rifampicin J04AB02, 'Isoniazid / pyrazinamide / rifampin' J04AM05; question 'Can I give her alprazolam?'. The injector wrote [6] partners=[Isoniazid / pyrazinamide / rifampin] rows=[[6038]] (isoniazid rule) and [8] (#477 finding) partners=[Rifampicin, Isoniazid / pyrazinamide / rifampin] rows=[[],[]]. An answer citing [5][6][7][8] and naming only 'isoniazid' gave FindingPartnerCoverage{named=5, stated=3}: Nevirapine, plus the combo counted twice, once for [6] and once for the #477 finding [8], which carries no rows of its own. Positive control: with the prose-rule arm disabled (`false && validator != null` in statedPartners, restored afterwards) the same answer gave stated=1. ordersOfOneSubstanceAreNotStatedByThatSubstancesName stays green because its arrangement has no rule finding that shares a printed order with the #477 finding. Fix: decide statedness per (finding, partner) from that finding's own rows, or correct the three docs to describe the union.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/module/chartsearchai/reference/DrugSafetyValidator.java",
+      "line": 4615,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "When a rule chip's printed partner is a combination prescription's display (the #339 order rung), the chip's rows are the single constituent the rule is about. An answer naming that one constituent now states the whole combination order and suppresses the 'not named above' sentence. This residue runs toward silence and is not listed among the 'other direction' residues in README, ChartSearchService.FindingPartnerCoverage or ADR Decision 100. Is it intended?",
+      "failure_mode": "",
+      "evidence": "Throwaway @Test added to CitedFindingPartnerCompletionTest (reusing its OverShippedData: shipped KB, real injector, real search()), then restored with git checkout. Orders Nevirapine J05AG01 and 'Isoniazid / pyrazinamide / rifampin' J04AM05; alprazolam question. The findings were [5] partners=[Isoniazid / pyrazinamide / rifampin] rows=[[6038]] and [6] same partner rows=[[9384]]. An answer naming only 'rifampicin' (and separately only 'isoniazid') was returned unchanged with FindingPartnerCoverage{named=3, stated=3}. The same answers with the prose-rule arm disabled appended 'Also covered by those findings and not named above: active order Isoniazid / pyrazinamide / rifampin.' with stated=1. The docs read are README.md:555 and ChartSearchService.java:713-726; their 'opposite direction' lists name only substring containment and the shared-alias case. One alternative avoids this residue for the issue's own case: match against the display of the order the partner was bridged to (her order is displayed 'Rifampicin'), carried per partner.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Close to mergeable. It fixes #555's reported case on both paths and on the screening and merged findings. The biggest reason to hold it is that the per-key row union contradicts the PR's own documented guarantee about #477 findings (F1), and that combination-order residue toward silence is undocumented (F2).",
+  "what_i_swept": "Read SKILL.md Steps 1-3, the PR body and issue #555 snapshots, and the full production diff (15 files, +493/-69, matches the stated stat). Read both rule-chip arms in DrugSafetyValidator (drug-in-play ~4560-4630, screening ~8770-8900), collapseSharedMechanisms, rowsOfSubstance, namesAnyOf and its sibling namesTheFindingsSubject. Read every SafetyWarning copy site (all private-ctor calls carry partnerRows) and every RecordMapping construction in api/omod main (no copy site drops the new field). Read the three callers of measure/withUnstatedPartnersNamed in LlmInferenceService, the root CLAUDE.md, reference/CLAUDE.md (Matching a drug name, partner naming, #477, StatedInteractionChips) and api/impl/CLAUDE.md. Outward trace covered InteractionClaimPairFidelityCheck's shared comparable(); I probed interactionClaimPairs on the issue's answer: judged=0, nothing contradictory. Ran: CitedFindingPartnerCompletionTest at head (green, with probes); ArchitectureGuardTest, ProjectInstructionsGuardTest, CitedFindingPartnerCompletionTest, FindingPartnerLogDisclosureTest, SharedMechanismChipCollapseTest, SubstanceInSeveralActiveOrdersTest and InteractionClaimPairFidelityTest together (141 tests, 0 failures). Ran three throwaway probes (combination order; combination plus standalone with a #477 finding; claim pairs), plus a containment-only positive control done by mutating statedPartners. All were restored, and git status is clean.",
+  "could_not_verify": [
+    "Did not run the full `mvn -o clean install`; the machine is busy and I ran only the narrow selection above.",
+    "Did not reproduce the PR's per-write-site mutation claims (drug-in-play rows, screening rows, merge union).",
+    "No live OpenMRS/llama-server run, per the constraints, so whether models actually name a combination order by one constituent was not measured.",
+    "withUnstatedPartnersNamed, unlike measure, has no RuntimeException guard, and it now calls into DrugReferenceService.getAll(). I could not construct a path where that throws, so I am not raising it."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 surfaced F1 and F2 through probes. Pass 2 traced outward (claim-pair check, RecordMapping and SafetyWarning copy sites, guard tests) and found nothing new. Pass 3 re-read the docs' residue enumerations against the probe output. No prior review conversation was available. The approach (prose rule over structurally carried rows, rather than stripping the parenthetical) follows reference CLAUDE.md 'Matching a drug name' and the namesTheEndedOrderDrug precedent. I have no approach objection beyond the question in F2."
+}

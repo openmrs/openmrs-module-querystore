@@ -10,7 +10,9 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_OBS_GROUP_CONCEPT_NAME;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_SYNONYMS;
@@ -29,6 +31,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
+import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 
@@ -196,6 +199,42 @@ public class TypeBootstrapperTest {
 	}
 
 	@Test
+	public void run_embeddingProviderClosed_marksFailedWithoutCheckpointingThePage() {
+		// A server stop closes the provider while a bootstrap may still be running. Skipping like a
+		// poison record would advance the cursor past records never indexed, so the scan must end
+		// FAILED (re-runnable) with the cursor still before the page that hit the closed provider.
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("a", Instant.parse("2025-01-01T00:00:00Z")));
+		b.queuePage(entity("b", Instant.parse("2025-01-02T00:00:00Z")),
+		        entity("c", Instant.parse("2025-01-03T00:00:00Z")));
+		EmbeddingProvider closesAfterFirst = new EmbeddingProvider() {
+			int calls;
+
+			@Override public int getDimensions() { return 8; }
+
+			@Override
+			public float[] embed(String text) {
+				if (++calls > 1) {
+					throw new EmbeddingProviderClosedException();
+				}
+				return new float[8];
+			}
+		};
+		BootstrapProgress progress = new BootstrapProgress("test");
+
+		try {
+			b.run(progress, service, closesAfterFirst, progressDao);
+			fail("expected EmbeddingProviderClosedException");
+		}
+		catch (EmbeddingProviderClosedException expected) {
+		}
+
+		assertEquals(BootstrapStatus.FAILED, progress.getStatus());
+		assertEquals("cursor stays at the last fully indexed page", "a", progress.getCursorUuid());
+		assertEquals(1, progress.getDocumentsIndexed());
+	}
+
+	@Test
 	public void run_indexedDocumentsCarrySerializerLastModified() {
 		FakeBootstrapper b = new FakeBootstrapper();
 		Instant t = Instant.parse("2025-01-01T00:00:00Z");
@@ -281,6 +320,90 @@ public class TypeBootstrapperTest {
 		assertEquals("cursor advanced past the recovered poison window", "c", progress.getCursorUuid());
 	}
 
+	@Test
+	public void run_aTopUpSkipsRecordsStoredAtTheirCurrentVersion() {
+		// A restart's top-up walks every record changed since the last checkpoint, most of which
+		// steady-state sync already indexed at that very version; re-embedding them is the cost.
+		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
+		Instant later = Instant.parse("2025-01-02T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("same", earlier), entity("changed", later), entity("new", later));
+		service.storedVersions.put("same", earlier);
+		service.storedVersions.put("changed", earlier);
+		BootstrapProgress progress = new BootstrapProgress("test");
+
+		b.run(progress, service, embedder, progressDao, true);
+
+		assertEquals(Arrays.asList("changed", "new"), indexedUuids());
+		assertEquals(2, embedder.inputs.size());
+		assertEquals(BootstrapStatus.COMPLETED, progress.getStatus());
+		assertEquals("the cursor still advances past the skipped record's page", "new", progress.getCursorUuid());
+	}
+
+	@Test
+	public void run_aTopUpReprojectsAVersionOtherThanTheStoredOne() {
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("edited", Instant.parse("2026-10-20T07:03:22Z")));
+		service.storedVersions.put("edited", Instant.parse("2026-10-20T07:03:21Z"));
+
+		b.run(new BootstrapProgress("test"), service, embedder, progressDao, true);
+
+		assertEquals(Collections.singletonList("edited"), indexedUuids());
+	}
+
+	@Test
+	public void run_aTopUpRewritesATypeWhoseVersionDoesNotTrackItsContent() {
+		// An order stopped since it was stored keeps its version (dateCreated), so only a rewrite
+		// carries its date_stopped.
+		Instant created = Instant.parse("2025-01-01T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.versionTracksContent = false;
+		b.queuePage(entity("stopped", created));
+		service.storedVersions.put("stopped", created);
+
+		b.run(new BootstrapProgress("test"), service, embedder, progressDao, true);
+
+		assertEquals(Collections.singletonList("stopped"), indexedUuids());
+	}
+
+	@Test
+	public void onlyObsConditionsDiagnosesAndDispensesAreTheTypesWhoseVersionTracksTheirContent() {
+		assertTrue(new ObsBootstrapper(null, null).versionTracksContent());
+		assertTrue(new ConditionBootstrapper(null, null).versionTracksContent());
+		assertTrue(new DiagnosisBootstrapper(null, null).versionTracksContent());
+		assertTrue(new MedicationDispenseBootstrapper(null, null).versionTracksContent());
+		assertFalse(new DrugOrderBootstrapper(null, null).versionTracksContent());
+		assertFalse(new TestOrderBootstrapper(null, null).versionTracksContent());
+		assertFalse(new ReferralOrderBootstrapper(null, null).versionTracksContent());
+		assertFalse(new PatientBootstrapper(null, null).versionTracksContent());
+		assertFalse(new VisitBootstrapper(null, null).versionTracksContent());
+		assertFalse(new AllergyBootstrapper(null, null).versionTracksContent());
+		assertFalse(new PatientProgramBootstrapper(null, null).versionTracksContent());
+		assertFalse(new EncounterBootstrapper(null, null).versionTracksContent());
+	}
+
+	@Test
+	public void run_aForcedReprojectionEmbedsEveryRecordEvenAtItsStoredVersion() {
+		// A resync re-projects on purpose (drift, or new fields an upgrade added), so it never skips.
+		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.queuePage(entity("same", earlier));
+		service.storedVersions.put("same", earlier);
+		BootstrapProgress progress = new BootstrapProgress("test");
+
+		b.run(progress, service, embedder, progressDao, false);
+
+		assertEquals(Collections.singletonList("same"), indexedUuids());
+	}
+
+	private List<String> indexedUuids() {
+		List<String> uuids = new ArrayList<>();
+		for (QueryDocument doc : service.indexed) {
+			uuids.add(doc.getResourceUuid());
+		}
+		return uuids;
+	}
+
 	// ---------- fakes ----------
 
 	private static TestEntity entity(String uuid, Instant ts) {
@@ -319,6 +442,74 @@ public class TypeBootstrapperTest {
 		}
 	}
 
+	@Test
+	public void runForPatient_skipsRecordsStoredAtTheirCurrentVersion() {
+		// A patient whose projection keeps failing is sent back through this walk on every read, so
+		// the records already stored at their version must not be embedded again each time.
+		Instant earlier = Instant.parse("2025-01-01T00:00:00Z");
+		Instant later = Instant.parse("2025-01-02T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.patientPages = new ArrayList<>(Arrays.asList(
+		    Arrays.asList(new TestEntity("same", earlier), new TestEntity("changed", later))));
+		service.storedVersions.put("same", earlier);
+		service.storedVersions.put("changed", earlier);
+
+		int failed = b.runForPatient("patient-A", service, embedder);
+
+		assertEquals(0, failed);
+		assertEquals(Collections.singletonList("changed"), indexedUuids());
+		assertEquals(1, embedder.inputs.size());
+	}
+
+	@Test
+	public void runForPatient_rewritesATypeWhoseVersionDoesNotTrackItsContent() {
+		// A stopped order keeps its dateCreated version, so the patient walk rewrites it too.
+		Instant created = Instant.parse("2025-01-01T00:00:00Z");
+		FakeBootstrapper b = new FakeBootstrapper();
+		b.versionTracksContent = false;
+		b.patientPages = new ArrayList<>(Arrays.asList(Arrays.asList(new TestEntity("stopped", created))));
+		service.storedVersions.put("stopped", created);
+
+		b.runForPatient("patient-A", service, embedder);
+
+		assertEquals(Collections.singletonList("stopped"), indexedUuids());
+	}
+
+	@Test
+	public void runForPatient_stopsWhenAPageDoesNotAdvancePastTheCursor() {
+		FakeBootstrapper b = new FakeBootstrapper();
+		// A failed fetch leaves half-loaded rows in the session; they come back unhydrated, at the same
+		// epoch cursor, on every later fetch.
+		b.stuckPatientPage = Arrays.asList(new TestEntity("cond-1", Instant.EPOCH));
+
+		try {
+			b.runForPatient("patient-A", service, embedder);
+			fail("a page that never advances must stop the walk");
+		}
+		catch (IllegalStateException expected) {
+			assertEquals(2, b.patientFetches);
+			assertTrue(expected.getMessage(), expected.getMessage().contains("patient-A"));
+		}
+	}
+
+	@Test
+	public void runForPatient_stopsWhenAStaleRowOnAPageBoundaryWouldCycleTheWalk() {
+		FakeBootstrapper b = new FakeBootstrapper();
+		// Page one ends at a real cursor; page two ends on an unhydrated row at the epoch, which sends the
+		// next fetch back to page one. Each page differs from the cursor just before it.
+		b.cyclingPatientPages = Arrays.asList(
+		    Arrays.asList(new TestEntity("cond-1", Instant.parse("2026-01-01T00:00:00Z"))),
+		    Arrays.asList(new TestEntity("cond-stale", Instant.EPOCH)));
+
+		try {
+			b.runForPatient("patient-A", service, embedder);
+			fail("a walk that returns to an earlier page must stop");
+		}
+		catch (IllegalStateException expected) {
+			assertEquals(2, b.patientFetches);
+		}
+	}
+
 	private static final class FakeBootstrapper extends TypeBootstrapper<TestEntity> {
 		private final Deque<List<TestEntity>> pages = new ArrayDeque<>();
 		private int pageNumber = 0;
@@ -326,6 +517,11 @@ public class TypeBootstrapperTest {
 		private RuntimeException failureCause;
 		String poisonUuid;
 		private final List<FetchCall> fetchCalls = new ArrayList<>();
+		List<TestEntity> stuckPatientPage;
+		List<List<TestEntity>> cyclingPatientPages;
+		/** Pages served in order to a per-patient walk; an empty page follows the last. */
+		List<List<TestEntity>> patientPages;
+		int patientFetches;
 		private final TestSerializer serializer = new TestSerializer() {
 			@Override
 			public org.openmrs.module.querystore.model.QueryDocument serialize(TestEntity record) {
@@ -364,6 +560,8 @@ public class TypeBootstrapperTest {
 		@Override protected ClinicalRecordSerializer<TestEntity> getSerializer() { return serializer; }
 		@Override protected Instant getDateChanged(TestEntity e) { return e.ts; }
 		@Override protected String getUuid(TestEntity e) { return e.uuid; }
+		boolean versionTracksContent = true;
+		@Override protected boolean versionTracksContent() { return versionTracksContent; }
 
 		@Override
 		protected List<TestEntity> fetchPage(Instant afterDateChanged, String afterUuid, int pageSize) {
@@ -373,6 +571,21 @@ public class TypeBootstrapperTest {
 				throw failureCause;
 			}
 			return pages.isEmpty() ? Collections.emptyList() : pages.poll();
+		}
+
+		@Override
+		protected List<TestEntity> fetchPageForPatient(String patientUuid, Instant afterDateChanged, String afterUuid,
+		        int pageSize) {
+			if (++patientFetches > 4) {
+				throw new AssertionError("the per-patient walk fetched " + patientFetches + " pages without stopping");
+			}
+			if (cyclingPatientPages != null) {
+				return cyclingPatientPages.get((patientFetches - 1) % cyclingPatientPages.size());
+			}
+			if (patientPages != null) {
+				return patientPages.isEmpty() ? Collections.<TestEntity> emptyList() : patientPages.remove(0);
+			}
+			return stuckPatientPage;
 		}
 
 		@Override
@@ -401,7 +614,19 @@ public class TypeBootstrapperTest {
 	private static final class RecordingQueryStoreService implements QueryStoreService {
 		final List<QueryDocument> indexed = new ArrayList<>();
 		final List<Integer> bulkBatchSizes = new ArrayList<>();
+		final Map<String, Instant> storedVersions = new HashMap<>();
 		String failUuid;
+
+		@Override
+		public Map<String, Instant> findStoredVersions(String resourceType, List<String> resourceUuids) {
+			Map<String, Instant> found = new HashMap<>();
+			for (String uuid : resourceUuids) {
+				if (storedVersions.containsKey(uuid)) {
+					found.put(uuid, storedVersions.get(uuid));
+				}
+			}
+			return found;
+		}
 
 		// Record the batch size per call, then route to the interface default (which loops index())
 		// so `indexed` still captures every doc — lets a test assert "one bulkIndex per page" while

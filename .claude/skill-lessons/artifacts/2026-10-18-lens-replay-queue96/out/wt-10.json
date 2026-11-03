@@ -1,0 +1,35 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/module/queue/api/VisitWithQueueEntriesDeleteAdvice.java",
+      "line": 42,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The merge made the advice purge-only and hands the ticket's actual path (visit delete = voidVisit) back to VisitWithQueueEntriesSaveHandler, whose void branch only fires if core's BaseVoidHandler wins an unordered @Handler tie. That is the non-deterministic mechanism the approving review and the ticket's root-cause comment identified as the O3-5459 bug.",
+      "failure_mode": "If merged as-is, on any deployment where the tie resolves with the queue handler first (Dennis Kigen observed this live on the RefApp), DELETE /visit/{uuid} (VisitResource1_9.delete -> voidVisit) still leaves the queue entries active, so O3-5459 is not fixed. Only purge is fixed. CI stays green because the test context happens to order the handlers favourably. Fix: restore a voidVisit branch in the advice that copies visit.getVoidReason/getVoidedBy/getDateVoided onto the entries, the same way the handler does. RequiredDataAdvice has already stamped those fields by the time the advice runs, so the pairing the patient-unvoid handler relies on still holds, and the order dependence goes away.",
+      "evidence": "Core 2.7.4: HandlerUtil.getHandlersForType sorts by @Handler order only. BaseVoidHandler, VisitVoidHandler and VisitWithQueueEntriesSaveHandler all use the default order (Integer.MAX_VALUE), and ServiceContext.getRegisteredComponents copies the beans into a HashMap, so the tie is broken by hash-bucket order. Main's own test comment (VisitWithQueueEntriesSaveHandlerTest.shouldVoidQueueEntriesWhenVisitIsVoidedThroughVoidVisit) says the outcome 'depends on it running after core's BaseVoidHandler'. Mutation probe: with @Handler(supports = Visit.class, order = 1) on the queue handler, which simulates the adverse tie, `mvn -o -pl integration-tests -am -Dtest=VisitWithQueueEntriesSaveHandlerTest` goes from 7/0 failures to 3 failures, including the voidVisit test. Alternative probe under the same adverse ordering: a voidVisit branch in the advice that copies the visit's void metadata printed 'visit voided=true dateVoided=...' inside before(), and a test asserting the entry's voidReason, dateVoided and voidedBy equal the visit's passed (3/3). A runtime print of the VisitService proxy chain shows AuthorizationAdvice, RequiredDataAdvice, LoggingAdvice, CacheInterceptor, TransactionInterceptor, then VisitWithQueueEntriesDeleteAdvice. A HashMap bucket computation on the default bean names (JDK 8 HashMap) puts baseVoidHandler ahead of the queue handler at the 7 VoidHandler beans of core plus queue, but behind it once more than 24 VoidHandler beans are registered, so the order depends on the deployment. All probes were reverted.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F2",
+      "file": null,
+      "line": null,
+      "where": "PR-level",
+      "disposition": "suggestion",
+      "claim": "The PR title and description still say the advice voids entries on voidVisit, that 'All 98 integration tests pass', and that the handler 'does not reliably fire'. After the merge the PR is purge-only and its own Javadoc says voiding needs no advice, so the description contradicts the code it describes.",
+      "failure_mode": "",
+      "evidence": "pr96-body-at-round1.md 'Changes' section compared with the advice Javadoc at VisitWithQueueEntriesDeleteAdvice.java:24-34 and the ae7f8fa merge message ('The advice is now purge-only'). git diff 36b2040 HEAD on the advice shows the voidVisit branch was removed.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Not ready: the merge removed the deterministic voidVisit handling, so the visit-delete path that O3-5459 reports again depends on an unordered handler tie. Only the purge half is fixed for certain.",
+  "what_i_swept": "Pass 1: read the skill, PR body, both tickets and the review conversation, and confirmed `git diff main...HEAD` = 3 files, +170/-0 (same as the two-dot diff, so no drift). Read the full advice, its test and config.xml, then diffed the PR's last pre-merge commit 36b2040 against the merge to see what the merge changed. Traced outward to main's #124 changes (VisitWithQueueEntriesSaveHandler, PatientWithQueueEntriesUnvoidHandler, the DAO voided filter), core 2.7.4 (HandlerUtil, ServiceContext.getRegisteredComponents/addAdvice, RequiredDataAdvice, BaseVoidHandler, VisitServiceImpl voidVisit/purgeVisit, Handler.order default) and REST VisitResource1_9 delete/purge. Ran the baseline tests, a handler-order mutation and an alternative-fix probe. Pass 2 (convergence): runtime-printed the proxy chain to settle transaction and authorization placement, which clears the concern that purging entries before core's has-encounters check could lose data on rollback. Checked liquibase for other FKs onto queue_entry (only visit_queue_entries, which has been dropped), checked purge order (no self-reference) and the privilege proxying. Nothing new and substantive came up.",
+  "could_not_verify": [
+    "I could not observe the @Handler tie order on a real RefApp deployment at this head; that needs a running distribution. The blocking failure mode rests on the mutation probe, core's sort code and Dennis Kigen's recorded live observation under queue 3.0.0, which uses the same handler annotation.",
+    "The HashMap bucket computation assumes Spring's default bean names and the VoidHandler bean count. It matches the observed favourable order in the test context, but I have no known-bad deployment to calibrate it against.",
+    "Rollback of the pre-purged entries when core's purgeVisit throws Visit.purge.inUse cannot be shown in a BaseModuleContextSensitiveTest, because the test transaction wraps the service call. I relied on the observed proxy chain (advice inside TransactionInterceptor) and the class-level @Transactional instead."
+  ],
+  "passes_run": 2,
+  "notes": "The merge commit's reasoning is sound in its own terms: the old advice's voidQueueEntry would have stamped a different date and user than the visit's and broken the patient-unvoid pairing from #124. The fix is to copy the visit's metadata in the advice, not to drop it. Nothing was posted. The working copy is clean (git status --porcelain is empty)."
+}

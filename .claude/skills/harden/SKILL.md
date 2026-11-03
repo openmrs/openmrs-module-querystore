@@ -1,7 +1,7 @@
 ---
 name: harden
 description: Run /review passes on the current slice until they stop finding substantive issues, then one /simplify polish pass. Use when the user wants to harden a code slice end-to-end without manually orchestrating the review/simplify dance. Trigger phrases include "harden this", "polish until done", "iterate until convergence", "harden".
-version: 0.43.1
+version: 0.45.0
 ---
 
 # Harden
@@ -74,7 +74,7 @@ A behavior change without a named test is a Phase 1 finding — even when the co
 - Two consecutive passes return only cosmetic items (e.g., test assertion tightening, import ordering).
 - The pass starts re-flagging items prior passes addressed.
 
-**Transition gate** (forcing function — say BOTH out loud in the report before moving to Phase 2):
+**Transition gate** (forcing function — say these out loud in the report before moving to Phase 2):
 
 > "Phase 1 stopping condition met: [last pass returned no further review value | last two consecutive passes returned only cosmetic items | last pass started re-flagging prior items]. Edits made by that last pass: [N]."
 
@@ -200,6 +200,9 @@ This is deliberately cheap to satisfy and expensive to fake, which is the point 
 - **Do not manufacture a finding to look thorough.** A Phase 1 pass that finds nothing substantive is the goal, not a failure. If it finds nothing, say so and move to Phase 2; inventing a cosmetic item to justify the pass just buys another mandatory one.
 - **Do not withhold a warranted finding to end sooner.** If you find something substantive on what you hoped was the last Phase 1 pass, fix it and run another. The rule exists precisely to stop "it's basically converged" from ending a run that still had a finding in it.
 - Every applied change still needs its evidence: verified by build or test, and where it fixes a behavior, checked by reverting it and confirming the failure. **Where it ADDS a guard or clause, the same check is owed on that — deleted, its arms swapped, its comparison loosened, or rewritten in a semantically equivalent way** — because a clause the suite never discriminates is one the next change can remove for free.
+- **And an edit that REWRITES a test — a merged helper, a folded case, a changed fixture — owes the
+  revert-check on the mutations that test caught before the edit.** Re-run them against the rewritten
+  test: the build shows it passes, not that it can still fail.
 - **A mutation that reddened nothing has not shown the guard is dead until you know it RAN.** It is
   a zero result, so ask of it what its inputs could not have produced — and where that zero would
   license deleting the clause, make the loop redden ON PURPOSE before believing it: run one mutation
@@ -271,7 +274,9 @@ a `resolve-ticket` run needs — see that skill's Step 7.
 Record it immediately before spawning and **clear it on ANY terminal outcome** — a result, or the
 harness reporting the agent died, stalled or was killed. A stale entry lets the run stop for real,
 which is what the gate exists to prevent, so the gate's allow is bounded by an hour; an agent that
-has not returned inside it is treated as dead rather than outstanding.
+has not returned inside it is treated as dead rather than outstanding, except where a usage-limit
+wait can have held it: the gate's block past the bound opens on that await, and `pr-harden`'s
+**State** says what it gets.
 
 ```bash
 # ONCE, at the top of the run: pick an id for it — any string unique to this run — and use the same
@@ -368,6 +373,11 @@ After stopping, summarize:
 - Current build / test status.
 - Recommended next action (commit + push, or move on).
 
+**When `/harden` is the run, append its record before you finish** — invoked on its own, not as
+`resolve-ticket`'s Step 7, whose record covers it. `pr-harden`'s *Write the run record* gives the
+format, the `>>` and the file name, with the branch, any `/` replaced by `-`, where the slice has no
+ticket or PR; write `rounds: n/a` and the cycles.
+
 ## Anti-patterns
 
 - **Don't re-litigate** decisions from prior passes (e.g., "we deferred test fixture unification — should we revisit?" — no, ship).
@@ -410,7 +420,7 @@ After stopping, summarize:
   stop relying on noticing:**
 
   ```sh
-  git diff -U1 <base>..HEAD -- '*.java' | awk '/^\+\+\+ /{f=substr($0,7); p=""; next} /^ /{p=$0; next} /^\+/{if (p ~ /\*\/[ \t]*$/) print f; p=""; next} {p=""}'
+  git diff -U1 <base>..HEAD -- '*.java' | awk '/^\+\+\+ /{f=substr($(NF-NF),7); p=""; next} /^ /{p=$(NF-NF); next} /^\+/{if (p ~ /\*\/[ \t]*$/) print f; p=""; next} {p=""}'
   ```
 
   It names every file where an insertion landed directly below a doc comment's `*/`. Give it a

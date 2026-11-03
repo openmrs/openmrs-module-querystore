@@ -1,0 +1,489 @@
+{
+  "verdicts": [
+    {
+      "key": "F001",
+      "matches": [
+        "L02"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P05 (new parent+child, child assigned to user 1, flush+clear, purgeLocation(parent), flush) -> ConstraintViolationException on USER_LOCATION FK (9); control P05c (no assignment) deleted both rows. P06 (assigned child removed via parent.removeChildLocation + saveLocation(parent), flush) -> same FK violation (13); control P06c deleted the orphaned child.",
+      "why": "Asserts L02 and correctly extends it to orphan removal: both paths fail at flush on the user_location FK while the unassigned controls succeed. Its citation of existing onDelete=CASCADE FKs (2.4.x changelog lines 123/132/148) checks out.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F002",
+      "matches": [
+        "L01"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left).",
+      "why": "Asserts L01 with the right reason (no flush, so the FK is never evaluated and getLocation reads the in-session removal); its rewritten test (flush+clear before the purge, flush after) is a working guard.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F003",
+      "matches": [
+        "L04"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P99 becomeUser('3-4') (hasPrivilege Get Users=false, Get Locations=false); control getUser(1) -> APIAuthenticationException 'Privileges required: Get Users'; with only a proxy Get Locations, getAllowedLocations(new User(1), tag) returned user 1's assignment [2]. Re-read UserService.java:86-87 and 668-669, UserServiceImpl.java:855-860.",
+      "why": "Asserts L04 with the right mechanism (dao.getUser skips getUser's Get Users check), which P99 reproduces. One citation is wrong: UserService.java:154 is getUsersByRole; getUser(Integer) is at 86-87. A demonstrated leak, not a question.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F004",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left. P07 at head: 2LC containsEntity(User,1)/(Concept,3) true before purgeLocation(6), false right after the purge call and after flush. Calibration M1 (native delete removed): true/true/true. M3 (.addSynchronizedQuerySpace(\"user_location\")): true/true/true, while P02/P02b still left 0 rows and all 4 LocationServiceTest#purgeLocation* tests passed.",
+      "why": "Asserts L03 correctly, including that the collection must be initialised (P04b vs P04c) and that the PR's own test sets the case up; the comment does describe stale data rather than a flush failure. Its 2LC aside is also true (P07).",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F005",
+      "matches": [
+        "L01",
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left). At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L01 with the right reason, and correctly warns that just adding a flush makes the test fail at head (the L03 aborted flush, P03), though it names the cause only by reference to another finding.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F006",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "P07 at head: 2LC containsEntity(User,1)/(Concept,3) true before purgeLocation(6), false right after the purge call and after flush. Calibration M1 (native delete removed): true/true/true. M3 (.addSynchronizedQuerySpace(\"user_location\")): true/true/true, while P02/P02b still left 0 rows and all 4 LocationServiceTest#purgeLocation* tests passed.",
+      "why": "Reproduced with calibration: the unscoped native DELETE evicts unrelated entity regions (Concept) on every purge, and a synchronized query space stops it without breaking the cleanup. Rare operation, cold-cache cost only, and core's concept-type conversion (HibernateConceptDAO:238-240) does the same, so a suggestion.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F007",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left. P02 (clear before purge) left 0 rows.",
+      "why": "Asserts L03 correctly; all three probes reproduce, including (c): the PR's own getAllowedLocations leaves an initialised User.locations in the session (P04), contradicting the comment's 'no caller holds a loaded User'.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F008",
+      "matches": [
+        "L04"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P99 becomeUser('3-4') (hasPrivilege Get Users=false, Get Locations=false); control getUser(1) -> APIAuthenticationException 'Privileges required: Get Users'; with only a proxy Get Locations, getAllowedLocations(new User(1), tag) returned user 1's assignment [2]. Re-read UserService.java:86-87 and 668-669, UserServiceImpl.java:855-860.",
+      "why": "Asserts L04 with the correct mechanism and correct citations (UserService.java:86-87, UserServiceImpl.java:860); posed as a question, but the leak reproduces.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F009",
+      "matches": [
+        "L02"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P05 (new parent+child, child assigned to user 1, flush+clear, purgeLocation(parent), flush) -> ConstraintViolationException on USER_LOCATION FK (9); control P05c (no assignment) deleted both rows. P06 (assigned child removed via parent.removeChildLocation + saveLocation(parent), flush) -> same FK violation (13); control P06c deleted the orphaned child.",
+      "why": "Asserts L02 including the orphan-removal path; both reproduce. Its notes that the H2 schema is hbm2ddl-generated (create-drop, BaseContextSensitiveNonTransactionalTest:336) and that the DAO has a recursive descendants CTE are right.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F010",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "M2 (@ManyToMany/@JoinTable on User.locations replaced by @Transient): UserServiceTest#getAllowedLocations* 5 run, 0 failures. Same run, mutation-took-effect controls: P00 (select from user_location) -> 'Table \"USER_LOCATION\" not found', and the PR purge test errored on the missing table. At head P00 returns rows=0 and P02 shows the mapping writes a row after flush.",
+      "why": "Reproduced: with the collection unmapped all five tests still pass, because assignLocations never flushes or clears and dao.getUser returns the same in-session instance, so nothing reads the assignment back from the database.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F011",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "P07 at head: 2LC containsEntity(User,1)/(Concept,3) true before purgeLocation(6), false right after the purge call and after flush. Calibration M1 (native delete removed): true/true/true. M3 (.addSynchronizedQuerySpace(\"user_location\")): true/true/true, while P02/P02b still left 0 rows and all 4 LocationServiceTest#purgeLocation* tests passed.",
+      "why": "Same defect as F006, reproduced; its proposed fix (addSynchronizedQuerySpace(\"user_location\")) is verified to stop the eviction while the purge tests still pass, and User.locations indeed has no @Cache.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F012",
+      "matches": [
+        "L10"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P08 (tag 1, 2, 6; user 1 assigned only 6; flush+clear) allowed=[6]; after purgeLocation(6), flush, clear: allowed=[1, 2], 0 user_location rows, no exception or log. P08r (user assigned only 2, 2 retired): allowed=[].",
+      "why": "Asserts L10 with the right mechanism; the purge-widens versus retire-narrows contrast reproduces exactly.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F013",
+      "matches": [
+        "L01"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left).",
+      "why": "Asserts L01 with the right reason; its proposed test (flush+clear, reload, purge, flush) is the variant that catches the regression.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F014",
+      "matches": [
+        "L12"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git grep getAllowedLocations: only UserServiceImpl, the interface, User javadoc and UserServiceTest (positive control getLastLoginTime found in 6 files); read UserContext.setLocationId/setLocation (578/597), which accept any location.",
+      "why": "Asserts L12: nothing in core enforces the restriction while the title reads as enforcement.",
+      "correct_disposition": "question"
+    },
+    {
+      "key": "F015",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "AdjEnversProbeTest, run alone with runtime property hibernate.integration.envers.enabled=true and TestTransaction commits: new locations 4 and 5 assigned to user 1 (rev 1: two REVTYPE=0 rows in USER_LOCATION_AUDIT); known-good control removed 5 through the ORM (rev 2: REVTYPE=2 row for (1,5)); the PR's purgeLocation(4) (rev 3: LOCATION_AUDIT REVTYPE=2 for 4, live user_location rows 0) wrote no REVTYPE=2 row for (1,4). Envers is off by default (hibernate.default.properties:66).",
+      "why": "Reproduced: with Envers on, the native delete leaves user_location_audit showing user 1 still assigned to the purged location, while an ORM-level removal records the DEL. Minor slip: the table is user_location_audit (suffix _audit), not _aud; the ORM-level cleanup that also fixes L03 would close it.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F016",
+      "matches": [
+        "L10"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P08 (tag 1, 2, 6; user 1 assigned only 6; flush+clear) allowed=[6]; after purgeLocation(6), flush, clear: allowed=[1, 2], 0 user_location rows, no exception or log. P08r (user assigned only 2, 2 retired): allowed=[]. P10 (parent 3's children initialised, purge 4, flush) left location 4 in place at head and under M1; P10c (fresh session) deleted it.",
+      "why": "Asserts L10 correctly with the retire contrast. Its aside blames location 4 surviving on a 'read-only-session artifact'; P10 shows the cause is the pre-existing cascade from parent 3's initialised childLocations (it also survives under M1), so 'predates this PR' is right but the attribution is not.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F017",
+      "matches": [
+        "L10"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P08 (tag 1, 2, 6; user 1 assigned only 6; flush+clear) allowed=[6]; after purgeLocation(6), flush, clear: allowed=[1, 2], 0 user_location rows, no exception or log. P08r (user assigned only 2, 2 retired): allowed=[].",
+      "why": "Asserts L10 with the correct mechanism (the PR's native delete, which it loosely calls the cascade, empties the rows and empty means unrestricted); the retire contrast reproduces.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F018",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L03 correctly; both callers it names (the PR's purge test and getAllowedLocations) leave an initialised User.locations that makes the next flush throw.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F019",
+      "matches": [
+        "L01"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left).",
+      "why": "Asserts L01 with the right reason (remove without a flush issues no SQL, and getLocation returns null for the removed entity in the same session).",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F020",
+      "matches": [
+        "L04"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P99 becomeUser('3-4') (hasPrivilege Get Users=false, Get Locations=false); control getUser(1) -> APIAuthenticationException 'Privileges required: Get Users'; with only a proxy Get Locations, getAllowedLocations(new User(1), tag) returned user 1's assignment [2]. Re-read UserService.java:86-87 and 668-669, UserServiceImpl.java:855-860.",
+      "why": "Asserts L04 with the correct mechanism; posed as a question, but the leak reproduces.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F021",
+      "matches": [
+        "L12"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git grep getAllowedLocations: only UserServiceImpl, the interface, User javadoc and UserServiceTest (positive control getLastLoginTime found in 6 files); read UserContext.setLocationId/setLocation (578/597), which accept any location.",
+      "why": "Asserts L12; its citations of UserContext.setLocationId/setLocation (578/597) are correct.",
+      "correct_disposition": "question"
+    },
+    {
+      "key": "F022",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L03 (exception at flush) correctly, and correctly scopes production reach as undemonstrated.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F023",
+      "matches": [
+        "L10"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P08 (tag 1, 2, 6; user 1 assigned only 6; flush+clear) allowed=[6]; after purgeLocation(6), flush, clear: allowed=[1, 2], 0 user_location rows, no exception or log. P08r (user assigned only 2, 2 retired): allowed=[].",
+      "why": "Asserts L10 with the correct mechanism and the retire contrast; blocking overstates a suggestion-level gap.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F024",
+      "matches": [
+        "L01",
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left). At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L01 with the right reason and, correctly, that adding a flush after the purge fails at head with TransientPropertyValueException (P03).",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F025",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L03 correctly: the PR test plus one flush fails exactly as stated (P03).",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F026",
+      "matches": [
+        "L02"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P05 (new parent+child, child assigned to user 1, flush+clear, purgeLocation(parent), flush) -> ConstraintViolationException on USER_LOCATION FK (9); control P05c (no assignment) deleted both rows. P06 (assigned child removed via parent.removeChildLocation + saveLocation(parent), flush) -> same FK violation (13); control P06c deleted the orphaned child.",
+      "why": "Asserts L02 with the right mechanism (cascade=ALL on childLocations deletes children without passing through deleteLocation); its orphan-removal aside also reproduces.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F027",
+      "matches": [
+        "L01"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left). At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L01 with the right reason but understates it as a suggestion, and its fix (just add a flush after purgeLocation) would itself fail at head with TransientPropertyValueException (P03) unless the session is cleared first.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F028",
+      "matches": [
+        "L01",
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left). At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L01 and the L03 flush failure in the PR test as written, both reproduced; the disposition is understated.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F029",
+      "matches": [
+        "L04"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P99 becomeUser('3-4') (hasPrivilege Get Users=false, Get Locations=false); control getUser(1) -> APIAuthenticationException 'Privileges required: Get Users'; with only a proxy Get Locations, getAllowedLocations(new User(1), tag) returned user 1's assignment [2]. Re-read UserService.java:86-87 and 668-669, UserServiceImpl.java:855-860.",
+      "why": "Asserts L04 with the correct mechanism and citations; the 'deliberate for the logging-in user' caveat does not cover reading other users.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F030",
+      "matches": [
+        "L04"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P99 becomeUser('3-4') (hasPrivilege Get Users=false, Get Locations=false); control getUser(1) -> APIAuthenticationException 'Privileges required: Get Users'; with only a proxy Get Locations, getAllowedLocations(new User(1), tag) returned user 1's assignment [2]. Re-read UserService.java:86-87 and 668-669, UserServiceImpl.java:855-860.",
+      "why": "Asserts L04 and its probe reproduces exactly: getUser(1) is denied while getAllowedLocations(new User(1), tag) returns user 1's list.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F031",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L03 correctly (P03 and P04c reproduce both probes); no production caller is shown, and the loaded-user case failed before the PR too (with the FK), so suggestion rather than blocking.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F032",
+      "matches": [
+        "L04"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P99 becomeUser('3-4') (hasPrivilege Get Users=false, Get Locations=false); control getUser(1) -> APIAuthenticationException 'Privileges required: Get Users'; with only a proxy Get Locations, getAllowedLocations(new User(1), tag) returned user 1's assignment [2]. Re-read UserService.java:86-87 and 668-669, UserServiceImpl.java:855-860.",
+      "why": "Asserts L04 with the correct mechanism; the question framing understates a reproduced leak.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F033",
+      "matches": [
+        "L01"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left).",
+      "why": "Asserts L01 with the right reason and the right fix (flush+clear, reload, purge, flush); disposition understated.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F034",
+      "matches": [
+        "L01",
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "M1 (the two native-delete lines removed from HibernateLocationDAO.deleteLocation): LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser passed (Tests run 1, Failures 0); flushing controls P02/P02b (assign loc 6 or 4, flush, clear, purge, flush) failed with the USER_LOCATION FK violation under M1 and passed at head (0 location and 0 user_location rows left). At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left. P10/P10c as described in the why.",
+      "why": "Asserts L01 and the L03 flush failure correctly. Its side claim also holds: location 4 silently survives a purge once its parent's children are initialised (P10), at head and under M1, so it predates the PR and moving to location 6 is sound.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F035",
+      "matches": [
+        "L05"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read User.java:95-111 (roles EAGER, locations LAZY), HibernateContextDAO.authenticate 166-169 and UserContext.becomeUser 184-195 (roles, user properties and privileges hydrated, locations not). Not re-run: L05 is given.",
+      "why": "Asserts L05 with the correct mechanism; the hydration citations (authenticate ~166-168, becomeUser ~184-195) are accurate.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F036",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L03 correctly; its p11 sequence reproduces as P04c and its getAllowedLocations variant as P04.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F037",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "M2 (@ManyToMany/@JoinTable on User.locations replaced by @Transient): UserServiceTest#getAllowedLocations* 5 run, 0 failures. Same run, mutation-took-effect controls: P00 (select from user_location) -> 'Table \"USER_LOCATION\" not found', and the PR purge test errored on the missing table. At head P00 returns rows=0 and P02 shows the mapping writes a row after flush.",
+      "why": "Same coverage gap as F010 (no test reads the assignment back from the database), confirmed by the M2 mutation; for a new persistent mapping that is a suggestion, not a nit.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F038",
+      "matches": [
+        "L05"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read User.java:95-111 (roles EAGER, locations LAZY), HibernateContextDAO.authenticate 166-169 and UserContext.becomeUser 184-195 (roles, user properties and privileges hydrated, locations not). Not re-run: L05 is given.",
+      "why": "Asserts L05 with the correct contrast (roles is EAGER at User.java:95, locations LAZY).",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F039",
+      "matches": [
+        "L10"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P08 (tag 1, 2, 6; user 1 assigned only 6; flush+clear) allowed=[6]; after purgeLocation(6), flush, clear: allowed=[1, 2], 0 user_location rows, no exception or log. P08r (user assigned only 2, 2 retired): allowed=[].",
+      "why": "Asserts L10 with the correct mechanism (UserServiceImpl:868-869 returns every tagged location for an empty set) and the retire contrast.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F040",
+      "matches": [
+        "L03"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "At head: P03/P03b (PR test body plus Context.flushSession() after purgeLocation, loc 4 and loc 6) threw IllegalStateException/TransientPropertyValueException [org.openmrs.User.locations -> org.openmrs.Location]; P04c (flush+clear, getUser(1).getLocations().size(), purge 6, flush) threw the same; P04 (flush+clear, getAllowedLocations(new User(1), tag) returned [6], purge 6, flush) threw the same; control P04b (user loaded, collection not initialised) purged cleanly with 0 rows left.",
+      "why": "Asserts L03 correctly, including the initialised versus uninitialised distinction (P04b purges cleanly, P04c throws); its Envers aside is the F015 point.",
+      "correct_disposition": "suggestion"
+    }
+  ],
+  "duplicate_groups": [
+    [
+      "F006",
+      "F011"
+    ],
+    [
+      "F010",
+      "F037"
+    ]
+  ],
+  "notes": "Judged against wt-adj at b7cd909 (Hibernate 7.4.7, H2 schema from hbm2ddl create-drop). Probes lived in temporary AdjProbeTest/AdjEnversProbeTest classes (LocationServiceTest-initialData.xml loaded) and were deleted afterwards; logs are run1-head.log, run2-m1.log, run3-m3.log, run4-m2.log and run5-envers.log in this directory. run1 at head: 25 tests green, with probe outcomes recorded. M1 removed the native user_location delete. M3 added .addSynchronizedQuerySpace(\"user_location\"). M2 replaced User.locations' @ManyToMany/@JoinTable with @Transient. The Envers run used no mutation. Every mutation was restored with git checkout; the clone ends with an empty git status.\n\nMatching: 35 findings match known keys and 5 are unmatched (F006, F010, F011, F015, F037). F005, F024, F028 and F034 assert L01 and also the L03 aborted flush (the PR test plus one flush throws TransientPropertyValueException at head, P03). F005 makes that point only by reference to another finding. No finding asserts L06, L07, L08, L09, L11 or L13. F010 and F037 mention the in-session re-read only as the reason the mapping goes unread; neither asserts that the re-read is unpinned or that its comment is wrong, so neither matches L08.\n\nL03 disposition: I chose suggestion over blocking. Every L03 probe reproduces (P03, P03b, P04, P04c). But an initialised User.locations is required (P04b, where the collection is uninitialised, purges cleanly). That same loaded-user purge failed before the PR too (on the FK). And no finding shows a production caller. The fix is to correct the comment or do the cleanup through the ORM.\n\nSide checks on matched findings. F003 cites UserService.java:154 for getUser; line 154 is getUsersByRole, and getUser(Integer) is at 86-87. F027's proposed fix (only add a flush after purgeLocation) would itself fail at head with TransientPropertyValueException unless the session is cleared before the purge. F034's side claim reproduces: location 4 silently survives its purge once parent 3's childLocations is initialised, because the cascade from that initialised collection undoes the delete (P10). It survives under M1 too, so the behaviour predates the PR. F016 attributes the same survival to a read-only session; P10 produces it with no read-only transaction involved, so that attribution is unsupported. F001's changelog citation of existing onDelete=\"CASCADE\" FKs checks out. The orphanRemoval path claimed by F001, F009 and F026 reproduces (P06: FK violation; P06c control passes).\n\nAsides inside matched findings restate unmatched defects. F004 restates the 2LC eviction; F018 and F040 restate the Envers gap. They are left out of duplicate_groups because those groups are drawn from unmatched findings only.\n\nDuplicate groups: I compared all pairs among the five unmatched findings. F006 and F011 are the same defect: the unscoped native DELETE evicts every 2LC region (P07: true->false at head, true->true under M1 and M3). F010 and F037 are the same defect: no getAllowedLocations test reads the user_location mapping back from the database; all five still pass under M2. F015 (Envers audit gap) has no duplicate among the unmatched findings."
+}

@@ -392,11 +392,11 @@ public class BootstrapLauncherTest {
 		BootstrapLauncher launcher = SynchronousLaunchers.create();
 		try {
 			launcher.runWithProjectionSlot("patient-1", () -> {
-				throw new PartialProjectionException(java.util.Collections.singletonList("allergy"));
+				throw new IncompleteProjectionException("Cold-touch projection for patient patient-1 was incomplete: 1 type(s) failed, 0 record(s) not projected");
 			}, 50);
 			fail("expected the partial projection to propagate");
 		}
-		catch (PartialProjectionException expected) {
+		catch (IncompleteProjectionException expected) {
 			// pass
 		}
 		assertTrue("a synchronous failure is recorded too", launcher.hasFailed("patient-1"));

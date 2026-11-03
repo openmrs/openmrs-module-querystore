@@ -1,0 +1,23 @@
+{
+ "pr": "openmrs/openmrs-module-queue#96",
+ "as_of": "2026-09-16T11:16:58Z (just before the review round being replayed)",
+ "title": "O3-5459: Void and purge a visit's queue entries when the visit is deleted",
+ "reviews": [
+  {
+   "author": "denniskigen",
+   "state": "APPROVED",
+   "submitted_at": "2026-07-03T12:05:45Z",
+   "commit_id": "36b2040b2bbd57b99b4d0aa024f247b95b5f4fc6",
+   "body": "Reviewed and verified this end to end, including a live deployment. Verdict: works as described, and the advice approach is the right mechanism.\n\n**Live verification** (RefApp stack, core 2.8.7, module built from this branch): `DELETE /visit/{uuid}?reason=...` voided the associated queue entry with the reason propagated (DB-verified), where queue 3.0.0 leaves it active, which is the O3-5459 bug. `DELETE /visit/{uuid}?purge=true` purged the queue entry and visit cleanly, where 3.0.0 fails on the `queue_entry_visit_id_fk` constraint. This also confirms the `config.xml` advice registration fires in a deployed module, which the integration tests can't exercise (as your test comments note).\n\n**On the root cause, to sharpen \"does not reliably fire\":** the O3-4416 void branch in `VisitWithQueueEntriesSaveHandler` is guarded by `visit.getVoided()`, which is only true if core's `BaseVoidHandler` has already run. Both handlers carry the default `@Handler` order, and core returns tied handlers in `HashMap` iteration order via `ServiceContext.getRegisteredComponents`, so on the current RefApp the queue handler runs first and silently no-ops. Its test passes because it calls `saveVisit()` on a pre-voided visit, a path the real delete flow never takes. Your advice reads the method arguments directly, so it has no ordering dependency, and it is the only mechanism that can cover `purgeVisit` at all.\n\n**On @RoshanMadival08's question:** it's better than transactional. `ServiceContext.addAdvice` appends this advice to the tail of the service proxy chain, inside the `TransactionInterceptor`, so the queue-entry writes and the visit void commit or roll back together. Notably, the mechanism this replaces had the weaker guarantee: `RequiredDataAdvice` is registered as a pre-interceptor (outside the transaction interceptor), so the old handler's `saveQueueEntry` calls committed independently of the visit operation.\n\nThree non-blocking suggestions:\n\n1. Consider retiring the void branch in `VisitWithQueueEntriesSaveHandler` once this merges. It isn't dead code, which is the problem: whether it fires depends on `@Handler` order ties resolved by `HashMap` iteration order, so it runs in some deployments (O3-5594 arose through its `saveQueueEntry` path) and silently no-ops in others (verified on the RefApp). With this advice in place it's redundant on every `voidVisit` path, and I could find no production caller that saves a pre-voided visit, so removing it would leave the behavior with a single deterministic owner. Its `shouldVoidQueueEntriesIfVisitIsVoided` test would go with it.\n2. `unvoidVisit` is still unhandled, so restore-after-delete leaves entries voided. Seems fine as a follow-up ticket; the natural semantics would unvoid only entries whose void metadata matches the visit's.\n3. The branch merges clean onto current main (checked, zero conflicts); worth a rebase before merge, and a multi-entry-per-visit test would round out coverage.\n\nSmall observation in favor of the implementation: using `voidQueueEntry` rather than `saveQueueEntry` keeps `QueueEntryValidator` out of the cascade path entirely, which sidesteps the class of multi-entry issues O3-5594 addressed.\n\nFor cross-reference: openmrs/openmrs-esm-patient-chart#3427 is a frontend workaround for the same ticket; once this merges and ships in a release, that PR can be closed.\n"
+  }
+ ],
+ "conversation_comments": [
+  {
+   "author": "RoshanMadival08",
+   "created_at": "2026-03-18T07:42:16Z",
+   "body": "great!!\r\n\r\nOne question: is there a risk of partial failure if purging one queue entry fails midway? A transactional guarantee would be worth confirming."
+  }
+ ],
+ "inline_review_threads": [],
+ "note": "No inline review threads existed at this time. This file is the complete PR conversation as of the snapshot time."
+}

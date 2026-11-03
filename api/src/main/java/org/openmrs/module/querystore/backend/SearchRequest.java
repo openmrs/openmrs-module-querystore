@@ -75,6 +75,13 @@ public final class SearchRequest {
 		return offset;
 	}
 
+	/**
+	 * Returns a copy of this request with {@code limit} replaced by {@code newLimit}.
+	 */
+	public SearchRequest withLimit(int newLimit) {
+		return new SearchRequest(resourceTypes, queryText, queryVector, filters, newLimit, offset);
+	}
+
 	public static Builder builder() {
 		return new Builder();
 	}

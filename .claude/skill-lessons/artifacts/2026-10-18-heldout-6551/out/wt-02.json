@@ -1,0 +1,67 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/test/java/org/openmrs/api/LocationServiceTest.java",
+      "line": 557,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The regression test purgeLocation_shouldDeleteLocationAssignedToAUser never flushes after the purge, so it passes whether or not the user_location delete in HibernateLocationDAO.deleteLocation exists.",
+      "failure_mode": "If merged as-is, the FK fix has no guard: deleting the native `delete from user_location` passes CI and purging an assigned location goes back to failing with a referential-integrity violation at commit, because the test checks `getLocation` against session state and the DELETE never reaches the database.",
+      "evidence": "Mutation probe: removed the two native-delete lines from HibernateLocationDAO.deleteLocation, ran `mvn -o -B -pl api -am test -Dtest='LocationServiceTest#purgeLocation_shouldDeleteLocationAssignedToAUser'`, which gave Tests run: 1, Failures: 0, BUILD SUCCESS. Rewrote the test as saveUser, Context.flushSession(), Context.clearSession(), purgeLocation(ls.getLocation(4)), Context.flushSession(). With the fix in place it passes. With the fix removed it fails with `JdbcBatchUpdateException: Referential integrity constraint violation ... USER_LOCATION FOREIGN KEY(LOCATION_ID) REFERENCES PUBLIC.LOCATION(LOCATION_ID) (4)`. Files restored with git checkout.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 130,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The comment's 'Safe today since no caller holds a loaded User across this call' is false: the PR's own purge test holds one. With a User whose locations collection is initialized in the session, purgeLocation followed by a flush throws TransientPropertyValueException.",
+      "failure_mode": "",
+      "evidence": "Added only `Context.flushSession()` after `ls.purgeLocation(locationToDelete)` in the PR's test, with the PR's DAO fix intact. Result: IllegalStateException / TransientPropertyValueException: 'Persistent instance of org.openmrs.User references an unsaved transient instance of org.openmrs.Location [org.openmrs.User.locations -> org.openmrs.Location]' at LocationServiceTest.java:558. Any single-session caller that loaded or edited a user's locations (for example via getAllowedLocations under open-session-in-view, or module code) and then purges one of those locations fails at flush. Recommended fix: drop the native SQL and go through Hibernate instead: query `select u from User u join u.locations l where l = :location` and call `u.getLocations().remove(location)` on each result before `session.remove(location)`. That keeps the session consistent and also fixes F3. The other option is to evict or refresh affected users after the native delete.",
+      "confidence": "high"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/main/java/org/openmrs/api/db/hibernate/HibernateLocationDAO.java",
+      "line": 133,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The native DELETE declares no synchronized query space, so Hibernate invalidates the entire second-level cache (every entity region, not just User/Location) on every location purge.",
+      "failure_mode": "",
+      "evidence": "Probe test: loaded User 1 and Concept 3, flushed, then checked sessionFactory.getCache().containsEntity before and after purgeLocation(location 4). PR code: before=true/true, after=false/false (unrelated Concept evicted). Control with the native delete removed, same test order: after=true/true. With `.addSynchronizedQuerySpace(\"user_location\")` added: after=true/true, and the PR's purge test still passes. 2LC is enabled by default (hibernate.default.properties:33). Purges are rare, so the impact is a cache-wide cold start rather than a correctness bug.",
+      "confidence": "high"
+    },
+    {
+      "id": "F4",
+      "file": "api/src/main/java/org/openmrs/api/UserService.java",
+      "line": 669,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "getAllowedLocations is guarded only by GET_LOCATIONS and re-reads the user through the DAO, so a caller without GET_USERS can read any other user's location assignments by passing `new User(id)`. Is that exposure intended, or should other-user lookups also need GET_USERS?",
+      "failure_mode": "",
+      "evidence": "Probe: Context.becomeUser(\"3-4\") + addProxyPrivilege(GET_LOCATIONS) only. userService.getUser(1) gave APIAuthenticationException (control), but userService.getAllowedLocations(new User(1), tag) returned user 1's restricted list [Test Level A Child Location 1]. UserServiceImpl.java:860 uses dao.getUser, which skips the @Authorized(GET_USERS) on UserService.getUser (UserService.java:86).",
+      "confidence": "medium"
+    },
+    {
+      "id": "F5",
+      "file": null,
+      "line": null,
+      "where": "PR-level",
+      "disposition": "question",
+      "claim": "The title says 'restricting users to assigned locations', but nothing in core enforces the restriction (a restricted user can still set any session or login location). Is enforcement deliberately out of scope, with filtering left to the login picker as TRUNK-6669 describes?",
+      "failure_mode": "",
+      "evidence": "Read the diff: the only consumer of User.locations is UserServiceImpl.getAllowedLocations. TRUNK-6669 scopes the work to filtering the /login/location picker server-side. No change touches UserContext/session location setting.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Not ready to merge: the purge regression test added for the user_location FK fix cannot fail (verified by mutation), and the fix itself breaks flush when a User with loaded locations is in the session, so the delete path needs reworking and a flushing test.",
+  "what_i_swept": "Read the skill and openmrs-verification.md, the PR body and the TRUNK-6669 snapshot. Confirmed the diff stat (8 files, +216/-6, three-dot equals two-dot so no drift). Read each changed hunk with context: User mapping (Envers @Audited, 2LC annotations vs roles), UserServiceImpl, UserService auth, HibernateLocationDAO, the Liquibase changeset vs siblings in 3.0.x. Traced outward to LocationServiceImpl.purgeLocation/getLocationsByTag, HibernateUserDAO.deleteUser (owning-side join rows removed by Hibernate, so no user-purge FK issue), the HibernateOrderDAO bulk-delete precedent, the 2LC config, and UserService.getUser authorization. Ran mutation probes on the purge test (fix removed / flush added / flush+clear), a 2LC eviction probe calibrated against a no-native-delete control and a synchronized-query-space variant, an authorization probe with a non-admin user, and DatabaseUpdaterDatabaseIT under -Pintegration-test (passes with count 917). Swept solution fit, correctness, tests, security, performance, conventions.",
+  "could_not_verify": [
+    "Could not identify from the IT log which database backend(s) DatabaseUpdaterDatabaseIT ran against (it ran 3 times and passed). The Liquibase changeset was not separately validated on MySQL/PostgreSQL.",
+    "Did not exercise the companion REST PR (openmrs-module-webservices.rest#762) or a real web request under open-session-in-view, so F2's production trigger is reasoned from the in-test reproduction, not observed in a running server."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 found F1 and pass 2 (prompted by F1) found F2/F3/F4. Pass 3 (Liquibase, IT, ticket fit) found only the F5 question. The getAllowedLocations tests at head and the intersection logic look correct. The composite PK departs from the ticket's surrogate user_location_id but mirrors user_role, so it is not raised. Envers is off by default and EnversAuditTableInitializer builds audit tables from the mappings, so it is not raised. All probes restored. git status --porcelain is clean."
+}

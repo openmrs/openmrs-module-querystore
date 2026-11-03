@@ -1,0 +1,23 @@
+$ class-rates.py combined-digest.txt combined-classes.txt
+all blocks by class: {'M': 29, 'R': 45, 'N': 20, 'U': 15, 'Rc': 18, '0': 8}
+
+first: 60 traversals over 60 runs
+  R     traversals= 19 escalated= 14 ( 74%)  runs=19
+  Rc    traversals=  6 escalated=  4 ( 67%)  runs=6
+  R+Rc  traversals= 25 escalated= 18 ( 72%)  runs=25
+  M     traversals= 11 escalated=  8 ( 73%)  runs=11
+  N     traversals= 12 escalated=  7 ( 58%)  runs=12
+  M+N   traversals= 23 escalated= 15 ( 65%)  runs=23
+  0     traversals=  8 escalated=  4 ( 50%)  runs=8
+  U     traversals=  4 escalated=  4 (100%)  runs=4
+
+resumed: 75 traversals over 40 runs
+  R     traversals= 26 escalated= 12 ( 46%)  runs=20
+  Rc    traversals= 12 escalated=  6 ( 50%)  runs=9
+  R+Rc  traversals= 38 escalated= 18 ( 47%)  runs=25
+  M     traversals= 18 escalated=  9 ( 50%)  runs=16
+  N     traversals=  8 escalated=  5 ( 62%)  runs=6
+  M+N   traversals= 26 escalated= 14 ( 54%)  runs=20
+  0     none
+  U     traversals= 11 escalated=  6 ( 55%)  runs=7
+exit=0

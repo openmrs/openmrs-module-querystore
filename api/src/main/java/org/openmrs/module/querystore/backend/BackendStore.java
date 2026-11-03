@@ -9,7 +9,10 @@
  */
 package org.openmrs.module.querystore.backend;
 
+import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.openmrs.module.querystore.model.QueryDocument;
 
@@ -87,6 +90,16 @@ public interface BackendStore {
 	boolean existsByPatient(String patientUuid);
 
 	/**
+	 * The stored {@code last_modified} of each given record of {@code resourceType} this backend holds,
+	 * keyed by resource uuid; a record not stored, or stored without one, is absent. Lets a bootstrap
+	 * top-up skip records already indexed at their current version. The default reports none, so a
+	 * backend without an implementation re-projects every record, as before.
+	 */
+	default Map<String, Instant> findLastModified(String resourceType, List<String> resourceUuids) {
+		return Collections.emptyMap();
+	}
+
+	/**
 	 * Returns the number of documents in the per-type store for {@code resourceType}, or {@code -1} if
 	 * this backend does not implement a count (the {@code default}). Used by drift detection (ADR: Sync
 	 * reliability and reconciliation) to compare the live index size against core's expected record
@@ -151,6 +164,15 @@ public interface BackendStore {
 	 */
 	List<QueryDocument> findAllByPatient(String patientUuid);
 
+	/**
+	 * Full-chart read with explicit loss information. Existing backends inherit a complete result;
+	 * backends override this method when they know a cap or handled read failure may have omitted
+	 * records.
+	 */
+	default PatientChartRead findPatientChart(String patientUuid) {
+		return PatientChartRead.complete(findAllByPatient(patientUuid));
+	}
+
 	SearchResult bm25(SearchRequest req);
 
 	SearchResult knn(SearchRequest req);
@@ -164,11 +186,14 @@ public interface BackendStore {
 	 * need to override {@code hybrid} or implement {@code knn}; it returns BM25 alone.
 	 */
 	default SearchResult hybrid(SearchRequest req) {
-		SearchResult bm25 = bm25(req);
 		if (req.getQueryVector() == null || !capabilities().supportsKnn()) {
-			return bm25;
+			return bm25(req);
 		}
-		SearchResult knn = knn(req);
+		SearchRequest candidateReq = req.getLimit() > 0
+		        ? req.withLimit((int) Math.max(Math.min(req.getLimit() * 3L, Integer.MAX_VALUE), 30))
+		        : req;
+		SearchResult bm25 = bm25(candidateReq);
+		SearchResult knn = knn(candidateReq);
 		return RankFusion.rrf(bm25, knn, req.getLimit());
 	}
 

@@ -1,0 +1,476 @@
+{
+  "verdicts": [
+    {
+      "key": "F001",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone.",
+      "why": "Asserts K1 with the right reason: purgeQueueEntry is @Authorized(PURGE_QUEUE_ENTRIES) and the advice proxies only Get and Manage. Reproduced as stated, including the control.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F002",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. Also read core 2.7.4 PatientDataVoidHandler and PatientWithQueueEntriesUnvoidHandler.shouldRestore.",
+      "why": "Asserts K6 with the right mechanism: the getVoided() guard at VisitWithQueueEntriesSaveHandler.java:62 passes only after BaseVoidHandler, and the default-order tie is settled by HashMap order. Reproduced without touching annotations; its side claims (PatientDataVoidHandler does not void visits, shouldRestore skips entries on voided visits) hold.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F003",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout.",
+      "why": "Asserts K6; mechanism and citations (VisitServiceImpl.voidVisit:201, RequiredDataAdvice:159-163, ServiceContext.java:919-926) are right, and its order=1 mutation result (3 failures incl. :128 and :151) matches mine.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F004",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone.",
+      "why": "K1 with the right reason, reproduced. MANAGE is indeed unused on this path: purgeQueueEntry is a plain dao.delete.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F005",
+      "matches": [
+        "K4"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Probe ZzAdjProbeTest E3 at head: advice registered + purgeVisit + Context.flushSession -> flush OK, visit and entry 3 gone; no advice + purgeVisit + flushSession -> javax.persistence.PersistenceException <- ConstraintViolationException 'could not execute batch' <- JdbcBatchUpdateException 'Referential integrity constraint violation: FK6KV88QXAJR18XBN1YNPJ7QR74: PUBLIC.QUEUE_ENTRY FOREIGN KEY(VISIT_ID) REFERENCES PUBLIC.VISIT(VISIT_ID)' for visits 102 and 101; no advice and no flush -> getVisit returns null while entries 3 and 10 are still present, so the PR's tests would fail only at the assertFalse lines 78/90.",
+      "why": "Asserts K4 with the right reason; all three outcomes it reports reproduce (pass with advice + flush, FK ConstraintViolationException without the advice, assertFalse-only failures without the flush).",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F006",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "NOISE",
+      "anchor_wrong": false,
+      "what_i_ran": "grep -n 'visit_queue_entr\\|dropTable' api/src/main/resources/liquibase.xml and read lines 396-440: add_visit_id_to_queue_entry_20231025, migrate_visit_id_to_queue_entry_20231025 (MySQL/MariaDB) and its PostgreSQL twin, then drop_visit_queue_entries_20231025 (precondition tableExists, onFail MARK_RAN) with <dropTable tableName=\"visit_queue_entries\"/>.",
+      "why": "The premise 'No dropTable for it in liquibase.xml' is false: changeset drop_visit_queue_entries_20231025 drops visit_queue_entries on any install that still has it, right after the visit_id migration, so no legacy rows or FKs remain to block the purge.",
+      "correct_disposition": "drop"
+    },
+    {
+      "key": "F007",
+      "matches": [
+        "K4"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Probe ZzAdjProbeTest E3 at head: advice registered + purgeVisit + Context.flushSession -> flush OK, visit and entry 3 gone; no advice + purgeVisit + flushSession -> javax.persistence.PersistenceException <- ConstraintViolationException 'could not execute batch' <- JdbcBatchUpdateException 'Referential integrity constraint violation: FK6KV88QXAJR18XBN1YNPJ7QR74: PUBLIC.QUEUE_ENTRY FOREIGN KEY(VISIT_ID) REFERENCES PUBLIC.VISIT(VISIT_ID)' for visits 102 and 101; no advice and no flush -> getVisit returns null while entries 3 and 10 are still present, so the PR's tests would fail only at the assertFalse lines 78/90.",
+      "why": "K4 with the right reason; reproduced, and the H2 message it quotes (FK on QUEUE_ENTRY(VISIT_ID) REFERENCES VISIT(VISIT_ID)) is the one I got.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F008",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout.",
+      "why": "Asserts the K6 ordering dependence: main's voidVisit test passes only because the 7-bean test context puts BaseVoidHandler first, and the same scenario fails at 24 beans. Its own ask, an order-independent test, belongs with the K6 fix, so suggestion.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F009",
+      "matches": [
+        "K6",
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K6 with the right mechanism and a real-code reproduction, plus the stale PR description (K2). Minor slip: the order flips at 24 VoidHandler beans (17 extra), not at 18 extra / 25 as its simulation says; its observed extra=18 result is still consistent.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F010",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "Says the description and approval describe the voidVisit advice the merge removed (K2) and only asks what makes the handler order-independent; nothing does (K6), so it should state the defect rather than ask.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F011",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone. Read core 2.7.4 VisitService.java:226 (@Authorized PURGE_VISITS).",
+      "why": "K1 with the right reason, reproduced; its note that this is no regression versus base (base fails on the FK for everyone) is also right.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F012",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2: the title and description still describe the pre-merge voidVisit advice while the head returns early unless the method is purgeVisit.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F013",
+      "matches": [
+        "K9"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git grep -n 'implements.*UnvoidHandler' and '@Handler' over api and omod at head: the only unvoid handler is PatientWithQueueEntriesUnvoidHandler (UnvoidHandler<Patient>); the search finds that known class, so the zero hit for a Visit unvoid handler is real. Read VisitWithQueueEntriesSaveHandler: on unvoidVisit's saveVisit pass it only closes or voids entries.",
+      "why": "K9 with the right reason: no UnvoidHandler<Visit> exists, and nothing else restores a visit's entries on unvoidVisit.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F014",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. Also git show bdfaa72 -- VisitWithQueueEntriesSaveHandler.java and core 2.8.7 ServiceContext (same HashMap copy).",
+      "why": "K6 with the right mechanism; its 7-23 vs 24+ bean threshold matches my real-code run, and O3-5955 did leave the getVoided() guard unchanged, so the merge message's premise does not remove the ordering problem.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F015",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone. Read liquibase.xml:654-666.",
+      "why": "K1 with the right reason, reproduced. Its 'not blocking' argument fails: the one-time changeset grants Purge Queue Entries to roles holding Delete Visits, but purgeVisit is gated on Purge Visits, so the callers the advice's comment promises to cover are the ones that fail.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F016",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. Read webservices VisitResource1_9.delete (lines 271-277).",
+      "why": "K6 with the right mechanism and REST path (VisitResource1_9.delete calls voidVisit at line 276); its order=1 mutation result matches mine.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F017",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2: the description's void claims and 'tests for both void and purge' no longer match a purge-only advice with two purge tests.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F018",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout.",
+      "why": "K6 with the right mechanism; its HashMap result (BaseVoidHandler first up to 23 beans, the queue handler first from 24) matches my real-code run.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F019",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout.",
+      "why": "Asserts that the Javadoc's 'already voids ... on the voidVisit path' is false under the adverse order, which is K6's mechanism (reproduced). The doc fix it asks for follows from the K6 fix, so suggestion.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F020",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Removed `!\"purgeVisit\".equals(method.getName()) ||` from line 41 and ran the api and integration-tests suites in full (-Dmaven.test.failure.ignore=true): api 59/59 and all 119 integration tests pass, including VisitWithQueueEntriesDeleteAdviceTest 2/2, VisitWithQueueEntriesSaveHandlerTest 7/7 and VisitWithQueueEntriesValidatorTest 8/8. The only failure was my added probe (advice registered, voidVisit, flush, assert entry 3 present): entry 3 was purged by voidVisit; the same probe passes at head. Control: setIncludedVoided(true) -> false turns shouldPurgeVoidedQueueEntriesOfAPurgedVisit red at line 90. Both mutations restored with git checkout.",
+      "why": "Reproduced: the method-name guard is all that stops the advice purging a visit's queue entries on saveVisit, endVisit, voidVisit and unvoidVisit, and removing it leaves every existing test green. A negative test (advice registered, voidVisit, entry still present) kills the mutation, as my probe showed.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F021",
+      "matches": [
+        "K6",
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K6 with the right mechanism; its threshold (24 beans, buckets 52 vs 25 at capacity 64) matches my probe exactly. It also says the PR body describes the removed branch as the fix (K2).",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F022",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone. Read liquibase.xml:654-666.",
+      "why": "K1 with the right reason, reproduced; its liquibase detail (a one-time grant of Purge Queue Entries to roles that held Delete Visits) is accurate.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F023",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. Read core 2.7.4 applicationContext-service.xml: visitService is a TransactionProxyFactoryBean with serviceInterceptors (authorization, requiredData, logging, cache) as preInterceptors.",
+      "why": "K6 with the right mechanism; its adverse-order mutation result matches mine, and RequiredDataAdvice does run ahead of advice added with Context.addAdvice, so the visit is already stamped when the advice runs.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F024",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR. git diff --numstat 36b2040 ae7f8fa on the advice: 24 24.",
+      "why": "K2: the description and approval describe 36b2040, not the head. Minor slip: the merge changed the advice by 24/24 lines, not +27/-21.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F025",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2: the description still says the advice voids on voidVisit while the head is purge-only.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F026",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. Printed applicationContext.getBeansOfType(VoidHandler.class).keySet(): [patientWithQueueEntriesVoidHandler, visitWithQueueEntriesSaveHandler, patientDataVoidHandler, requireVoidReasonVoidHandler, personVoidHandler, visitVoidHandler, baseVoidHandler].",
+      "why": "K6: the guard and tie dependence are right and its order=1 mutation result (:115, :128, :151 fail) matches mine exactly. One wrong detail: ties are not kept in 'bean registration order' but in HashMap order; getBeansOfType lists visitWithQueueEntriesSaveHandler before baseVoidHandler in the test context, yet BaseVoidHandler runs first.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F027",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone.",
+      "why": "K1 with the right reason; reproduced, including both controls.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F028",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone.",
+      "why": "K1 with the right reason; reproduced, including the control.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F029",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2: the description's root cause ('does not reliably fire') and its void claims contradict the head's Javadoc and purge-only code.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F030",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. Read core 2.7.4 applicationContext-service.xml (visitService TransactionProxyFactoryBean, serviceInterceptors).",
+      "why": "K6 with the right mechanism; its order=1 result and proxy-chain order match core's wiring. Off by one in wording: the order flips at 24 VoidHandler beans, not 'more than 24'.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F031",
+      "matches": [
+        "K1"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read QueueEntryService.java:132-133 (@Authorized PURGE_QUEUE_ENTRIES on purgeQueueEntry) and QueueEntryServiceImpl.purgeQueueEntry (dao.delete only). Probe ZzAdjProbeTest e6a/e6b at head (JDK 8, -o, -pl integration-tests -am): advice registered with Context.addAdvice, becomeUser('3-4') with Purge Visits, Get Encounters and Get Visits proxied, purgeVisit(visit of entry 3) -> APIAuthenticationException 'Privileges required: Purge Queue Entries', visit and entry 3 still present; control with Purge Queue Entries also proxied -> purge and flush OK, both gone.",
+      "why": "K1 with the right reason, reproduced. Slight overstatement: the purge works for any caller holding Purge Queue Entries, not only superusers.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F032",
+      "matches": [
+        "K6",
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K6 with the right mechanism; its 17-extra-bean run matches mine exactly (24 beans, queue handler first, visitVoided=true entryVoided=false). It also states the PR description still says the advice intercepts voidVisit (K2).",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F033",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR. git show 36b2040 on both test classes.",
+      "why": "K2: the description says void and purge are both handled and tested; the head's advice and its two tests are purge-only (the pre-merge void test lived in VisitWithQueueEntriesSaveHandlerTest and was replaced by main's).",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F034",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2, correct; but a description that tells a merger the void path is handled here is more than a nit.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F035",
+      "matches": [
+        "K6"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "Read core 2.7.4 VisitServiceImpl.voidVisit (return dao.saveVisit), RequiredDataAdvice.before void branch (only VoidHandlers), HandlerUtil.getHandlersForType (sorts by @Handler order only), ServiceContext.getRegisteredComponents (new HashMap<>(getBeansOfType), values copied to a list). Probe ZzAdjProbeTest at head: the 7 VoidHandler beans of the test context give [BaseVoidHandler, VisitWithQueueEntriesSaveHandler, VisitVoidHandler] and voidVisit voids entry 3 (control); after registering 17 no-op, un-annotated VoidHandler singletons (24 beans) and clearing HandlerUtil's cache the order becomes [VisitWithQueueEntriesSaveHandler, VisitVoidHandler, BaseVoidHandler] and voidVisit gives visitVoided=true entryVoided=false (8-23 beans keep the original order). Mutation @Handler(supports = Visit.class, order = 1) on VisitWithQueueEntriesSaveHandler: VisitWithQueueEntriesSaveHandlerTest 3/7 fail (:115, :128, :151), baseline 7/7. Restored with git checkout. The probe printed the bucket indices with String.hashCode and HashMap's spread; they predict the observed order at 7 beans and the flip at 24.",
+      "why": "K6 with the right mechanism; its bucket indices (baseVoidHandler 4/20/52, visitWithQueueEntriesSaveHandler 9/25/25 at capacity 16/32/64) and the 24-bean flip match my probe exactly.",
+      "correct_disposition": "blocking"
+    },
+    {
+      "key": "F036",
+      "matches": [],
+      "mechanism_correct": null,
+      "class": "REAL",
+      "anchor_wrong": false,
+      "what_i_ran": "Removed `!\"purgeVisit\".equals(method.getName()) ||` from line 41 and ran the api and integration-tests suites in full (-Dmaven.test.failure.ignore=true): api 59/59 and all 119 integration tests pass, including VisitWithQueueEntriesDeleteAdviceTest 2/2, VisitWithQueueEntriesSaveHandlerTest 7/7 and VisitWithQueueEntriesValidatorTest 8/8. The only failure was my added probe (advice registered, voidVisit, flush, assert entry 3 present): entry 3 was purged by voidVisit; the same probe passes at head. Control: setIncludedVoided(true) -> false turns shouldPurgeVoidedQueueEntriesOfAPurgedVisit red at line 90. Both mutations restored with git checkout.",
+      "why": "Same defect as F020, reproduced. Its control (setIncludedVoided(false) fails shouldPurgeVoidedQueueEntriesOfAPurgedVisit at line 90) also reproduces, so the suite does catch other advice mutations and the untested guard is the gap.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F037",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2: the approval and description describe 36b2040's void branch. It alludes to the returned ordering dependency but does not assert the void-path failure or its mechanism, so not K6.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F038",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2 posed as a process question; the stale description is established, so it should be stated as a fix request.",
+      "correct_disposition": "suggestion"
+    },
+    {
+      "key": "F039",
+      "matches": [
+        "K2"
+      ],
+      "mechanism_correct": true,
+      "class": null,
+      "anchor_wrong": false,
+      "what_i_ran": "git diff 36b2040 ae7f8fa -- VisitWithQueueEntriesDeleteAdvice.java (voidVisit branch removed, purgeVisit-only guard added inside the merge commit); git log -1 ae7f8fa ('The advice is now purge-only', '119 integration tests'). The PR description itself is taken as given by K2; I did not read the PR.",
+      "why": "K2, correct; a description that misstates what the PR fixes is worth more than a nit.",
+      "correct_disposition": "suggestion"
+    }
+  ],
+  "duplicate_groups": [
+    [
+      "F020",
+      "F036"
+    ]
+  ],
+  "notes": "All experiments ran in wt-adj at ae7f8fa under JDK 8, offline, with -pl integration-tests -am; every source mutation was restored with git checkout after checking its diff held only the mutation, the throwaway probe (ZzAdjProbeTest, copy kept at adj-blind/probe/ZzAdjProbeTest.as-run.java) and its target/ outputs were deleted, target/ was recompiled at the restored head, and git status is clean. Baseline at head: VisitWithQueueEntriesDeleteAdviceTest 2/2, VisitWithQueueEntriesSaveHandlerTest 7/7. K6 was reproduced on real code without changing any annotation: the order of the tied VoidHandlers depends on how many VoidHandler beans the HashMap holds (7 in the test context; it flips at 24, capacity 64). No finding asserts K3, K5, K7 or K8 (searched the input for import, hide, config.xml, transaction, atomic, rollback, inUse). Judgement calls: F009, F021 and F032 also match K2 because each states the PR description/body still describes the removed voidVisit branch; F010, F037 and F038 only gesture at the ordering problem and match K2 alone; F008 and F019 match K6 but their own asks (a test, a Javadoc fix) are companions to the K6 fix, so suggestion; F026's mechanism is marked correct despite its wrong 'bean registration order' gloss. Claims that rest on the ticket, the approving review or a RefApp run were not checked, since those sources are off limits. Duplicate search: I compared the three unmatched findings pairwise on defect, anchor and failure mode; F020 and F036 are the same untested purgeVisit name guard, F006 (legacy visit_queue_entries table) is unrelated to either."
+}

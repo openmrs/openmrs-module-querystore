@@ -103,6 +103,11 @@ run_case "phase1 open but STALE -> allow" allow \
 STALE_AW="[{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7200))}]"
 run_case "awaiting STALE on an ATTENDED session -> block (AWAIT_TTL)" block \
   "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+# pr-harden's State has an await past the bound recorded again, once, where a usage-limit wait under
+# CLAUDE_CODE_RETRY_WATCHDOG can hold its agent alive. That works because the gate reads the NEWEST
+# `since`, and with `max` read as `min` this suite stayed green.
+run_case "a stale await recorded again, attended -> allow (newest since)" allow \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":[{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7200))},{\"agent\":\"phase2 quality\",\"since\":$NOW}]}"
 run_case "awaiting stale AND converged+done -> allow (nothing owed)" allow \
   "{\"cycle\":1,\"phase1\":\"converged\",\"phase2\":\"done\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
 
@@ -115,12 +120,18 @@ run_case "no cycle number -> still blocks" block \
 # early repair that omitted the flag when there was no number swapped an unparseable argument for a
 # missing one; the hook resolves the cycle to 1 instead and always emits the flag. A case asserting
 # only `block` could not tell the two apart, so these read the text.
-run_cmd_case() { # name expected_substring entry_json
-  local name="$1" want="$2" entry="$3" work="$TMP/work"
+run_cmd_case() { # name expected_substring entry_json -- a `^` before it: the reason must OPEN with it;
+  # a `!`: it must be absent from a reason the hook still gave, so an allow cannot pass it
+  local name="$1" want="$2" entry="$3" work="$TMP/work" ok=0
   mkdir -p "$work"; rm -rf "$TMP/.claude/pipeline/unattended"
   jq -n --arg k "$work" --argjson e "$entry" '{($k): $e}' > "$STATE"
   local got; got=$(cd "$work" && HOME="$TMP" bash "$HOOK" 2>/dev/null | jq -r '.reason // ""')
-  if [[ "$got" == *"$want"* ]]; then PASS=$((PASS+1)); echo "  ok   $name"
+  case "$want" in
+    !*) [ -n "$got" ] && [[ "$got" != *"${want#!}"* ]] && ok=1 ;;
+    ^*) [[ "$got" == "${want#^}"* ]] && ok=1 ;;
+    *)  [[ "$got" == *"$want"* ]] && ok=1 ;;
+  esac
+  if [ "$ok" = 1 ]; then PASS=$((PASS+1)); echo "  ok   $name"
   else FAIL=$((FAIL+1)); echo "  FAIL $name: no '$want' in: ${got:0:160}"; fi
 }
 run_cmd_case "the emitted command names a cycle even when the entry has none" \
@@ -132,6 +143,28 @@ run_cmd_case "the emitted command tells the run to stamp its id" \
   "--run <this run" "{\"phase1\":\"open\",\"ts\":$NOW}"
 run_cmd_case "and uses the entry's cycle when it has one" \
   "harden-set --cycle 7 --phase1" "{\"cycle\":7,\"phase1\":\"converged\",\"ts\":$NOW}"
+# Past the await bound the block hands back "Run Phase 2 once" or "Run another Phase 1 pass", which has
+# the run dispatch its agents again; where they are waiting at a usage limit that puts a second set
+# beside a live one, and only the hook knows the await's age. So every block reached there leads
+# with it, and one that never had an await says nothing of one: it must still BLOCK, so an allow
+# cannot pass the absence.
+run_cmd_case "a block past the await bound names the await" \
+  "past the one-hour bound (awaiting: phase2 quality)" \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+# ...and names one recorded again twice, which is how a run knows pr-harden State's once is spent.
+run_cmd_case "an await recorded again past the bound is named twice" \
+  "(awaiting: phase2 quality, phase2 quality)" \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":[{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7300))},{\"agent\":\"phase2 quality\",\"since\":$((NOW - 7200))}]}"
+run_cmd_case "and opens on it, ahead of the contract's own text" "^The newest await recorded here is " \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_cmd_case "and still states the termination contract" "harden termination contract" \
+  "{\"cycle\":1,\"phase1\":\"converged\",\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_cmd_case "the legacy zero-edit block opens on it too" "^The newest await recorded here is " \
+  "{\"edits\":2,\"ts\":$NOW,\"awaiting\":$STALE_AW}"
+run_cmd_case "a block with no await says nothing of one" "!past the one-hour bound" \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW}"
+run_cmd_case "an await with no time recorded gets no note" "!past the one-hour bound" \
+  "{\"cycle\":1,\"phase1\":\"open\",\"ts\":$NOW,\"awaiting\":[{\"agent\":\"phase2 quality\"}]}"
 
 # A run that has STAMPED this entry and stated no verdict owes one. Chosen by the absence of
 # `phase1` alone, this fell to the legacy branch — and at `edits: 0`, the ordinary reading on a
@@ -162,6 +195,10 @@ run_case "awaiting fresh, attended -> allow (yield)" allow "{\"cycle\":2,\"edits
 run_case "awaiting fresh, marker LIVE -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" $$
 run_case "awaiting fresh, marker DEAD -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"awaiting\":$AW}" 999999
 run_case "awaiting fresh, unattended FIELD -> block" block "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"unattended\":true,\"awaiting\":$AW}"
+# ...naming the agents it holds the run for, through the lookup the stale-await note uses.
+run_cmd_case "an unattended yield names the agents it left outstanding" \
+  "outstanding: phase2 quality, phase2 reuse" \
+  "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"unattended\":true,\"awaiting\":[{\"agent\":\"phase2 quality\",\"since\":$NOW},{\"agent\":\"phase2 reuse\",\"since\":$NOW}]}"
 run_case "marker live but edits 0 -> allow" allow "{\"cycle\":2,\"edits\":0,\"ts\":$NOW}" $$
 run_case "override -> allow" allow "{\"cycle\":2,\"edits\":3,\"ts\":$NOW,\"override\":true}"
 

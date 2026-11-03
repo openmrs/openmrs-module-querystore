@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "> \"Phase 1 stopping condition met: [last pass returned no further review value | last two ...]. Edits made by that last pass: [N].\""}]}}
+{"type": "user", "message": {"role": "user", "content": "Phase 1 stopping condition met says the user"}}

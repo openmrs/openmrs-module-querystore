@@ -84,6 +84,42 @@ public class HybridDefaultTest {
 		assertEquals("A", result.getHits().get(0).getDocument().getResourceUuid());
 	}
 
+	@Test
+	public void hybrid_overfetchesCandidateWindowBeforeRrfTruncation() {
+		// When limit=1, pre-truncating bm25 and knn to 1 before RRF would never see rank-2
+		// candidates that appear in both legs. Over-fetching candidate pools (max(limit * 3, 30))
+		// lets RRF fuse the deeper pools before slicing to req.getLimit(). The stub returns no more
+		// hits than each leg asks for, so C reaches the fusion only through the deeper pools.
+		QueryDocument a = doc("A");
+		QueryDocument b = doc("B");
+		QueryDocument c = doc("C");
+		StubBackend backend = new StubBackend(
+		    new SearchResult(Arrays.asList(new Hit(a, 0, 1), new Hit(c, 0, 2))),
+		    new SearchResult(Arrays.asList(new Hit(b, 0, 1), new Hit(c, 0, 2))));
+		backend.honorLimit = true;
+
+		SearchResult fused = backend.hybrid(SearchRequest.builder()
+		    .queryText("q").queryVector(new float[] { 0.1f, 0.2f }).limit(1).build());
+
+		assertEquals(30, backend.lastBm25Limit);
+		assertEquals(30, backend.lastKnnLimit);
+		assertEquals(1, fused.getHits().size());
+		assertEquals("C", fused.getHits().get(0).getDocument().getResourceUuid());
+	}
+
+	@Test
+	public void hybrid_capsTheCandidateWindowInsteadOfWrappingALargeLimit() {
+		// Tripled as an int, 715827883 wraps negative and the floor of 30 would take over.
+		StubBackend backend = new StubBackend(new SearchResult(Collections.emptyList()),
+		    new SearchResult(Collections.emptyList()));
+
+		backend.hybrid(SearchRequest.builder().queryText("q").queryVector(new float[] { 0.1f, 0.2f })
+		    .limit(715827883).build());
+
+		assertEquals(Integer.MAX_VALUE, backend.lastBm25Limit);
+		assertEquals(Integer.MAX_VALUE, backend.lastKnnLimit);
+	}
+
 	private static QueryDocument doc(String uuid) {
 		QueryDocument d = new QueryDocument();
 		d.setResourceUuid(uuid);
@@ -93,6 +129,8 @@ public class HybridDefaultTest {
 	private static final class StubBackend implements BackendStore {
 		final AtomicBoolean bm25Called = new AtomicBoolean();
 		final AtomicBoolean knnCalled = new AtomicBoolean();
+		int lastBm25Limit = -1;
+		int lastKnnLimit = -1;
 		boolean supportsKnn = true;
 		private final SearchResult bm25Result;
 		private final SearchResult knnResult;
@@ -102,8 +140,18 @@ public class HybridDefaultTest {
 			this.knnResult = knnResult;
 		}
 
-		@Override public SearchResult bm25(SearchRequest req) { bm25Called.set(true); return bm25Result; }
-		@Override public SearchResult knn(SearchRequest req) { knnCalled.set(true); return knnResult; }
+		/** When set, each leg returns at most the hits its request asks for, as a real backend does. */
+		boolean honorLimit;
+
+		@Override public SearchResult bm25(SearchRequest req) { bm25Called.set(true); lastBm25Limit = req.getLimit(); return limited(bm25Result, req); }
+		@Override public SearchResult knn(SearchRequest req) { knnCalled.set(true); lastKnnLimit = req.getLimit(); return limited(knnResult, req); }
+
+		private SearchResult limited(SearchResult result, SearchRequest req) {
+			if (!honorLimit || req.getLimit() <= 0 || result.getHits().size() <= req.getLimit()) {
+				return result;
+			}
+			return new SearchResult(result.getHits().subList(0, req.getLimit()));
+		}
 
 		@Override public void ensureSchema(String resourceType, SchemaSpec spec) { }
 		@Override public void deleteSchema(String resourceType) { }

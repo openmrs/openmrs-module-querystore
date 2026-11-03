@@ -13,6 +13,7 @@ import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ADDRESS1;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ADDRESSES;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_AGE_YEARS;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_ATTRIBUTES;
+import static org.openmrs.module.querystore.QueryStoreConstants.DATE_KIND_ADMINISTRATIVE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_BIRTHDATE;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_BIRTHDATE_ESTIMATED;
 import static org.openmrs.module.querystore.QueryStoreConstants.FIELD_CAUSE_OF_DEATH_NAME;
@@ -108,6 +109,16 @@ public class PatientRecordSerializer extends AbstractRecordSerializer<Patient> {
 	@Override
 	protected LocalDate getDate(Patient patient) {
 		return DateFormatUtil.toLocalDate(patient.getDateCreated());
+	}
+
+	@Override
+	protected LocalDate getClinicalDate(Patient patient) {
+		return null;
+	}
+
+	@Override
+	protected String getDateKind(Patient patient) {
+		return DATE_KIND_ADMINISTRATIVE;
 	}
 
 	@Override

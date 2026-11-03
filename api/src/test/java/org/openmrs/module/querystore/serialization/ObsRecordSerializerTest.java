@@ -86,6 +86,8 @@ public class ObsRecordSerializerTest {
 
 		assertEquals("obs", doc.getResourceType());
 		assertEquals("Fasting blood glucose: 11.2 mmol/L", doc.getText());
+		assertEquals("clinical_event", doc.getMetadata().get("date_kind"));
+		assertNotNull(doc.getMetadata().get("clinical_date"));
 		assertEquals(11.2, (Double) doc.getMetadata().get("value_numeric"), 0.0001);
 		assertEquals("mmol/L", doc.getMetadata().get("units"));
 		assertEquals("Fasting blood glucose", doc.getMetadata().get("concept_name"));
@@ -118,6 +120,59 @@ public class ObsRecordSerializerTest {
 		assertEquals("Diagnosis: Malaria", doc.getText());
 		assertEquals("answer-uuid", doc.getMetadata().get("value_coded_uuid"));
 		assertEquals("Malaria", doc.getMetadata().get("value_coded_name"));
+	}
+
+	@Test
+	public void serialize_codedObs_enrichesConceptMetadataFromValueCoded() {
+		// Container obs like "Tests ordered: Serum creatinine (umol/L)" carry clinical category
+		// vocabulary on the coded answer concept rather than the generic question concept.
+		Concept question = concept("Tests ordered");
+		Concept answer = new Concept();
+		answer.setUuid("creatinine-uuid");
+		answer.addName(preferredName("Serum creatinine (umol/L)"));
+		answer.addName(conceptName("Creatinine"));
+		ConceptDescription d = new ConceptDescription();
+		d.setDescription("Laboratory test that determines a blood serum creatinine level. Often used with BUN to assess kidney function.");
+		d.setLocale(Locale.ENGLISH);
+		answer.addDescription(d);
+		LinkedHashSet<ConceptMap> mappings = new LinkedHashSet<>();
+		mappings.add(termMapping("Creatinine [Moles/volume] in Serum or Plasma"));
+		answer.setConceptMappings(mappings);
+
+		Obs obs = obs(question);
+		obs.setValueCoded(answer);
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals("Tests ordered: Serum creatinine (umol/L)", doc.getText());
+		assertEquals(Collections.singletonList("Creatinine"), doc.getMetadata().get("synonyms"));
+		assertEquals(
+				"Laboratory test that determines a blood serum creatinine level. Often used with BUN to assess kidney function.",
+				doc.getMetadata().get("description"));
+		assertEquals(
+				Collections.singletonList("Creatinine [Moles/volume] in Serum or Plasma"),
+				doc.getMetadata().get("mapping_names"));
+	}
+
+	@Test
+	public void serialize_codedObs_keepsBothConceptsDescriptionsInOrder() {
+		Concept question = concept("Tests ordered");
+		ConceptDescription asked = new ConceptDescription();
+		asked.setDescription("Laboratory tests requested for the patient.");
+		asked.setLocale(Locale.ENGLISH);
+		question.addDescription(asked);
+		Concept answer = concept("Serum creatinine (umol/L)");
+		ConceptDescription answered = new ConceptDescription();
+		answered.setDescription("Often used with BUN to assess kidney function.");
+		answered.setLocale(Locale.ENGLISH);
+		answer.addDescription(answered);
+		Obs obs = obs(question);
+		obs.setValueCoded(answer);
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals("Laboratory tests requested for the patient. Often used with BUN to assess kidney function.",
+				doc.getMetadata().get("description"));
 	}
 
 	@Test
@@ -349,6 +404,59 @@ public class ObsRecordSerializerTest {
 				"Chronic kidney disease",
 				"Chronic kidney disease, unspecified"),
 				doc.getMetadata().get("mapping_names"));
+	}
+
+	@Test
+	public void serialize_mappingCodes_namespacedBySource() {
+		// The code is what a question names ("CIEL:12345"), and a SNOMED term on the demo carries
+		// a code and no name, so the codes channel is written even where the names one is empty.
+		Concept c = new Concept();
+		c.addName(preferredName("Blood urea nitrogen"));
+		ConceptReferenceTerm term = new ConceptReferenceTerm();
+		term.setCode("72341003");
+		org.openmrs.ConceptSource source = new org.openmrs.ConceptSource();
+		source.setName("SNOMED-CT");
+		term.setConceptSource(source);
+		ConceptMap mapping = new ConceptMap();
+		mapping.setConceptReferenceTerm(term);
+		LinkedHashSet<ConceptMap> mappings = new LinkedHashSet<>();
+		mappings.add(mapping);
+		c.setConceptMappings(mappings);
+
+		Obs obs = obs(c);
+		obs.setValueText("noted");
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals(Arrays.asList("SNOMED-CT:72341003"), doc.getMetadata().get("mapping_codes"));
+		assertEquals(null, doc.getMetadata().get("mapping_names"));
+	}
+
+	@Test
+	public void serialize_codedObs_carriesItsAnswersMappingCodes() {
+		// The answer's names are merged, so a question naming the answer's code must match too.
+		Concept question = concept("HIV test result");
+		question.setConceptMappings(new LinkedHashSet<>(Collections.singletonList(codedMapping("CIEL", "1040"))));
+		Concept answer = concept("Positive");
+		answer.setConceptMappings(new LinkedHashSet<>(Arrays.asList(codedMapping("CIEL", "703"),
+				codedMapping("CIEL", "1040"))));
+		Obs obs = obs(question);
+		obs.setValueCoded(answer);
+
+		QueryDocument doc = serializer.serialize(obs);
+
+		assertEquals(Arrays.asList("CIEL:1040", "CIEL:703"), doc.getMetadata().get("mapping_codes"));
+	}
+
+	private static ConceptMap codedMapping(String sourceName, String code) {
+		ConceptReferenceTerm t = new ConceptReferenceTerm();
+		t.setCode(code);
+		org.openmrs.ConceptSource source = new org.openmrs.ConceptSource();
+		source.setName(sourceName);
+		t.setConceptSource(source);
+		ConceptMap m = new ConceptMap();
+		m.setConceptReferenceTerm(t);
+		return m;
 	}
 
 	private static ConceptMap termMapping(String name) {
