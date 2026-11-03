@@ -125,8 +125,9 @@ lookup. They differ from `/patientrecord` on purpose:
   here too. A uuid core doesn't return, a voided patient among them, is a `404`.
 - **Privilege:** `Get Patients`, plus each type's core read privilege, as for `/patientrecord`
   (obs needs `Get Observations`, and so on). A type with no mapped privilege, such as one a module
-  contributes, is never searched. Naming a type the caller can't read in `types` is a `403`, and so
-  is a caller who can read no registered type.
+  contributes, is never searched. Naming a type in `types` that the caller can't read, or that isn't
+  registered, gets the same `403`, so the answer doesn't say which types exist. A caller who can read
+  no registered type gets a `403` too.
 
 Errors are `{"error": "..."}` with `400`, `403` or `404`. A server or backend message is never
 echoed.
@@ -140,7 +141,12 @@ failed, and returns at once.
 |---|---|---|
 | `200` | `{"status": "indexed"}` | Nothing to do. |
 | `202` | `{"status": "projecting"}` | A projection started, or one is already running. |
-| `503` + `Retry-After` | `{"status": "not_indexed" \| "failed"}` | Nothing could start: every projection slot is busy, or the daemon isn't up yet. |
+| `503` + `Retry-After` | `{"status": "not_indexed" \| "failed"}` | Nothing could start: every projection slot is busy, or the daemon isn't up yet (`Retry-After: 5`), or a failed chart is still in its retry backoff (`Retry-After` is the backoff's remaining seconds). |
+
+A `failed` chart is retried with a full re-projection, but only once its backoff has run out: 30
+seconds after one failure, doubling with each failure in a row, up to an hour. A retry deletes the
+chart first, so until that delete lands every search on the patient answers `projecting` with no
+hits rather than rows that are about to go.
 
 ### GET `.../patient/{uuid}/status`
 
@@ -151,9 +157,15 @@ projecting and failed states are held per JVM.
 ### GET `.../patient/{uuid}/recent`
 
 The patient's newest records: `limit` (default 5, at most 50), `types` (comma-separated), and
-`wait` (default `false`). A cold patient is warmed and answered `projecting` with no hits unless
-`wait=true`. A `failed` patient is answered `failed` with no hits and isn't retried here; that
-takes a `POST warm`.
+`wait` (default `false`). A cold patient is warmed and answered `projecting` unless `wait=true`.
+
+While a chart is `projecting`, a caller who can read every registered type gets the records indexed
+so far with the `projecting` status, plus `progress: {"done", "total"}` counted in resource types.
+Any other caller gets `projecting` with no hits and no progress until the chart is indexed, because
+rows land type by type, and their timing would show how much of an unreadable type the patient has.
+
+A `failed` patient is answered `failed` with no hits. The warm a search makes retries it once its
+backoff has run out, as `POST warm` does.
 
 ### GET `.../patient/{uuid}/search`
 
@@ -171,7 +183,7 @@ takes a `POST warm`.
 The body is `{"status", "hits": [...]}`, with `groups` when `collapse=concept` and `facets` when
 asked for. A hit carries `resourceType`, `resourceUuid`, `date`, `snippet` (the stored text) and
 `score` (not comparable across queries), plus `conceptUuid`, `conceptName`, `valueNumeric` and
-`units` when the record has them.
+`units` when the record has them. A `projecting` or `failed` chart is answered as for `recent`: the rows indexed so far and `progress` only for a caller who can read every type, no hits otherwise.
 
 - **`collapse=concept`** groups hits by concept. Each group carries `count` and `latest` (that
   concept's newest value) and `recentValues` (its last five values with dates). Both come from the
