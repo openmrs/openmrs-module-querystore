@@ -16,16 +16,6 @@
     <description>OMOD packaging for the OpenMRS Query Store Module.</description>
 
     <dependencies>
-        <!-- Test only, and first so it precedes the servlet-api 2.4 that openmrs-web brings in through
-             jsp-api: Spring's MockMvc needs the Servlet 4 API. Lets the REST tests drive real request
-             dispatch, so a missing @ExceptionHandler fails them. -->
-        <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>4.0.1</version>
-            <scope>test</scope>
-        </dependency>
-
         <dependency>
             <groupId>org.openmrs.module</groupId>
             <artifactId>querystore-api</artifactId>
