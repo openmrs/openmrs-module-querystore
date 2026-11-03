@@ -34,6 +34,7 @@ import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
+import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapProgress;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatus;
@@ -630,6 +631,28 @@ public class QueryStoreServiceImplTest {
 		assertEquals(1, chart.getDocuments().size());
 		assertFalse("a fully paged partial projection is not a complete patient ledger",
 		        chart.isProjectionComplete());
+	}
+
+	@Test
+	public void getPatientChartRead_disclosesTheGap_whenItWaitedForAProjectionThatLeftRecordsOut() {
+		// A second read of a cold patient waits for the projection already in flight instead of
+		// running its own, and the launcher answers true once that one ends, whether or not it
+		// completed. Here it left records out, so this read must not call the chart complete.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.incompletePatients.add("patient-uuid");
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+		service.setBootstrapLauncher(new BootstrapLauncher() {
+			@Override
+			public boolean runWithProjectionSlot(String patientUuid, java.util.function.BooleanSupplier work,
+			        long timeoutMillis) {
+				return true; // joined the other projection; this call's work never ran
+			}
+		});
+
+		assertTrue("a read that joined an incomplete projection must disclose the gap",
+		    service.getPatientChartRead("patient-uuid").isTruncated());
 	}
 
 	@Test

@@ -340,7 +340,10 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 			}
 			if (bootstrapLauncher.runWithProjectionSlot(patientUuid,
 			    () -> bootstrapService().projectIfNotIndexed(patientUuid), syncProjectionWaitMillis)) {
-				return true;
+				// True also when this call only waited for another projection of the patient, which
+				// may have failed: ask, rather than take the chart as complete.
+				return !bootstrapLauncher.hasFailed(patientUuid)
+				        && !bootstrapService().isPatientProjectionIncomplete(patientUuid);
 			}
 			log.debug("No projection slot for a cold patient in time; serving search with whatever is indexed");
 			return false;
