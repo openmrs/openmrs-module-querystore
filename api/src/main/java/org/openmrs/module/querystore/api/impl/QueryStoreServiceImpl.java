@@ -657,7 +657,7 @@ public class QueryStoreServiceImpl extends BaseOpenmrsService implements QuerySt
 		// projects is not re-run by every keystroke or POST warm. A dropped chart is rebuilt the same
 		// way: documents synced since the drop would make ensureIndexed skip it.
 		boolean retry = status == IndexStatus.FAILED || droppedCharts.contains(patientUuid);
-		if (bootstrapLauncher == null || retry && bootstrapLauncher.millisUntilRetry(patientUuid) > 0) {
+		if (bootstrapLauncher == null || (retry && bootstrapLauncher.millisUntilRetry(patientUuid) > 0)) {
 			return status;
 		}
 		// Marked here, on the request thread and before the launch, so no search between now and the

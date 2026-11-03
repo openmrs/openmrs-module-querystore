@@ -838,6 +838,13 @@ public class QueryStoreRestControllerTest {
 	}
 
 	@Test
+	public void canReadEvery_failsClosed_whenNoTypeIsRegistered() {
+		authenticate();
+		assertFalse(PatientRequests.canReadEvery(Collections.<String> emptyList()));
+		assertTrue(PatientRequests.canReadEvery(Arrays.asList("obs", "condition")));
+	}
+
+	@Test
 	public void search_withEveryReadPrivilege_searchesEveryType() {
 		authenticate();
 		QueryStoreService queryStore = mock(QueryStoreService.class);

@@ -134,6 +134,10 @@ final class PatientRequests {
 	 * progress ({@link org.openmrs.module.querystore.api.QuerySpec#isPartialResults()}).
 	 */
 	static boolean canReadEvery(List<String> known) {
+		if (known.isEmpty()) {
+			// No registered types (a startup race, or none registered): fail closed.
+			return false;
+		}
 		for (String type : known) {
 			if (!canRead(type)) {
 				return false;
