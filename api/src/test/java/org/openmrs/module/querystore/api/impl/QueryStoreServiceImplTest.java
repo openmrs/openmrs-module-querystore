@@ -656,6 +656,30 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void getPatientChartRead_disclosesTheGap_whenItWaitedForAProjectionThatFailedOutright() {
+		// The projection it waited for threw before reporting itself incomplete (its delete failed,
+		// say), so only the launcher's failed set knows.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(new RecordingBootstrapService());
+		service.setBootstrapLauncher(new BootstrapLauncher() {
+			@Override
+			public boolean runWithProjectionSlot(String patientUuid, java.util.function.BooleanSupplier work,
+			        long timeoutMillis) {
+				return true; // joined the other projection; this call's work never ran
+			}
+
+			@Override
+			public boolean hasFailed(String patientUuid) {
+				return true;
+			}
+		});
+
+		assertTrue("a read that joined a failed projection must disclose the gap",
+		    service.getPatientChartRead("patient-uuid").isTruncated());
+	}
+
+	@Test
 	public void getPatientChartRead_marksCompletedProjectionComplete() {
 		FakeBackendStore backend = new FakeBackendStore(true);
 		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
