@@ -1,0 +1,34 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationResource.java",
+      "line": 49,
+      "where": "PR-level",
+      "disposition": "question",
+      "claim": "The same blank-UUID fallthrough the PR closes for actions still exists in StockOperationResource.getByUniqueId and StockOperationBatchNumbersResource.getByUniqueId, which pass the path uuid straight into StockOperationSearchFilter and return get(0); if a whitespace path segment (e.g. POST /stockoperation/%20) reaches them, GET/update would act on the newest visible operation. Worth a follow-up ticket?",
+      "failure_mode": "",
+      "evidence": "Read StockOperationResource.java:47-51 and StockOperationBatchNumbersResource.java:39-43 (setStockOperationUuid(uniqueId) then result.getData().isEmpty() ? null : get(0)); StockManagementDao.java:719 only adds the uuid condition when StringUtils.isNotBlank; REST 3.0 DelegatingCrudResource.update (ref webservices.rest, resource/impl/DelegatingCrudResource.java:117-118) calls getByUniqueId(uuid). Frontend never sends a blank there (stock-operations.resource.ts:66 guards id, :145 would send the literal 'undefined'), so only a crafted request reaches it, and only operations the user can already address by uuid.",
+      "confidence": "low"
+    },
+    {
+      "id": "F2",
+      "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationActionResource.java",
+      "line": 54,
+      "where": "inline",
+      "disposition": "nit",
+      "claim": "The message is hard-coded English while the module already ships the key stockmanagement.stockoperation.action.uuidrequired ('Stock operation uuid is required') for exactly this case, which the first PR commit used and the second dropped, leaving the key unused.",
+      "failure_mode": "",
+      "evidence": "git grep 'action.uuidrequired' -> only api/src/main/resources/messages.properties:59 (present since 97729fc initial setup); git show dc40730 used it via ValidationException, 3fa1a45 replaced it with the literal. omod already resolves messages through Context.getMessageSourceService() in 16 places. The key is not translated in messages_es/fr, so the user-visible cost today is small; the frontend shows the backend message in its error toast (stock-operations.modal.tsx 'Details: {{message}}').",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Ready to merge: the guard rejects null/empty/whitespace UUIDs with a 400 before any lookup, closing the ticket's backend expectation, and the tests demonstrably fail without it; nothing found blocks.",
+  "what_i_swept": "Step 1: read ticket O3-6201 snapshot, PR body, diff (3 files, +131/-1, identical three-dot and two-dot stat, so no drift), each commit. Step 2: ticket's backend expectation ('reject an action with no UUID instead of picking an operation') vs. the guard; alternatives weighed: DAO change (rejected: blank means 'no filter' for list searches), service-level guard (service takes a DTO, not a uuid), frontend-only (paired #697 merged but backend must still refuse); sibling precedent StockManagementServiceImpl.saveStockOperationBatchNumbers:3321 uses the same isBlank-before-lookup shape. Each hunk accounted for: pom openmrs-test test dep is managed in root pom and mirrors api/pom.xml, needed for the new test. Step 3: ran StockOperationActionResourceTest at head (4 pass); mutation probe replacing the isBlank guard with if(false) turned 2 tests red (rejectBlankUuid... and returnBadRequest...), restored with git checkout. Read REST 3.0 BaseRestController.handleException and IllegalRequestException/ObjectNotFoundException @ResponseStatus (400/404) in the reference copy. Outward trace: every setStockOperationUuid caller (DAO, ServiceImpl sendStockOperationNotification and saveStockOperationBatchNumbers, StockOperationResource, StockOperationBatchNumbersResource), StockOperationAction DTO (plain uuid field, no auto-generated default that would bypass the guard), other save() callers (none), frontend modal payload and error display, CI workflow (reusable build-backend-module).",
+  "could_not_verify": [
+    "F1 reachability over HTTP (whether a %20 path segment arrives as a blank uniqueId in MainResourceController): needs access to a running OpenMRS server, which this review may not use.",
+    "PR description's REST 3.6 manual results: needs access to a running server."
+  ],
+  "passes_run": 3,
+  "notes": "Test shouldSubmitOnlyTheRequestedOperationWhenAnotherOperationIsNewer also passes on base (the uuid was always passed to the filter); it characterizes rather than regresses the fix, and its never()-verify on 'newer' cannot fail since the mock never returns it. Not raised. The unknown-UUID path changes from RestClientException (500) to ObjectNotFoundException (404), as the PR body states. A missing 'name' still NPEs after lookup (pre-existing, out of scope, no wrong-operation effect). Working copy left clean."
+}

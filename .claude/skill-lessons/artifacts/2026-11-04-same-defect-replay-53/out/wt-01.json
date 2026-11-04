@@ -1,0 +1,44 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "omod/pom.xml",
+      "line": 15,
+      "where": "inline",
+      "disposition": "nit",
+      "claim": "Declaring openmrs-test first in omod/pom.xml (api/pom.xml declares it after the core deps) lets its transitives win Maven's equal-depth mediation, so two provided deps on omod's compile/test classpath change version: byte-buddy 1.12.18 -> 1.14.8 and snakeyaml 2.4 -> 2.2.",
+      "failure_mode": "",
+      "evidence": "Ran `mvn -o -B -q -pl omod -am dependency:list` three ways and diffed the non-test entries: base omod/pom.xml vs head gives exactly those two version changes; head with the same block moved to the end of <dependencies> is identical to base (so the comparison catches a difference and also shows none when there isn't one). Both are provided scope, so the .omod is unaffected, and `git grep 'yaml|bytebuddy' -- omod/src` has no hits. The cost is only that omod tests run against versions core 2.8.0 doesn't ship. Fix: move the block below webservices.rest-omod.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationResource.java",
+      "line": 47,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "The same blank-filter defect is still reachable through StockOperationResource.getByUniqueId (and StockOperationBatchNumbersResource.getByUniqueId): a whitespace path uuid passes the DAO's isNotBlank skip and returns the newest visible operation, and DelegatingCrudResource.update then saves the request body onto it. Should these get the same guard, as a follow-up if not here?",
+      "failure_mode": "",
+      "evidence": "Read StockManagementDao.java:719 (uuid condition added only when isNotBlank), StockOperationResource.java:47-58 and StockOperationBatchNumbersResource.java:38-44 (return get(0) of that result), and webservices.rest 3.0.0 DelegatingCrudResource.update:117-120 (getByUniqueId, then update and save) with MainResourceController:119 mapping POST /{resource}/{uuid}. I did not confirm that Spring routes /stockoperation/%20 to {uuid}=' ', because that needs a running server. The existing frontend builds these URLs from a real uuid, so a client hitting it by accident is unlikely. This predates the PR and doesn't break the PR's own guarantee for stockoperationaction.",
+      "confidence": "low"
+    },
+    {
+      "id": "F3",
+      "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationActionResource.java",
+      "line": 66,
+      "where": "inline",
+      "disposition": "nit",
+      "claim": "An action with a valid uuid but no `name` still runs the lookup and then throws a NullPointerException from `switch (delegate.getName())`, which REST returns as a 500 instead of a 400. It is a sibling of the missing-uuid input this PR now rejects.",
+      "failure_mode": "",
+      "evidence": "Read StockOperationActionResource.save: only StockManagementException is caught, and in Java a switch on a null enum throws an NPE. BaseRestController.handleException (webservices.rest 3.0.0, lines 104-130) maps an exception without @ResponseStatus to DEFAULT_ERROR_CODE. No operation is changed. This predates the PR, so it is follow-up material: add an isBlank-style `name == null` check next to the new guard.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Ready to merge. The guard closes the reported backend hole (a blank uuid made the action hit the newest visible operation): it rejects null/empty/whitespace uuids with a 400 before the lookup and turns an unknown uuid into a 404, and its tests go red on the base resource. Nothing found blocks.",
+  "what_i_swept": "Step 1: PR body and O3-6201 snapshot (backend half of the ticket's expected behaviour). Confirmed the diff stat is 3 files +131/-1 and that the merge-base diff equals the direct diff (no drift). Step 2: the only entry to the action service methods is StockOperationActionResource.save (git grep). Weighed a resource guard against changing the DAO filter (blank there means 'no filter' for list searches, so that would be wrong) and against a frontend-only fix (paired PR already merged). The resource guard is the proportionate shape. The batch-numbers sibling guards blank uuid in the service, but the action service methods take a DTO, not a uuid, so the resource is where the uuid lives. Step 3: read the full resource, StockOperationAction DTO (plain String uuid, no default), DAO filter at StockManagementDao:719, and REST 3.0.0's DelegatingCrudResource.create/update, BaseRestController.handleException, IllegalRequestException (@ResponseStatus 400), ObjectNotFoundException (404) and RestUtil.wrapErrorResponse. Checked the frontend modal's error path (extractErrorMessagesFromResponse reads error.message, which still gets populated). Ran StockOperationActionResourceTest on head (4 pass) and with the base resource swapped in (1 failure, 2 errors: blank uuid not rejected, RestClientException instead of ObjectNotFound, NPE), then restored it. Compared omod dependency lists for base, head and head with the block moved. Outward trace: every setStockOperationUuid caller (sendStockOperationNotification and StockOperationResource.save use stored uuids; saveStockOperationBatchNumbers already guards; the two getByUniqueId sites are F2).",
+  "could_not_verify": [
+    "F2: whether Spring MVC in a running OpenMRS routes POST /rest/v1/stockmanagement/stockoperation/%20 to getByUniqueId(' '). That needs a running server, which this review has no access to."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 (diff, ticket, tests with controls) found F1. Pass 2 (outward trace of setStockOperationUuid callers and the REST update path) found F2 and F3. Pass 3 (other callers of complete/submit/dispatch/approve, frontend error handling) found nothing new. The PR's REST-3.0 commit message says core ValidationException isn't translated to 400, and that matches BaseRestController importing org.openmrs.module.webservices.validation.ValidationException. The 404 changes the unknown-uuid response from 500 (Spring RestClientException has no @ResponseStatus) to 404 with an 'Object with given uuid doesn't exist [...]' message, which the frontend shows as-is. Working copy left clean."
+}

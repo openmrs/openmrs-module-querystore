@@ -1,0 +1,8 @@
+{
+ "verdicts": {
+  "K01": "K1",
+  "K02": "not K1: the dead validator's uuid rule; says nothing about a missing name",
+  "K03": "K1"
+ },
+ "recorded": "before opening map-private.json"
+}

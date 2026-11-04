@@ -1,0 +1,9 @@
+755 /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/5bb1becb-751a-4a76-b06d-08682713e488/scratchpad/private-53
+644 /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/5bb1becb-751a-4a76-b06d-08682713e488/scratchpad/replay-53/PROTOCOL.md
+644 /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/5bb1becb-751a-4a76-b06d-08682713e488/scratchpad/replay-53/KEY-private.json
+755 /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/5bb1becb-751a-4a76-b06d-08682713e488/scratchpad/replay-53/briefs
+755 /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/5bb1becb-751a-4a76-b06d-08682713e488/scratchpad/replay-53/scripts
+755 /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/5bb1becb-751a-4a76-b06d-08682713e488/scratchpad/replay-53/logs
+644 /Users/danielkayiwa/.claude/skill-lessons/2026-11-04-pr-review-stockmanagement-53-missed-input.md
+644 /Users/danielkayiwa/.claude/projects/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/memory/pr-review-sweep-every-input-of-the-changed-method.md
+644 /Users/danielkayiwa/.claude/projects/-Users-danielkayiwa-Projects-openmrs-openmrs-module-chartsearchai/memory/openmrs-rest-create-probe-with-mockstatic.md

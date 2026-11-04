@@ -1,0 +1,34 @@
+{
+ "map": {
+  "K01": {
+   "wt": "wt-04",
+   "id": "F2"
+  },
+  "K02": {
+   "wt": "wt-05",
+   "id": "F1"
+  },
+  "K03": {
+   "wt": "wt-01",
+   "id": "F3"
+  }
+ },
+ "outside_findings": {
+  "wt-01": [
+   "verdict"
+  ],
+  "wt-02": [
+   "notes"
+  ],
+  "wt-03": [
+   "notes"
+  ],
+  "wt-04": [],
+  "wt-05": [
+   "verdict"
+  ],
+  "wt-06": [
+   "notes"
+  ]
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "key": "O3-6201",
+ "summary": "Stock management: Complete, Submit or Dispatch on a form that fails validation acts on a different operation",
+ "status": "Done",
+ "description": "*Summary*\nIf the operation form fails validation, clicking Complete, Submit or Dispatch still opens the confirmation modal. Confirming sends the action with no operation UUID, and the backend then applies it to the newest operation the user can see, if that operation's status allows the action. The success toast hides that the wrong operation changed.\n\n*Steps to reproduce*\n\n* Have two NEW receipts, RCPT-0004 (older) and RCPT-0005 (newer).\n* Operations, edit RCPT-0004. Clear Responsible Person.\n* Go to Submit/Complete, choose No for approval, click Complete. \"Responsible Person Required\" shows on the form, but the confirmation modal opens anyway.\n* Click Submit in the modal.\n* The request is {{POST stockoperationaction}} with {{{\"name\":\"COMPLETE\",\"reason\":\"\"}}} and no {{uuid}}. It returns 201, and the toast says \"You have successfully Complete operation\".\n* RCPT-0005 is now COMPLETED. RCPT-0004 is still NEW.\n\n*Current behaviour*\n\n* Frontend: in {{src/stock-operations/stock-operations-forms/steps/stock-operation-submission-form-step.component.tsx}}, {{handleSave}} returns {{undefined}} when {{handleSubmit}} fails validation. {{handleComplete}}, {{handleSubmitForReview}} and {{handleDispatch}} still call {{launchStockOperationsModal(..., { ...operation, status })}}, so the modal gets an operation with no UUID.\n* Backend: {{StockOperationActionResource.save}} builds a search filter with {{delegate.getUuid()}}. The DAO only adds the UUID condition when it isn't blank, so a missing UUID searches every visible operation (newest first) and acts on {{get(0)}}.\n\n*Expected behaviour*\n\n* If validation fails, the modal doesn't open and the user stays on the form with the errors.\n* The backend rejects an action with no UUID instead of picking an operation.",
+ "comments": [
+  {
+   "author": "Automation for Jira",
+   "created": "2026-11-03T23:18:14.457+1100",
+   "body": "This item is being transitioned to \"In Progress\" as [a PR|https://github.com/openmrs/openmrs-module-stockmanagement/pull/53] has been opened for it."
+  },
+  {
+   "author": "Automation for Jira",
+   "created": "2026-11-04T22:50:12.555+1100",
+   "body": "This issue is marked as done as the PR [|https://github.com/openmrs/openmrs-esm-stock-management-app/pull/697] has been merged."
+  }
+ ],
+ "snapshot_note": "comments created before 2026-11-04T12:00Z"
+}

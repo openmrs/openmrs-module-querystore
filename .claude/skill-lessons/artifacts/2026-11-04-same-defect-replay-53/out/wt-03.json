@@ -1,0 +1,22 @@
+{
+ "findings": [
+  {
+   "id": "F1",
+   "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationActionResource.java",
+   "line": 54,
+   "where": "inline",
+   "disposition": "nit",
+   "claim": "The 400 message is hardcoded English although api/src/main/resources/messages.properties:59 already defines stockmanagement.stockoperation.action.uuidrequired for exactly this case (unused since the initial commit 97729fc; the PR's first commit dc40730 used it and 3fa1a45 dropped it).",
+   "failure_mode": "",
+   "evidence": "git grep -n 'action.uuidrequired' master -> only messages.properties:59, no .java hit (rc=1; the same grep finds the properties line, which is the positive control); git log -S dates it to 97729fc 2023-01-24; git show 3fa1a45 shows the key replaced by the literal. Mitigating: no es/fr translation exists for the key, and the sibling IllegalRequestException calls in BatchJobResource/StockRuleResource/StockSourceResource/UserRoleScopeResource all use English literals, so this is take-or-leave.",
+   "confidence": "high"
+  }
+ ],
+ "verdict": "Ready to merge: the guard closes the reported wrong-target path (a blank uuid no longer drops the DAO's so.uuid filter at StockManagementDao.java:719), it is tested, and the only remark is a take-or-leave nit about the message key.",
+ "what_i_swept": "Diff stat checked (3 files, +131/-1; same for master...HEAD and master HEAD, so no drift). Read the full resource, the DTO (plain String uuid with no default, so the blank check is reachable) and ResourceBase. Ran the 4 PR tests at head (all pass). Mutation probe: disabling the guard and reverting ObjectNotFoundException to RestClientException turned 3 of 4 tests red (blank-uuid loop, the 400 controller test, the 404 test), then restored with git checkout. Verified against REST 3.0.0 sources that IllegalRequestException is @ResponseStatus(BAD_REQUEST), that ObjectNotFoundException is NOT_FOUND, that BaseRestController.handleException uses that annotation, and that DelegatingCrudResource.create runs convert -> ValidateUtil.validate -> save, so a body without a uuid reaches the guard. Outward trace: every other findStockOperations(uuid filter)+get(0) caller (saveStockOperationBatchNumbers already guards blank uuid via invalidRequest; sendStockOperationNotification gets its uuid from the server-side DTO; StockOperationBatchNumbersResource.getByUniqueId is read-only and takes a URL id) plus the delete/void resources that take delegate.getUuid() from the URL path. Found no other client-controlled blank-uuid path to a mutation. Frontend consumer: stock-operations.modal.tsx sends {name, uuid: operation?.uuid} and its error branch uses extractErrorMessagesFromResponse (constants.ts:165), which reads error.message, so the 400 shows up as an error snackbar and no longer as a false success. Approach compared with sibling saveStockOperationBatchNumbers, which guards in the service. A resource-level guard fits better here because the action service methods take a resolved DTO, not a uuid. The pom hunk is needed because omod had no test sources or test dependencies on master, and openmrs-test is managed in the root pom (pom.xml:65-71) just as api/pom.xml uses it.",
+ "could_not_verify": [
+  "End-to-end HTTP behaviour on a running OpenMRS server (POST stockoperationaction without uuid -> 400 with no operation changed). This needs access to a server, and none is available here. The controller-level unit test and the REST 3.0.0 source reading stand in for it."
+ ],
+ "passes_run": 3,
+ "notes": "Ticket O3-6201 has two halves: the frontend half is merged in esm-stock-management-app #697 (9e9cd98), and this PR is the backend half, so the PR covers what the ticket asks of the backend. Test shouldSubmitOnlyTheRequestedOperationWhenAnotherOperationIsNewer would also pass on base, so it is a non-regression check, not a regression test. The other three tests fail under the mutation. A pre-existing, out-of-scope issue: a missing 'name' with a valid uuid NPEs in the switch and returns a 500 instead of a 400. No operation is mutated, so the PR's guarantee holds and I did not raise it as a finding. The module's own invalidRequest() helper throws RestClientException, which has no @ResponseStatus and so returns a 500. Choosing IllegalRequestException instead is the better option and needs no comment."
+}

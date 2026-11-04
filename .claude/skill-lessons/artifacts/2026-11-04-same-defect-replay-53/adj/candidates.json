@@ -1,0 +1,29 @@
+[
+ {
+  "key": "K01",
+  "disposition": "nit",
+  "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationActionResource.java",
+  "line": 66,
+  "claim": "An action with a valid uuid and no `name` still reaches `switch (delegate.getName())` and throws a NullPointerException, which becomes a 500. The new missing-UUID path returns a 400, so these two missing-field cases now behave differently. The same isBlank-style guard on name would make it a 400.",
+  "failure_mode": "",
+  "evidence": "Throwaway test (deleted): save() with uuid='x' and name=null threw java.lang.NullPointerException. BaseRestController.handleException in webservices.rest 3.0.0 maps an exception with no @ResponseStatus to the default 500."
+ },
+ {
+  "key": "K02",
+  "disposition": "suggestion",
+  "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationActionResource.java",
+  "line": 53,
+  "claim": "The module already has a validator meant to require the action UUID, but it never runs because it is registered for the wrong class. This PR adds a second, working UUID rule in the resource and leaves the dead validator as a misleading duplicate.",
+  "failure_mode": "",
+  "evidence": "api/src/main/java/org/openmrs/module/stockmanagement/api/validator/StockOperationActionValidator.java:12 declares @Handler(supports = { StockOperationDTO.class }) while supports() and validate() target StockOperationAction. The validator checks `getUuid() == null` (not blank) and uses the 'namerequired' message key for uuid. It has been like this since 94c3a9a (2023-01-29). DelegatingCrudResource.create (webservices.rest 3.0.0) calls ValidateUtil.validate(delegate) before save(). I ran a throwaway BaseModuleContextSensitiveTest on core 2.8.0. HandlerUtil.getHandlersForType(Validator.class, StockOperationAction.class) returned [], and ValidateUtil.validate on a SUBMIT action with a null UUID passed. Control: after retargeting @Handler to StockOperationAction.class, the same probe threw ValidationException 'uuid: Name is required'. It also threw 'reason: Please provide a reason' for a REJECT with no reason. Retargeting therefore also enables reason rules that nothing enforces today: the modal (esm stock-operations.modal.tsx handleClick) does not block an empty reason, and StockManagementServiceImpl.processStockOperationAction:1835 has no reason check. The PR's resource guard is a reasonable fix in scope. The ask is to record or remove the dead validator rule (or fix its registration as a follow-up), so the UUID rule doesn't live in two places that disagree (== null vs isBlank)."
+ },
+ {
+  "key": "K03",
+  "disposition": "nit",
+  "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationActionResource.java",
+  "line": 66,
+  "claim": "An action with a valid uuid but no `name` still runs the lookup and then throws a NullPointerException from `switch (delegate.getName())`, which REST returns as a 500 instead of a 400. It is a sibling of the missing-uuid input this PR now rejects.",
+  "failure_mode": "",
+  "evidence": "Read StockOperationActionResource.save: only StockManagementException is caught, and in Java a switch on a null enum throws an NPE. BaseRestController.handleException (webservices.rest 3.0.0, lines 104-130) maps an exception without @ResponseStatus to DEFAULT_ERROR_CODE. No operation is changed. This predates the PR, so it is follow-up material: add an isBlank-style `name == null` check next to the new guard."
+ }
+]

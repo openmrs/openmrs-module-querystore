@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request — check that the change actually resolves the issue it claims to and by the best approach available rather than merely one that works, verify every finding empirically, and write clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.24.0
+version: 0.25.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -101,6 +101,7 @@ Cover each of these, scaled to what the PR touches — an unnamed dimension is o
 The diff is a piece of a bigger machine; review the machine, not the patch. Follow each thread at least one level out from the changed lines:
 
 - **Unchanged neighbors.** Re-read the unchanged code, comments, Javadoc, and docs adjacent to or depending on the change — anything stating an assumption ("the only caller", "X is the only path that…"). Ask of each: does this PR make that statement false? Diff-scoped review structurally cannot catch these, because the now-stale line never appears in the diff.
+- **The same defect, where the PR didn't look.** When the change fixes a kind of defect (an unguarded input, a missing null check), look for the same kind on the same path in the code it left alone, such as every other input that reaches the line the PR now protects. An instance that predates the PR blocks only if it defeats the PR's own guarantee; otherwise it is a suggestion, which the author may take as a follow-up.
 - **Consumers and published artifacts.** For everything the changed code produces — events fired, attached/published artifacts (e.g. `-tests.jar` classifiers), API responses, filtered resources — identify who consumes it, in-repo and downstream, and verify the contract still holds.
 - **Optional dependencies and lifecycle.** For `provided`-scope deps, soft module references (`aware_of_module`), and registration-order-sensitive code (Spring beans, listeners, schedulers), walk through what happens when the dependency is absent or the ordering shifts at runtime.
 - **The merged result, not the commit stack.** Review the final combined state of the PR — and re-check it against the current base tip if the branch is behind — rather than commit-by-commit. Individually sensible commits can compose into a contradiction.

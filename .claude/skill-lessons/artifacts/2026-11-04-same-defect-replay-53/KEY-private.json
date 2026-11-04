@@ -1,0 +1,27 @@
+{
+ "skill_dirs": {
+  "C": "s1",
+  "E": "s2"
+ },
+ "slots": {
+  "wt-01": {
+   "arm": "E"
+  },
+  "wt-02": {
+   "arm": "C"
+  },
+  "wt-03": {
+   "arm": "E"
+  },
+  "wt-04": {
+   "arm": "E"
+  },
+  "wt-05": {
+   "arm": "C"
+  },
+  "wt-06": {
+   "arm": "C"
+  }
+ },
+ "bullet_added_in_E": "- **The same defect, where the PR didn't look.** When the change fixes a kind of defect (an unguarded input, a missing null check), look for the same kind on the same path in the code it left alone, such as every other input that reaches the line the PR now protects. An instance that predates the PR blocks only if it defeats the PR's own guarantee; otherwise it is a suggestion, which the author may take as a follow-up.\n"
+}

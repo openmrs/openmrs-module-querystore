@@ -1,0 +1,34 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationResource.java",
+      "line": 47,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "The defect class this PR fixes (a blank UUID drops the DAO's uuid filter, so the code picks get(0), the newest visible operation) is also present in StockOperationResource.getByUniqueId and StockOperationBatchNumbersResource.getByUniqueId. DelegatingCrudResource.update calls these on the update path, so a whitespace-only path UUID would update the newest operation. A shared guard (for example, return null for a blank uniqueId, which turns into a 404) would cover them.",
+      "failure_mode": "",
+      "evidence": "Routing: a throwaway test (deleted) built Spring's real RequestMappingHandlerMapping over StockManagementResourceController, with OpenmrsPathMatcher as InitPathMatcher2_4 installs it. POST /rest/v1/stockmanagement/stockoperation/%20 and /%09, and stockoperationbatchnumbers/%20, all mapped to MainResourceController#update with uuid=' ' or a tab. Controls: /stockoperation/abc-123 mapped to update with uuid=abc-123, and a trailing slash mapped to create. MainResourceController.java:133-134 in REST 3.0.0 calls res.update(uuid, ...), and DelegatingCrudResource.java:117-118 calls getByUniqueId(uuid) and then save(); ResourceBase extends DelegatingCrudResource (ResourceBase.java:15). A throwaway test (deleted) showed StockOperationResource.getByUniqueId(\" \") passes a filter with uuid [ ] and returns the 'newest' DTO, and StockManagementDao.java:719 drops the uuid condition when it is blank. StockOperationBatchNumbersResource.java:38-43 has the same shape. This predates the PR and does not weaken the action-endpoint guarantee. The frontend builds these URLs from `${uuid}`, so it cannot send a whitespace segment.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "omod/src/main/java/org/openmrs/module/stockmanagement/web/resource/StockOperationActionResource.java",
+      "line": 66,
+      "where": "inline",
+      "disposition": "nit",
+      "claim": "An action with a valid uuid and no `name` still reaches `switch (delegate.getName())` and throws a NullPointerException, which becomes a 500. The new missing-UUID path returns a 400, so these two missing-field cases now behave differently. The same isBlank-style guard on name would make it a 400.",
+      "failure_mode": "",
+      "evidence": "Throwaway test (deleted): save() with uuid='x' and name=null threw java.lang.NullPointerException. BaseRestController.handleException in webservices.rest 3.0.0 maps an exception with no @ResponseStatus to the default 500.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Ready to merge: the guard does what O3-6201 asks of the backend (a missing or blank UUID gets a 400 before any lookup), and the tests go red when the guard is removed. The other findings are pre-existing, non-blocking follow-ups.",
+  "what_i_swept": "Step 1: PR body, the O3-6201 snapshot (its backend expectation is 'reject an action with no UUID instead of picking an operation'), and the diff stat, which is 3 files +131/-1 and identical for three-dot and two-dot (no drift). Step 2: the guard sits in the resource before findStockOperations. Moving it into the DAO was rejected because a blank uuid legitimately means 'no filter' for list search. The frontend half is merged as esm #697 (9e9cd98 in the ref copy). Every hunk is needed: the import and guard, 404 for an unknown uuid as the PR describes, the new test, and the omod pom test dependency. At base omod has no tests and no test deps, and the new dependency mirrors api/pom.xml with its version managed in the root pom at line 67. Step 3: ran StockOperationActionResourceTest at head (4/4 pass). Mutation control: with the guard removed, 2 of the 4 tests fail. Throwaway probe confirmed ObjectNotFoundException maps to 404 with 'Stock operation x not found' kept in the message, which the frontend's extractErrorMessagesFromResponse shows. Outward trace: grepped every findStockOperations/getData().get(0) consumer in omod, read DelegatingCrudResource.update in the REST ref, read the frontend caller (stock-operations.modal.tsx and stock-operations.resource.ts), and read the IllegalRequestException/ObjectNotFoundException @ResponseStatus annotations in the REST ref. Security: the change narrows which operations an action can reach. No performance impact (the guard runs before the query).",
+  "could_not_verify": [
+    "End-to-end behaviour of POST /stockoperation/%20 in a real servlet container against a real database: needs access to a running OpenMRS server, which this review may not use. Every step of the chain was driven or read individually; see F1.",
+    "The PR's manual results on a REST 3.6 server: needs access to a running OpenMRS server with REST 3.6, which this review may not use."
+  ],
+  "passes_run": 4,
+  "notes": "Pass 1: diff and approach. Pass 2: outward trace, which found F1 and F2. Pass 3: pom, the consumer's error handling and the 404 body, nothing new. Working copy restored; git status --porcelain is clean. The ticket snapshot already shows the issue as Done, closed by the frontend PR's merge. Pass 4 (prompted by the unchecked-items gate) drove the real Spring handler mapping to settle the routing question for F1. The omod pom was temporarily given javax.servlet-api 3.1.0 (test scope) to run that probe and restored with git checkout; the diff held only that line before the restore. The working copy is clean."
+}

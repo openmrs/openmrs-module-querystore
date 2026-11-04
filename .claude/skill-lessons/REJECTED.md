@@ -5991,3 +5991,65 @@ by +164 — :5539→:5703, :5552-5565→:5716-5729, :5559→:5723, :5562→:5726
 equal to the old one at `7eb600c`. Citations below :5421 did not move.
 
 **Running parked counts:** unchanged.
+
+## 2026-11-05 (owner-directed: pr-review's same-defect bullet, from the stockmanagement PR 53 miss) — 1 proposed and applied unrevised (P1), 1 parked by the gate (P1′); one pre-registered replay; one refutation round; linter 17 files, 0 findings; **pr-review 0.25.0**
+
+The store matched `origin/main` at `670ee0d7` before the read. One record since 2026-10-26:
+`2026-11-04-pr-review-stockmanagement-53-missed-input.md`, a hand-written defect note from an attended
+`pr-review` 0.24.0 run. A retro over one record cannot corroborate anything. This pass ran because the
+owner directed the change, as `proposals/2026-09-25-owner-directed-prose-prune-wait.md` did, with a
+pre-registered measurement as its evidence:
+- the measurement note, `2026-11-04-pr-review-same-defect-replay-53.md`;
+- the proposal with the gate's reply, `proposals/2026-11-04-owner-directed-pr-review-same-defect.md`;
+- the artifacts, `artifacts/2026-11-04-same-defect-replay-53/`.
+`confidential/` was read for names only.
+
+**Applied: P1, pr-review 0.25.0.** A bullet in Step 3's *Trace outward*, after *Unchanged neighbors*:
+where a PR fixes a kind of defect, look for the same kind on the same path in the code it left alone. An
+instance that predates the PR blocks only if it defeats the PR's own guarantee; otherwise it is a
+suggestion.
+- **Corroborated by:** the owner's direction and the replay, which filed K1 in E 2 of 3 against C 0 of 3.
+  It was scored blind and met the reading the protocol committed to. Not by a count: there is one record.
+- **Pruned:** nothing, since it subsumes no rule (the gate checked Step 2's "class of input" and "next
+  instance" bullets). Net +80 words, with the `pr-review` budget raised 8430 → 8510 and its `why` recorded.
+- **The gate's non-blocking objections**, each with what would reopen it:
+  - **Thin signal.** With 2 hits in 6 runs, both land in E 3 times in 15. **REOPEN ON:** a held-out
+    replay where E does not file more same-kind pre-existing defects than C.
+  - **"Blocks only if" is untested on a severe pre-existing instance.** It is in tension with *Don't let
+    severity labels substitute for analysis* and with the parked "A demonstrated privilege bypass filed
+    below blocking" (2026-10-23). **REOPEN ON:** a run record or measurement where the bullet filed a
+    pre-existing exposure on the same path below blocking.
+  - **Noise is unmeasured.** E filed 6 findings and C filed 3, on one PR; the gate found none of E's extra
+    findings false. **REOPEN ON:** a held-out PR where E's extra findings are noise.
+  - **Disposition.** Both E filings were `nit`, where the bullet says suggestion. Recorded; no action.
+  - **Mechanism.** The replay changed what reviewers FILE (E 2/3, C 0/3), not what they NOTICE (E 3/3,
+    C 2/3). The run that missed never noticed K1, and its conditions were not replayed: max effort, the PR
+    conversation, and a second-reviewer subagent with a closed brief.
+
+**Parked by the gate: P1′.** An unmeasured rewording of P1's last sentence ("raised all the same"),
+parked on two blocking objections:
+- Its premise is not shown. The premise was that wt-03 read the blocking sentence as a reason not to
+  raise K1, but wt-03's reason is the one C run wt-02 gave with no bullet.
+- An unmeasured rewording is what skill-retro Step 4 and :39 say not to ship.
+**REOPEN ON:** a measurement where E runs see a same-kind pre-existing instance and leave it unfiled at a
+rate no lower than C's.
+
+**Parked, measurement only, 0 run records: seen, then set aside as outside the ticket.**
+- In the replay, 3 of 6 runs found K1 and left it in their notes as pre-existing or out of scope: C wt-02,
+  C wt-06 and E wt-03.
+- In 556, wt-02 and wt-05 set S1 aside in the same way (`2026-10-18-pr-review-reviewer-brief-556.md`).
+- K1 is not a blocker, so this does not meet the REOPEN of the parked "Routing `could_not_verify` to the
+  author", which asks for a blocker held in `notes`.
+- **REOPEN ON:** a run record where a review left a real non-blocking defect in its notes and the
+  maintainer then raised it.
+
+**Isolation.**
+- The replay ran headless from per-run clones, with project memory empty (canary checked).
+- `gh` was unauthenticated, MCP was off, and the web, subagent, skill and publishing tools were
+  disallowed. Nine answer-bearing paths were at mode 000 for the wave.
+- Audit: 0 forbidden reads. It was calibrated first: 7 of 7 planted reads flagged, 0 of 7 allowed reads.
+- The refuter ran headless from a folder of copies, for the reason the parked "Agent-tool subagents load
+  the project's memory index" gives. It read this session's transcript, but only the owner's five typed
+  messages, to check the origin claim: no assistant text and no tool output.
+
+**Running parked counts:** unchanged. The one record adds to none of them.
