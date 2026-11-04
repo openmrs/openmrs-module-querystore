@@ -18,6 +18,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.BaseOpenmrsData;
 import org.openmrs.OpenmrsObject;
+import org.openmrs.module.querystore.SafeLog;
 import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BulkWriteResult;
@@ -166,12 +167,15 @@ public abstract class TypeBootstrapper<T> {
 			progressDao.save(progress);
 		}
 		catch (RuntimeException e) {
-			log.warn("Bootstrap failed for " + getResourceType() + " at cursor "
-			        + progress.getCursorDateChanged() + "/" + progress.getCursorUuid(), e);
+			SafeLog.warn(TypeBootstrapper.class, "Bootstrap failed for " + getResourceType() + " at cursor "
+			        + progress.getCursorDateChanged() + "/"
+			        + SkipLogFormat.loggableUuid(getResourceType(), progress.getCursorUuid()), e);
 			progress.setStatus(BootstrapStatus.FAILED);
 			// Include the exception class so a null-message failure (NPE, ISE) is still identifiable
 			// from the persisted row alone; getMessage() can be null and would store as "null".
-			progress.setFailureMessage(e.getClass().getSimpleName() + ": " + e.getMessage());
+			// Scrubbed: the row is served by GET /querystore/indexingstatus, and a message can quote a
+			// patient's uuid.
+			progress.setFailureMessage(e.getClass().getSimpleName() + ": " + SkipLogFormat.scrubUuids(e.getMessage()));
 			progressDao.save(progress);
 			throw e;
 		}
@@ -286,7 +290,8 @@ public abstract class TypeBootstrapper<T> {
 			fast = fetchPage(cursor, cursorUuid, pageSize);
 		}
 		catch (RuntimeException e) {
-			log.warn("Page fetch failed for " + getResourceType() + " at cursor " + cursor + "/" + cursorUuid
+			SafeLog.warn(TypeBootstrapper.class, "Page fetch failed for " + getResourceType() + " at cursor " + cursor + "/"
+			        + SkipLogFormat.loggableUuid(getResourceType(), cursorUuid)
 			        + "; falling back to per-row fetch to skip dump-orphaned record(s)", e);
 			return fetchPageSkippingPoison(cursor, cursorUuid, pageSize, e);
 		}
@@ -334,7 +339,7 @@ public abstract class TypeBootstrapper<T> {
 			}
 			catch (RuntimeException e) {
 				// retryable=null → "unknown": a thrown exception, not a DocFailure-bearing WriteResult.
-				log.warn(SkipLogFormat.format("bootstrap", getResourceType(), getUuid(entity),
+				SafeLog.warn(TypeBootstrapper.class, SkipLogFormat.format("bootstrap", getResourceType(), getUuid(entity),
 				        null, e.getMessage()), e);
 				outcome.failed++;
 				continue;

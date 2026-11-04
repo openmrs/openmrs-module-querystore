@@ -26,6 +26,8 @@ import ai.onnxruntime.OrtSession;
 import org.apache.commons.lang3.StringUtils;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.querystore.QueryStoreConstants;
+import org.openmrs.module.querystore.SafeLog;
+import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.embedding.WordPieceTokenizer.TokenizedInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -177,7 +179,7 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 			session.close();
 		}
 		catch (OrtException e) {
-			log.warn("Error closing ONNX session", e);
+			SafeLog.warn(OnnxEmbeddingProvider.class, "Error closing ONNX session", e);
 		}
 		session = null;
 		if (sessionOptions != null) {
@@ -198,7 +200,7 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 			querySession.close();
 		}
 		catch (OrtException e) {
-			log.warn("Error closing query ONNX session", e);
+			SafeLog.warn(OnnxEmbeddingProvider.class, "Error closing query ONNX session", e);
 		}
 		querySession = null;
 		if (querySessionOptions != null) {
@@ -282,7 +284,7 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 					result.close();
 				}
 				catch (Exception e) {
-					log.warn("Error closing ONNX result", e);
+					SafeLog.warn(OnnxEmbeddingProvider.class, "Error closing ONNX result", e);
 				}
 			}
 			for (OnnxTensor tensor : inputs.values()) {
@@ -290,7 +292,7 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 					tensor.close();
 				}
 				catch (Exception e) {
-					log.warn("Error closing ONNX tensor", e);
+					SafeLog.warn(OnnxEmbeddingProvider.class, "Error closing ONNX tensor", e);
 				}
 			}
 		}
@@ -319,7 +321,7 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
 			// to resolve a .data file path. Only works for self-contained models (no external
 			// initializers).
 			log.warn("ONNX session creation failed with path '{}', trying byte array fallback: {}",
-					canonical, e.getMessage());
+					canonical, SkipLogFormat.scrubUuids(e.getMessage()));
 			try {
 				byte[] modelBytes = Files.readAllBytes(Paths.get(canonical));
 				return ortEnv.createSession(modelBytes, options);

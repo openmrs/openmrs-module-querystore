@@ -27,6 +27,7 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.FSDirectory;
 import org.openmrs.module.querystore.QueryStoreConstants;
+import org.openmrs.module.querystore.SafeLog;
 
 /**
  * Owns the per-type {@link IndexWriter} instances. One Lucene directory per resource type
@@ -180,7 +181,7 @@ final class LuceneSchemaManager implements AutoCloseable {
 				}
 				catch (RuntimeException ex) {
 					skipped.add(name);
-					log.warn("Could not open Lucene index directory '" + name + "'; skipping for"
+					SafeLog.warn(LuceneSchemaManager.class, "Could not open Lucene index directory '" + name + "'; skipping for"
 					        + " this enumeration. A type-specific ensureWriter call will surface"
 					        + " the underlying error to the caller of that path.", ex);
 				}
@@ -201,7 +202,7 @@ final class LuceneSchemaManager implements AutoCloseable {
 			catch (IOException e) {
 				// Continue closing siblings — but log: a stuck writer here usually means a held
 				// index lock, which an operator chasing "module won't restart" needs to see.
-				log.warn("Could not close Lucene writer " + entry.getKey() + " during shutdown", e);
+				SafeLog.warn(LuceneSchemaManager.class, "Could not close Lucene writer " + entry.getKey() + " during shutdown", e);
 			}
 		}
 		writers.clear();

@@ -60,6 +60,21 @@ public class ObsRecordSerializerTest {
 	}
 
 	@Test
+	public void serialize_lastModifiedIsTheObsEntryTime() {
+		// Obs are immutable in core (the obs table has no date_changed column; an edit voids the obs and
+		// creates a new one), so last_modified is date_created. Collapse-by-concept breaks a same-day
+		// tie on it, which makes "latest" the reading entered last.
+		ConceptNumeric concept = new ConceptNumeric();
+		concept.addName(conceptName("CD4 count"));
+		Obs obs = obs(concept);
+		obs.setValueNumeric(431.0);
+		java.util.Date entered = java.util.Date.from(java.time.Instant.parse("2006-05-04T10:22:02Z"));
+		obs.setDateCreated(entered);
+
+		assertEquals(entered.toInstant(), serializer.serialize(obs).getLastModified());
+	}
+
+	@Test
 	public void serialize_numericObs_populatesTextAndMetadata() {
 		ConceptNumeric concept = new ConceptNumeric();
 		concept.addName(conceptName("Fasting blood glucose"));

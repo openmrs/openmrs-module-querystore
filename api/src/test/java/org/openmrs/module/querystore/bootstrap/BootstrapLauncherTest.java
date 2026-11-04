@@ -16,8 +16,12 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.Test;
 import org.openmrs.module.DaemonToken;
+import org.openmrs.module.querystore.LogCapture;
 
 /**
  * Pins {@link BootstrapLauncher}'s daemon-token contract via its {@code DaemonExecutor} seam, so the
@@ -168,17 +172,252 @@ public class BootstrapLauncherTest {
 	}
 
 	@Test
-	public void launchResyncAsync_doesNotCollapse_eachCallHandsOffSeparately() {
-		// Deliberate contrast with launchAsync: a per-type re-sync has no in-flight guard, so repeated
-		// requests each hand off (the service serializes same-type work on its per-type lock and the
-		// scan is idempotent, so a duplicate is at worst redundant, never corrupting).
+	public void launchResyncAsync_collapsesWhileOneIsRunning_andRunsAgainAfter() {
+		// Single-flight per type: repeated requests while a re-sync runs join it rather than piling up
+		// daemon threads on the type lock; once it finishes, the next request starts a new one.
 		BootstrapLauncher launcher = new BootstrapLauncher();
-		final int[] launches = { 0 };
-		launcher.setDaemonExecutor((task, token) -> launches[0]++);
+		final java.util.List<Runnable> tasks = new java.util.ArrayList<>();
+		launcher.setDaemonExecutor((task, token) -> tasks.add(task));
 		launcher.setDaemonToken(new DaemonToken("token-resync-twice"));
 
 		assertTrue(launcher.launchResyncAsync("obs"));
+		assertTrue("a duplicate reports the running re-sync", launcher.launchResyncAsync("obs"));
+		assertTrue("another type runs alongside", launcher.launchResyncAsync("condition"));
+		assertEquals(2, tasks.size());
+
+		tasks.get(0).run(); // finishes (its service lookup throws without a context; the flag still clears)
 		assertTrue(launcher.launchResyncAsync("obs"));
-		assertEquals("re-sync does not collapse overlapping requests (unlike launchAsync)", 2, launches[0]);
+		assertEquals(3, tasks.size());
+	}
+	@Test
+	public void launchPatientWarm_collapsesRepeatsPerPatient_andReportsWarmingUntilTheTaskEnds() {
+		BootstrapLauncher launcher = new BootstrapLauncher();
+		final List<Runnable> tasks = new ArrayList<>();
+		launcher.setDaemonExecutor((task, token) -> tasks.add(task));
+		launcher.setDaemonToken(new DaemonToken("token-warm"));
+
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+		assertTrue("a repeat for the same patient reports success", launcher.launchPatientWarm("patient-1", () -> true));
+		assertEquals("but hands off only one warm", 1, tasks.size());
+		assertTrue(launcher.isWarming("patient-1"));
+		assertFalse(launcher.isWarming("patient-2"));
+
+		tasks.get(0).run();
+		assertFalse(launcher.isWarming("patient-1"));
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+		assertEquals(2, tasks.size());
+	}
+
+	@Test
+	public void launchPatientWarm_marksAThrowingWarmFailed_untilALaterOneSucceeds() {
+		BootstrapLauncher launcher = SynchronousLaunchers.create();
+
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> {
+			throw new IllegalStateException("projection blew up");
+		}));
+		assertTrue(launcher.hasFailed("patient-1"));
+		assertFalse("a failed warm no longer reads as in flight", launcher.isWarming("patient-1"));
+		assertFalse(launcher.hasFailed("patient-2"));
+
+		assertTrue("a failed patient can be warmed again", launcher.launchPatientWarm("patient-1", () -> true));
+		assertFalse("and success clears the failure", launcher.hasFailed("patient-1"));
+	}
+
+	@Test
+	public void launchPatientWarm_refusesBeyondTheConcurrencyCap_andWithoutAToken() {
+		BootstrapLauncher launcher = new BootstrapLauncher();
+		final int[] launches = { 0 };
+		launcher.setDaemonExecutor((task, token) -> launches[0]++);
+
+		assertFalse("no token, no warm", launcher.launchPatientWarm("patient-0", () -> true));
+
+		launcher.setDaemonToken(new DaemonToken("token-warm-cap"));
+		for (int i = 1; i <= BootstrapLauncher.DEFAULT_MAX_CONCURRENT_PROJECTIONS; i++) {
+			assertTrue(launcher.launchPatientWarm("patient-" + i, () -> true));
+		}
+		assertFalse("one past the cap is refused", launcher.launchPatientWarm("patient-x", () -> true));
+		assertTrue("with every slot busy, a repeat for a patient whose warm holds one is still in flight",
+		    launcher.launchPatientWarm("patient-1", () -> true));
+		assertFalse(launcher.isWarming("patient-x"));
+		assertEquals(BootstrapLauncher.DEFAULT_MAX_CONCURRENT_PROJECTIONS, launches[0]);
+	}
+
+	@Test
+	public void launchPatientWarm_logsStartAndDuplicateAtDebug_withoutThePatientUuid() {
+		BootstrapLauncher launcher = new BootstrapLauncher();
+		launcher.setDaemonExecutor((task, token) -> { });
+		launcher.setDaemonToken(new DaemonToken("token-warm-log"));
+
+		try (LogCapture log = LogCapture.of(BootstrapLauncher.class)) {
+			launcher.launchPatientWarm("patient-uuid-1", () -> true);
+			launcher.launchPatientWarm("patient-uuid-1", () -> true);
+
+			List<String> debug = log.at("DEBUG");
+			assertEquals(2, debug.size());
+			assertTrue(debug.get(0), debug.get(0).startsWith("Patient warm starting"));
+			assertTrue(debug.get(1), debug.get(1).contains("ignoring duplicate"));
+			for (String line : log.lines()) {
+				assertFalse(line, line.contains("patient-uuid-1"));
+			}
+		}
+	}
+
+	@Test
+	public void launchPatientWarm_failureWarnsWithoutThePatientUuid_andNamesItOnlyAtDebug() {
+		BootstrapLauncher launcher = SynchronousLaunchers.create();
+
+		try (LogCapture log = LogCapture.of(BootstrapLauncher.class)) {
+			launcher.launchPatientWarm("patient-uuid-2", () -> {
+				throw new IllegalStateException("boom");
+			});
+
+			assertEquals(1, log.at("WARN").size());
+			assertFalse(log.at("WARN").get(0).contains("patient-uuid-2"));
+			assertTrue(log.at("DEBUG").stream().anyMatch(l -> l.contains("patient-uuid-2")));
+		}
+	}
+
+	@Test
+	public void syncProjections_andBackgroundWarms_shareOneBound() {
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+		final int[] ran = { 0 };
+
+		assertTrue("the one slot goes to a background warm", launcher.launchPatientWarm("patient-1", () -> true));
+		assertFalse("a synchronous projection finds no slot in time", launcher.runWithProjectionSlot("patient-sync", () -> ++ran[0] > 0, 50));
+		assertFalse("nor does a second warm", launcher.launchPatientWarm("patient-2", () -> true));
+		assertEquals(0, ran[0]);
+
+		parked.get(0).run();
+		assertTrue("the warm released its slot", launcher.runWithProjectionSlot("patient-sync", () -> ++ran[0] > 0, 50));
+		assertEquals(1, ran[0]);
+		assertTrue("and the synchronous projection released it in turn", launcher.launchPatientWarm("patient-2", () -> true));
+	}
+
+	@Test
+	public void runWithProjectionSlot_releasesTheSlotWhenTheWorkThrows() {
+		List<Runnable> parked = new ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+
+		try {
+			launcher.runWithProjectionSlot("patient-sync", () -> {
+				throw new IllegalStateException("projection blew up");
+			}, 50);
+			fail("expected the work's exception");
+		}
+		catch (IllegalStateException expected) {
+			// pass
+		}
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+	}
+
+	@Test
+	public void failedPatients_areBounded_oldestForgottenFirst() {
+		BootstrapLauncher launcher = SynchronousLaunchers.create();
+		for (int i = 0; i <= BootstrapLauncher.MAX_FAILED_PATIENTS; i++) {
+			launcher.launchPatientWarm("patient-" + i, () -> {
+				throw new IllegalStateException("x");
+			});
+		}
+
+		assertFalse("the first failure is forgotten past the bound", launcher.hasFailed("patient-0"));
+		assertTrue(launcher.hasFailed("patient-" + BootstrapLauncher.MAX_FAILED_PATIENTS));
+	}
+
+	@Test
+	public void aSecondProjectionForAPatientInFlight_waitsForIt_andDoesNotProjectAgain() throws Exception {
+		// Every slot is busy, one of them with this patient's warm. The second projection must wait on
+		// that warm, not queue for a slot: queued, it would get the warm's slot when the warm finished
+		// and project the patient a second time.
+		java.util.List<Runnable> parked = new java.util.ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+		final boolean[] ran = { false };
+		final boolean[] result = { false };
+		Thread waiter = new Thread(() -> result[0] = launcher.runWithProjectionSlot("patient-1", () -> ran[0] = true, 5000));
+		waiter.start();
+		Thread.sleep(100);
+
+		parked.get(0).run();
+		waiter.join(5000);
+
+		assertTrue("the waiter saw the in-flight projection finish", result[0]);
+		assertFalse("and did not project again", ran[0]);
+	}
+
+	@Test
+	public void aSecondProjectionForAPatientInFlight_leavesTheOtherSlotsFree() throws Exception {
+		java.util.List<Runnable> parked = new java.util.ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(2, parked);
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+		Thread waiter = new Thread(() -> launcher.runWithProjectionSlot("patient-1", () -> true, 5000));
+		waiter.start();
+		Thread.sleep(100);
+
+		assertTrue("another patient can still start", launcher.launchPatientWarm("patient-2", () -> true));
+		parked.get(0).run();
+		waiter.join(5000);
+	}
+
+	@Test
+	public void aWaiterGivesUp_whenTheProjectionInFlightOutlastsItsWait() {
+		java.util.List<Runnable> parked = new java.util.ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+
+		assertFalse(launcher.runWithProjectionSlot("patient-1", () -> true, 50));
+	}
+
+	@Test
+	public void runExclusiveProjection_waitsForTheOneInFlight_thenRunsItsOwn() throws Exception {
+		java.util.List<Runnable> parked = new java.util.ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1, parked);
+		assertTrue(launcher.launchPatientWarm("patient-1", () -> true));
+		final boolean[] ran = { false };
+		final boolean[] result = { false };
+		Thread reindex = new Thread(() -> result[0] = launcher.runExclusiveProjection("patient-1", () -> ran[0] = true, 5000));
+		reindex.start();
+		Thread.sleep(100);
+		assertFalse("not while the warm runs", ran[0]);
+
+		parked.get(0).run();
+		reindex.join(5000);
+
+		assertTrue(result[0]);
+		assertTrue("a forced reindex runs its own projection after the warm", ran[0]);
+	}
+
+	@Test
+	public void aFailureIsClearedOnlyByAFullProjection() {
+		BootstrapLauncher launcher = SynchronousLaunchers.create();
+		try {
+			launcher.runWithProjectionSlot("patient-1", () -> {
+				throw new IncompleteProjectionException("Cold-touch projection for patient patient-1 was incomplete: 1 type(s) failed, 0 record(s) not projected");
+			}, 50);
+			fail("expected the partial projection to propagate");
+		}
+		catch (IncompleteProjectionException expected) {
+			// pass
+		}
+		assertTrue("a synchronous failure is recorded too", launcher.hasFailed("patient-1"));
+
+		launcher.runWithProjectionSlot("patient-1", () -> false, 50);
+		assertTrue("a projection that found the chart there and skipped proves nothing", launcher.hasFailed("patient-1"));
+
+		launcher.runWithProjectionSlot("patient-1", () -> true, 50);
+		assertFalse("a full projection clears it", launcher.hasFailed("patient-1"));
+	}
+
+	@Test
+	public void projectionSlots_areClampedTo32() {
+		java.util.List<Runnable> parked = new java.util.ArrayList<>();
+		BootstrapLauncher launcher = SynchronousLaunchers.parked(1000, parked);
+		int started = 0;
+		for (int i = 0; i < 40; i++) {
+			if (launcher.launchPatientWarm("patient-" + i, () -> true)) {
+				started++;
+			}
+		}
+		assertEquals(BootstrapLauncher.MAX_PROJECTION_SLOTS, started);
 	}
 }
