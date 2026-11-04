@@ -12,6 +12,7 @@ package org.openmrs.module.querystore.api.impl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -34,6 +35,7 @@ import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
+import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapProgress;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatus;
@@ -152,7 +154,7 @@ public class QueryStoreServiceImplTest {
 
 			@Override public void delete(String resourceType, String resourceUuid) { }
 
-			@Override public void bulkDeleteByPatient(String patientUuid) { }
+			@Override public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) { return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList()); }
 
 			@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
 
@@ -321,6 +323,29 @@ public class QueryStoreServiceImplTest {
 		assertEquals("service must forward the patient uuid to the backend",
 		        1, backend.bulkDeleteByPatientCount.get());
 		assertEquals("patient-9", backend.bulkDeleteByPatientUuids.get(0));
+	}
+
+	@Test
+	public void bulkDeleteByPatient_returnsTheBackendsResult_failuresIncluded() {
+		// r2 code S3: a caller that must know the chart is gone (forgetPatient) reads the failures.
+		BulkWriteResult partial = new BulkWriteResult(3, 2, Collections.singletonList(
+		    new org.openmrs.module.querystore.backend.DocFailure("obs", "patient-9", "IOException", true)));
+		FakeBackendStore backend = new FakeBackendStore(false) {
+
+			@Override
+			public BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				super.bulkDeleteByPatient(patientUuid);
+				return partial;
+			}
+		};
+		service.setBackend(backend);
+
+		assertSame(partial, service.bulkDeleteByPatient("patient-9"));
+	}
+
+	@Test
+	public void bulkDeleteByPatient_unwiredBackend_reportsAFailure_ratherThanSuccess() {
+		assertTrue(new QueryStoreServiceImpl().bulkDeleteByPatient("patient-9").hasFailures());
 	}
 
 	@Test
@@ -633,6 +658,52 @@ public class QueryStoreServiceImplTest {
 	}
 
 	@Test
+	public void getPatientChartRead_disclosesTheGap_whenItWaitedForAProjectionThatLeftRecordsOut() {
+		// A second read of a cold patient waits for the projection already in flight instead of
+		// running its own, and the launcher answers true once that one ends, whether or not it
+		// completed. Here it left records out, so this read must not call the chart complete.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.incompletePatients.add("patient-uuid");
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+		service.setBootstrapLauncher(new BootstrapLauncher() {
+			@Override
+			public boolean runWithProjectionSlot(String patientUuid, java.util.function.BooleanSupplier work,
+			        long timeoutMillis) {
+				return true; // joined the other projection; this call's work never ran
+			}
+		});
+
+		assertTrue("a read that joined an incomplete projection must disclose the gap",
+		    service.getPatientChartRead("patient-uuid").isTruncated());
+	}
+
+	@Test
+	public void getPatientChartRead_disclosesTheGap_whenItWaitedForAProjectionThatFailedOutright() {
+		// The projection it waited for threw before reporting itself incomplete (its delete failed,
+		// say), so only the launcher's failed set knows.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(new RecordingBootstrapService());
+		service.setBootstrapLauncher(new BootstrapLauncher() {
+			@Override
+			public boolean runWithProjectionSlot(String patientUuid, java.util.function.BooleanSupplier work,
+			        long timeoutMillis) {
+				return true; // joined the other projection; this call's work never ran
+			}
+
+			@Override
+			public boolean hasFailed(String patientUuid) {
+				return true;
+			}
+		});
+
+		assertTrue("a read that joined a failed projection must disclose the gap",
+		    service.getPatientChartRead("patient-uuid").isTruncated());
+	}
+
+	@Test
 	public void getPatientChartRead_marksCompletedProjectionComplete() {
 		FakeBackendStore backend = new FakeBackendStore(true);
 		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
@@ -756,7 +827,7 @@ public class QueryStoreServiceImplTest {
 
 	// ---------- fakes ----------
 
-	private static final class FakeBackendStore implements BackendStore {
+	private static class FakeBackendStore implements BackendStore {
 		private final boolean existsByPatientReturn;
 		final AtomicInteger existsByPatientCount = new AtomicInteger();
 		final AtomicInteger hybridCount = new AtomicInteger();

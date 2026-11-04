@@ -95,14 +95,14 @@ public class ElasticsearchPatientChartReadTest {
 	public void truncationDisclosure_namesTheSignalThatFired() {
 		// The WARN is the only trace of a degraded read, so it has to name the cause an operator
 		// should chase: a failed shard or a timeout points at cluster health, the cap at paging.
-		String shards = ElasticsearchBackendStore.truncationDisclosure("patient-1", 0, 0, true, false, false);
+		String shards = ElasticsearchBackendStore.truncationDisclosure(0, 0, true, false, false);
 		assertTrue(shards, shards.contains("failed shard"));
 		assertFalse("a shard failure must not be reported as the paging cap: " + shards, shards.contains("cap"));
-		String timeout = ElasticsearchBackendStore.truncationDisclosure("patient-1", 3, 3, false, true, false);
+		String timeout = ElasticsearchBackendStore.truncationDisclosure(3, 3, false, true, false);
 		assertTrue(timeout, timeout.contains("timed out"));
-		String early = ElasticsearchBackendStore.truncationDisclosure("patient-1", 3, 3, false, false, true);
+		String early = ElasticsearchBackendStore.truncationDisclosure(3, 3, false, false, true);
 		assertTrue(early, early.contains("terminated early"));
-		String cap = ElasticsearchBackendStore.truncationDisclosure("patient-1", 12000, 10000, false, false, false);
+		String cap = ElasticsearchBackendStore.truncationDisclosure(12000, 10000, false, false, false);
 		assertTrue("the cap case reports the real total it compared against: " + cap,
 		        cap.contains("12000") && cap.contains("10000"));
 	}

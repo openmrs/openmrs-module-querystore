@@ -10,8 +10,10 @@
 package org.openmrs.module.querystore.bootstrap;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 import org.openmrs.api.OpenmrsService;
+import org.openmrs.module.querystore.api.ProjectionProgress;
 
 /**
  * Entry point for the initial-backfill path (ADR open question on bootstrap). Walks core's
@@ -81,6 +83,19 @@ public interface BootstrapService extends OpenmrsService {
 	void ensureIndexed(String patientUuid);
 
 	/**
+	 * {@link #ensureIndexed}, reporting whether it projected: {@code false} when the patient already
+	 * had a document, so nothing ran. A projection that ran over a patient with nothing indexed is a
+	 * full one, which a caller can take as clearing an earlier failure; a skipped one is not.
+	 *
+	 * <p>A {@code default} so test doubles keep compiling; it cannot tell a skip from a projection
+	 * and reports {@code true}. The production implementation overrides it.
+	 */
+	default boolean projectIfNotIndexed(String patientUuid) {
+		ensureIndexed(patientUuid);
+		return true;
+	}
+
+	/**
 	 * Whether the last per-patient projection of {@code patientUuid} ({@link #ensureIndexed} or
 	 * {@link #reindexPatient}) in this JVM left records out. The patient may already have documents,
 	 * so a reader that gates the cold touch on the backend's existence probe asks this as well,
@@ -103,6 +118,51 @@ public interface BootstrapService extends OpenmrsService {
 	 * logged and then reported as an {@link IncompleteProjectionException}, matching {@code ensureIndexed}.
 	 */
 	void reindexPatient(String patientUuid);
+
+	/**
+	 * {@link #reindexPatient(String)}, running {@code afterDelete} once the patient's documents are
+	 * deleted and before any is re-projected: the point from which the old chart is gone. A
+	 * {@code default} so test doubles keep compiling; it runs {@code afterDelete} after the whole
+	 * reindex. The production implementation overrides it.
+	 */
+	default void reindexPatient(String patientUuid, Runnable afterDelete) {
+		reindexPatient(patientUuid);
+		afterDelete.run();
+	}
+
+	/**
+	 * Whether a {@link #reindexPatient} of the patient has started and not yet deleted its old
+	 * documents: from the call until that delete lands (or the reindex ends). Those documents are
+	 * about to go, so a search should not serve them. A {@code default} that says no, so test doubles
+	 * keep compiling; the production implementation overrides it.
+	 */
+	default boolean isDeletePending(String patientUuid) {
+		return false;
+	}
+
+	/**
+	 * Deletes the patient's documents under its per-patient lock, so it reads as not indexed and a
+	 * later warm projects it afresh: for a patient whose failed projection may have left a partial
+	 * chart, before its failure is forgotten. {@code stillDroppable} is checked once the lock is held
+	 * and before anything is deleted: a projection may have rebuilt the chart while this waited for
+	 * the lock, and then nothing is deleted. Returns whether the chart is gone, which is true only
+	 * when every index's delete succeeded and the patient has no document left; a caller keeps the
+	 * failure otherwise. A {@code default} that deletes nothing and returns {@code false}, so test
+	 * doubles keep compiling and nothing is forgotten on their word; the production implementation
+	 * overrides it.
+	 */
+	default boolean forgetPatient(String patientUuid, BooleanSupplier stillDroppable) {
+		return false;
+	}
+
+	/**
+	 * How far the patient's running {@link #ensureIndexed} or {@link #reindexPatient} has got, in
+	 * resource types; {@code null} when none is running for the patient in this JVM. A {@code default}
+	 * so test doubles keep compiling; the production implementation overrides it.
+	 */
+	default ProjectionProgress getProjectionProgress(String patientUuid) {
+		return null;
+	}
 
 	List<BootstrapProgress> getStatus();
 

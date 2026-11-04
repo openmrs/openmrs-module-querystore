@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
@@ -25,8 +26,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
+import org.openmrs.module.querystore.SafeLog;
+import org.openmrs.module.querystore.SkipLogFormat;
+import org.openmrs.module.querystore.api.ProjectionProgress;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.BackendStore;
+import org.openmrs.module.querystore.backend.BulkWriteResult;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
 import org.openmrs.module.querystore.embedding.EmbeddingProvider;
 import org.openmrs.module.querystore.embedding.EmbeddingProviderClosedException;
@@ -61,10 +66,32 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 
 	// Per-patient lock so concurrent ensureIndexed(uuid) calls for the same patient serialize. The
 	// cross-JVM race is absorbed by the Decision 3 version invariant (conditional upsert on
-	// last_modified); this lock prevents redundant projection work within one JVM. Map grows by one
-	// entry per ever-touched patient and is bounded in practice by deployment patient count — see
-	// the ADR "Lazy per-patient projection" sub-question for the trade-off discussion.
-	private final Map<String, Object> patientLocks = new ConcurrentHashMap<>();
+	// last_modified); this lock prevents redundant projection work within one JVM. Striped, not one
+	// lock per patient: a map of locks grew by one entry per uuid any caller tried and was never
+	// evicted. Two patients share a stripe about one time in PATIENT_LOCK_STRIPES and then project
+	// one after the other, which costs time, not correctness.
+	static final int PATIENT_LOCK_STRIPES = 256;
+
+	private final Object[] patientLockStripes = new Object[PATIENT_LOCK_STRIPES];
+
+	{
+		for (int i = 0; i < PATIENT_LOCK_STRIPES; i++) {
+			patientLockStripes[i] = new Object();
+		}
+	}
+
+	// Patients whose reindexPatient has started and not yet deleted their old documents (see
+	// isDeletePending). An entry exists only while such a call runs.
+	private final Set<String> deletePending = ConcurrentHashMap.newKeySet();
+
+	// How far each patient's running per-patient projection has got. An entry exists only while one
+	// runs (under the patient's lock), so the map holds at most one per running projection.
+	private final Map<String, ProjectionProgress> projectionProgress = new ConcurrentHashMap<>();
+
+	/** The lock a patient's projections serialize on; the same object for the same uuid. */
+	Object patientLock(String patientUuid) {
+		return patientLockStripes[Math.floorMod(patientUuid.hashCode(), PATIENT_LOCK_STRIPES)];
+	}
 
 	// Patients whose last per-patient projection left records out. Such a patient has documents, so
 	// the existence probe alone would read its chart as complete; this set keeps it cold until a
@@ -143,7 +170,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 				throw e;
 			}
 			catch (RuntimeException e) {
-				log.warn("Bootstrap of " + resourceType + " failed; continuing with remaining types", e);
+				SafeLog.warn(BootstrapServiceImpl.class, "Bootstrap of " + resourceType + " failed; continuing with remaining types", e);
 			}
 		}
 	}
@@ -168,11 +195,15 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 
 	@Override
 	public void ensureIndexed(String patientUuid) {
+		projectIfNotIndexed(patientUuid);
+	}
+
+	@Override
+	public boolean projectIfNotIndexed(String patientUuid) {
 		if (patientUuid == null || patientUuid.isEmpty()) {
-			return;
+			return false;
 		}
-		Object lock = patientLocks.computeIfAbsent(patientUuid, k -> new Object());
-		synchronized (lock) {
+		synchronized (patientLock(patientUuid)) {
 			// Re-probe inside the lock: callers (QueryStoreServiceImpl.searchByPatient /
 			// getPatientChart) test existsByPatient BEFORE entering this method, so two concurrent
 			// cold-touches on the same never-indexed patient both see false and both invoke
@@ -187,9 +218,10 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			// documents, so a waiter that queued behind a failed touch projects it again too.
 			if (!incompletePatients.contains(patientUuid) && backendSelector != null
 			        && backendSelector.getStore().existsByPatient(patientUuid)) {
-				return;
+				return false;
 			}
 			reportProjection(patientUuid, projectAllTypesForPatient(patientUuid), "Cold-touch projection");
+			return true;
 		}
 	}
 
@@ -213,11 +245,31 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 
 	@Override
 	public void reindexPatient(String patientUuid) {
+		reindexPatient(patientUuid, () -> {
+		});
+	}
+
+	@Override
+	public void reindexPatient(String patientUuid, Runnable afterDelete) {
 		if (patientUuid == null || patientUuid.isEmpty()) {
 			return;
 		}
-		Object lock = patientLocks.computeIfAbsent(patientUuid, k -> new Object());
-		synchronized (lock) {
+		deletePending.add(patientUuid);
+		try {
+			reindexPatientUnderLock(patientUuid, afterDelete);
+		}
+		finally {
+			deletePending.remove(patientUuid);
+		}
+	}
+
+	@Override
+	public boolean isDeletePending(String patientUuid) {
+		return patientUuid != null && deletePending.contains(patientUuid);
+	}
+
+	private void reindexPatientUnderLock(String patientUuid, Runnable afterDelete) {
+		synchronized (patientLock(patientUuid)) {
 			// Force a full re-projection (repairs a partially-indexed patient, which ensureIndexed's
 			// existsByPatient gate refuses to touch). Delete FIRST: this clears stale rows AND means
 			// the projection isn't gated by existing docs. Order is load-bearing — projecting before
@@ -226,8 +278,34 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			// can't interleave with the delete. queryStoreService is called unconditionally (as
 			// elsewhere in this class): a null here is a wiring fault that must fail loudly, not
 			// silently skip the delete and leave stale docs alongside the re-projected ones.
-			queryStoreService.bulkDeleteByPatient(patientUuid);
+			BulkWriteResult deleted = queryStoreService.bulkDeleteByPatient(patientUuid);
+			// An index whose delete failed still holds the old rows (the backends log which): the
+			// chart is not gone, so re-projecting over it would report a mixed chart complete.
+			if (deleted == null || deleted.hasFailures()) {
+				throw new IllegalStateException("Deleting the patient's documents did not finish; not re-projecting");
+			}
+			deletePending.remove(patientUuid);
+			afterDelete.run();
 			reportProjection(patientUuid, projectAllTypesForPatient(patientUuid), "Re-projection");
+		}
+	}
+
+	@Override
+	public boolean forgetPatient(String patientUuid, BooleanSupplier stillDroppable) {
+		if (patientUuid == null || patientUuid.isEmpty()) {
+			return false;
+		}
+		synchronized (patientLock(patientUuid)) {
+			if (!stillDroppable.getAsBoolean()) {
+				return false;
+			}
+			BulkWriteResult deleted = queryStoreService.bulkDeleteByPatient(patientUuid);
+			// The backends log each index whose delete failed; such an index still holds the
+			// patient's documents, so the chart is not gone.
+			if (deleted == null || deleted.hasFailures()) {
+				return false;
+			}
+			return backendSelector != null && !backendSelector.getStore().existsByPatient(patientUuid);
 		}
 	}
 
@@ -239,32 +317,46 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 	 *          {@code null} when every type ran and every record was written */
 	private String projectAllTypesForPatient(String patientUuid) {
 		Map<String, ResourceTypeProvider> providers = discoverProviders();
+		List<String> resourceTypes = allResourceTypes(providers);
 		int failedTypes = 0;
 		int failedRecords = 0;
-		for (String resourceType : allResourceTypes(providers)) {
-			try {
-				failedRecords += runOneForPatient(resourceType, patientUuid, providers);
-			}
-			catch (UnsupportedOperationException noPerPatientImpl) {
-				// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
-				// default throw). Legitimate no-op for reference-data SPI types that don't carry a
-				// patient association — log at debug so a deployment with several such providers
-				// doesn't spam warnings on every cold searchByPatient.
-				if (log.isDebugEnabled()) {
-					log.debug("Skipping " + resourceType + " for patient " + patientUuid
-					        + " — no per-patient projection implemented");
+		int done = 0;
+		try {
+			for (String resourceType : resourceTypes) {
+				projectionProgress.put(patientUuid, new ProjectionProgress(done++, resourceTypes.size()));
+				try {
+					failedRecords += runOneForPatient(resourceType, patientUuid, providers);
+				}
+				catch (UnsupportedOperationException noPerPatientImpl) {
+					// Bootstrapper declared no per-patient story (TypeBootstrapper.fetchPageForPatient
+					// default throw). Legitimate no-op for reference-data SPI types that don't carry a
+					// patient association — log at debug so a deployment with several such providers
+					// doesn't spam warnings on every cold searchByPatient.
+					if (log.isDebugEnabled()) {
+						log.debug("Skipping " + resourceType + " for patient " + patientUuid
+						        + " — no per-patient projection implemented");
+					}
+				}
+				catch (RuntimeException e) {
+					SafeLog.warn(BootstrapServiceImpl.class, "Per-patient projection of " + resourceType
+					        + " failed; continuing with remaining types (patient uuid at DEBUG)", e);
+					log.debug("Per-patient projection of " + resourceType + " failed for patient " + patientUuid);
+					failedTypes++;
 				}
 			}
-			catch (RuntimeException e) {
-				log.warn("Per-patient projection of " + resourceType + " for patient " + patientUuid
-				        + " failed; continuing with remaining types", e);
-				failedTypes++;
-			}
+		}
+		finally {
+			projectionProgress.remove(patientUuid);
 		}
 		if (failedTypes == 0 && failedRecords == 0) {
 			return null;
 		}
 		return failedTypes + " type(s) failed, " + failedRecords + " record(s) not projected";
+	}
+
+	@Override
+	public ProjectionProgress getProjectionProgress(String patientUuid) {
+		return patientUuid == null ? null : projectionProgress.get(patientUuid);
 	}
 
 	@Override
@@ -317,7 +409,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			return counter.getAsLong();
 		}
 		catch (RuntimeException e) {
-			log.warn(operation + " failed for resource type '" + resourceType
+			SafeLog.warn(BootstrapServiceImpl.class, operation + " failed for resource type '" + resourceType
 			        + "'; reporting its drift as unknown", e);
 			return -1L;
 		}
@@ -497,7 +589,7 @@ public class BootstrapServiceImpl extends BaseOpenmrsService implements Bootstra
 			catch (RuntimeException e) {
 				log.warn("Skipping malformed ResourceTypeProvider bean " + p.getClass().getName()
 				        + (name != null ? " (resource type '" + name + "')" : "")
-				        + " — " + e.getMessage());
+				        + " — " + SkipLogFormat.scrubUuids(e.getMessage()));
 			}
 		}
 		return accepted;
