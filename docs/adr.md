@@ -31,6 +31,7 @@ Originating discussion: [RFC: A separate read-optimized projection of OpenMRS cl
 16. [REST Read API — `patientrecord` Resource](#decision-16-rest-read-api--patientrecord-resource)
 17. [Context-Slice Read — Tiered Record Selection](#decision-17-context-slice-read--tiered-record-selection)
 18. [Context-Slice Question Interpretation and Retrieval Preprocessing](#decision-18-context-slice-question-interpretation-and-retrieval-preprocessing)
+19. [Clinical Dates and Timestamps Are the Server's Wall Clock](#decision-19-clinical-dates-and-timestamps-are-the-servers-wall-clock)
 
 [Open Questions](#open-questions)
 
@@ -1527,6 +1528,59 @@ questions. Query normalization is retrieval quality, which this module owns.
 
 ---
 
+## Decision 19: Clinical Dates and Timestamps Are the Server's Wall Clock
+
+### Status
+Accepted (November 2026). Resolves the former open question *Timestamp time-zone convention*, and folds #81's
+date-only rule into the general one.
+
+### Context
+Documents carry date-only fields (`record_date`, `birthdate`) and timestamps (`start_date_time`, `end_date_time`,
+`date_handed_over`), and every serializer rendered them through UTC. OpenMRS stores a date and time with no offset,
+in the zone the server runs in, and a day entered as a date is stored at that zone's midnight. So on a server east
+of UTC every such day read one earlier than the chart shows it, and on one west of UTC an evening read as the next
+day.
+
+Measured on chartsearchai's demo replica (+03:00, the demo's own dump): Kamwara's (dd74dc61) three nevirapine orders,
+activated 2006-03-14, 2006-04-19 and 2006-05-30, were indexed with `record_date` 2006-03-13, 2006-04-18 and
+2006-05-29. chartsearchai cited them with those dates, beside a chart widget showing the orders' own.
+
+#81 had already moved `person.birthdate`, a `DATE` column, to the JVM zone, and left every `datetime` column in UTC
+pending this question, "including midnight-valued ones".
+
+### Decision
+A clinical date or timestamp is rendered on the server's wall clock, `ZoneId.systemDefault()`: `yyyy-MM-dd` for a
+date (Decision 7's format), `yyyy-MM-dd'T'HH:mm:ss` for a timestamp, and `QueryDocument.date` as that zone's
+calendar day. One rule for every field, through `DateFormatUtil`'s `formatDate`, `formatDateTime` and `toLocalDate`.
+A date-only column is the same case and takes `formatDate`; #81's separate method is folded into it.
+
+### Rationale
+- It is what the record holds. A stored `2006-05-30 00:00` means the 30th at the clinic, and no other zone is
+  recorded anywhere to convert it from.
+- Consumers compare these dates with the chart the clinician sees, which shows the same wall clock. A UTC day needs
+  the server's offset to be read back, and no document carries that offset.
+- UTC would be right only for data that originates in UTC, which OpenMRS's does not.
+
+### Consequences
+- **A server that changes zone changes every rendered date.** The values are wall-clock times with no offset, as
+  core's are. Moving the JVM's zone is the same event for core's own UI.
+- **Re-index after upgrading.** A document written before this decision keeps its UTC day. A restart's top-up skips a
+  record whose stored version is current, so it does not rewrite one. Re-project with
+  `BootstrapService.resyncType(type)` (REST `POST /reindex {"scope":"type","resourceType":"<type>"}`), or per patient with `POST /reindex {"patient":"<uuid>"}`,
+  which deletes the patient's documents and projects them again.
+- **Tests build stored values as local wall-clock times** (`Timestamp.valueOf`, `DateFixtures.localMidnight`) where
+  they assert a rendered time. A UTC instant renders differently on each host's zone.
+  `VisitRecordSerializerTest.serialize_emitsIsoTimestamps` asserted UTC noon as `12:00:00` and now builds its times
+  so.
+
+Pinned by:
+- `DrugOrderRecordSerializerTest.serialize_datesAtLocalMidnightEastOfUtc_areTheDaysTheyHold`: the record date and
+  the stop date.
+- `VisitRecordSerializerTest.serialize_timestampsEastOfUtc_areTheServersWallClockTimes`: a timestamp.
+- #81's three `PatientRecordSerializerTest` birthdate cases, `java.sql.Date` included.
+
+Each of the first two was red against the UTC rendering.
+
 ## Open Questions
 
 Design questions that have been recognized but not yet resolved. Each item below is self-contained and should be deleted from this list once it is promoted to a numbered decision above. New items can be appended as they are surfaced.
@@ -1547,7 +1601,6 @@ Design questions that have been recognized but not yet resolved. Each item below
 - [Patient merge handling](#patient-merge-handling)
 - [Concept-set and hierarchy queries](#concept-set-and-hierarchy-queries)
 - [Knowledge-base and reference-data projection](#knowledge-base-and-reference-data-projection)
-- [Timestamp time-zone convention](#timestamp-time-zone-convention)
 - [Person vs Patient model](#person-vs-patient-model)
 - [Drug-order non-coded drug handling](#drug-order-non-coded-drug-handling)
 - [Prefixed-primary-concept concept_class projection](#prefixed-primary-concept-concept_class-projection)
@@ -1689,11 +1742,6 @@ The deployment-specific residual that OCL cannot answer reduces to four cases:
 Items 1–3 are largely answerable with SQL against `concept` filtered to deployment scope; they do not by themselves require an index. Only item 4 requires concept content co-located with clinical data in the same embedding space, and that is the case the **Mixed retrieval semantics** bullet above flags as unresolved (ranking coherence across structurally different document types). Re-opening this open question for projection in querystore therefore reduces to demonstrating a consumer use case that item 4 serves and that UUID-crosswalk to OCL/FHIR does not.
 
 Out-of-v1 by design; the gating signal for re-opening this is whether the chartsearchai eval workflow surfaces queries that need knowledge-base projections to answer well, or whether downstream consumers (FHIR analytics, AI agents reasoning over coded data) request it concretely.
-
-### Timestamp time-zone convention
-Documents mix date-only fields (`record_date`, `birthdate`) with timestamp fields (`start_date_time`, `end_date_time`, `date_handed_over`). The time zone for timestamps is unspecified. UTC is the obvious default, but OpenMRS data often originates in deployment-local time and is stored without a zone offset. The convention needs to be explicit so consumers know how to interpret a value like `start_date_time = "2025-03-15T09:30:00"` and so date-range filters match consistently.
-
-**Date-only columns are not part of this question.** A value core stores in a `DATE` column has no instant to convert: JDBC materializes it at midnight in the JVM default zone, and rendering that through UTC moved `birthdate` one day back wherever the zone's offset on that date is positive ([#81](https://github.com/openmrs/openmrs-module-querystore/issues/81)). Such values render through `DateFormatUtil.formatCalendarDate`, which reads the date back in the JVM default zone. In the core schema `person.birthdate` is the only `DATE` column a serializer formats (`patient_state.start_date`/`end_date` are compared, never rendered). Every other formatted field is a `datetime` column and still renders in UTC pending this question, including midnight-valued ones such as an obs `value_datetime` entered as a date.
 
 ### Person vs Patient model
 The `querystore_patient` index conflates Person attributes (name, gender, birthdate, addresses, attributes) with Patient attributes (identifiers). In OpenMRS core these are separate entities — a Person can exist without being a Patient (e.g., providers, relatives). The current flattening is appropriate for a read-side projection focused on patient queries, but should be made explicit so downstream consumers do not expect a `querystore_persons` resource type to also exist or look for non-patient Persons in this index.

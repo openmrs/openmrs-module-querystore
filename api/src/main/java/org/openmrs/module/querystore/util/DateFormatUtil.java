@@ -12,18 +12,19 @@ package org.openmrs.module.querystore.util;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 
 /**
- * Shared date formatting for clinical record serializers. Renders timestamps to ADR decision 7's
- * {@code yyyy-MM-dd} format in UTC; the time-zone convention is tracked under the Timestamp
- * time-zone convention open question. Date-only values go through {@link #formatCalendarDate}.
+ * Shared date formatting for clinical record serializers. Renders dates to ADR decision 7's
+ * {@code yyyy-MM-dd} format, and timestamps to {@code yyyy-MM-dd'T'HH:mm:ss}, in the server's own zone
+ * ({@link ZoneId#systemDefault()}), per ADR decision 19: OpenMRS stores a date and time without an
+ * offset, in the zone the server runs in, so that zone's wall clock is what the record holds.
+ * Rendered through UTC, a day entered as a date read one earlier on any server east of UTC. A
+ * date-only value ({@code person.birthdate}, a {@code DATE} column JDBC materializes at the server's
+ * midnight, possibly as a {@link java.sql.Date}) is the same case and takes the same method (#81).
  */
 public final class DateFormatUtil {
-
-	private static final ZoneId UTC = ZoneOffset.UTC;
 
 	private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -39,35 +40,25 @@ public final class DateFormatUtil {
 		if (date == null) {
 			return null;
 		}
-		return date.toInstant().atZone(UTC).toLocalDate().format(DATE_FORMAT);
-	}
-
-	/**
-	 * Renders a date-only value — one core stores in a {@code DATE} column, such as
-	 * {@code person.birthdate} — as the calendar date it holds. JDBC materializes such a column at
-	 * midnight in the JVM default zone, so the date is read back in that zone rather than through a
-	 * UTC instant, which moves it one day back wherever the offset is positive (#81). Timestamps keep
-	 * {@link #formatDate}. Never calls {@code toInstant()}, which {@link java.sql.Date} throws on.
-	 */
-	public static String formatCalendarDate(Date date) {
-		if (date == null) {
-			return null;
-		}
-		return Instant.ofEpochMilli(date.getTime()).atZone(ZoneId.systemDefault()).toLocalDate()
-		        .format(DATE_FORMAT);
+		return inTheServersZone(date).toLocalDate().format(DATE_FORMAT);
 	}
 
 	public static String formatDateTime(Date date) {
 		if (date == null) {
 			return null;
 		}
-		return date.toInstant().atZone(UTC).toLocalDateTime().format(DATE_TIME_FORMAT);
+		return inTheServersZone(date).toLocalDateTime().format(DATE_TIME_FORMAT);
 	}
 
 	public static LocalDate toLocalDate(Date date) {
 		if (date == null) {
 			return null;
 		}
-		return date.toInstant().atZone(UTC).toLocalDate();
+		return inTheServersZone(date).toLocalDate();
+	}
+
+	/** {@code date} on the server's wall clock. Never {@code toInstant()}, which {@link java.sql.Date} throws on. */
+	private static java.time.ZonedDateTime inTheServersZone(Date date) {
+		return Instant.ofEpochMilli(date.getTime()).atZone(ZoneId.systemDefault());
 	}
 }

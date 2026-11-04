@@ -135,7 +135,7 @@ public class PatientRecordSerializer extends AbstractRecordSerializer<Patient> {
 		String genderCode = trimToNull(patient.getGender());
 		String genderLabel = genderLabel(genderCode);
 		Date birthdate = patient.getBirthdate();
-		String birthdateText = DateFormatUtil.formatCalendarDate(birthdate);
+		String birthdateText = DateFormatUtil.formatDate(birthdate);
 		Integer ageYears = birthdate != null ? patient.getAge() : null;
 		boolean dead = Boolean.TRUE.equals(patient.getDead());
 		String deathDateText = DateFormatUtil.formatDate(patient.getDeathDate());

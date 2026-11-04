@@ -17,6 +17,9 @@ import static org.openmrs.module.querystore.serialization.DateFixtures.utcDate;
 
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.TimeZone;
+import java.time.LocalDate;
+import java.sql.Timestamp;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -129,9 +132,10 @@ public class VisitRecordSerializerTest {
 
 	@Test
 	public void serialize_emitsIsoTimestamps() {
+		// The server's wall-clock times, which is what OpenMRS stores and what the timestamps state (Decision 19).
 		Visit visit = visit("visit-uuid", visitType("type-uuid", "Outpatient"),
-		        utcDate(2025, Calendar.MARCH, 15));
-		visit.setStopDatetime(utcDate(2025, Calendar.MARCH, 16));
+		        Timestamp.valueOf("2025-03-15 12:00:00"));
+		visit.setStopDatetime(Timestamp.valueOf("2025-03-16 12:00:00"));
 
 		QueryDocument doc = serializer.serialize(visit);
 
@@ -271,6 +275,25 @@ public class VisitRecordSerializerTest {
 
 		assertEquals("patient-uuid", doc.getPatientUuid());
 		assertEquals("visit-uuid", doc.getResourceUuid());
+	}
+
+	/** A visit's times are the server's own wall-clock times, as OpenMRS stores them (Decision 19). */
+	@Test
+	public void serialize_timestampsEastOfUtc_areTheServersWallClockTimes() {
+		TimeZone original = TimeZone.getDefault();
+		TimeZone.setDefault(TimeZone.getTimeZone("Africa/Nairobi"));
+		QueryDocument doc;
+		try {
+			Visit visit = visit("visit-uuid", visitType("type-uuid", "Outpatient"),
+			        Timestamp.valueOf("2006-05-30 00:30:00"));
+			doc = serializer.serialize(visit);
+		}
+		finally {
+			TimeZone.setDefault(original);
+		}
+
+		assertEquals("2006-05-30T00:30:00", doc.getMetadata().get("start_date_time"));
+		assertEquals(LocalDate.of(2006, 5, 30), doc.getDate());
 	}
 
 	private static Visit visit(String uuid, VisitType type, java.util.Date startDatetime) {

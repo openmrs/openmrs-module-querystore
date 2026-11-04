@@ -35,7 +35,7 @@ final class DateFixtures {
 	/**
 	 * A date-only value in the shape Hibernate materializes a {@code DATE} column: a
 	 * {@link Timestamp} at midnight in the JVM default zone. Use it for fields rendered through
-	 * {@code DateFormatUtil.formatCalendarDate}, which reads the date back in that zone — a
+	 * {@code DateFormatUtil}, which reads every date back in that zone — a
 	 * {@link #utcDate} instant renders as the next day on a host at UTC+12 or beyond.
 	 */
 	static Date localMidnight(int year, int month, int day) {

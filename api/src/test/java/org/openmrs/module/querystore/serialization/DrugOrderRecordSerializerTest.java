@@ -20,6 +20,10 @@ import static org.openmrs.module.querystore.serialization.OrderTestFixtures.setO
 import static org.openmrs.module.querystore.serialization.ProviderFixtures.providerNamed;
 
 import java.util.Calendar;
+import java.util.function.Supplier;
+import java.util.TimeZone;
+import java.time.LocalDate;
+import java.sql.Timestamp;
 import java.util.Date;
 
 import org.junit.Before;
@@ -289,6 +293,34 @@ public class DrugOrderRecordSerializerTest {
 
 		assertEquals("patient-uuid", doc.getPatientUuid());
 		assertEquals("order-uuid", doc.getResourceUuid());
+	}
+
+	// OpenMRS stores a date and time without an offset, in the server's zone, and a day entered as a date at that
+	// zone's midnight: the demo replica's orders are dated so, at +03:00. Rendered through UTC, every such day read
+	// one earlier than the chart shows it (Decision 19).
+	@Test
+	public void serialize_datesAtLocalMidnightEastOfUtc_areTheDaysTheyHold() {
+		QueryDocument doc = inZone("Africa/Nairobi", () -> {
+			DrugOrder order = order(concept("Nevirapine"), null);
+			order.setDateActivated(Timestamp.valueOf("2006-05-30 00:00:00"));
+			setOrderField(order, "dateStopped", Timestamp.valueOf("2006-06-30 00:00:00"));
+			return serializer.serialize(order);
+		});
+
+		assertEquals("the record's date", LocalDate.of(2006, 5, 30), doc.getDate());
+		assertTrue(doc.getText(), doc.getText().contains("Stopped: 2006-06-30"));
+		assertEquals("2006-06-30", doc.getMetadata().get("date_stopped"));
+	}
+
+	private static QueryDocument inZone(String zone, Supplier<QueryDocument> serialize) {
+		TimeZone original = TimeZone.getDefault();
+		TimeZone.setDefault(TimeZone.getTimeZone(zone));
+		try {
+			return serialize.get();
+		}
+		finally {
+			TimeZone.setDefault(original);
+		}
 	}
 
 	private static DrugOrder order(Concept concept, Drug drug) {
