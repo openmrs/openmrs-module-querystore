@@ -27,7 +27,9 @@ the last one. A proposal that changes under a bare "are you sure?" was offered b
   stay only with one of three reasons, written in these words: it **needs the implementation** (for example, a UI change
   verified in the browser), it **needs your decision**, or it **needs access** you don't have. "Not yet", "costly" and
   "slow" are not reasons. The Stop hook `unchecked-items-gate.py` refuses an unchecked list whose items carry none of
-  the three.
+  the three. Running a measurement is never "needs your decision": a request for the best fix already asks for every
+  measurement that could find it. A proposal never ends by asking whether to test an untried shape — test it, then
+  propose.
 - **A passing check counts only with a control.** For tests, change the code under test and confirm a test goes red.
   For data, confirm the sample contains the shapes the pick touches. A green run that reaches nothing proves nothing.
 
