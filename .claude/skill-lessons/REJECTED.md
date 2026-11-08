@@ -6053,3 +6053,40 @@ rate no lower than C's.
   messages, to check the origin claim: no assistant text and no tool output.
 
 **Running parked counts:** unchanged. The one record adds to none of them.
+
+## 2026-11-08 (window: no run record since 2026-11-05) — 0 proposed, 0 applied, 0 killed; no refutation round (nothing to refute); linter 17 files, 0 findings; **no skill file changed**
+
+The store matched `origin/main` at `4ef8b460` before the read, apart from one `__pycache__` bytecode file
+under `artifacts/2026-10-07-isolation-guard/`, which is build output and was never mirrored. No file in
+the store is newer than `LAST`. No other remote branch carries a `.claude/` commit since 2026-11-04 that
+`main` lacks, and the pool's ledger was last written 2026-09-29. `confidential/` was read for its `PRS`
+and file names only.
+
+**What ran instead**, read from the transcripts' `Skill` calls since `LAST` was written (2026-11-04
+21:18Z). The extractor found this session's own call, and found nothing in a session whose only `Skill`
+strings are its system prompt.
+- 22 `pr-review` runs, one per session, and 3 `verify` runs.
+- No `resolve-ticket`, `pr-harden` or `harden` run.
+- `pr-review` has no capture step, and no run was captured by hand. So the 22 runs since the 0.25.0
+  bullet shipped left nothing the 2026-11-05 section's REOPEN conditions can be read from.
+
+**Step 6, whether or not a skill changed.**
+- Equal, live against pushed: all 27 skill files with `skill-budgets.json`, `CLAUDE.md` and
+  `proposing-fixes.md`, the 8 pushed hook files, and the vendored `pipeline/` and `bin/` scripts.
+- Equal, live skill against live hook: both gates.
+- **Red: two hook files are live only.** One is `kill-session-scratchpad-procs.sh`, a SessionEnd hook
+  dated 2026-11-01 and registered in `settings.json`. The other is its `.log`, which
+  `.gitignore:22:*.log` keeps out of the repo, so the comparison cannot pass while the hook writes it
+  there.
+- This was already red at the 2026-11-05 pass, and that section does not record it. That session put the
+  hook to the owner, and its two refuters found:
+  - it would not have stopped the incident its header cites, because that session never ended;
+  - it stops the tasks `/background` carries over to a new session. This was traced in the 2.1.318
+    binary, not run.
+- Its answer was "No, not as it stands", with two options:
+  - push a fixed draft, if sessions are never sent to the background;
+  - otherwise, remove the hook.
+- No choice is recorded since. Nothing was pushed, and the hook, its log and `settings.json` are
+  unchanged.
+
+**Running parked counts:** unchanged.
