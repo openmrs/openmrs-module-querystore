@@ -13,7 +13,7 @@
 
     <activator>org.openmrs.module.querystore.QueryStoreActivator</activator>
 
-    <require_version>2.8.0</require_version>
+    <require_version>2.9.0</require_version>
 
     <!-- The webservices.rest module hosts the /ws/rest/v1 dispatcher that serves the indexing-status
          REST controller (org.openmrs.module.querystore.web.rest). -->
@@ -74,6 +74,33 @@
             Default false. After the initial bootstrap completes, subsequent restarts with this flag
             true perform an incremental top-up from each type's persisted cursor. Bootstrap can also
             be triggered programmatically via BootstrapService regardless of this flag.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>querystore.projection.maxConcurrent</property>
+        <defaultValue>4</defaultValue>
+        <description>How many per-patient projections may run at once: background warms and the
+            synchronous projection a search does on a never-indexed patient share this bound. Each
+            projection keeps the CPU busy embedding, so more than the cores available buys queueing,
+            not throughput. 1 to 32; another value is logged and the default used. Read at module start.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>querystore.projection.syncWaitSeconds</property>
+        <defaultValue>10</defaultValue>
+        <description>How long a search on a never-indexed patient waits for a projection slot before
+            answering with whatever is indexed. The waiting request holds its server thread, so a
+            burst of cold-patient searches parks up to this many seconds per surplus request; longer
+            waits find a slot more often, shorter ones free threads sooner. 0 to 30; another value is
+            logged and the default used. Read at module start.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>querystore.query.candidatePool</property>
+        <defaultValue>200</defaultValue>
+        <description>How many backend hits the patient query's collapse-by-concept, recency sort and
+            facets run over. Larger is more complete and slower. 1 to 1000; another value is logged and
+            the default used. Read at module start.</description>
     </globalProperty>
 
 </module>

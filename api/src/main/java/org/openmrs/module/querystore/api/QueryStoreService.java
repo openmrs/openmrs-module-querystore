@@ -158,8 +158,9 @@ public interface QueryStoreService extends OpenmrsService {
 	 * cold-bootstrap path, and returns the partial chart without retrying the failed types. The
 	 * patient stays under-projected until the global scheduled scan re-runs (or a write event for
 	 * a failed-type resource triggers single-doc indexing). Operators monitoring querystore should
-	 * watch for the "Per-patient projection of {type} for patient {uuid} failed" WARN log as the
-	 * signal of an under-projected patient. A per-type-per-patient retry marker is tracked under
+	 * watch for the "Per-patient projection of {type} failed" WARN log as the signal of an
+	 * under-projected patient; the patient's uuid is on a companion DEBUG line.
+	 * A per-type-per-patient retry marker is tracked under
 	 * the ADR's "Lazy per-patient projection" open question.
 	 *
 	 * <p>Token-budget enforcement is the consumer's responsibility — v1 returns whatever the index
@@ -176,6 +177,54 @@ public interface QueryStoreService extends OpenmrsService {
 	 */
 	@Authorized(PrivilegeConstants.GET_PATIENTS)
 	List<QueryDocument> getPatientChart(String patientUuid);
+
+	/**
+	 * Patient-scoped query with a retrieval mode, type filter, sort, collapse-by-concept, facets and
+	 * paging (prototype consumer API for the omnibar; see {@link QuerySpec}). Same authorization as
+	 * {@link #searchByPatient}. A cold patient is projected first when {@link QuerySpec#isWait()},
+	 * else answered at once with an empty result whose {@link IndexStatus} says why: a background warm
+	 * is started where one can be, and a patient whose last warm failed is not retried here.
+	 * Throws {@link IllegalArgumentException} for a type no
+	 * provider registers.
+	 *
+	 * <p>A {@code default} so existing implementers (test doubles) keep compiling, mirroring
+	 * {@link #bulkIndex}; the production {@code QueryStoreServiceImpl} overrides it.
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default QueryResult query(QuerySpec spec) {
+		throw new UnsupportedOperationException("query is not implemented by " + getClass().getName());
+	}
+
+	/** Whether the patient's chart is indexed, being projected, or not indexed. */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default IndexStatus getIndexStatus(String patientUuid) {
+		throw new UnsupportedOperationException("getIndexStatus is not implemented by " + getClass().getName());
+	}
+
+	/**
+	 * Starts projecting a never-indexed patient on a background thread and returns at once.
+	 * Idempotent: an indexed patient, or one already being projected, starts nothing. A patient whose
+	 * last warm failed ({@link IndexStatus#FAILED}) is retried with a full re-projection. Returns the
+	 * status after the call; {@link IndexStatus#NOT_INDEXED} or {@link IndexStatus#FAILED} means
+	 * nothing could be started (the daemon isn't up yet, or too many warms are running) and the
+	 * caller may retry.
+	 */
+	@Authorized(PrivilegeConstants.GET_PATIENTS)
+	default IndexStatus warm(String patientUuid) {
+		throw new UnsupportedOperationException("warm is not implemented by " + getClass().getName());
+	}
+
+	/**
+	 * Deletes the patient's documents and re-projects every type, under the per-patient lock and
+	 * inside a projection slot: the bounded form of {@code BootstrapService.reindexPatient}, for a
+	 * request thread. Returns the patient's status after it ran ({@link IndexStatus#INDEXED}, or
+	 * {@link IndexStatus#FAILED} when a type failed), or {@link IndexStatus#NOT_INDEXED} when no slot
+	 * came free within {@code querystore.projection.syncWaitSeconds} and nothing ran.
+	 */
+	@Authorized(PrivilegeConstants.MANAGE_GLOBAL_PROPERTIES)
+	default IndexStatus reindex(String patientUuid) {
+		throw new UnsupportedOperationException("reindex is not implemented by " + getClass().getName());
+	}
 
 	/**
 	 * Full patient-chart read with an explicit backend completeness signal. Existing in-JVM

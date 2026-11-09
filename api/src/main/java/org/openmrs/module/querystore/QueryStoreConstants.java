@@ -260,6 +260,15 @@ public final class QueryStoreConstants {
 
 	public static final String GP_BOOTSTRAP_AUTOSTART = "querystore.bootstrap.autostart";
 
+	/** Per-patient projections (background warms and synchronous cold-touch) that may run at once. */
+	public static final String GP_PROJECTION_MAX_CONCURRENT = "querystore.projection.maxConcurrent";
+
+	/** Seconds a synchronous cold-touch projection waits for a projection slot. */
+	public static final String GP_PROJECTION_SYNC_WAIT_SECONDS = "querystore.projection.syncWaitSeconds";
+
+	/** Backend hits that query()'s service-layer collapse, recency sort and facets run over. */
+	public static final String GP_QUERY_CANDIDATE_POOL = "querystore.query.candidatePool";
+
 	public static final String GP_BACKEND = "querystore.backend";
 
 	public static final String BACKEND_MYSQL = "mysql";

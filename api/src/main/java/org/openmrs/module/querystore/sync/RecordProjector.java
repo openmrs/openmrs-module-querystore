@@ -15,12 +15,15 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.BaseOpenmrsData;
+import org.openmrs.module.querystore.SafeLog;
+import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.querystore.serialization.ClinicalRecordSerializer;
 
 /**
  * The {@code serialize → partition → dispatch} projection the events consumer
  * ({@code CoreServiceEventListener}) runs to write a saved/voided/purged record into the read store.
+ * Obs other than a purge take {@link ObsVersions}' committed-state path instead.
  * (It was originally shared with the AOP migration bridge to guarantee parity; the bridge has since
  * been removed and events is the sole sync path — ADR Decision 12.)
  *
@@ -127,8 +130,8 @@ public final class RecordProjector {
 						}
 					}
 					catch (RuntimeException e) {
-						log.warn("Skipping the replacement of " + resourceType + "/" + node.getUuid()
-						        + " due to failure", e);
+						SafeLog.warn(RecordProjector.class, "Skipping the replacement of " + resourceType + "/"
+						        + SkipLogFormat.loggableUuid(resourceType, node.getUuid()) + " due to failure", e);
 					}
 				}
 			}
@@ -141,8 +144,8 @@ public final class RecordProjector {
 						indexer.index(doc);
 					}
 					catch (RuntimeException e) {
-						log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
-						        + " due to failure", e);
+						SafeLog.warn(RecordProjector.class, "Skipping index for " + resourceType + "/"
+						        + SkipLogFormat.loggableUuid(resourceType, doc.getResourceUuid()) + " due to failure", e);
 					}
 				}
 				for (String uuid : voided) {
@@ -150,7 +153,8 @@ public final class RecordProjector {
 						indexer.delete(resourceType, uuid);
 					}
 					catch (RuntimeException e) {
-						log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+						SafeLog.warn(RecordProjector.class, "Skipping delete for " + resourceType + "/"
+						        + SkipLogFormat.loggableUuid(resourceType, uuid) + " due to failure", e);
 					}
 				}
 				for (QueryDocument doc : replacements) {
@@ -158,8 +162,8 @@ public final class RecordProjector {
 						indexer.index(doc);
 					}
 					catch (RuntimeException e) {
-						log.warn("Skipping index for " + resourceType + "/" + doc.getResourceUuid()
-						        + " due to failure", e);
+						SafeLog.warn(RecordProjector.class, "Skipping index for " + resourceType + "/"
+						        + SkipLogFormat.loggableUuid(resourceType, doc.getResourceUuid()) + " due to failure", e);
 					}
 				}
 				for (String uuid : toDelete) {
@@ -167,7 +171,8 @@ public final class RecordProjector {
 						indexer.delete(resourceType, uuid);
 					}
 					catch (RuntimeException e) {
-						log.warn("Skipping delete for " + resourceType + "/" + uuid + " due to failure", e);
+						SafeLog.warn(RecordProjector.class, "Skipping delete for " + resourceType + "/"
+						        + SkipLogFormat.loggableUuid(resourceType, uuid) + " due to failure", e);
 					}
 				}
 				if (bulkDeletePatientUuid != null) {
@@ -175,8 +180,7 @@ public final class RecordProjector {
 						indexer.bulkDeleteByPatient(bulkDeletePatientUuid);
 					}
 					catch (RuntimeException e) {
-						log.warn("Skipping bulk-delete-by-patient for " + bulkDeletePatientUuid
-						        + " due to failure", e);
+						SafeLog.warn(RecordProjector.class, "Skipping bulk-delete-by-patient due to failure", e);
 					}
 				}
 			};

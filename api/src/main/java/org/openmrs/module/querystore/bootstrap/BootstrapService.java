@@ -81,6 +81,19 @@ public interface BootstrapService extends OpenmrsService {
 	void ensureIndexed(String patientUuid);
 
 	/**
+	 * {@link #ensureIndexed}, reporting whether it projected: {@code false} when the patient already
+	 * had a document, so nothing ran. A projection that ran over a patient with nothing indexed is a
+	 * full one, which a caller can take as clearing an earlier failure; a skipped one is not.
+	 *
+	 * <p>A {@code default} so test doubles keep compiling; it cannot tell a skip from a projection
+	 * and reports {@code true}. The production implementation overrides it.
+	 */
+	default boolean projectIfNotIndexed(String patientUuid) {
+		ensureIndexed(patientUuid);
+		return true;
+	}
+
+	/**
 	 * Whether the last per-patient projection of {@code patientUuid} ({@link #ensureIndexed} or
 	 * {@link #reindexPatient}) in this JVM left records out. The patient may already have documents,
 	 * so a reader that gates the cold touch on the backend's existence probe asks this as well,

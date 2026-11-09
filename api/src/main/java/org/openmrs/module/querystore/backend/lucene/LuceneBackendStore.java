@@ -27,8 +27,6 @@ import java.util.PriorityQueue;
 import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -58,6 +56,8 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.BytesRef;
 import org.openmrs.module.querystore.QueryStoreConstants;
+import org.openmrs.module.querystore.SafeLog;
+import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.backend.BackendCapabilities;
 import org.openmrs.module.querystore.backend.BackendDocs;
 import org.openmrs.module.querystore.backend.BackendStore;
@@ -90,8 +90,6 @@ import org.openmrs.util.OpenmrsUtil;
  * Decision 3's "uniformity is the default" principle — no Lucene-specific override.
  */
 public class LuceneBackendStore implements BackendStore, Closeable {
-
-	private static final Log log = LogFactory.getLog(LuceneBackendStore.class);
 
 	private static final int RECOMMENDED_MAX_CORPUS = 5_000_000;
 
@@ -151,7 +149,8 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			return WriteResult.success();
 		}
 		catch (IOException e) {
-			log.warn("upsert failed for " + doc.getResourceType() + "/" + doc.getResourceUuid(), e);
+			SafeLog.warn(LuceneBackendStore.class, "upsert failed for " + doc.getResourceType() + "/"
+			        + SkipLogFormat.loggableUuid(doc.getResourceType(), doc.getResourceUuid()), e);
 			return WriteResult.failed(failure(doc.getResourceType(), doc.getResourceUuid(), e));
 		}
 	}
@@ -165,7 +164,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			return WriteResult.success();
 		}
 		catch (IOException e) {
-			log.warn("delete failed for " + resourceType + "/" + resourceUuid, e);
+			SafeLog.warn(LuceneBackendStore.class, "delete failed for " + resourceType + "/" + SkipLogFormat.loggableUuid(resourceType, resourceUuid), e);
 			return WriteResult.failed(failure(resourceType, resourceUuid, e));
 		}
 	}
@@ -211,7 +210,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 				succeeded += terms.length;
 			}
 			catch (IOException e) {
-				log.warn("bulkDelete chunk failed for " + resourceType, e);
+				SafeLog.warn(LuceneBackendStore.class, "bulkDelete chunk failed for " + resourceType, e);
 				for (int i = start; i < end; i++) {
 					failures.add(failure(resourceType, resourceUuids.get(i), e));
 				}
@@ -221,7 +220,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			writer.commit();
 		}
 		catch (IOException e) {
-			log.warn("bulkDelete commit failed for " + resourceType, e);
+			SafeLog.warn(LuceneBackendStore.class, "bulkDelete commit failed for " + resourceType, e);
 			// Per-doc successes already counted are still durable on a retry; surface a single
 			// rollup failure so the caller knows the operation didn't fully complete.
 			failures.add(failure(resourceType, null, e));
@@ -254,7 +253,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 				totalDeleted += matchedHere;
 			}
 			catch (IOException e) {
-				log.warn("bulkDeleteByPatient failed for " + indexName, e);
+				SafeLog.warn(LuceneBackendStore.class, "bulkDeleteByPatient failed for " + indexName, e);
 				failures.add(failure(resourceType, patientUuid, e));
 			}
 		}
@@ -280,7 +279,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 				}
 			}
 			catch (IOException e) {
-				log.warn("existsByPatient probe failed for " + indexName, e);
+				SafeLog.warn(LuceneBackendStore.class, "existsByPatient probe failed for " + indexName, e);
 			}
 		}
 		return false;
@@ -303,7 +302,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			}
 		}
 		catch (IOException e) {
-			log.warn("findLastModified failed for " + resourceType, e);
+			SafeLog.warn(LuceneBackendStore.class, "findLastModified failed for " + resourceType, e);
 			return Collections.emptyMap();
 		}
 		return found;
@@ -329,7 +328,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			return countMatching(writer, new MatchAllDocsQuery());
 		}
 		catch (IOException e) {
-			log.warn("countByType failed for " + resourceType, e);
+			SafeLog.warn(LuceneBackendStore.class, "countByType failed for " + resourceType, e);
 			return -1L;
 		}
 	}
@@ -362,7 +361,9 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			}
 			catch (IOException e) {
 				incomplete = true;
-				log.warn("findAllByPatient probe failed for " + indexName, e);
+				// One index failing should not strand the LLM caller: partial chart beats throwing, and
+				// the read reports itself incomplete.
+				SafeLog.warn(LuceneBackendStore.class, "findAllByPatient probe failed for " + indexName, e);
 			}
 		}
 		all.sort(BackendDocs.CHART_ORDER);
@@ -574,7 +575,8 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 				applied.add(doc);
 			}
 			catch (IOException e) {
-				log.warn("bulkUpsert doc failed for " + resourceType + "/" + doc.getResourceUuid(), e);
+				SafeLog.warn(LuceneBackendStore.class, "bulkUpsert doc failed for " + resourceType + "/"
+				        + SkipLogFormat.loggableUuid(resourceType, doc.getResourceUuid()), e);
 				failures.add(failure(resourceType, doc.getResourceUuid(), e));
 			}
 		}
@@ -582,7 +584,7 @@ public class LuceneBackendStore implements BackendStore, Closeable {
 			writer.commit();
 		}
 		catch (IOException e) {
-			log.warn("bulkUpsert commit failed for " + resourceType, e);
+			SafeLog.warn(LuceneBackendStore.class, "bulkUpsert commit failed for " + resourceType, e);
 			// On commit failure none of the applied writes are durable; surface them as failures.
 			// Only the docs that actually made it past applyConditionalUpsert get a commit-failure
 			// entry — re-appending every doc would double-count UUIDs that already failed per-doc.

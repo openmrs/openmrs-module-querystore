@@ -34,6 +34,7 @@ import org.openmrs.module.querystore.backend.SchemaSpec;
 import org.openmrs.module.querystore.backend.SearchRequest;
 import org.openmrs.module.querystore.backend.SearchResult;
 import org.openmrs.module.querystore.backend.WriteResult;
+import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapProgress;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatus;
@@ -630,6 +631,52 @@ public class QueryStoreServiceImplTest {
 		assertEquals(1, chart.getDocuments().size());
 		assertFalse("a fully paged partial projection is not a complete patient ledger",
 		        chart.isProjectionComplete());
+	}
+
+	@Test
+	public void getPatientChartRead_disclosesTheGap_whenItWaitedForAProjectionThatLeftRecordsOut() {
+		// A second read of a cold patient waits for the projection already in flight instead of
+		// running its own, and the launcher answers true once that one ends, whether or not it
+		// completed. Here it left records out, so this read must not call the chart complete.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		RecordingBootstrapService bootstrap = new RecordingBootstrapService();
+		bootstrap.incompletePatients.add("patient-uuid");
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(bootstrap);
+		service.setBootstrapLauncher(new BootstrapLauncher() {
+			@Override
+			public boolean runWithProjectionSlot(String patientUuid, java.util.function.BooleanSupplier work,
+			        long timeoutMillis) {
+				return true; // joined the other projection; this call's work never ran
+			}
+		});
+
+		assertTrue("a read that joined an incomplete projection must disclose the gap",
+		    service.getPatientChartRead("patient-uuid").isTruncated());
+	}
+
+	@Test
+	public void getPatientChartRead_disclosesTheGap_whenItWaitedForAProjectionThatFailedOutright() {
+		// The projection it waited for threw before reporting itself incomplete (its delete failed,
+		// say), so only the launcher's failed set knows.
+		FakeBackendStore backend = new FakeBackendStore(false);
+		service.setBackend(backend);
+		service.setBootstrapServiceOverride(new RecordingBootstrapService());
+		service.setBootstrapLauncher(new BootstrapLauncher() {
+			@Override
+			public boolean runWithProjectionSlot(String patientUuid, java.util.function.BooleanSupplier work,
+			        long timeoutMillis) {
+				return true; // joined the other projection; this call's work never ran
+			}
+
+			@Override
+			public boolean hasFailed(String patientUuid) {
+				return true;
+			}
+		});
+
+		assertTrue("a read that joined a failed projection must disclose the gap",
+		    service.getPatientChartRead("patient-uuid").isTruncated());
 	}
 
 	@Test
