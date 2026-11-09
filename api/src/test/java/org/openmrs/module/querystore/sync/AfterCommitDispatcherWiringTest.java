@@ -129,7 +129,7 @@ public class AfterCommitDispatcherWiringTest {
 			return org.openmrs.module.querystore.backend.WriteResult.success();
 		}
 		@Override public void delete(String resourceType, String resourceUuid) { }
-		@Override public void bulkDeleteByPatient(String patientUuid) { }
+		@Override public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) { return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList()); }
 		@Override public List<QueryDocument> searchByPatient(String p, String q, int l) {
 			return Collections.emptyList();
 		}

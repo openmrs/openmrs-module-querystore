@@ -13,11 +13,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Daemon;
 import org.openmrs.module.DaemonToken;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.openmrs.module.querystore.SafeLog;
 
 /**
  * Hands a projection task to the {@link SyncExecutor} once the originating transaction has
@@ -40,7 +40,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  */
 public class AfterCommitDispatcher {
 
-	private static final Log log = LogFactory.getLog(AfterCommitDispatcher.class);
 
 	private final SyncExecutor executor;
 
@@ -103,7 +102,7 @@ public class AfterCommitDispatcher {
 			return prepare.get();
 		}
 		catch (RuntimeException e) {
-			log.warn("After-commit projection could not be prepared; swallowing per ADR Decision 12", e);
+			SafeLog.warn(AfterCommitDispatcher.class, "After-commit projection could not be prepared; swallowing per ADR Decision 12", e);
 			return null;
 		}
 	}
@@ -118,7 +117,7 @@ public class AfterCommitDispatcher {
 				// conditional-upsert-by-version invariant (ADR Decision 3) means a missed
 				// projection is corrected by the next save or the bootstrap pass — neither
 				// overwrites the freshest document.
-				log.warn("After-commit projection task failed; swallowing per ADR Decision 12", e);
+				SafeLog.warn(AfterCommitDispatcher.class, "After-commit projection task failed; swallowing per ADR Decision 12", e);
 			}
 		};
 	}

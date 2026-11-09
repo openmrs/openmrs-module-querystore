@@ -9,6 +9,11 @@
  */
 package org.openmrs.module.querystore;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Pattern;
+
 import org.openmrs.module.querystore.backend.DocFailure;
 
 /**
@@ -24,6 +29,9 @@ import org.openmrs.module.querystore.backend.DocFailure;
  * {@code openmrs.log} for {@code [querystore-skip]}, filter by {@code retryable=true}, and feed
  * the resulting uuids back through whatever re-projection path they have available (today: delete
  * the row from {@code querystore_bootstrap_progress} and restart so the next bootstrap re-walks).
+ *
+ * <p>A patient's or an encounter's uuid renders as {@link #OMITTED}: those skips are found by type,
+ * and the uuid is available at DEBUG where a call site logs one.
  */
 public final class SkipLogFormat {
 
@@ -35,7 +43,25 @@ public final class SkipLogFormat {
 	 */
 	public static final String LOG_SKIP_TAG = "[querystore-skip]";
 
+	/** Stands in for a uuid a WARN line must not carry. */
+	public static final String OMITTED = "<omitted>";
+
+	// Resource types whose uuid identifies a patient or an encounter. WARN reaches production logs by
+	// default, so these uuids appear only at DEBUG, like the [QSEVAL] retrieval lines.
+	private static final Set<String> IDENTIFYING_TYPES = new HashSet<String>(Arrays.asList("patient", "encounter"));
+
+	private static final Pattern UUID_PATTERN = Pattern
+	        .compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
 	private SkipLogFormat() {
+	}
+
+	/**
+	 * The uuid as a WARN line may show it: {@link #OMITTED} when it is a patient's or an encounter's,
+	 * else unchanged. Use at every WARN site that names a record by type and uuid.
+	 */
+	public static String loggableUuid(String resourceType, String uuid) {
+		return uuid != null && IDENTIFYING_TYPES.contains(resourceType) ? OMITTED : uuid;
 	}
 
 	/**
@@ -80,21 +106,28 @@ public final class SkipLogFormat {
 		sb.append(LOG_SKIP_TAG)
 		        .append(" layer=").append(layer)
 		        .append(" type=").append(resourceType)
-		        .append(" uuid=").append(resourceUuid)
+		        .append(" uuid=").append(loggableUuid(resourceType, resourceUuid))
 		        .append(" retryable=").append(retryable == null ? "unknown" : retryable.toString())
 		        .append(" reason=\"").append(sanitizeReason(reason))
 		        .append('"');
 		return sb.toString();
 	}
 
+	/** Replaces every uuid in {@code text} with {@code <uuid>}; null stays null. */
+	public static String scrubUuids(String text) {
+		return text == null ? null : UUID_PATTERN.matcher(text).replaceAll("<uuid>");
+	}
+
 	/**
-	 * Keeps each emitted skip event on one log4j entry with balanced quoting. Stack traces ride
+	 * Keeps each emitted skip event on one log4j entry with balanced quoting, and keeps uuids out of
+	 * the free-text reason (the structured {@code uuid=} field says which record). Stack traces ride
 	 * the {@code Throwable} argument to {@code log.warn(msg, t)} unaffected.
 	 */
 	private static String sanitizeReason(String reason) {
 		if (reason == null) {
 			return "no failure detail";
 		}
-		return reason.replace('\n', ' ').replace('\r', ' ').replace('"', '\'');
+		// A backend or Hibernate message can quote any uuid, a patient's included.
+		return scrubUuids(reason).replace('\n', ' ').replace('\r', ' ').replace('"', '\'');
 	}
 }
