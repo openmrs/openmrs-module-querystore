@@ -6090,3 +6090,86 @@ strings are its system prompt.
   unchanged.
 
 **Running parked counts:** unchanged.
+
+## 2026-11-15 (window: 2 hand-written `pr-review` defect notes since 2026-11-08, owner-invoked with a `pr-review` focus) — 3 proposed: 1 applied (P3, a prune), 2 parked by the gate (P1a, P1b), 0 killed; one refutation round; linter 17 files, 0 findings; **pr-review 0.25.1**
+
+The store matched `origin/main` at `ea5ee4b2` before the read, apart from the two notes below, a
+`.DS_Store`, and the `__pycache__` file the 2026-11-08 section names. `confidential/` was read for its
+`PRS` and file names only. The window holds no pipeline run record, only two hand-written defect notes
+of attended `pr-review` 0.25.0 runs, each written after the owner asked why the review missed something:
+- R-A: `2026-11-11-pr-review-core-6827-noop-dismissed-as-convention.md`
+- R-B: `2026-11-14-pr-review-cohortbuilder-781-second-defect-filtered.md`
+
+The proposals and the gate's reply, verbatim, are in `proposals/2026-11-15-pr-review-seen-then-filtered.md`.
+
+**Applied: P3, pr-review 0.25.1.** Deleted :163's last sentence, "Verified-clean cross-cutting
+verification does NOT get relocated to the body (see Step 4 — the body carries none); at most it is a
+single inline `note (no action needed):`."
+- **Corroborated by:** nothing, since it is a Step 4 prune and not a lesson. The gate found both of its
+  claims carried at :146 and posting.md:15, and no evidence.md beside `pr-review` to hold a measurement.
+- **Budget:** `pr-review` 8510 → 8481, lowered with the prune.
+
+**Parked by the gate: P1a**, "a second consequence stays out of a comment only when the fix the comment
+names also resolves it" (:163 and posting.md:13). Blocking objections, each settled by its citation:
+- **Bar (a) counted one lesson over two events.** P1a's site has one record, R-B. R-A's filter was the
+  convention rule at :92 (R-A:15), and neither edit reaches the class-level shape the two share.
+- **Bar (c) is not a fact about the document.** R-B:16 reads the current :163 as already covering the
+  rollback through "A second ask gets its own comment if it stands as a finding". That is a misreading,
+  not two clauses in conflict.
+- **"The fix you name" is undefined when a comment names none.** :163 allows that ("and the fix where
+  there is one"), and R-B's posted reply named none.
+- **It would probably not have changed R-B's run.** Its final report lists the rollback under the one
+  item "fix the history-position race in `runDefinition`" (the transcript R-B names, 10:39:06Z), so "the
+  fix" would have read as resolving both. That
+  `composeQueries` leaves the rollback standing was measured only later, in session 7d92a8d0 (R-B:8).
+- The gate's alternative test needs no later measurement: "a consequence that needs a change on other
+  lines than the ones your comment asks about". Its exact wording is in the proposals file.
+- **REOPEN ON:** a second run record where a review filtered a verified defect out through :163; or a
+  pre-registered replay of the #781 review in which the "other lines" wording files the rollback and the
+  current text does not.
+
+**Parked by the gate: P1b**, "prior instances settle a convention claim, never a claim about what a line
+does" (:92). Blocking objections:
+- One record, R-A, and its premise is the reviewing session's own after-the-fact account (R-A:14, "The
+  reasoning in between is not in the transcript").
+- It would probably not have changed R-A's run. Its trigger is "a line verified to do nothing", but that
+  verification came after the review (R-A:8, :17), and R-A:16's two other pressures toward silence stay.
+- Non-blocking: "never" is one of the words skill-retro's Step 4 treats as a defect, and R-A:10's ten
+  copies on master, untouched by #5792's 16 inline comments, were not weighed. A wording for a reopen
+  drops it: "They settle what the project accepts, not whether a line has an effect: an attribute you
+  have verified to be inert is still a take-or-leave nit, whatever master holds."
+- **REOPEN ON:** a second run record where prior instances dropped a verified claim about what a line
+  does.
+
+**Corrected.** R-B:23 claimed a "third run with this shape", counting #53's replay. #53's run never
+noticed its defect (`2026-11-04-pr-review-stockmanagement-53-missed-input.md`:15; this ledger :6025-6026),
+and a measurement "has never counted as corroboration" (:5595-5596). The record now says so. R-A:21
+makes the same "same shape" claim about #53. It is left as written, and flagged here.
+
+**Parked counts advanced.**
+- **"Seen, then set aside" (2026-11-05, :6037-6044): REOPEN met, 0 → 1 run record.** R-B meets it:
+  P3/P4 were in the terminal report and not on the PR (R-B:16), and the maintainer then raised the
+  rollback. R-A does not, since its final report raised neither attribute (R-A:14). The reopened lesson
+  is P1a's, and it stays parked with P1a's REOPEN ON.
+
+**Parked, new, 1 record each (R-B).**
+- **O1:** a blocker posted without a fix, when the PR said later PRs build on it and one of them (#782)
+  already held the fix. No tool call opened it (R-B:17). No ledger entry matches. **REOPEN ON:** a second
+  record.
+- **O2:** the coverage mutations never touched the code of the review's own blocking finding (R-B:18).
+  Read it beside "(c) The per-condition mutation sentence" (:5633-5637), measured and not adopted; a run
+  record does not meet that entry's REOPEN. **REOPEN ON:** a second record.
+- **O3:** every check stayed inside the PR's mocks, where a failed lookup followed by a search is the
+  specified behaviour (R-B:19). Precursor: #53's lesson, "send absent, null, blank and unknown values …
+  through the real entry point" (`…-53-missed-input.md`:21), now :104, which covers only a PR that fixes
+  a defect. **REOPEN ON:** a second record on a PR that does not.
+
+**Step 6, before the commit.**
+- Equal, live against pushed: all 27 skill files, `skill-budgets.json`, `proposing-fixes.md`, the 8
+  pushed hook files, and the vendored `pipeline/` and `bin/` scripts.
+- **Red: `CLAUDE.md`.** The live copy carries the owner's 2026-11-13 18:07 edit, which replaces the
+  zsh `=`-separator bullet with a bash 5 one. It was made outside this retro and is not this retro's to
+  publish, so it is reported here and not committed.
+- **Red, as on 2026-11-08:** `kill-session-scratchpad-procs.sh` and its `.log` are live only.
+
+**Running parked counts:** "seen, then set aside" 0 → 1 run record. The others are unchanged.
