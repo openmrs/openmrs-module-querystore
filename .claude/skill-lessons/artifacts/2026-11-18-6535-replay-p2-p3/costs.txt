@@ -1,0 +1,12 @@
+p2 wt-01: model=claude-opus-5-5 subtype=success is_error=False turns=42 tools=40 min=16.0 cost=$2.66 in(all)=4,309,580 out=33,173
+p2 wt-02: model=claude-opus-5-5 subtype=success is_error=False turns=47 tools=45 min=18.2 cost=$2.81 in(all)=4,691,461 out=39,398
+p2 wt-03: model=claude-opus-5-5 subtype=success is_error=False turns=32 tools=31 min=13.2 cost=$1.87 in(all)=2,489,422 out=27,027
+p2 wt-04: model=claude-opus-5-5 subtype=success is_error=False turns=31 tools=30 min=13.8 cost=$2.23 in(all)=2,879,710 out=30,643
+p2 wt-05: model=claude-opus-5-5 subtype=success is_error=False turns=34 tools=33 min=11.5 cost=$2.21 in(all)=3,019,513 out=29,832
+p2 wt-06: model=claude-opus-5-5 subtype=success is_error=False turns=45 tools=43 min=17.8 cost=$2.54 in(all)=3,987,936 out=37,535
+p3 wt-01: model=claude-opus-5-5 subtype=success is_error=False turns=55 tools=54 min=26.1 cost=$3.29 in(all)=5,046,474 out=55,846
+p3 wt-02: model=claude-opus-5-5 subtype=success is_error=False turns=74 tools=72 min=22.8 cost=$3.57 in(all)=6,835,035 out=52,432
+p3 wt-03: model=claude-opus-5-5 subtype=success is_error=False turns=43 tools=42 min=16.1 cost=$2.72 in(all)=3,817,825 out=45,473
+p3 wt-04: model=claude-opus-5-5 subtype=success is_error=False turns=79 tools=77 min=29.2 cost=$4.46 in(all)=8,610,627 out=69,660
+p3 wt-05: model=claude-opus-5-5 subtype=success is_error=False turns=56 tools=54 min=22.1 cost=$3.65 in(all)=5,718,915 out=63,515
+p3 wt-06: model=claude-opus-5-5 subtype=success is_error=False turns=67 tools=65 min=22.7 cost=$4.47 in(all)=8,230,811 out=68,353

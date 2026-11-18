@@ -1,0 +1,15 @@
+{
+ "p2": {
+  "C01": {
+   "verdict": "reject",
+   "why": "ImageHandler RAW_VIEW wastes a metadata read; matched on mime type near null in injectMissingMetadata, not the TextHandler comparison"
+  }
+ },
+ "p3": {
+  "C01": {
+   "verdict": "reject",
+   "why": "posts D2 with catch (FileSystemException e) unchanged; EACCES appears only in its account of the JDK errno mapping, not as a failure the catch falls back on or hides"
+  }
+ },
+ "recorded_before_map": true
+}

@@ -1,0 +1,65 @@
+{
+ "map": {
+  "C01": {
+   "wt": "wt-06",
+   "id": "F3"
+  }
+ },
+ "outside_findings": {
+  "wt-01": [],
+  "wt-02": [
+   "K-order",
+   "K-since"
+  ],
+  "wt-03": [
+   "K-order"
+  ],
+  "wt-04": [
+   "K-since"
+  ],
+  "wt-05": [
+   "K-order"
+  ],
+  "wt-06": [
+   "K-since"
+  ]
+ },
+ "recorded_in_findings": {
+  "wt-01": [
+   [
+    "F2",
+    "K-since"
+   ]
+  ],
+  "wt-02": [
+   [
+    "F2",
+    "K-since"
+   ]
+  ],
+  "wt-03": [
+   [
+    "F2",
+    "K-since"
+   ]
+  ],
+  "wt-04": [
+   [
+    "F2",
+    "K-since"
+   ]
+  ],
+  "wt-05": [
+   [
+    "F2",
+    "K-since"
+   ]
+  ],
+  "wt-06": [
+   [
+    "F2",
+    "K-since"
+   ]
+  ]
+ }
+}

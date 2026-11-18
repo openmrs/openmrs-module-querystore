@@ -1,0 +1,20 @@
+{
+ "judgments": {
+  "F01": "valid",
+  "F02": "valid",
+  "F03": "valid",
+  "F04": "valid",
+  "F05": "valid",
+  "F06": "valid",
+  "F07": "valid",
+  "F08": "valid",
+  "F09": "valid",
+  "F10": "valid",
+  "F11": "valid",
+  "F12": "valid",
+  "F13": "valid",
+  "F14": "valid"
+ },
+ "notes": "All 14 true of the head: legacy-layout op counts (6 findings, measured by the runs and matching this session's earlier counts), backport/@since with Java 16+ constructs (6; record at ImageHandler.java:153 and instanceof pattern at S3StorageService.java:178 checked), the untested default getDataWithMetadata (mutation survives), and ImageHandler's unused metadata read on a perf ticket. None invalid, none noise.",
+ "recorded_before_map": true
+}

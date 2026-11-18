@@ -1,0 +1,54 @@
+{
+ "head": "a2002caeacef930b67179359d1ceae657ba85af5",
+ "posted": false,
+ "comments": [
+  {
+   "draft_id": "D1",
+   "path": "api/src/main/java/org/openmrs/api/storage/S3StorageService.java",
+   "start_line": 154,
+   "line": 156,
+   "side": "RIGHT",
+   "body": "This reports the wrong length for objects over 8 MiB. The multipart client (on by default) hands back part 1's response, so a 20 MiB obs reports 8388608 where master's HEAD gave 20971520. legacyui's [`ComplexObsServlet`](https://github.com/openmrs/openmrs-module-legacyui/blob/020f7e6f071d33542ff8c7ce365a3dc3b4760531/omod/src/main/java/org/openmrs/web/servlet/ComplexObsServlet.java#L79-L81) sends that as Content-Length, and Tomcat cuts the download there with a 200. S3Mock ignores `partNumber`, so the IT can't see it:\n\n```suggestion\n\t\tmetadata.setLength(getObjectLength(getResponse));\n\t\treturn new DataWithMetadata(response, metadata);\n\t}\n\n\t/**\n\t * With multipart enabled the client downloads in parts and hands back the first part's response, so\n\t * Content-Length is that part's size, while Content-Range ends with the size of the object.\n\t */\n\tprivate Long getObjectLength(GetObjectResponse response) {\n\t\tString total = StringUtils.substringAfterLast(response.contentRange(), \"/\");\n\t\treturn StringUtils.isNumeric(total) ? Long.valueOf(total) : response.contentLength();\n\t}\n```\n"
+  },
+  {
+   "draft_id": "D2",
+   "path": "api/src/main/java/org/openmrs/api/storage/LocalStorageService.java",
+   "start_line": null,
+   "line": 98,
+   "side": "RIGHT",
+   "body": "Legacy obs with long non-ASCII titles stop loading. 2.7 named files `<title>_<uuid>.<ext>` ([source](https://github.com/openmrs/openmrs-core/blob/08668a329c1fc7c238bf90fc33a1f38e0fdc72c7/api/src/main/java/org/openmrs/obs/handler/AbstractHandler.java#L65)), and `encodeKey` turns each non-ASCII byte into `%XX`, so a 36-letter Cyrillic or 24-character Amharic title takes the encoded name past the 255-byte limit. The stat fails with \"File name too long\", so the legacy file master reads is never tried. Falling back on `FileSystemException` fixes it:\n\n```java\n\tprivate <T> T read(String key, IOFunction<Path, T> reader) throws IOException {\n\t\tPath path = storageDir.resolve(encodeKey(key));\n\t\tFileSystemException currentLocationFailure = null;\n\t\tif (isInStorageDir(path)) {\n\t\t\ttry {\n\t\t\t\treturn reader.apply(path);\n\t\t\t} catch (FileSystemException e) {\n\t\t\t\t// Not only a missing file: a legacy name the encoding pushes past the file system's name\n\t\t\t\t// length limit fails here too, so the legacy location decides\n\t\t\t\tcurrentLocationFailure = e;\n\t\t\t}\n\t\t}\n\n\t\tPath legacyPath = getLegacyStorageDir().resolve(key);\n\t\tif (fileExists(legacyPath)) {\n\t\t\tassertKeyInLegacyStorageDir(legacyPath, key);\n\t\t\treturn reader.apply(legacyPath);\n\t\t}\n\n\t\tif (currentLocationFailure != null) {\n\t\t\tthrow currentLocationFailure;\n\t\t}\n\t\tthrow new IllegalArgumentException(\"Key must not point outside storage dir. Wrong key: \" + key);\n\t}\n```\n"
+  },
+  {
+   "draft_id": "D3",
+   "path": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+   "start_line": null,
+   "line": 207,
+   "side": "RIGHT",
+   "body": "Before merge this needs to reach the bundled handlers, which are what [TRUNK-6682](https://openmrs.atlassian.net/browse/TRUNK-6682)'s call-count criterion guards. All five override `AbstractHandler.getObs`, so re-adding `storageService.exists(key)` to `BinaryStreamHandler`, or a separate `getMetadata` to the other four, leaves every test green. Each handler's test could run its own `getObs` against `CountingStorageService`, moved to its own file:\n\n```java\nImageHandler handler = new ImageHandler();\nReflectionTestUtils.setField(handler, \"adminService\", adminService);\nReflectionTestUtils.setField(handler, \"storageService\", counting);\n```\n"
+  },
+  {
+   "draft_id": "D4",
+   "path": "api/src/main/java/org/openmrs/api/storage/LocalStorageService.java",
+   "start_line": null,
+   "line": 273,
+   "side": "RIGHT",
+   "body": "`exists` dropped master's containment check for the current location: `exists(\"/etc/passwd\")` is now true where master threw `IllegalArgumentException`. `read` still refuses that key, so nothing leaks, but could this keep the check? It costs no extra I/O:\n\n```suggestion\n\t\tPath path = storageDir.resolve(encodeKey(key));\n\t\tif (isInStorageDir(path) && fileExists(path)) {\n```\n"
+  },
+  {
+   "draft_id": "D5",
+   "path": "api/src/main/java/org/openmrs/obs/handler/ImageHandler.java",
+   "start_line": 85,
+   "line": 86,
+   "side": "RIGHT",
+   "body": "Could this guard and `getObs_shouldNotThrowWhenTheObsDirGlobalPropertyHasNoValue` go in their own ticket? Master throws the same NPE here for a bare-extension title whenever the obs dir property is unset, image present or not, so it's a separate fix from the I/O counts, and keeping it out leaves less to verify here. Nothing breaks with it in."
+  },
+  {
+   "draft_id": "D6",
+   "path": "api/src/main/java/org/openmrs/api/storage/S3StorageService.java",
+   "start_line": 130,
+   "line": 137,
+   "side": "RIGHT",
+   "body": "This can just delegate to `getDataWithMetadata`, which repeats the same GetObject call and 404 translation (the kind of duplication ibacher flagged in `LocalStorageService`, [comment](https://github.com/openmrs/openmrs-core/pull/6535#discussion_r3990739410)), since the GET already carries the headers:\n\n```suggestion\n\t\treturn getDataWithMetadata(key).data();\n```\n"
+  }
+ ]
+}

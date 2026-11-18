@@ -6242,3 +6242,48 @@ The owner's instruction, the proposals, both gate replies verbatim, and the chec
 - Gate 2: `8b5a2a53-dc93-430d-9332-9bec119ba688`, $0.65.
 
 **Running parked counts:** "seen, then set aside" 1 → 2 run records. The others are unchanged.
+
+## 2026-11-18 (addendum, owner-directed: the replay both REOPEN ONs above name) — 2 parked proposals measured, both stay parked (E 0 of 3, C 0 of 3 each); no skill file changed; **Step 5 not run** (nothing to apply)
+
+The owner asked why P2 and P3 needed a retro "when they were real issues that would help us catch what Ian identified". Both REOPEN ONs above named a replay, so this pass ran it, pre-registered.
+- **Measurement note:** `2026-11-18-pr-review-6535-replay-p2-p3.md`.
+- **Artifacts:** `artifacts/2026-11-18-6535-replay-p2-p3/`.
+- **Arms:** C was `pr-review` 0.26.0 as live, and E was C plus gate 1's reopen wording, n=3 per arm per replay.
+- **Run conditions:**
+  - Headless, at default effort, from per-run clones of frozen full-history repos.
+  - The network was blocked through a dead-port proxy, with only the model API exempt (canary checked).
+  - 53 answer-bearing paths were at mode 000 for the wave.
+  - Audit: 0 forbidden reads. Every flag was read in context.
+- **Cost:** $36.48.
+
+**P2 stays parked: E 0 of 3, C 0 of 3.**
+- No run filed `TextHandler.java:118`'s null `mimeType`, and no output mentions it anywhere. The first REOPEN ON ran and failed for gate 1's wording.
+- **REOPEN ON** either of these:
+  - the second-run-record route above, unchanged;
+  - a different mechanism with its own replay, in which E files the null `mimeType`.
+
+  A sentence asking reviewers to read moved lines "as new code, such as for a null that throws" made no run notice it.
+- **Recorded:** E's runs filed the legacy-layout I/O count as blocking in 2 of 3, against C's 0 of 3. That is a disposition shift the sentence may cause, and it is unmeasured as noise or as value.
+
+**P3 stays parked: E 0 of 3, C 0 of 3.**
+- All six runs posted D2 (r4473604840) with `catch (FileSystemException e)` unchanged. The replay REOPEN ran and failed for gate 1's wording.
+- Two runs saw the concern and set it aside:
+  - wt-02 (C) judged the broadening safe against Greptile's masking thread.
+  - wt-05 (E) read that thread, as P3 asks, and counted it "resolved".
+
+  So in this replay the gap was judgment, not a missing check.
+- **REOPEN ON** both of these:
+  - the second-run-record route above;
+  - a wording or mechanism that a replay shows changes the posted block.
+
+**Parked counts advanced (measurement only, not run records).**
+- **"Seen, then set aside":** 5 more sightings in this replay.
+  - The read-order mismatch appears in the notes of 3 of 6 P2 runs, 2 E and 1 C. None filed it, and the maintainer raised it in r4617856131.
+  - The catch's breadth appears outside the findings of 2 of 6 P3 runs.
+
+  The count stays at 2 run records.
+- **"Never noticed":** the null `mimeType` and the MediaHandler stream, 0 of 6 P2 runs each.
+
+**Consistent with P1 (0.26.0), not a test of it.** With TRUNK-6682's `backport` label in the snapshot, all 6 P2 runs filed the `@since 3.0.0` question. No arm lacked the label.
+
+**Running parked counts:** unchanged in run records. Measurement sightings for "seen, then set aside" are 3 + 2 + 3 = 8 across the 2026-11-04 and 2026-11-18 replays.

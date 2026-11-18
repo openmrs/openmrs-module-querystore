@@ -1,0 +1,44 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+      "line": 118,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Reply in the existing thread (r4070873940, still unanswered): new-layout reads now meet TRUNK-6682's 'at most one existence-related check', but legacy-layout obs still cost 3 Files.exists plus a failed stat on the current path (6 filesystem operations, the same as master). So does the ticket stay open for legacy reads, and should the PR description's flat '3 filesystem operations on local storage' say it applies to the new layout only?",
+      "failure_mode": "",
+      "evidence": "Throwaway BaseContextSensitiveTest (deleted afterwards) subclassed LocalStorageService, overrode the PR's fileExists hook, and drove AbstractHandler.getObs with the obs dir GP set to 'obs'. New-layout key gave fileExists=1, which matches the PR's own readAsHandler_shouldPerformOnlyOneExistenceCheck (that is the calibration). A legacy file at <appdata>/obs/legacy_<uuid>.txt gave fileExists=3 and data loaded correctly. Path traced: parseDataKey -> exists() probes current then legacy (2, AbstractHandler.java:134 and LocalStorageService.exists), key gets the obs-dir prefix, then read() fails readAttributes on the current path and probes legacy (+1) (LocalStorageService.read). By reading master, master's legacy count is 4 Files.exists + open + stat, so there is no regression. The ticket's AC1 is unqualified ('Reading a complex obs performs at most one existence-related check').",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+      "line": 21,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Reply in thread r4070873955: TRUNK-6682 carries the 'backport' label, but the new API's @since lists only 3.0.0 (DataWithMetadata:21, StorageService:197, injectMissingMetadata overload), and the main code uses Java 16+ syntax (private record LoadedImage in ImageHandler.java:153, instanceof pattern in S3StorageService.java:178). At the 2.8.x branch point the compiler level was 1.8. Is this going to 2.8.x? If so it needs those lines rewritten and the 2.8.x version added to each @since. If not, should the backport label come off the ticket?",
+      "failure_mode": "",
+      "evidence": "Ticket snapshot labels: ['backport','community-priority','performance'], fixVersions []. `git show a085b50b6^:pom.xml` (the parent of 'Bump version to 3.0.0-SNAPSHOT') has <javaCompilerVersion>1.8</javaCompilerVersion>. ImageHandler.java exists at that commit, S3StorageService.java does not. The 2.8.x branch is not in the clone, so I could not check its current Java level or whether S3 storage was backported to it.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/main/java/org/openmrs/api/StorageService.java",
+      "line": 199,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "No test reaches the default getDataWithMetadata. It is the compatibility path for StorageService implementations outside core (the reason it was made a default in the greptile thread), and its close-the-stream-if-metadata-fails behaviour is unpinned. A small test over a minimal or mocked StorageService that does not override it would cover both the happy path and the close-on-failure path.",
+      "failure_mode": "",
+      "evidence": "Mutation: inserted `if (true) throw new UnsupportedOperationException(\"probe\")` at the top of the default method. LocalStorageServiceTest, S3StorageServiceTest, all *HandlerTest and ObsServiceTest still passed, exit 0 (reverted with git checkout). LocalStorageService, S3StorageService and the test CountingStorageService all override the method.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Close to mergeable. Every prior review thread is fixed at the head, and nothing I found blocks. The open item is the scope call from earlier: the ticket's one-existence-check criterion holds for new-layout reads but not for legacy-layout ones (3 probes), so whether TRUNK-6682 closes with this PR, and whether it is being backported, still needs a decision.",
+  "what_i_swept": "Read the PR body, the ticket snapshot and all 31 inline comments, 11 reviews and 13 PR comments. Confirmed git diff master...HEAD is 21 files +967/-68 and the three-dot and two-dot stats match, so there is no drift. Checked each prior thread against the head without commenting: URI_VIEW metadata, default method, DataWithMetadata formatting/record->class, shared internal readers, the NoSuchFileException javadoc, the metadata-before-data comment, the parseDataKey revert, the Assert.notNull removal, APIException wrapping, the ImageHandler early return and the obsDir guard leftover, @since 3.0.0, S3 multipart length plus the mocked-client wiring test, FileSystemException fallback plus the tempDir/obs fix, exists containment, S3 getData delegation, the injectMissingMetadata deprecation, the restored AbstractHandler count test, per-handler count tests (all five), and the legacy getDataWithMetadata test. I mutation-probed that last one: removing the legacy fallback from getDataWithMetadata turned exactly getDataWithMetadata_shouldReturnDataAndMetadataWhenLegacyFileExists red. Ran LocalStorageServiceTest, S3StorageServiceTest, AbstractHandlerTest and the 5 handler tests: 78 tests green. Outward trace: getPath's remaining callers (purgeData only, matching its new javadoc), every StorageService implementor and AbstractHandler subclass in the tree, S3 exists/getMetadata/HEAD+GET cost, encodeKey and the current-vs-legacy collision case (not realistic because '.' is encoded), the legacy unicode-name path through exists()/read(), the legacyui ComplexObsServlet Content-Length consumer (now fed the object length), and the Java level and commons-io IOFunction availability at the 2.8 branch point. Measured legacy vs new-layout existence counts through AbstractHandler with a throwaway test. Pass 3 turned up nothing new. S3: ran S3StorageServiceIT against the locally cached S3Mock 4.5.0 container (28 tests, 0 skipped, 0 failures, including both getDataWithMetadata tests). Drove AbstractHandler.getObs over S3StorageService with a mocked S3AsyncClient in a throwaway test and checked the client calls with verifyNoMoreInteractions. PR head: 1 headObject + 1 getObject (pass). Same probe on a master worktree as the known-bad control: 3 calls, headObject twice (fails). The PR description's S3 claim (HEAD/GET down from HEAD/GET/HEAD) is confirmed.",
+  "could_not_verify": [
+    "needs access: the 2.8.x maintenance branch is not in the clone and the web is off-limits, so its current Java level and whether S3StorageService was backported to it are unknown. Only the 2.8 branch point was checked (Java 1.8, no S3StorageService). This is why F2 is a question."
+  ],
+  "passes_run": 3,
+  "notes": "This is a re-review. Since the last review (7723639a9) the only PR change is cdbc3b108, which adds the legacy getDataWithMetadata test a reviewer asked for, plus a master merge. That test is real: it fails under the mutation. All previously raised sub-points are resolved at the head and earn silence. F1 and F2 are replies into existing threads, not new top-level comments. Working copy restored: git status --porcelain is empty, and the probe test and its compiled class were deleted. Throwaway S3 probe and the master worktree were removed afterwards, and git status --porcelain is empty."
+}

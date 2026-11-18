@@ -1,0 +1,15 @@
+[
+ {
+  "cand": "C01",
+  "key": "K-mime",
+  "draft_id": null,
+  "disposition": "suggestion",
+  "file": "api/src/main/java/org/openmrs/obs/handler/ImageHandler.java",
+  "start_line": null,
+  "line": 117,
+  "claim": "ImageHandler.readImage fetches metadata with getDataWithMetadata, but RAW_VIEW never uses it. The mime type is already set from the image content whenever the image is non-null, and the length is reset to null right after, so plain getData would save one readAttributes per image read on local storage.",
+  "failure_mode": "",
+  "evidence": "Mutation probe (reverted with git checkout): I replaced loaded.metadata() in ImageHandler.getObs with ObjectMetadata(mime 'bogus/x', length 999). ImageHandlerTest stayed 9/9 green, including the mime-type assertions at ImageHandlerTest.java:100,102,129. Code: injectMissingMetadata only sets the mime type when it is null (AbstractHandler.java:177), and ImageHandler.java:94 does complexData.setLength(null). This waste predates the PR (master called getMetadata), so it is optional. Changing it would also mean updating ImageHandlerTest.getObs_shouldReadDataAndMetadataInASingleStorageCall.",
+  "body": null
+ }
+]

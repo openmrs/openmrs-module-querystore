@@ -1,0 +1,34 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+      "line": 118,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "For legacy-layout obs (every pre-2.8 complex obs on an upgraded install), a handler read still costs 6 filesystem operations including 3 existence checks, exactly as many operations as master, so TRUNK-6682's 'at most one existence-related check' criterion holds only for new-layout keys and the PR description's '3 filesystem operations' claim is true only for them.",
+      "failure_mode": "",
+      "evidence": "Throwaway test (deleted) wrapping java.nio.file.Files in Mockito.mockStatic(CALLS_REAL_METHODS) and counting exists/newInputStream/readAttributes during AbstractHandler.getObs with a LocalStorageService on a temp dir, run on PR head and on master (git worktree at a93b6293c9). Master: legacy 6 (4x exists, open, stat), new layout 6. PR head: new layout 3 (1 exists, stat, open), legacy 6 = exists(storageDir/<fn>%2Etxt), exists(appdata/<fn>), failed readAttributes(storageDir/obs/<fn>%2Etxt), exists(appdata/obs/<fn>), readAttributes, newInputStream. A second probe overriding LocalStorageService.fileExists gave 3 checks for legacy through both AbstractHandler and TextHandler(TEXT_VIEW), and 1 for new layout. Calibration: the master new-layout count of 6 matches the earlier reviewer measurement in thread 4070873940, and the PR new-layout count of 1 check matches the PR's own readAsHandler_shouldPerformOnlyOneExistenceCheck. Cause: AbstractHandler.parseDataKey (unchanged, AbstractHandler.java:135) probes the raw key in both locations before prepending the obs dir, then LocalStorageService.read (LocalStorageService.java:96-119) fails the current-location stat and probes legacy again. Every new CountingStorageService handler test uses a new-layout key only. Ties into the still-unanswered thread 4070873940 (does TRUNK-6682 stay open for the layout-resolution half?): best posted as a reply there carrying the legacy numbers rather than as a new comment.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+      "line": 21,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "TRUNK-6682 carries the 'backport' label, but the new public API (DataWithMetadata, StorageService.getDataWithMetadata, the 3-arg injectMissingMetadata) and the @Deprecated(since = \"3.0.0\") on the 2-arg overload name only 3.0.0. Neighbouring storage API names every line (StorageService/LocalStorageService/ObjectMetadata: '@since 2.8.0, 2.7.5, 2.6.16, 2.5.15'), so is this going back to the maintenance lines, and if so, with which versions?",
+      "failure_mode": "",
+      "evidence": "Ticket snapshot labels: ['backport','community-priority','performance']. grep '@since' in api/src/main/java/org/openmrs/api/StorageService.java:31,197 and api/src/main/java/org/openmrs/api/storage/*.java. pom.xml version 3.0.0-SNAPSHOT. The earlier thread 4070873955 asked for 'the version this actually lands in, plus whatever maintenance lines it gets backported to'. Only the 3.0.0 half was applied, so this is a reply in that thread, not a new comment. Whether to backport is the maintainers' call.",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "Close to mergeable for new-layout keys (prior-round findings verified fixed, tests bite), but before TRUNK-6682 is closed the maintainers need to decide the open question from thread 4070873940: legacy-layout obs, which are most existing data, see no reduction in I/O (6 ops, 3 existence checks, same as master).",
+  "what_i_swept": "Read the SKILL, the ticket, the PR body and all 31 inline comments, 11 reviews and 13 PR comments. Confirmed the diff stat (21 files, +967/-68) and no drift (three-dot equals two-dot). Read the full main diff and the test diff. Checked each prior thread against the head: the default interface method resolves the AbstractMethodError concern; URI_VIEW metadata is restored and tested; the ImageHandler legacy-filename fallback is restored and tested; the S3 multipart length fix is wired and tested through a mocked client; the FileSystemException legacy fallback, the exists() containment check, the deprecated 2-arg injectMissingMetadata, handler-level counting tests for all five handlers, the restored AbstractHandler counting test, and the legacy getDataWithMetadata test are all present. Mutation controls: removing the legacy fallback in LocalStorageService.read turned getDataWithMetadata_shouldReturnDataAndMetadataWhenLegacyFileExists and four other legacy tests red, and reintroducing a separate getMetadata in TextHandler turned TextHandlerTest.getObs_shouldReadDataAndMetadataInASingleStorageCall red. Both files were restored. Traced outward: AbstractHandler.parseDataKey (unchanged) as the source of the remaining probes, measured on master versus PR for both layouts; purgeData/getPath precedence (legacy-first) versus read (current-first), where both locations can only collide when an encoded name equals a raw one, which the '.'->%2E encoding makes practically unreachable, so dropped; in-tree StorageService implementations and handler subclasses (only Local and S3, and the five bundled handlers); exception-type changes in BinaryData/BinaryStream/Text handlers versus master (missing file still ends in the same IllegalArgumentException; other IOExceptions now become APIException, and both versions throw); S3 getData now delegating to getDataWithMetadata. Three passes. The second (outward) pass produced F1's measurement and F2; the third turned up nothing new.",
+  "could_not_verify": [
+    "S3 path against a real or mock S3 (S3StorageServiceIT needs a container runtime and was not run). The S3 round-trip claims (HEAD+GET) are read from code: S3StorageService.exists issues HEAD, and getDataWithMetadata issues one GET.",
+    "Whether the legacy-layout probes can be removed without the parseDataKey contract change ibacher rejected (thread 3990841768/3990860896): the alternative (caching the resolution, which the ticket allows) is a design choice for the maintainers, so F1 is posed as a question."
+  ],
+  "passes_run": 3,
+  "notes": "/tmp/probe6535, the scratch dir I used for probe sources and logs, turned out to be shared with another concurrent process: one of my log files picked up a block of another run's output (BinaryStreamHandlerTest). My conclusions rest only on the sections my own commands produced, which match the tests and mutations I ran. I removed only my own files there and left the other process's files alone. The master comparison used a temporary git worktree, now removed. The working copy is clean (git status --porcelain empty, worktree list shows only the main copy)."
+}

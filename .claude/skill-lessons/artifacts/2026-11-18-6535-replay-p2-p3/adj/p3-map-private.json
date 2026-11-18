@@ -1,0 +1,21 @@
+{
+ "map": {
+  "C01": {
+   "wt": "wt-05",
+   "id": "F2"
+  }
+ },
+ "outside_findings": {
+  "wt-01": [],
+  "wt-02": [
+   "K-catch"
+  ],
+  "wt-03": [],
+  "wt-04": [],
+  "wt-05": [
+   "K-catch"
+  ],
+  "wt-06": []
+ },
+ "recorded_in_findings": {}
+}

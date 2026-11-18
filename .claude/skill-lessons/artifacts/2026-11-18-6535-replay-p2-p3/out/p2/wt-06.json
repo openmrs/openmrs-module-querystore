@@ -1,0 +1,44 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/obs/handler/AbstractHandler.java",
+      "line": 135,
+      "where": "PR-level",
+      "disposition": "question",
+      "claim": "Legacy-layout complex obs (every obs saved before 2.8 on an upgraded install) still cost exactly what they cost on master: 6 filesystem operations including 3 Files.exists per read, so TRUNK-6682's 'at most one existence-related check' criterion is met only for new-layout keys, and the PR description's 'it now costs 3 filesystem operations on local storage' holds only for those.",
+      "failure_mode": "",
+      "evidence": "Throwaway test (since deleted) wrapping AbstractHandler.getObs in Mockito.mockStatic(Files.class, CALLS_REAL_METHODS) and counting exists/newInputStream/readAttributes, run on the PR head and on a master worktree, obs dir GP 'complex_obs'. master: NEW exists=4 open=1 readAttributes=1 (6), LEGACY exists=4 open=1 readAttributes=1 (6). PR: NEW exists=1 open=1 readAttributes=1 (3), LEGACY exists=3 open=1 readAttributes=2 (6). The master NEW figure (4 exists + open + stat) matches the measurement in review thread 4070873940, which serves as the known-good calibration. Path: parseDataKey's exists() (AbstractHandler.java:135) does 2 Files.exists for a bare legacy name (LocalStorageService.exists checks current then legacy). Then LocalStorageService.read (around line 95) fails the readAttributes on the current location, runs fileExists(legacyPath) and reads again. This builds on the still-unanswered thread 4070873940 ('does TRUNK-6682 stay open for the layout-resolution half?'). The new fact is that the legacy half's count did not move at all. It belongs as a reply in that thread, not a new one.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+      "line": 21,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "TRUNK-6682 carries the 'backport' label, yet the new API is tagged '@since 3.0.0' only, and the change uses Java 16+ syntax that the 2.8.x line (Java 1.8 at its branch point) cannot compile: a record (ImageHandler.LoadedImage, ImageHandler.java:153) and an instanceof pattern (S3StorageService.translateNotFound, around line 178). Is this meant to be backported, and if so to which lines?",
+      "failure_mode": "",
+      "evidence": "Ticket snapshot labels: ['backport','community-priority','performance']. `git show a085b50b6^:pom.xml` (the commit before 'Bump version to 3.0.0-SNAPSHOT') has <javaCompilerVersion>1.8</javaCompilerVersion>. StorageService's existing @since lists '2.8.0, 2.7.5, 2.6.16, 2.5.15' (LocalStorageService.java:42), so the storage API has been backported before. S3StorageService does not exist at a085b50b6^, so its part of this change is 3.0-only either way. DataWithMetadata was already converted from a record to a class in commit 956bc83f9, but ImageHandler.LoadedImage is still a record. Reply in thread 4070873955, whose 'plus whatever maintenance lines it gets backported to' sub-point is still open; ibacher's 'We can't backport this implementation' (3990860896) shows backport is expected.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/main/java/org/openmrs/obs/handler/ImageHandler.java",
+      "line": 117,
+      "where": "inline",
+      "disposition": "suggestion",
+      "claim": "ImageHandler.readImage fetches metadata with getDataWithMetadata, but RAW_VIEW never uses it. The mime type is already set from the image content whenever the image is non-null, and the length is reset to null right after, so plain getData would save one readAttributes per image read on local storage.",
+      "failure_mode": "",
+      "evidence": "Mutation probe (reverted with git checkout): I replaced loaded.metadata() in ImageHandler.getObs with ObjectMetadata(mime 'bogus/x', length 999). ImageHandlerTest stayed 9/9 green, including the mime-type assertions at ImageHandlerTest.java:100,102,129. Code: injectMissingMetadata only sets the mime type when it is null (AbstractHandler.java:177), and ImageHandler.java:94 does complexData.setLength(null). This waste predates the PR (master called getMetadata), so it is optional. Changing it would also mean updating ImageHandlerTest.getObs_shouldReadDataAndMetadataInASingleStorageCall.",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Close to mergeable: the new-layout I/O reduction is real, tested and mutation-sensitive (6 to 3 local filesystem operations, HEAD/GET/HEAD to HEAD/GET on S3), but the ticket scope for legacy-layout reads (unchanged at 6 operations) and the backport intent are unresolved maintainer decisions.",
+  "what_i_swept": "Diff stat checked against the brief: 21 files, +967/-68, and the two-dot and three-dot stats agree, so there is no drift. I read the full diff, the ticket snapshot, the PR body, and all 31 inline comments, 11 reviews and 13 PR comments. I checked every prior thread against the head. Resolved: internal helper split, NoSuchFileException documentation, the read-ordering comment, the exists() probe kept, the ImageHandler legacy filename fallback, DataWithMetadata formatting, S3 multipart length plus mocked test, the FileSystemException legacy fallback plus test directory, the exists() containment check, per-handler call-count tests, S3 getData delegation, the deprecated overload, and the legacy getDataWithMetadata test. Open: 4070873940 (ticket scope) and 4070873955 (backport lines). Measured filesystem operations per getObs for new and legacy layouts on master and the PR with an instrumented throwaway test. Ran all 8 touched test classes on the head (78 tests green). Ran a mutation probe that re-adds fileExists in LocalStorageService.read: 3 count tests went red. Outward trace: StorageService implementations in the tree (only Local and S3; a module implementation gets the default method, so the ABI concern is gone); getPath callers (purgeData only); handler exception-path changes for missing versus failing files compared with master; the Java language level and @since history for backport. S3: ran S3StorageServiceIT against the local S3Mock 4.5.0 container through Testcontainers: 28 tests, 0 failures, 0 skipped, including getDataWithMetadata_shouldThrowNoSuchFileExceptionWhenFileDoesNotExist. Control: making translateNotFound return the raw exception turned exactly that test red (1 failure of 28). Reverted with git checkout.",
+  "could_not_verify": [
+    "The current Java level and contents of the 2.8.x/2.7.x maintenance branches: needs access. The clone holds only master and the PR history, and reading the repo on GitHub is out of bounds. The Java 1.8 level comes from master's pom at the parent of the 3.0.0 version bump (a085b50b6^). So F2 stays a question."
+  ],
+  "passes_run": 3,
+  "notes": "Pass 1 covered the diff, the conversation and the ticket. Pass 2 traced outward and measured filesystem-operation counts (F1, F2, and F3 surfaced). Pass 3 re-swept security (path containment preserved in read/exists), resource closing for each handler, and exception paths, and found nothing new. The existing threads cover F1 and F2, so both should be replies there rather than new top-level comments. An earlier draft listed the S3 404 translation as unverifiable because Docker was unavailable. That was wrong: Docker was available and the integration test was run. The working copy is clean, the throwaway test is deleted and the master worktree is removed."
+}

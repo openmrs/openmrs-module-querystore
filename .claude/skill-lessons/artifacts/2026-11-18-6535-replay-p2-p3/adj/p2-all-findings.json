@@ -1,0 +1,128 @@
+[
+ {
+  "f": "F01",
+  "disposition": "blocking",
+  "file": "api/src/main/java/org/openmrs/obs/handler/AbstractHandler.java",
+  "line": 135,
+  "claim": "Legacy-layout complex obs (every complex obs on an upgraded install) get no I/O reduction at all: a read still costs 6 filesystem operations, 3 of them Files.exists, exactly as on master, so TRUNK-6682's first acceptance criterion ('at most one existence-related check') holds only for new-layout obs while the ticket would close as done.",
+  "failure_mode": "If merged as-is and TRUNK-6682 closes, upgraded local-storage installations, whose pre-2.8 obs all resolve through parseDataKey's legacy branch, keep paying master's 6 ops per read (exists(raw key) probes current + legacy = 2 Files.exists, then read() fails a stat on the current location and pays a 3rd Files.exists before stat+open), and nothing tracks the unmet half. The handler count tests only cover new-layout keys, so this cannot show up in CI. This is a reply in the open thread on AbstractHandlerTest (discussion 4070873940), which asked the same scope question before the read-first rewrite and has no answer; the new fact is that the rewrite fixed the new layout (6 to 3) and left legacy at 6 to 6. Under the constraint that parseDataKey keeps its exists() probe (ibacher's thread), 'at most one' is unreachable for legacy keys, so the resolution is probably to narrow the ticket or open a follow-up, which is the maintainers' call.",
+  "evidence": "Throwaway test (deleted) wrapping TextHandler.getObs(RAW_VIEW) and AbstractHandler.getObs in Mockito.mockStatic(Files.class, callRealMethod) counting exists/readAttributes/newInputStream, run on PR head and on a master worktree. New layout: master {exists=4, readAttributes=1, newInputStream=1}, PR {exists=1, readAttributes=1, newInputStream=1}. Legacy layout (<appdata>/obs/<name>, valueComplex 'title|<name>', data loaded = 5 bytes on both): master {exists=4, readAttributes=1, newInputStream=1}, PR {exists=3, readAttributes=2 (one throws NoSuchFileException), newInputStream=1}. Calibrated: the master new-layout 6 matches the earlier reviewer's independent instrumentation (4 exists + stat + open), and the PR new-layout 3 matches the PR description's own claim. Code path: AbstractHandler.parseDataKey:135 -> LocalStorageService.exists (two fileExists on a miss) -> LocalStorageService.read (failed reader.apply on current, fileExists(legacyPath), then stat + open)."
+ },
+ {
+  "f": "F02",
+  "disposition": "blocking",
+  "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+  "line": 118,
+  "claim": "Legacy-layout complex obs still cost 3 existence checks and 6 filesystem operations per read, the same as master, so TRUNK-6682's first acceptance criterion ('at most one existence-related check') holds only for new-layout keys. The PR description's unqualified claim that a read 'now costs 3 filesystem operations' is wrong for those obs. The open thread asking whether the ticket stays open for the layout-resolution half (r4070873940) still has no answer.",
+  "failure_mode": "If merged as-is, TRUNK-6682 closes with its acceptance criterion unmet for every legacy-layout obs, which on an upgraded install means every complex obs saved before 2.8. Nothing would track the remaining parseDataKey/exists probes (2 Files.exists that miss on the raw filename) plus the failed stat and legacy Files.exists in LocalStorageService.read, and the inaccurate per-read cost in the description becomes the record. No test pins the legacy-layout count either, so it can regress silently.",
+  "evidence": "Throwaway test (deleted) drove the real AbstractHandler.getObs, TextHandler.getObs(TEXT_VIEW) and BinaryDataHandler.getObs(RAW_VIEW) through the autowired LocalStorageService, counting every java.nio.file.Files call with Mockito.mockStatic(Files.class, CALLS_REAL_METHODS). Controls: Files.exists alone gave {exists=1}, an empty runnable gave {}, and Files.newInputStream gave {newInputStream=1, newByteChannel=2 (internal)}. HEAD 86b96c7d6: new layout {exists=1, readAttributes=1, newInputStream=1}; legacy layout (file at appdata/obs/<uuid>.txt, valueComplex 'legacy.txt|<uuid>.txt') {exists=3, readAttributes=2 (one fails on the current location), newInputStream=1}. master a93b6293c (api/src/main+test checked out from master, then restored): both layouts {exists=4, readAttributes=1, newInputStream=1}. So new layout goes from 6 to 3 ops and legacy stays at 6 to 6. Paths: AbstractHandler.parseDataKey (unchanged) -> LocalStorageService.exists:278-294 -> LocalStorageService.read:96-119. PR body: 'it now costs 3 filesystem operations on local storage'. Ticket AC1 in trunk-6682-at-review.json."
+ },
+ {
+  "f": "F03",
+  "disposition": "question",
+  "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+  "line": 21,
+  "claim": "TRUNK-6682 carries the backport label and describes a 2.8.x regression, but the new API is tagged '@since 3.0.0' only (StorageService.getDataWithMetadata, DataWithMetadata, the 3-arg injectMissingMetadata), and the change uses Java 16+ constructs (private record LoadedImage in ImageHandler, pattern-matching instanceof in S3StorageService.translateNotFound, @Deprecated(since=...)) that do not compile on the 2.8.x line, which built with javaCompilerVersion 1.8. Is this getting backported, and if so to which lines?",
+  "failure_mode": "",
+  "evidence": "Ticket snapshot: labels [backport, community-priority, performance], fixVersions []. StorageService.java:31 and ObjectMetadata.java:19 carry '@since 2.8.0, 2.7.5, 2.6.16, 2.5.15' (the storage API was backported before); the new members say only 3.0.0 (StorageService.java:197, DataWithMetadata.java:21, AbstractHandler.java ~168). `git show a085b50b6^:pom.xml` (last 2.8.0-SNAPSHOT pom before the 3.0.0 bump) has <javaCompilerVersion>1.8</javaCompilerVersion>. `javac --release 8` on a one-line file with a private record and `o instanceof String s` reports 'records are not supported in -source 8' and 'pattern matching in instanceof is not supported in -source 8'. Reply in the existing @since thread (discussion 4070873955), whose 'plus whatever maintenance lines it gets backported to' sub-point is still open."
+ },
+ {
+  "f": "F04",
+  "disposition": "suggestion",
+  "file": "api/src/main/java/org/openmrs/api/StorageService.java",
+  "line": 199,
+  "claim": "No test reaches the default getDataWithMetadata. It is the compatibility path for StorageService implementations outside core (the reason it was made a default in the greptile thread), and its close-the-stream-if-metadata-fails behaviour is unpinned. A small test over a minimal or mocked StorageService that does not override it would cover both the happy path and the close-on-failure path.",
+  "failure_mode": "",
+  "evidence": "Mutation: inserted `if (true) throw new UnsupportedOperationException(\"probe\")` at the top of the default method. LocalStorageServiceTest, S3StorageServiceTest, all *HandlerTest and ObsServiceTest still passed, exit 0 (reverted with git checkout). LocalStorageService, S3StorageService and the test CountingStorageService all override the method."
+ },
+ {
+  "f": "F05",
+  "disposition": "suggestion",
+  "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+  "line": 21,
+  "claim": "TRUNK-6682 carries the 'backport' label, but the new API is tagged @since 3.0.0 only, with no maintenance-line versions (StorageService/LocalStorageService list '2.8.0, 2.7.5, 2.6.16, 2.5.15'). The main code also uses Java 16+ syntax: the private record LoadedImage at ImageHandler.java:153 and pattern-matching instanceof at S3StorageService.java:178. A cherry-pick onto the 2.x lines therefore won't compile. This is the surviving sub-point of thread 4070873955, which asked for the version this lands in 'plus whatever maintenance lines it gets backported to'. Only the first half was addressed.",
+  "failure_mode": "",
+  "evidence": "Ticket snapshot labels: backport, community-priority, performance. `git show a085b50b6^:pom.xml` (the commit just before 'Bump version to 3.0.0-SNAPSHOT', i.e. the 2.8.x line's content) has <javaCompilerVersion>1.8</javaCompilerVersion>. `javac --release 8` on a snippet with a private record and `instanceof X x` fails with 'records are not supported in -source 8' and 'pattern matching in instanceof is not supported in -source 8'; the same snippet compiles with --release 21. `grep @since` on the storage package shows the multi-version precedent. I could not see the maintenance branches themselves (the clone holds only master's history), so the current Java level of 2.8.x is inferred from the pre-3.0 pom."
+ },
+ {
+  "f": "F06",
+  "disposition": "question",
+  "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+  "line": 21,
+  "claim": "TRUNK-6682 carries the `backport` label and the StorageService API it extends is tagged '@since 2.8.0, 2.7.5, 2.6.16, 2.5.15'. The new DataWithMetadata, StorageService.getDataWithMetadata and the 3-arg injectMissingMetadata are tagged '@since 3.0.0' only, so is this master-only, with the label to be dropped, or does it get backported, in which case each @since needs the maintenance versions and the Java 16+ constructs it adds (`private record LoadedImage` in ImageHandler, pattern-matching `instanceof S3Exception s3Exception` in S3StorageService) need checking against those lines' compiler level?",
+  "failure_mode": "",
+  "evidence": "grep '@since' api/src/main/java/org/openmrs/api/StorageService.java and api/src/main/java/org/openmrs/api/storage/*.java: StorageService, ObjectMetadata and LocalStorageService are '2.8.0, 2.7.5, 2.6.16, 2.5.15', while DataWithMetadata.java:21 and StorageService.java:197 are '3.0.0'. Ticket labels: backport, community-priority, performance. Prior thread r4070873955 asked for 'the version this actually lands in, plus whatever maintenance lines it gets backported to'. master pom has maven.compiler.release 21, and the clone has no maintenance branches or tags, so I could not check their Java level."
+ },
+ {
+  "f": "F07",
+  "disposition": "suggestion",
+  "file": "api/src/main/java/org/openmrs/obs/handler/ImageHandler.java",
+  "line": 117,
+  "claim": "ImageHandler.readImage fetches metadata with getDataWithMetadata, but RAW_VIEW never uses it. The mime type is already set from the image content whenever the image is non-null, and the length is reset to null right after, so plain getData would save one readAttributes per image read on local storage.",
+  "failure_mode": "",
+  "evidence": "Mutation probe (reverted with git checkout): I replaced loaded.metadata() in ImageHandler.getObs with ObjectMetadata(mime 'bogus/x', length 999). ImageHandlerTest stayed 9/9 green, including the mime-type assertions at ImageHandlerTest.java:100,102,129. Code: injectMissingMetadata only sets the mime type when it is null (AbstractHandler.java:177), and ImageHandler.java:94 does complexData.setLength(null). This waste predates the PR (master called getMetadata), so it is optional. Changing it would also mean updating ImageHandlerTest.getObs_shouldReadDataAndMetadataInASingleStorageCall."
+ },
+ {
+  "f": "F08",
+  "disposition": "question",
+  "file": "api/src/main/java/org/openmrs/obs/handler/AbstractHandler.java",
+  "line": 135,
+  "claim": "Legacy-layout complex obs (every obs saved before 2.8 on an upgraded install) still cost exactly what they cost on master: 6 filesystem operations including 3 Files.exists per read, so TRUNK-6682's 'at most one existence-related check' criterion is met only for new-layout keys, and the PR description's 'it now costs 3 filesystem operations on local storage' holds only for those.",
+  "failure_mode": "",
+  "evidence": "Throwaway test (since deleted) wrapping AbstractHandler.getObs in Mockito.mockStatic(Files.class, CALLS_REAL_METHODS) and counting exists/newInputStream/readAttributes, run on the PR head and on a master worktree, obs dir GP 'complex_obs'. master: NEW exists=4 open=1 readAttributes=1 (6), LEGACY exists=4 open=1 readAttributes=1 (6). PR: NEW exists=1 open=1 readAttributes=1 (3), LEGACY exists=3 open=1 readAttributes=2 (6). The master NEW figure (4 exists + open + stat) matches the measurement in review thread 4070873940, which serves as the known-good calibration. Path: parseDataKey's exists() (AbstractHandler.java:135) does 2 Files.exists for a bare legacy name (LocalStorageService.exists checks current then legacy). Then LocalStorageService.read (around line 95) fails the readAttributes on the current location, runs fileExists(legacyPath) and reads again. This builds on the still-unanswered thread 4070873940 ('does TRUNK-6682 stay open for the layout-resolution half?'). The new fact is that the legacy half's count did not move at all. It belongs as a reply in that thread, not a new one."
+ },
+ {
+  "f": "F09",
+  "disposition": "question",
+  "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+  "line": 118,
+  "claim": "Reply in the existing thread (r4070873940, still unanswered): new-layout reads now meet TRUNK-6682's 'at most one existence-related check', but legacy-layout obs still cost 3 Files.exists plus a failed stat on the current path (6 filesystem operations, the same as master). So does the ticket stay open for legacy reads, and should the PR description's flat '3 filesystem operations on local storage' say it applies to the new layout only?",
+  "failure_mode": "",
+  "evidence": "Throwaway BaseContextSensitiveTest (deleted afterwards) subclassed LocalStorageService, overrode the PR's fileExists hook, and drove AbstractHandler.getObs with the obs dir GP set to 'obs'. New-layout key gave fileExists=1, which matches the PR's own readAsHandler_shouldPerformOnlyOneExistenceCheck (that is the calibration). A legacy file at <appdata>/obs/legacy_<uuid>.txt gave fileExists=3 and data loaded correctly. Path traced: parseDataKey -> exists() probes current then legacy (2, AbstractHandler.java:134 and LocalStorageService.exists), key gets the obs-dir prefix, then read() fails readAttributes on the current path and probes legacy (+1) (LocalStorageService.read). By reading master, master's legacy count is 4 Files.exists + open + stat, so there is no regression. The ticket's AC1 is unqualified ('Reading a complex obs performs at most one existence-related check')."
+ },
+ {
+  "f": "F10",
+  "disposition": "question",
+  "file": "api/src/main/java/org/openmrs/obs/handler/AbstractHandler.java",
+  "line": 135,
+  "claim": "Reading a legacy-layout complex obs still costs 6 filesystem operations with 3 Files.exists calls (plus a failed stat), the same total as master. So TRUNK-6682's 'at most one existence-related check' acceptance criterion, and the PR description's unqualified '3 filesystem operations' claim, hold only for new-layout obs. Does the ticket stay open for legacy obs, or is its criterion narrowed? This belongs as a reply in the still-unanswered thread 4070873940, which asked the same scope question when the new-layout path was still at 5 operations.",
+  "failure_mode": "",
+  "evidence": "I wrote a throwaway BaseContextSensitiveTest that counts static Files.exists/readAttributes/newInputStream calls with Mockito.mockStatic(CALLS_REAL_METHODS). It drives AbstractHandler.getObs, TextHandler RAW_VIEW and BinaryDataHandler RAW_VIEW on a new-layout obs saved through the handler, and on a legacy obs ('t.txt|legacy_<uuid>.txt' with the file at <appdata>/obs/). Results: PR head new layout exists=1 readAttributes=1 newInputStream=1 (3 ops, matching the PR's claim, which serves as the known-good control); PR head legacy exists=3 readAttributes=2 newInputStream=1 (6 ops); master both layouts exists=4 readAttributes=1 newInputStream=1 (6 ops). Where the 3 come from: parseDataKey -> LocalStorageService.exists probes the current path and then <appdata>/<raw key> (LocalStorageService.java:286). read() then fails a stat on the current path and probes the legacy path (LocalStorageService.java:109). No count test covers the legacy path; all call-count tests use keys saved in the new layout. The test file was deleted afterwards."
+ },
+ {
+  "f": "F11",
+  "disposition": "question",
+  "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+  "line": 21,
+  "claim": "Reply in thread r4070873955: TRUNK-6682 carries the 'backport' label, but the new API's @since lists only 3.0.0 (DataWithMetadata:21, StorageService:197, injectMissingMetadata overload), and the main code uses Java 16+ syntax (private record LoadedImage in ImageHandler.java:153, instanceof pattern in S3StorageService.java:178). At the 2.8.x branch point the compiler level was 1.8. Is this going to 2.8.x? If so it needs those lines rewritten and the 2.8.x version added to each @since. If not, should the backport label come off the ticket?",
+  "failure_mode": "",
+  "evidence": "Ticket snapshot labels: ['backport','community-priority','performance'], fixVersions []. `git show a085b50b6^:pom.xml` (the parent of 'Bump version to 3.0.0-SNAPSHOT') has <javaCompilerVersion>1.8</javaCompilerVersion>. ImageHandler.java exists at that commit, S3StorageService.java does not. The 2.8.x branch is not in the clone, so I could not check its current Java level or whether S3 storage was backported to it."
+ },
+ {
+  "f": "F12",
+  "disposition": "question",
+  "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+  "line": 21,
+  "claim": "TRUNK-6682 carries the 'backport' label, yet the new API is tagged '@since 3.0.0' only, and the change uses Java 16+ syntax that the 2.8.x line (Java 1.8 at its branch point) cannot compile: a record (ImageHandler.LoadedImage, ImageHandler.java:153) and an instanceof pattern (S3StorageService.translateNotFound, around line 178). Is this meant to be backported, and if so to which lines?",
+  "failure_mode": "",
+  "evidence": "Ticket snapshot labels: ['backport','community-priority','performance']. `git show a085b50b6^:pom.xml` (the commit before 'Bump version to 3.0.0-SNAPSHOT') has <javaCompilerVersion>1.8</javaCompilerVersion>. StorageService's existing @since lists '2.8.0, 2.7.5, 2.6.16, 2.5.15' (LocalStorageService.java:42), so the storage API has been backported before. S3StorageService does not exist at a085b50b6^, so its part of this change is 3.0-only either way. DataWithMetadata was already converted from a record to a class in commit 956bc83f9, but ImageHandler.LoadedImage is still a record. Reply in thread 4070873955, whose 'plus whatever maintenance lines it gets backported to' sub-point is still open; ibacher's 'We can't backport this implementation' (3990860896) shows backport is expected."
+ },
+ {
+  "f": "F13",
+  "disposition": "question",
+  "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+  "line": 118,
+  "claim": "For legacy-layout obs (every pre-2.8 complex obs on an upgraded install), a handler read still costs 6 filesystem operations including 3 existence checks, exactly as many operations as master, so TRUNK-6682's 'at most one existence-related check' criterion holds only for new-layout keys and the PR description's '3 filesystem operations' claim is true only for them.",
+  "failure_mode": "",
+  "evidence": "Throwaway test (deleted) wrapping java.nio.file.Files in Mockito.mockStatic(CALLS_REAL_METHODS) and counting exists/newInputStream/readAttributes during AbstractHandler.getObs with a LocalStorageService on a temp dir, run on PR head and on master (git worktree at a93b6293c9). Master: legacy 6 (4x exists, open, stat), new layout 6. PR head: new layout 3 (1 exists, stat, open), legacy 6 = exists(storageDir/<fn>%2Etxt), exists(appdata/<fn>), failed readAttributes(storageDir/obs/<fn>%2Etxt), exists(appdata/obs/<fn>), readAttributes, newInputStream. A second probe overriding LocalStorageService.fileExists gave 3 checks for legacy through both AbstractHandler and TextHandler(TEXT_VIEW), and 1 for new layout. Calibration: the master new-layout count of 6 matches the earlier reviewer measurement in thread 4070873940, and the PR new-layout count of 1 check matches the PR's own readAsHandler_shouldPerformOnlyOneExistenceCheck. Cause: AbstractHandler.parseDataKey (unchanged, AbstractHandler.java:135) probes the raw key in both locations before prepending the obs dir, then LocalStorageService.read (LocalStorageService.java:96-119) fails the current-location stat and probes legacy again. Every new CountingStorageService handler test uses a new-layout key only. Ties into the still-unanswered thread 4070873940 (does TRUNK-6682 stay open for the layout-resolution half?): best posted as a reply there carrying the legacy numbers rather than as a new comment."
+ },
+ {
+  "f": "F14",
+  "disposition": "question",
+  "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+  "line": 21,
+  "claim": "TRUNK-6682 carries the 'backport' label, but the new public API (DataWithMetadata, StorageService.getDataWithMetadata, the 3-arg injectMissingMetadata) and the @Deprecated(since = \"3.0.0\") on the 2-arg overload name only 3.0.0. Neighbouring storage API names every line (StorageService/LocalStorageService/ObjectMetadata: '@since 2.8.0, 2.7.5, 2.6.16, 2.5.15'), so is this going back to the maintenance lines, and if so, with which versions?",
+  "failure_mode": "",
+  "evidence": "Ticket snapshot labels: ['backport','community-priority','performance']. grep '@since' in api/src/main/java/org/openmrs/api/StorageService.java:31,197 and api/src/main/java/org/openmrs/api/storage/*.java. pom.xml version 3.0.0-SNAPSHOT. The earlier thread 4070873955 asked for 'the version this actually lands in, plus whatever maintenance lines it gets backported to'. Only the 3.0.0 half was applied, so this is a reply in that thread, not a new comment. Whether to backport is the maintainers' call."
+ }
+]

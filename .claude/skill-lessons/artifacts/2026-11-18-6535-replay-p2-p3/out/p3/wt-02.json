@@ -1,0 +1,98 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "draft_id": "D1",
+      "file": "api/src/main/java/org/openmrs/api/storage/S3StorageService.java",
+      "start_line": 154,
+      "line": 156,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "S3StorageService.getDataWithMetadata takes the length from the multipart client's GetObject response, which is part 1's Content-Length, so any object stored in more than one part reports a fraction of its real size.",
+      "failure_mode": "If merged as-is, on S3 storage (multipart on by default) a complex obs over 8 MiB reports e.g. 8388608 instead of 20971520 as its length. legacyui's ComplexObsServlet sets Content-Length from ComplexData.getLength(), so downloads are silently truncated. CI cannot catch it because S3Mock ignores partNumber.",
+      "evidence": "AWS SDK 2.32.13 sources (bom awsSdkS3Version): DownloadObjectHelper.downloadObject splits the transformer and fetches by partNumber; SplittingTransformer forwards only the first onResponse upstream; MultipartDownloaderSubscriber itself adds response.contentLength() per part. Throwaway test against LocalStack 3.8.1 (local image) with 20 MiB multipart upload: HEAD len=20971520, GET partNumber=1 len=8388608 range='bytes 0-8388607/20971520' parts=3, getDataWithMetadata len=8388608 bytesRead=20971520, getMetadata len=20971520. Same test against S3Mock 4.5.0: partNumber ignored (full length, no range), so S3StorageServiceIT cannot see it. With the suggested fix applied, LocalStack gives getDataWithMetadata len=20971520 (small object still 1000). Suggestion confirmed spotless-clean via spotless:apply no-op, with a positive control (mangled spacing was restored). javap of legacyui-omod 3.0.0-SNAPSHOT ComplexObsServlet: ComplexData.getLength() -> setHeader(\"Content-Length\").",
+      "confidence": "high",
+      "body": "This reports the wrong length for anything this service stored in parts (over 8 MiB). The multipart client hands back part 1's response, so a 20 MiB obs reports 8388608 where master's HEAD gave 20971520. I reproduced it on LocalStack; S3Mock ignores `partNumber`, so the IT can't see it. legacyui's [`ComplexObsServlet`](https://github.com/openmrs/openmrs-module-legacyui/blob/master/omod/src/main/java/org/openmrs/web/servlet/ComplexObsServlet.java) sends this as Content-Length, so the download comes back truncated.\n\n```suggestion\n\t\tmetadata.setLength(getObjectLength(getResponse));\n\t\treturn new DataWithMetadata(response, metadata);\n\t}\n\n\t/**\n\t * With multipart enabled the client downloads in parts and hands back the first part's response, so\n\t * Content-Length is that part's size, while Content-Range ends with the size of the object.\n\t */\n\tprivate Long getObjectLength(GetObjectResponse response) {\n\t\tString total = StringUtils.substringAfterLast(response.contentRange(), \"/\");\n\t\treturn StringUtils.isNumeric(total) ? Long.valueOf(total) : response.contentLength();\n\t}\n```\n"
+    },
+    {
+      "id": "F2",
+      "draft_id": "D2",
+      "file": "api/src/main/java/org/openmrs/api/storage/LocalStorageService.java",
+      "start_line": 93,
+      "line": 113,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "LocalStorageService.read falls back to the legacy location only on NoSuchFileException, but a legacy key whose encoded name passes 255 bytes fails at the current location with FileSystemException 'File name too long', so the legacy file is never tried.",
+      "failure_mode": "If merged as-is, legacy (pre-2.8) complex obs whose title is long and non-ASCII (36+ Cyrillic or 24+ Amharic characters) stop loading once storageDir/<obs dir> exists, which it does as soon as any complex obs has been saved since 2.8. TextHandler/BinaryDataHandler throw APIException and ImageHandler returns no image, where master reads the file. This breaks the ticket's 'legacy-layout obs continue to load correctly' criterion.",
+      "evidence": "History: 80b4411f8^ AbstractHandler.getOutputFileToWrite names legacy files <title>_<uuid>.<ext>; BaseStorageService.encodeKey URL-encodes. Throwaway LocalStorageServiceTest probe with legacy file appdata/complex_obs/<n x U+0416>_<uuid>.txt and storageDir/complex_obs present: head n=10 reads, n=36 getData throws FileSystemException '...: File name too long' (exists() still true); master worktree (891b80745) same probe n=36 reads 'test'. Without storageDir/complex_obs present head also reads (ENOENT on the parent comes first). With the suggested read() applied, n=36 reads and the full LocalStorageServiceTest (incl. the PR's counting tests) passes. spotless:apply on the suggestion only removes the now-unused NoSuchFileException import, noted in the body. Linux check: Java 21 in a tomcat:11-jdk21-temurin container (Linux 5.15, overlay root) running Files.readAttributes on the encoded name with the parent directory present: 35 letters (253 bytes) throws NoSuchFileException, 36 letters (259 bytes) throws FileSystemException 'File name too long'.",
+      "confidence": "high",
+      "body": "Legacy obs with long non-ASCII titles stop loading. Before 2.8 files were named `<title>_<uuid>.<ext>`, and `encodeKey` turns each non-ASCII byte into `%XX`, so a 36-letter Cyrillic title pushes the encoded name past 255 bytes. The stat then fails with \"File name too long\" rather than `NoSuchFileException`, and the legacy file master still reads is never tried. Falling back on any `FileSystemException` fixes it (it also needs `import java.nio.file.FileSystemException;`, and the `NoSuchFileException` import goes unused):\n\n```suggestion\n\tprivate <T> T read(String key, IOFunction<Path, T> reader) throws IOException {\n\t\tPath path = storageDir.resolve(encodeKey(key));\n\t\tFileSystemException currentLocationFailure = null;\n\t\tif (isInStorageDir(path)) {\n\t\t\ttry {\n\t\t\t\treturn reader.apply(path);\n\t\t\t} catch (FileSystemException e) {\n\t\t\t\t// Not only a missing file: a legacy name the encoding pushes past the file system's name\n\t\t\t\t// length limit fails here too, so the legacy location decides\n\t\t\t\tcurrentLocationFailure = e;\n\t\t\t}\n\t\t}\n\n\t\tPath legacyPath = getLegacyStorageDir().resolve(key);\n\t\tif (fileExists(legacyPath)) {\n\t\t\tassertKeyInLegacyStorageDir(legacyPath, key);\n\t\t\treturn reader.apply(legacyPath);\n\t\t}\n\n\t\tif (currentLocationFailure != null) {\n\t\t\tthrow currentLocationFailure;\n\t\t}\n\t\tthrow new IllegalArgumentException(\"Key must not point outside storage dir. Wrong key: \" + key);\n\t}\n```\n"
+    },
+    {
+      "id": "F3",
+      "draft_id": "D3",
+      "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+      "start_line": null,
+      "line": 207,
+      "where": "inline",
+      "disposition": "blocking",
+      "claim": "The only call-count test drives AbstractHandler.getObs, which every bundled handler overrides, so the ticket's regression guard covers none of the handlers it is for.",
+      "failure_mode": "If merged as-is, putting a redundant exists() or separate getMetadata() call back into any of Image/Binary/BinaryStream/Text/Media handlers passes CI, so TRUNK-6682's 'unit tests assert the number of storage-service calls per getObs()' criterion is not met for any production read path.",
+      "evidence": "All five bundled handlers declare 'public Obs getObs(Obs obs, String view)' (grep). Mutation run: added storageService.exists(key) in BinaryStreamHandler and a separate getMetadata/injectMissingMetadata(key, cd) in Text/Image/Media/BinaryData handlers, plus the control mutation in AbstractHandler.getObs. Ran AbstractHandlerTest, TextHandlerTest, BinaryStreamHandlerTest, ImageHandlerTest, MediaHandlerTest, BinaryDataHandlerTest, LocalStorageServiceTest: only AbstractHandlerTest.getObs_shouldNotIssueRedundantStorageCallsForLocalStorage failed ('expected: <0> but was: <1>'); all handler tests green (5/9/5/4/5 runs). AbstractHandler.storageService/adminService are package-private fields, hence ReflectionTestUtils.",
+      "confidence": "high",
+      "body": "This needs to reach the bundled handlers before merge, since they are what [TRUNK-6682](https://openmrs.atlassian.net/browse/TRUNK-6682)'s call-count criterion guards. All five override `AbstractHandler.getObs`, so putting `storageService.exists(key)` back into `BinaryStreamHandler`, or a separate `getMetadata` into the other four, leaves every test green. Each handler's test could run its own `getObs` against `CountingStorageService`, moved to its own file:\n\n```java\nImageHandler handler = new ImageHandler();\nReflectionTestUtils.setField(handler, \"adminService\", adminService);\nReflectionTestUtils.setField(handler, \"storageService\", counting);\n```\n"
+    },
+    {
+      "id": "F4",
+      "draft_id": "D4",
+      "file": "api/src/main/java/org/openmrs/api/storage/LocalStorageService.java",
+      "start_line": null,
+      "line": 273,
+      "where": "inline",
+      "disposition": "suggestion",
+      "failure_mode": "",
+      "claim": "exists() dropped master's storage-dir containment check on the current-location path, so an absolute key outside storage reports true instead of throwing.",
+      "evidence": "master getPath (git show master:...LocalStorageService.java:88-101) asserts containment; throwaway probe on head: exists(\"/etc/passwd\")=true; with the suggested two lines: throws IllegalArgumentException 'outside legacy storage dir' (master's behaviour), exists('/nonexistent')=false, full LocalStorageServiceTest passes; spotless:apply leaves it unchanged.",
+      "confidence": "high",
+      "body": "`exists` no longer checks that the current-location path stays inside the storage dir: `exists(\"/etc/passwd\")` now returns true where master threw `IllegalArgumentException`. `read` still refuses that key, so nothing leaks, but could this keep the check? It costs no extra I/O:\n\n```suggestion\n\t\tPath path = storageDir.resolve(encodeKey(key));\n\t\tif (isInStorageDir(path) && fileExists(path)) {\n```\n"
+    },
+    {
+      "id": "F5",
+      "draft_id": "D5",
+      "file": "api/src/main/java/org/openmrs/obs/handler/ImageHandler.java",
+      "start_line": 85,
+      "line": 86,
+      "where": "inline",
+      "disposition": "suggestion",
+      "failure_mode": "",
+      "claim": "The obsDir null guard and its test fix a pre-existing master NPE unrelated to TRUNK-6682's I/O counts.",
+      "evidence": "Throwaway ImageHandlerTest probe on a master worktree (891b80745) with obs dir GP null and valueComplex 'jpg|2026/01-01/...jpg': NullPointerException 'Cannot invoke \"String.isEmpty()\" because \"this.pattern\" is null' from key.replaceFirst(getObsDir(), ...). The line is unconditional on the image being present.",
+      "confidence": "high",
+      "body": "Could this guard and `getObs_shouldNotThrowWhenTheObsDirGlobalPropertyHasNoValue` go in their own ticket? Master throws the same NPE here for a bare-extension title whenever the obs dir property is unset, image present or not. That makes it a separate fix from the I/O counts, and leaving it out gives reviewers less to check here. Nothing breaks if it stays."
+    },
+    {
+      "id": "F6",
+      "draft_id": "D6",
+      "file": "api/src/main/java/org/openmrs/api/storage/S3StorageService.java",
+      "start_line": 130,
+      "line": 137,
+      "where": "inline",
+      "disposition": "suggestion",
+      "failure_mode": "",
+      "claim": "S3StorageService.getData duplicates getDataWithMetadata's GetObject call and 404 translation, so the two can drift.",
+      "evidence": "Read S3StorageService.java:129-156 at head: identical GetObjectRequest, toBlockingInputStream and translateNotFound; getDataWithMetadata(key).data() returns the same ResponseInputStream with no extra request.",
+      "confidence": "high",
+      "body": "This can just delegate to `getDataWithMetadata`, which repeats the same GetObject call and 404 translation (the duplication ibacher flagged in `LocalStorageService`, [comment](https://github.com/openmrs/openmrs-core/pull/6535#discussion_r3990739410)). The GET already carries the headers, so it costs nothing:\n\n```suggestion\n\t\treturn getDataWithMetadata(key).data();\n```\n"
+    }
+  ],
+  "dropped_drafts": [],
+  "review_body": "",
+  "verdict": "Not ready to merge: on S3 storage, getDataWithMetadata reports part 1's size for any object over 8 MiB, so downloads through legacyui's ComplexObsServlet are silently truncated (also blocking: legacy long non-ASCII filenames stop loading, and the call-count test misses every bundled handler).",
+  "what_i_swept": "Checked the diff stat (17 files, +692/-69; head is one bom-only commit behind master, unrelated). Read the PR body, the TRUNK-6682 snapshot (acceptance criteria, backport label) and the whole review thread. Every earlier thread (Greptile URI_VIEW, default method for binary compatibility, fallback only on NoSuchFileException, formatting, NoSuchFileException javadoc, metadata-before-data comment, ImageHandler legacy filename fallback, @since, the layout-probe ticket question) is fixed in the head, so those threads get no reply. Read every changed main file in full. Approach (Step 2): a combined data+metadata call with a default method is what the ticket asks for, and the exists probe in parseDataKey is kept because of ibacher's public-API objection, so the approach is closed. Outward trace: S3 multipart download path in the AWS SDK 2.32.13 sources; legacyui ComplexObsServlet bytecode (consumer of ComplexData length); legacy file naming in pre-storage-service history; master getPath/exists semantics; other getPath callers (purge only); S3 getMetadata vs getDataWithMetadata fields; stream closing in each handler; exception-type changes per handler. Verified each draft by running it: LocalStack and S3Mock probes (D1), head vs master long-name probe (D2), handler mutation run with an AbstractHandler control (D3), exists probe on head and with the fix (D4), master NPE probe (D5). Every suggestion block was checked with spotless:apply. Pass 1 (earlier in the session) produced D1-D6. Pass 2 (this one) verified all six and swept again, finding nothing new.",
+  "could_not_verify": [
+    "Real AWS S3 (needs access): D1 was reproduced on LocalStack 3.8.1, which honours partNumber, and matches the AWS SDK sources, but was not run against AWS itself.",
+    "The legacyui ComplexObsServlet link (needs access): it points at the module's master path, which I could not open with web access disabled. The Content-Length behaviour was confirmed from the bytecode of legacyui-omod 3.0.0-SNAPSHOT in ~/.m2."
+  ],
+  "passes_run": 2,
+  "notes": "Snapshot user logins are absent, so I attributed the 2026-09-22 comments to the user's earlier round from their content. The ticket's backport label and fixVersions are empty while @since says 3.0.0; repo history shows backport versions are sometimes added in a follow-up (TRUNK-6674 #6269), so I did not raise it again beyond the earlier thread. The D2 suggestion broadens the fallback from NoSuchFileException to FileSystemException, which Greptile's earlier 'fallback masks storage failures' thread argued against; the original failure is still rethrown when no legacy file exists, and a collision with a current-layout key is practically impossible. The master-worktree run for D2 had no .mvn/maven.config, so it used ~/.m2 directly in offline mode for a test-phase build only. Its app data dir was a temp 'appdir-for-unit-tests-' directory, and ~/.OpenMRS was untouched. Two adobe/s3mock containers were running at the end; they are not from my runs (Ryuk removes those), so I left them. Working copy is clean."
+}

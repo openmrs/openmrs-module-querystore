@@ -1,0 +1,23 @@
+{
+ "key": "TRUNK-6682",
+ "fields": {
+  "summary": "Complex obs storage abstraction performs redundant exists/metadata calls per read",
+  "description": "h2. Background\n\nThe 2.8.x storage-service abstraction for complex obs changed {{AbstractHandler.getObs()}} from a single file read into: a {{storageService.exists()}} probe (to distinguish legacy vs. new key layouts), the {{getData()}} read, and a separate {{getMetadata()}} call \u2014 with {{LocalStorageService.getPath()}} adding a further legacy-path existence check per call. On local storage this turns one file open into ~4\u20135 filesystem operations; on S3-backed storage a single complex obs view costs three network round-trips (HEAD/GET/HEAD) where 2.6.x performed one local read. This applies to all bundled handlers (Image, Binary, Text, Media, BinaryStream).\n\nh2. Requested change\n\nReduce per-read storage operations: resolve the legacy-vs-new key layout without a separate existence probe where possible (or cache the resolution), and fetch data and metadata in a single operation when the backend supports it (e.g. S3 GetObject already returns metadata). Behavior for both legacy and new key layouts must be preserved.\n\nh2. Acceptance criteria\n\n* Reading a complex obs performs at most one existence-related check and does not issue a separate metadata request when the data request already provides it.\n* Legacy-layout obs continue to load correctly (covered by tests for both layouts).\n* Unit tests assert the number of storage-service calls per {{getObs()}} for local storage, preventing reintroduction of redundant probes.",
+  "status": "Code Review (Post-Commit)",
+  "labels": [
+   "backport",
+   "community-priority",
+   "performance"
+  ],
+  "fixVersions": [],
+  "comment": {
+   "comments": [
+    {
+     "author": "Juliet Wamalwa",
+     "created": "2026-09-15T01:56:07.841+1000",
+     "body": "[~accountid:712020:cf4d3260-4f00-44a3-a68a-da53d2e5c14a] This is the PR [https://github.com/openmrs/openmrs-core/pull/6535|https://github.com/openmrs/openmrs-core/pull/6535|smart-link]  to be reviewed at your convenient time."
+    }
+   ]
+  }
+ }
+}
