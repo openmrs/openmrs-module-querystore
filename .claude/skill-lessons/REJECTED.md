@@ -6173,3 +6173,72 @@ makes the same "same shape" claim about #53. It is left as written, and flagged 
 - **Red, as on 2026-11-08:** `kill-session-scratchpad-procs.sh` and its `.log` are live only.
 
 **Running parked counts:** "seen, then set aside" 0 → 1 run record. The others are unchanged.
+
+## 2026-11-18 (owner-directed: pr-review, from the openmrs-core PR 6535 miss; window: 1 hand-written `pr-review` defect note since 2026-11-15) — 3 proposed: 1 applied after revision (P1), 2 parked by the gate (P2, P3), 0 killed; 2 prunes applied (A, B); two refutation rounds, the second over the staged diff; linter 17 files, 0 findings; **pr-review 0.26.0**
+
+The store matched `origin/main` at `cf5b82b9` before the read, apart from a `.DS_Store`. `confidential/` was read for its `PRS` and file names only. There is one record since 2026-11-15: `2026-11-18-pr-review-core-6535-maintainer-changes-requested.md`. It is a hand-written defect note on six attended `pr-review` rounds of openmrs-core PR 6535, written after the owner asked how the review missed a maintainer's changes-requested review. R-B (`2026-11-14-…-781-…`) was counted on 2026-11-15 and was read again only for the REOPEN below.
+
+The owner's instruction, the proposals, both gate replies verbatim, and the checks made after the gate are in `proposals/2026-11-18-owner-directed-pr-review-6535.md`.
+
+**Applied after revision: P1, pr-review 0.26.0.** Step 1's JIRA recipe fetches `labels,fixVersions`, and the MCP route takes "the same `fields`". A `backport` label means an API the change adds lists each maintenance line's version in `@since`, "as openmrs-core's `StorageService` does".
+- **Corroborated by:** the owner's direction, on a measured premise (the record's REST read, and 81 multi-version `@since` tags in 48 files at openmrs-core master `a93b6293c9`), and a mechanical edit: the fields print the label. Not by a count. Gate 1 ruled bar (b) not met, because the 2026-11-09 suggestion and the 2026-11-18 miss are one defect seen in two rounds.
+- **Revised at gate 1:**
+  - The MCP clause no longer claims that getJiraIssue omits `labels`, and it now carries `fixVersions`.
+  - The example `3.0.0, 2.9.0, 2.8.9` went: 2.8.9 is released (r4070873955), and an example gets copied verbatim.
+  - "`StorageService`'s own `@since`" became "openmrs-core's `StorageService`". Gate 2 found that accurate (`StorageService.java:29`, `@since 2.8.0, 2.7.5, 2.6.16, 2.5.15`) and acceptable.
+- **Checked after gate 2, which lacked the access:** `getJiraIssue` with those six `fields` returned TRUNK-6682's labels and an empty fixVersions. Its schema's default field list leaves out `comment`.
+- **What it does not fix (gate 1):** the backport intent was already on the PR (r3990860896, r4070873955), and the record's main failure is :20's headline-only check. P1 adds a louder second signal; it does not repair a compliance failure.
+
+**Applied: prunes A and B (Step 4).**
+- **A** deleted the old :142, "A "ready to merge" verdict with nothing left to act on is **not** something you post — see Step 5…". It is carried by :174, :184, :134 and posting.md:17.
+- **B** deleted the anti-pattern "Don't acknowledge fixes (especially on re-review)". It is carried by :20, :144, and posting.md:13 and :15.
+  - It came in with `8fb4b4bd` (pr-review 0.8.0, 2026-06-17). That commit's message names it as the fourth home of a rule it also put in Step 1, the body rule and both gate lines.
+  - No measurement stood behind it, so none is retired. The one thing lost is the salience line "This is the gap authors notice most".
+- **Budget:** `pr-review` 8481 → 8371 (P1 +28 words, A −39, B −99), lowered in this commit.
+
+**Parked by the gate: P2**, "lines the PR moves or rewrites are its own code; a defect found there is filed even when master has it too" (:104). Blocking objections, each settled by its citation:
+- **Bar (a) fails at the site edited:** one record. The class-level count of two, with R-B, is the move the 2026-11-15 gate rejected ("Bar (a) counted one lesson over two events").
+- **A false universal.** "Comparing the PR with its base cannot show a defect both carry" is false: the same run's comparison surfaced master's MediaHandler leak (record :18). What hid the null `mimeType` was a brief that asked only for differences (record :23).
+- **An uncited exemption.** "What a repaired line was designed to do is not such a defect" cites nothing in the store. It could also exempt the stream, since master's MediaHandler hands an open stream on by design.
+- **A mismatched item.** The stream the reviewer saw is not shown to be the one r4617890396 raised (record, corrected).
+- **Non-blocking:**
+  - P2 widens :104's "blocks only if it defeats the PR's own guarantee" over unclosed resources, against :182. That tension was parked on 2026-11-05.
+  - Its noise is unmeasured.
+- **REOPEN ON** either of these:
+  - A pre-registered, blind-scored replay of the 2026-11-18 round on 6535 head `86b96c7d6f`, in which the bullet files `TextHandler.java:118`'s null `mimeType` and the current text does not, with E's extra findings counted for noise.
+  - A second run record where a defect on lines the PR moved, also on base, was left out of the review and then raised by a maintainer.
+
+  A reopen uses gate 1's wording (proposals file, P2), and drops the "repaired line" sentence unless the boundary is cited.
+
+**Parked by the gate: P3**, "a fix the review posts gets the checks the review gave the PR" (:162). Blocking objections:
+- **One run record.** The owner's memory notes on earlier rounds (PRs 380, 6801, 6157, REST 778, cohortbuilder 783) are not in the store.
+- **No measurement.** The owner-directed precedent ships a rule on a measurement (2026-11-05), and P3 has none.
+- **Non-blocking:** "name every input and exception type it changes" doesn't say where. Naming them in the comment would collide with :161's word limit and posting.md:13. It also overlaps :18 and :82.
+- **REOPEN ON** either of these:
+  - A second run record in the store where a fix the review posted or drafted was broken by a maintainer or a refuter. Each owner-memory round above qualifies if written up from its transcript.
+  - A replay where a reviewer given the r4473604840 block plus P3 names `AccessDeniedException`, and one without P3 doesn't.
+
+  A reopen uses gate 1's wording (proposals file, P3).
+
+**Parked counts advanced.**
+- **"Seen, then set aside" (2026-11-05): 1 → 2 run records.** Gate 1 reads 6535's order mismatch as meeting the REOPEN: set aside twice as "not realistic" (record :17), then raised by the maintainer (r4617856131). The two records' filters differ (R-B's was :161, the old :163; 6535's was a realism judgment), and no proposed edit reaches both. P1a's REOPEN stays unmet.
+
+**Parked, new, 1 record each (6535).**
+- **O1:** `resolve-ticket`:163 and `pr-harden`:262 carry the field list that P1 widened in pr-review. **REOPEN ON:** a run record of either skill where a ticket label the fetch did not print mattered.
+- **O2:** the unanchored reviewer's brief asked for "defects this PR introduces relative to master" (record :23). pr-review prescribes no such agent. **REOPEN ON:** a second record.
+
+**Corrected.** The record first claimed two things, and both were corrected after gate 1:
+- that a defect present in both trees is "invisible" to a base comparison;
+- that the MediaHandler stream is the item meeting the REOPEN.
+
+**Step 6, before the commit.**
+- **Equal, live against pushed (`origin/main` `cf5b82b9`):** the 25 other skill files, the pipeline and bin scripts, `proposing-fixes.md`, and the 8 pushed hook files. Live skill against live hook: both gates.
+- **Red, as on 2026-11-15:**
+  - `CLAUDE.md` carries the owner's 2026-11-13 bash 5 edit. It is not this retro's to publish.
+  - `kill-session-scratchpad-procs.sh` and its `.log` are live only.
+
+**Gate sessions.** Both ran `claude-opus-5-5`, headless, from folders of copies, with no project memory and read-only tools.
+- Gate 1: `efc908b8-b7bb-41a8-98de-214dee88d48f`, $1.93. Its first reply was refused once by the Stop hook for unreasoned unchecked items.
+- Gate 2: `8b5a2a53-dc93-430d-9332-9bec119ba688`, $0.65.
+
+**Running parked counts:** "seen, then set aside" 1 → 2 run records. The others are unchanged.
