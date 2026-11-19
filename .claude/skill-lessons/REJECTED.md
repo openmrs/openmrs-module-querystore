@@ -6792,3 +6792,145 @@ them. This pass read the 303 non-routine ones in full. It also read the session 
 **Budgets:** `pr-review` 9226 → 9300 and `skill-retro` 2856 → 2911, with their whys.
 
 **Running parked counts:** unchanged in run records.
+
+## 2026-11-19 (ninth owner-directed pass: every review session read in full, every review memory, and a fresh audit of the skill) — 20 changes applied after two gate rounds; machinery outside the repo updated; 7 shapes rejected or parked with reasons; linter 17 files, 0 findings; **pr-review 0.35.0, skill-retro 0.8.1**
+
+The owner asked for "one more final round of very careful checking … even if that means using more tokens". So this pass
+read the sources that earlier passes had only searched, and measured where review time goes.
+
+**Evidence read:**
+- **Sessions.** The text of all 722 pr-review sessions (2026-09-08 to 2026-11-19), with the owner's typed messages
+  and each subagent's brief and report.
+  - The first corpus missed background agents' reports. The control, 0 of 401 refuter results matched, exposed it, and
+    the builder then read task notifications.
+  - 25 headless readers took one date-ordered chunk each, and each reported all its sessions read.
+  - Three synthesizers merged them into catalogs: A (303 sessions), B (227) and C (172).
+  - Two mergers produced the skill-text list (D1) and the machinery list (D2), with every rule dated against
+    querystore's history.
+- **Memories.** All 117 review-related project memories, read against the skill.
+- **Audit.** A fresh audit of SKILL.md and posting.md found 18 internal defects.
+- **Measurements, each calibrated:**
+  - Time to first report: median 39 minutes, p90 102.
+  - Model time 38%, background waits 16%, and a further 30% mostly waits ended by compaction; foreground tools 16%.
+  - 239 of 722 sessions compacted.
+  - Context fill: 224M characters, 67% of it code reading.
+  - Refuters: 199 of 337 results carry a refuted, weakened or wrong signal.
+  - Threads: 46 of 1,122 reached four messages, mostly productive.
+  - Reactions: no thumbs-down.
+  - The Action: 17 repos, fetching SKILL.md only, about 15 runs since August.
+- **Today's run records:** patientqueueing 41 (a probe's data picked its branch) and core 6605 (an A/B whose arms started
+  differently).
+- **D1's dating.** Almost every "covered, not followed" in the catalogs predates its rule: eleven of the thirteen rules
+  involved shipped on 11-19.
+
+**Applied, pr-review 0.35.0:**
+1. A blocker checks the base and names the default, version or caller that reaches it. Severity is the refuter
+   tallies' most common error.
+2. Every fix recommended goes to a refuter: code, prose, or a named alternative. It is checked against sibling inputs and
+   supported versions. 139 instances.
+3. Agents:
+   - they start as soon as what they check exists, with a budget written in their brief;
+   - they stop at 30 minutes, after which the finding ships as a question or is held, and the agent is recorded as owed;
+   - posting waits for an agent only up to its budget.
+
+   82 waits; one unbounded refuter ran 16 hours.
+4. The private check runs first in Step 1.
+   - Outside CI, a missing PRS file is a failed check.
+   - An authentication, privilege or secrets PR with an unreadable ticket stays private.
+   - In CI, such a review states code facts only.
+
+   Of 23 lookup instances, 20 broke the 10-21 rule.
+5. Where it runs: dependency, Liquibase and consumed-API changes boot base and head on a scratch server, and run the
+   consumers' tests. P4's and P5's REOPEN ON are met:
+   - core PR 6462: base 200, PR 500;
+   - core PR 6694: legacyui went red after a "can merge as is".
+6. A test run or probe needs a nonzero count, production entry, a matched control and its own exit status. 88
+   instances. The parked "pipe swallows the exit status" is met.
+7. Privilege probes use restricted users and data that takes every branch. 11 instances, plus today's record.
+8. Agents get scratch isolation. The parked "residue on shared rigs" is met.
+9. CI that never ran a head is said, and its command is run. 18 sessions.
+10. Owed items gain applied suggestions, re-tested at the head, and sibling-PR leads, written into that PR's record.
+11. The round record is written mid-round, with the scratchpad, rig ports, data directory and running agents.
+12. Decision records span repos and closed threads.
+13. The pre-post re-fetch covers each open PR in a stack.
+14. The formatter check is made real; build-config PRs build on CI's JDK matrix; mutations run one per run.
+15. The gate's brackets are filled each round, its line 5 is made truthful, and it names stacked merge order. 47 recitals
+    had been left unfilled; 15 said "not posted" after a post.
+16. An exploitable defect the base already has goes to the user privately. In CI, the review posts only a neutral
+    request for a security review. 4 sessions did this on their own judgment.
+17. Addressing the review comments now replies in the threads it addressed and, on the owner's own PR, corrects the
+    description lines the push made false. Resolving a thread and other writes still need their own ask.
+    - The new fact, which D1 and gate 1 lacked: 0.34.0's "own ask" clause came from a session's project memory. The
+      owner's words were "commit and push", and they asked for replies on legacyui PR 277 and fhir2 PR 635.
+    - The source memory was aligned.
+18. On the owner's own PR, the report offers to apply the findings and push. Findings held back privately are excluded.
+    57 loops of the owner asking for the fixes next.
+19. A recipes pointer. `~/.claude/pr-review-recipes.md` was written from D2's grounded draft: 9 sections, four facts
+    spot-checked against their sources.
+20. The auditor's consolidation edits:
+    - answering an author's question versus the clean verdict;
+    - label tags removed from the skill's own prose;
+    - em-dashes removed from examples;
+    - the body rules and the clean-verdict rule deduplicated;
+    - the two build rules merged;
+    - Step 1's garbled sentence fixed;
+    - CI scoping;
+    - the numbering ban kept.
+
+**Revised at the gates:**
+- The exploit rule is narrowed to defects already on the base.
+- The own-PR offer excludes findings held back privately.
+- Resolving a thread keeps its ask, and description fixes are limited to the owner's own PR.
+- The `why` is corrected.
+- The numbering ban is restored.
+- "within the 60" is kept.
+
+**skill-retro 0.8.1:** Step 6 names `~/.claude/pr-review-recipes.md` as local.
+
+**Machinery outside the repo:**
+- **Round records.** 49 open PRs have round records seeded with pointers to their notes: 41 by strict match, and 8 by a
+  looser match I verified. A first count read a trailing tab as a note.
+- **Memory corrections:**
+  - no-stamped-labels: the triage body and the stale override;
+  - resolved-thread-followups: a fresh comment instead of reopening;
+  - metadataexport merge-fast: stop when the PR has merged;
+  - both canonical-source notes: check the version;
+  - a private PR's note and its index line;
+  - the querystore address-rule note.
+- **Local checkouts.** Both local querystore checkouts were fast-forwarded. They had been at 0.24.0 and 0.26.0.
+
+**Rejected or parked:**
+- Refuter or second reviewer on by default: parked. The 2026-07-23 revert and the 11-19 replay stand, and :127 with :129
+  already covers a solo posted blocker.
+- Usage and concurrency caps: belong in the launcher, not the text.
+- A per-PR claim: the re-fetch caught every duplicate.
+- The unchanged-head short-circuit: re-audits found defects.
+- Hunk-rule exemptions: the owner settled this on 11-19.
+- A merge-readiness line: refuted, 14 of 14.
+- Repeated owner questions: parked. **REOPEN ON:** a run record of an item asked three times.
+
+**REOPEN ON not met:**
+- the second reviewer;
+- brief labels;
+- Action suggestions;
+- a change already on its base: d4c4bdb7 was the PR itself, merged;
+- "seen, then set aside": run records stay at 2;
+- O2;
+- the 10-23 bypass;
+- P7 and P10.
+
+**Left to the owner:**
+- whether to stop posting reviews on their own PRs;
+- the CI half of the exploit rule;
+- three hooks D2 proposed: an `~/.m2` install guard, a per-PR claim note and a refuter time box;
+- the Action prompt's "post nothing" when an author has asked a question.
+
+**Gate sessions:** cbe41864 ($1.30) and e3426fed ($0.60). The second found nothing in the diff, and one memory outside
+it, which was corrected.
+
+**Cost of this pass:** about $95. Readers about $68, synthesizers and mergers about $18, the memory reader and auditor
+$5, the pilot $3 and the gates $2.
+
+**Budgets:** `pr-review` 9300 → 9756, posting.md 2185 → 2236, `skill-retro` 2911 → 2916.
+
+**Running parked counts:** unchanged in run records.

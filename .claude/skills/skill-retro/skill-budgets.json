@@ -3,9 +3,9 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2856,
-      "to": 2911,
-      "why": "Step 3 lets the owner direct a change in place of the bar, with the description, the single-sighting line, the single-record anti-pattern and Step 5's refuter question made to agree, keeping Step 4's prune question and Step 5's refutation, after sessions answered the owner's 'add this to the skill' three ways (a replay first on core PR 6535, a direct edit on core PR 6790 followed by 'why is it that this time you did not advise first doing a skill retro?', and retro-first on 2026-11-19 until challenged) while the ledger applied owner-directed changes outside the written bar at least seven times; per the typed messages read 2026-11-19 (+55 words)"
+      "from": 2911,
+      "to": 2916,
+      "why": "Step 6 names ~/.claude/pr-review-recipes.md, this machine's measured how-tos that pr-review reads, among the local files kept out of the repo (+5 words)"
     },
     "pr-harden": {
       "from": 10532,
@@ -33,14 +33,14 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 9226,
-      "to": 9300,
-      "why": "Step 5 says what addressing the review comments means outside CI (every open comment, a bot's included, built and tested, committed and pushed to the PR's head branch; replies, resolving threads and description edits need their own ask), after the owner had to spell it out: on o3forms PR 12 a session stopped at local changes ('by address i mean commit and push to the pull request whose comments you were addressing'), initializer PR 338 took two more asks to push, and fhir2 PR 635 left a Greptile comment out as not 'the review comment'; the rule sat in querystore's project memory, and most later requests ran in folders that do not load it; per the typed messages read 2026-11-19 (+74 words)"
+      "from": 9300,
+      "to": 9756,
+      "why": "Owner-directed final pass over all 722 review sessions (25 readers), 117 review memories and a fresh audit of the skill: a blocker checks the base and names its reach, severity being the refuter tallies' most common error; every fix recommended, prose included, goes to a refuter, broken or untested fixes being the next; agents start early, carry a budget in their brief and stop at 30 minutes, after 82 waits and a 16-hour unbounded refuter (def9cf70); probes count on the same terms as searches; runtime, consumer and privilege checks run where the code runs, P4 and P5 reopened by core PR 6462 (base 200, PR 500) and core PR 6694 (legacyui red); the private check runs first; CI that never ran a head is said and run; an exploitable defect the base already has goes to the user privately; addressing replies in its threads and, on the owner's own PR, fixes the description, because 0.34.0 took its 'own ask' boundary from a session's memory while the owner had asked for replies on legacyui PR 277 and fhir2 PR 635; the owner's own PR ends with an offer to apply and push, after 57 loops of the owner asking next; a recipes file, where it exists, holds this machine's how-tos; the round record is written mid-round with what a resumed session needs (c6f5028a); prunes, mostly the auditor's consolidation edits, remove about 290 words; per the readers' catalogs, 2026-11-19 (+456 words)"
     },
     "pr-review/posting.md": {
-      "from": 2072,
-      "to": 2185,
-      "why": "the re-read before posting adds the head, merge state, title and each replied-to thread's resolved and outdated state (7 PRs' notes, and 6 PRs where a reply in a resolved or outdated thread went unseen), and posting waits for the last check started for the round, since in 4 sessions a comment was posted while its own refuter or suites ran and was edited once they reported"
+      "from": 2185,
+      "to": 2236,
+      "why": "posting.md's gate fills its brackets each round and names the stacked PRs that merge first, after 47 sessions recited the bracket unfilled and 15 said 'not posted' after posting; the pre-post re-fetch covers every open PR in a stack, after six duplicate asks across one; posting waits for agents only up to their budget; per the readers' catalogs, 2026-11-19 (+51 words)"
     },
     "ticket-pool": {
       "from": 5084,
@@ -71,11 +71,11 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 9300,
-    "pr-review/posting.md": 2185,
+    "pr-review": 9756,
+    "pr-review/posting.md": 2236,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2911,
+    "skill-retro": 2916,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1755,
