@@ -33,14 +33,14 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 8513,
-      "to": 8548,
-      "why": "Step 5 gains a paragraph: in an attended session, when another reviewer raises what the review should have found or something it posted proves wrong, the session appends a record, under its own header, to ~/.claude/skill-lessons/ in that turn, because a 2026-11-19 read of 722 pr-review sessions found misses reached the store only when the owner asked for a write-up (esm-core #1946, core #6757, stockmanagement #66 and cohortbuilder #783 never did); Step 3 also holds a draft shown to the user to the bar of a post; cutting :143's first sentence and :185's restatement of the label rule pays for all but 35 words"
+      "from": 8548,
+      "to": 8725,
+      "why": "six rules from a 2026-11-19 read of 250 reviewed PRs' later comments and 172 per-PR memory notes: a PR whose ticket only the MCP reads is appended to PRS (three were missing); a resolved or outdated thread gets a fresh comment, not a reply (6 PRs); builds and probes use a scratch worktree, Maven repository and data store (8 PRs); added lines are read for what they do (9 no-op points other reviewers raised); a test the PR adds or the review suggests is shown able to fail (9 test-design points); and code posted for the author to commit goes to a refuter first (13 of 88 later points sat in code or text the review suggested, and a refuter saw the suggestion before posting in at most 1 of 26 such rounds); cutting three anti-patterns that restated Step 2, Step 3 and Convergence pays for all but 177 words"
     },
     "pr-review/posting.md": {
-      "from": 2070,
-      "to": 2072,
-      "why": "the first gate line's private-ticket clause covers a post about a private PR as well as one on it, matching Step 1, since pr-review 0.27.0's new Step 1 bullet has a review name another open PR on the line it breaks"
+      "from": 2072,
+      "to": 2185,
+      "why": "the re-read before posting adds the head, merge state, title and each replied-to thread's resolved and outdated state (7 PRs' notes, and 6 PRs where a reply in a resolved or outdated thread went unseen), and posting waits for the last check started for the round, since in 4 sessions a comment was posted while its own refuter or suites ran and was edited once they reported"
     },
     "ticket-pool": {
       "from": 5084,
@@ -71,8 +71,8 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8548,
-    "pr-review/posting.md": 2072,
+    "pr-review": 8725,
+    "pr-review/posting.md": 2185,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 2831,

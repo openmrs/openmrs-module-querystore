@@ -6409,3 +6409,72 @@ The owner asked why P2 and P3 needed a retro "when they were real issues that wo
   parked "seen, then set aside" entry of 2026-11-05, and P1a of 2026-11-15), not more reviewers.
 
 **Running parked counts:** unchanged in run records.
+
+## 2026-11-19 (second owner-directed pass: what other reviewers raised after these reviews, and the per-PR memory notes) — 8 applied (6 rules, a wording repair, 3 anti-pattern prunes as one), weaker lessons left out on purpose; seven gate rounds over the staged diff, the last finding nothing; linter 17 files, 0 findings; **pr-review 0.29.0**
+
+The owner asked "shouldn't we just directly add these improvements to the skill?". So this pass applied directly,
+gated by fresh agents on the exact diff, and did not write the run records first.
+
+**Evidence read.**
+- **Outcomes on GitHub.** For the 250 PRs the 722 sessions reviewed, 36 got new top-level inline comments or
+  changes-requested reviews from other humans after this skill's first review: 105 items, fetched read-only.
+  - Two fresh agents judged them against everything posted under the owner's account before each item: 31 missed
+    defects, 57 missed quality points, 6 already raised, 7 declined, 3 not findings, 1 unclear.
+  - 13 of the 88 misses sat in code or text the review had suggested, on 11 PRs. Two were re-checked by hand
+    against the posted suggestion blocks (billing PR 891, authentication PR 59).
+- **Per-PR memory notes.** Six readers went through 172 of them across the project folders. 15 lessons rest on two or
+  more PRs, and none was a rule. The largest, "check what you suggest", rests on 36 PRs: 29 posted then found broken
+  or untested, 7 caught by a refuter before posting.
+- **Whether a refuter saw the suggestion.** Transcripts of 26 posting rounds on 10 of those 11 PRs: a refuter ran
+  before the post in 11, and at most one was given the suggested code. That one, on core PR 6535, is recorded in its
+  note as refuting the findings, not the code.
+- **The 2026-11-18 replay** that left P3 parked had disallowed subagents, so it could not test a refuter step.
+
+**Applied, pr-review 0.29.0:**
+1. **Step 1.** When the MCP reads a ticket whose REST URL 404s and PRS has no key for the PR, the review appends
+   `<url> <key>` to PRS. Three private PRs were missing from it. They were added to the local list on 2026-11-19, and
+   none is named in the public repo, which was searched with a positive control.
+2. **Step 1.** Before replying in a thread, check `isResolved` and `isOutdated`. A resolved or outdated thread gets a
+   fresh comment on the head lines, or the review body where those lines are gone, linking that thread. :21's
+   surviving-sub-point reply follows the same rule. Six PRs.
+3. **posting.md.** The pre-post re-read takes `headRefOid`, `state` and title, and each replied-to thread's state.
+   - Merged or closed: stop.
+   - Head moved: re-check and re-anchor.
+   - Thread now resolved or outdated: fresh comment.
+   - Title changed: re-read the ticket.
+   Posting waits for the last check started for the round. Seven PRs' notes; four sessions edited a posted comment
+   once their own still-running refuter or suites reported.
+4. **Step 3.** Code posted for the author to commit (a suggestion block, or a fix in a code block) goes to a fresh agent
+   with that exact code and the PR head before it is shown, staged or posted, where one can be started. The old
+   "never a default step" is scoped to findings.
+5. **Step 3.** For the test the review names or suggests, undo the guarded line while keeping the code compiling,
+   confirm the test fails on its assertion, then restore it. Nine test-design misses.
+6. **Step 3.** Read each added line for what it does. A no-op is a one-line nit; master's copies settle what the
+   project accepts, not whether the line does anything. Nine misses. This carries the substance of the parked P1b.
+7. **Step 3.** Build and test each ref in its own worktree, with a scratch Maven repository holding no local installs
+   (`-U`, and `-am` beside `-pl`) and a scratch data store. Eight PRs.
+   - A first wording chained `~/.m2` as a tail. Gate round 3 read Maven's resolver source: local metadata in the tail
+     still lets a newer local install win.
+   - That claim was not run, so the rule avoids the tail rather than asserting how it behaves.
+8. **Prunes.** Three anti-patterns that restated other rules were cut: "Don't invent concerns to look thorough"
+   (:118), "Don't post unverified suspicion as an `issue`" (:94, :122, :166) and "Don't mistake a verified diff for a
+   solved problem…" (:41, :47, :60-66). None carried a measurement.
+- **Budgets:** `pr-review` 8548 → 8725 and `pr-review/posting.md` 2072 → 2185, with their whys.
+
+**Left out, with the reason.** Each needs a sharper mechanism or more than its evidence shows:
+- concurrent sessions reviewing one PR or stack (4 PRs);
+- running tests in CI's order (3);
+- recording each round's sha and what was weighed (6; rule 2's capture covers misses only);
+- privilege probes on a running server (5; related techniques were measured and not adopted, 2026-10-23);
+- claims about CI, deploys or the merge (5);
+- the safety classifier stopping security probes (3);
+- error-handling breadth (8 outcome misses; the existing silent-failure rule and rule 4 cover the suggested-code cases);
+- missed call sites (4; 0.25.0's same-defect bullet exists, and the gap is compliance);
+- docs PRs' factual errors (2 PRs).
+
+**Gate sessions**, each `claude-opus-5-5` headless from a folder of copies, with no project memory and write tools
+disallowed: f81ad2ab ($0.86), 675435ab ($0.72), df65e824 ($0.93), d9d1678c ($0.83), 1be63c89 ($0.81), da77eb8b ($0.75)
+and 857b5b65 ($0.67). Round seven found nothing still wrong.
+
+**Running parked counts:** the 2026-11-18 P3 and the first 2026-11-19 pass's P3 are superseded by rule 4. P1b's
+substance is in rule 6.
