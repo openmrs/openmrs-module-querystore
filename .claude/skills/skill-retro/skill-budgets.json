@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 9022,
-      "to": 9090,
-      "why": "Step 3 settles a claim about what CI, a deploy or the merge does from the runs, the published artifact or the merge settings, after four wrong ones made from assumption or a workflow file, two of them in posted reviews this would have caught (core PR 6590 on SNAPSHOT publishing, fhir2 PR 606 on the squash message), per the per-PR memory notes read 2026-11-19 (+68 words)"
+      "from": 9090,
+      "to": 9226,
+      "why": "Step 1 and Step 5 carry what a round left owed, after per-PR notes carried owed items the round record had no place for, among them refuters stopped by the weekly limit on esm-stock PR 733 and a private PR, and a private PR whose clean verdict was challenged after an owed item its notes listed was never applied; Step 3 names failure paths, after other reviewers found failure-path defects our reviews missed on core PRs 6544, 6605 and 6744 and cohortbuilder PR 781; Step 4 puts a fix that takes something away from users to the user, after esm-stock PR 734's was posted undecided by the user, applied verbatim and changed a round later; per the notes and outcome judging read 2026-11-19 (+136 words)"
     },
     "pr-review/posting.md": {
       "from": 2072,
@@ -71,7 +71,7 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 9090,
+    "pr-review": 9226,
     "pr-review/posting.md": 2185,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,

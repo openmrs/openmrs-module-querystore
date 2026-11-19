@@ -6629,3 +6629,86 @@ prompts from 2026-03-09, and 553 sessions with a `/pr-review` prompt started bef
 - **Gate sessions**, `claude-opus-5-5` headless from folders of copies, write tools disallowed: ebfa555d ($0.27) and
   e438931b ($0.25).
 - **Budget:** `pr-review` 9022 → 9090, with its why.
+
+## 2026-11-19 (seventh owner-directed pass: the rest of what earlier passes set aside, read at its source) — 3 applied, 10 checked and left with their reasons; two gate rounds over the staged diff, the second finding nothing; linter 17 files, 0 findings; **pr-review 0.33.0**
+
+The second pass set nine items aside under one shared reason ("needs a sharper mechanism or more than its evidence
+shows"), not one reason and REOPEN ON per item. The sixth pass opened two of them and found a rule. This pass read every
+remaining item at its anchor in the per-PR notes or the outcome judges' reports, together with the harvest's lessons
+resting on two PRs.
+
+**Applied, pr-review 0.33.0:**
+1. **Owed items, Steps 1 and 5.** The round record also holds what is still owed: a check that did not finish (a refuter
+   stopped by a usage limit, for example), a change not yet applied, or a question the user has not answered. Before its
+   verdict, Step 1 runs or applies each owed item, or says it is still owed.
+   - **Evidence.** A search found owed items in 18 per-PR note files; the esm-stock PR 733 note was the positive control.
+     - Refuters were stopped by the weekly limit on esm-stock PR 733 and on a private PR.
+     - On another private PR, a clean verdict was challenged after an owed item listed in its note had never been applied.
+     - 0.30.0's round record had no place for any of these.
+   - **Revised at the gate:** added "a change not yet applied" and "run or apply", because the unapplied item was a
+     change, not a check.
+2. **Failure paths, Step 3's dimension list.** For each catch, throw or fallback the PR adds or moves, ask three questions:
+   what else it catches, whether an earlier step throws before it is reached, and what the caller or user then sees.
+   - **Evidence.** After our review, other reviewers raised failure-path defects in code the PR added:
+     - core PR 6744, what else it catches;
+     - core PR 6605, whether it is reached;
+     - core PR 6544 and cohortbuilder PR 781, what the caller sees.
+     - The gate confirmed each with `gh pr diff`.
+     - Two more were in catches the review itself suggested (core PR 6535 and a private PR). Those fall under 0.29.0's
+       refuter for posted code.
+   - **Counter-measure.** 422 of 1,122 top-level inline comments since 2026-09-08 (38%) mention a catch, throw, exception
+     or fallback. The regex was checked on 2 known hits and 2 known misses. Reviews already look at failure paths; what
+     they missed were these three questions.
+3. **Trade-offs, Step 4's recommended-default bullet.** A fix that takes away something people using the product had is
+   a trade-off. Say what it loses, and put it to the user with the pick before posting. In CI, post it as a question to
+   the author.
+   - **Evidence.** On esm-stock PR 734, a posted fix hid requesters' own stock figure. Its note says the trade-off "was
+     decided by me, not put to the user as a choice". The author applied the fix verbatim, then changed it a round later
+     when the user chose to ask the author.
+     - proposing-fixes.md's "undecidable because X" was in force (in the repo since 2026-11-02) and did not fire.
+   - **Not reached:** cohortbuilder PR 783. There the pick rested on one column of data and took nothing away; a refuter
+     caught it. The `why` does not cite it.
+
+**Checked, no change:**
+- **Privilege claims on a running server (5 PRs).** The verification already required caught each wrong premise before
+  posting. The premises were a roles CSV read instead of runtime grants, and a probe user missing a prerequisite
+  privilege.
+- **Concurrent sessions.**
+  - 5 of 257 PRs had a second pr-review launch within 3 hours, before the first session ended. Core PR 6590, the known
+    case, is among them.
+  - Its duplicate stopped at the pre-post re-fetch, so the cost was compute.
+  - One duplicate question landed on a sibling PR of a stack (chartsearchai PR 621).
+  - A stale shared install and a shared dev database are now covered by 0.29.0's scratch stores.
+- **Run order (3 PRs).**
+  - One blocker the review itself found in a Linux container.
+  - One suggested test the author made order-safe.
+  - One note.
+  - Since 0.32.0, a claim about CI's result is read off the runs.
+- **The safety classifier stopping security probes (3 PRs).** Each session said what stayed unverified. No harm is on
+  record.
+- **Refuter briefs.**
+  - The incidents:
+    - On a private PR, a brief's "known and accepted" list kept five refuters off a regression a maintainer later raised.
+    - On medicationsideeffects PR 1, a brief paraphrased an earlier comment wrongly.
+  - A regex for a known-or-skip list matches 138 of 569 briefs. It matches all 7 briefs holding "known and accepted" and
+    misses a billing refuter brief that has no such list.
+  - None of 10 sampled matches showed the failure: they re-ran base or listed only what the user had decided.
+  - **REOPEN ON:** a second record of a brief's label suppressing a finding.
+- **Usage limits stopping refuters (2 PRs).** Folded into item 1.
+- **Tests that pin file contents (2 PRs).** Step 3's "runtime effect, not a proxy" and 0.29.0's refuter for posted code
+  reach both.
+- **Residue on shared rigs (3 PRs).** Probe users, roles and stock rows were left on local replicas, each recorded in its
+  note. No harm is on record. **REOPEN ON:** a measurement skewed by such residue.
+- **Missed call sites (4).** Three predate 0.25.0's same-defect bullet (2026-11-05). One, webservices.rest PR 779, came
+  after it.
+- **Docs factual errors (2 PRs).**
+  - One was in text the review suggested, which 0.29.0's refuter now covers.
+  - The other is not a clean miss: our review started two minutes before the maintainer's nine comments and posted an
+    hour after them.
+
+**Gate sessions.** Both ran `claude-opus-5-5` headless from folders of copies, with write tools disallowed: 9fd23d02
+($0.40) and 99f66069 ($0.22). The second found nothing still wrong. It wrote one scratch file in /tmp and deleted it.
+
+**Budget:** `pr-review` 9090 → 9226, with its why.
+
+**Running parked counts:** unchanged in run records.
