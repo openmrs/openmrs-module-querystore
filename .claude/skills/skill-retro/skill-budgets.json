@@ -3,9 +3,9 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2831,
-      "to": 2848,
-      "why": "Step 6 names ~/.claude/pr-review-rounds/, the local per-PR round records pr-review 0.30.0 keeps, as kept out of the repo, so a new directory under ~/.claude/ is not an unsynced copy by construction (+17 words)"
+      "from": 2848,
+      "to": 2856,
+      "why": "Step 6 names ~/.claude/pr-review-voice.md beside ~/.claude/pr-review-rounds/ as local and kept out of the repo, since pr-review 0.31.0 reads it and it holds the account owner's writing profile (+8 words)"
     },
     "pr-harden": {
       "from": 10532,
@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 8806,
-      "to": 8987,
-      "why": "a per-PR round record at ~/.claude/pr-review-rounds/, read in Step 1 and appended at the end of each round, because of 62 PRs reviewed from two or more project folders 33 kept separate memory notes in each folder and 25 had a note some of their rounds could not see (measured 2026-11-19), and re-deriving a clean round cost 1-4 hours on 6 PRs (+181 words)"
+      "from": 8987,
+      "to": 9022,
+      "why": "Step 4 has the review write each comment and reply posted under the account owner's name in their measured voice, kept in ~/.claude/pr-review-voice.md where it exists, from the first draft: the owner asked for replies that do not read as AI-generated ten times from 2026-07-20 to 2026-11-18, the profile loaded in one project folder, and the two drafts written from it were posted unchanged (+35 words)"
     },
     "pr-review/posting.md": {
       "from": 2072,
@@ -71,11 +71,11 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8987,
+    "pr-review": 9022,
     "pr-review/posting.md": 2185,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2848,
+    "skill-retro": 2856,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1755,

@@ -6576,3 +6576,32 @@ it.
 1ee7b77a ($0.32) and 9172ce1a ($0.35). The third found nothing still wrong.
 
 **Running parked counts:** unchanged in run records.
+
+## 2026-11-19 (fifth owner-directed pass: the prompt history older than the transcripts) — 1 applied (the owner's measured voice, read by every session), 1 pending decision settled by the owner's own words; three gate rounds over the staged diff, the last finding nothing; linter 17 files, 0 findings; **pr-review 0.31.0, skill-retro 0.7.4**
+
+The fourth pass called the history exhausted, and that was wrong. `~/.claude/history.jsonl` keeps the owner's typed
+prompts from 2026-03-09, and 553 sessions with a `/pr-review` prompt started before the oldest surviving transcript
+(2026-09-08). After each launch they hold 539 non-routine typed messages. Read in full on 2026-11-19.
+
+- **Most early corrections became rules at the time.** The owner asked "update the skill" after nearly each one, and the
+  June–August commits match: the body rules, the label and em-dash bans, absence claims, `--stage`, the comment-commit
+  check, verified thread replies, best fix, unrelated hunks, and SNAPSHOT conventions.
+- **The request for replies that do not read as AI-generated spans the whole history.** It was made on 2026-07-20, 07-21
+  and 07-29, and seven times in 2026-11: ten in all, for replies under the owner's name.
+  - Inline comments, held by concrete rules, comply in 99% of cases. Replies had only the general tone rules.
+  - The measured profile of the owner's writing (716 comments, 2026-11-18) loaded in one project folder. The
+    openmrs-core memory contradicted it on contractions: a rater's "use contractions" against "do not" 15 to "don't" 1
+    measured.
+  - The two drafts written from the profile were posted unchanged.
+- **Applied, pr-review 0.31.0.** Step 4: where `~/.claude/pr-review-voice.md` exists, each comment and reply posted under
+  the owner's name is drafted in that voice from the first draft, "within the rules above". The file is local and was
+  created from the measured profile.
+- **Applied, skill-retro 0.7.4.** Step 6 names the file, beside the round records, as kept out of the repo.
+- **Revised at the gates:** the skill's own rules win where the voice file differs (a colon opener that diagnoses, the
+  two-sentence reply allowance); the file's tells were reworded to agree; and skill-retro says pr-review reads the file
+  rather than keeps it.
+- **Settled.** The scope-split rule stays. On 2026-08-17 the owner wrote "I do not want any changes that are not related
+  to the ticket", which outweighs the low rate at which authors heed those notes.
+- **Gate sessions**, each `claude-opus-5-5` headless from a folder of copies, write tools disallowed: f09274b9 ($0.39),
+  ccec55e5 ($0.39) and 849f615a ($0.35). The third found nothing still wrong.
+- **Budgets:** `pr-review` 8987 → 9022 and `skill-retro` 2848 → 2856, with their whys.
