@@ -3,9 +3,9 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2823,
-      "to": 2835,
-      "why": "the opening's list of the skills that append a run record adds a /harden invoked on its own, which harden 0.45.0 makes write one, and Step 1's \"A /harden invoked on its own writes none\" becomes \"wrote none before harden 0.45.0\", so the two do not contradict each other"
+      "from": 2831,
+      "to": 2848,
+      "why": "Step 6 names ~/.claude/pr-review-rounds/, the local per-PR round records pr-review 0.30.0 keeps, as kept out of the repo, so a new directory under ~/.claude/ is not an unsynced copy by construction (+17 words)"
     },
     "pr-harden": {
       "from": 10532,
@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 8725,
-      "to": 8806,
-      "why": "two corrections, 2026-11-19: where ~/.m2 and the scratch repository share an APFS volume, 0.29.0's scratch Maven repository is seeded from a clone of it minus its local installs, since an empty one costs each build its dependency downloads (a recorded 25-30 minutes) where the seed took 17-18 s and an openmrs-core api build on it 23 s; and an answer to the user about a PR's state re-runs Step 1's gh pr view and conversation fetches in that turn, after an answer about core PR 6535's maintainer comments came from a fetch 19 hours old (+81 words)"
+      "from": 8806,
+      "to": 8987,
+      "why": "a per-PR round record at ~/.claude/pr-review-rounds/, read in Step 1 and appended at the end of each round, because of 62 PRs reviewed from two or more project folders 33 kept separate memory notes in each folder and 25 had a note some of their rounds could not see (measured 2026-11-19), and re-deriving a clean round cost 1-4 hours on 6 PRs (+181 words)"
     },
     "pr-review/posting.md": {
       "from": 2072,
@@ -71,11 +71,11 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8806,
+    "pr-review": 8987,
     "pr-review/posting.md": 2185,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2831,
+    "skill-retro": 2848,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1755,

@@ -6530,3 +6530,49 @@ one author: "This is a major nitpick :)"). The rule that asks for them came from
 d036eee8 ($0.26), 4e7d06f2 ($0.26) and c48c8c30 ($0.36). The fourth found nothing still wrong.
 
 **Running parked counts:** unchanged in run records.
+
+## 2026-11-19 (fourth owner-directed pass: questions not yet asked of data already read) — 1 applied (a per-PR round record), 3 checks that found nothing to change; three gate rounds over the staged diff, the last finding nothing; linter 17 files, 0 findings; **pr-review 0.30.0, skill-retro 0.7.3**
+
+The owner asked the same question a third time. So this pass named what would show the history exhausted and checked
+it.
+
+**Checks that found nothing to change:**
+- **Our own later rounds on an unchanged head.**
+  - A first count found 106 top-level comments posted in a later round of ours on a head an earlier round of ours had
+    reviewed. A sample showed most were June–August rounds, or single rounds posted as many one-comment reviews within
+    a minute.
+  - Counting gaps of an hour or more since 2026-09-08: 7 of 1,122 comments, on 5 PRs. One was a real first-pass miss,
+    a packaging blocker on esm-medication-side-effects PR 1 found the next day. No rule follows from 7.
+- **PR size.** Median lines changed was 462 where others raised points after us and 412 elsewhere. Of PRs with 1,000+
+  lines, 17% had such points, against 14% overall. No size rule.
+- **The `@claude review` Action's own comments:** 27 top-level comments on 9 PRs, July–August, classified only
+  mechanically by reply wording. The previous pass showed that kind of signal is not trustworthy, so nothing is drawn
+  from them.
+
+**Applied, pr-review 0.30.0 and skill-retro 0.7.3: one round record per PR.** It lives at
+`~/.claude/pr-review-rounds/<owner>__<repo>__<n>.md`, is local, and stays out of the repo.
+- **Rules:**
+  - Step 1 reads it.
+  - A status answer re-reads it.
+  - Each round, a clean one included, appends to it outside CI with `cat >>` rather than Edit or Write. The entry
+    goes under a `# <date> <head sha>` header and holds what was posted and what was weighed and set aside and why.
+  - The user's decisions are appended as their own `decision` entries in the turn they decide.
+- **Evidence.** Of 62 PRs reviewed from two or more project folders (170 were reviewed in 2+ sessions), 33 kept
+  separate memory notes in each folder and 25 had a note some rounds could not see. A project memory loads in the folder
+  that wrote it. The matcher was checked on a PR known to have notes in two folders (stockmanagement PR 51).
+- **Cost.** Per-PR notes record 6 PRs where re-deriving a clean round cost 1-4 hours. One status answer omitted
+  decisions another session had recorded in such a note.
+- **skill-retro Step 6** now names the directory as kept out of the repo. The governance rule says a new directory
+  under `~/.claude/` no clause covers is an unsynced copy.
+- **Revised at the gates:**
+  - the status answer re-reads the record;
+  - `cat >>` replaced Edit or Write, because two sessions can write one PR's record;
+  - decisions are recorded in the turn they are made, with their own header, and an unsubmitted staged review is
+    "pending";
+  - a clean round writes its entry too.
+- **Budgets:** `pr-review` 8806 → 8987 and `skill-retro` 2831 → 2848, with their whys.
+
+**Gate sessions**, each `claude-opus-5-5` headless from a folder of copies, write tools disallowed: 08816a35 ($0.33),
+1ee7b77a ($0.32) and 9172ce1a ($0.35). The third found nothing still wrong.
+
+**Running parked counts:** unchanged in run records.
