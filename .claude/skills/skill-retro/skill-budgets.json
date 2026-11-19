@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 8371,
-      "to": 8513,
-      "why": "Step 1 gains a bullet: every round, look for an open PR that a maintainer has reviewed, that targets this PR's line or is due for a backport to it, and that deletes, renames or moves what this PR calls, reads or writes, and ask the maintainer on the line it breaks whether this PR waits, since openmrs-core #6790 was closed after eight review rounds ending clean because an open master PR due for a 2.9.x backport moves the state it reads and deletes a method it calls, and that trigger fires on that PR but not on a 2.9.x sibling that only shares hunks with #6790; Step 1's private-ticket rule also covers a post about such a PR (+2 words)"
+      "from": 8513,
+      "to": 8548,
+      "why": "Step 5 gains a paragraph: in an attended session, when another reviewer raises what the review should have found or something it posted proves wrong, the session appends a record, under its own header, to ~/.claude/skill-lessons/ in that turn, because a 2026-11-19 read of 722 pr-review sessions found misses reached the store only when the owner asked for a write-up (esm-core #1946, core #6757, stockmanagement #66 and cohortbuilder #783 never did); Step 3 also holds a draft shown to the user to the bar of a post; cutting :143's first sentence and :185's restatement of the label rule pays for all but 35 words"
     },
     "pr-review/posting.md": {
       "from": 2070,
@@ -71,7 +71,7 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8513,
+    "pr-review": 8548,
     "pr-review/posting.md": 2072,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,

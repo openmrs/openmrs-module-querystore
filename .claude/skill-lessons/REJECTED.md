@@ -6287,3 +6287,97 @@ The owner asked why P2 and P3 needed a retro "when they were real issues that wo
 **Consistent with P1 (0.26.0), not a test of it.** With TRUNK-6682's `backport` label in the snapshot, all 6 P2 runs filed the `@since 3.0.0` question. No arm lacked the label.
 
 **Running parked counts:** unchanged in run records. Measurement sightings for "seen, then set aside" are 3 + 2 + 3 = 8 across the 2026-11-04 and 2026-11-18 replays.
+
+## 2026-11-19 (owner-directed: pr-review lessons read from 722 session transcripts and the project memories; no run-record window) — 13 proposed: P1, P6(a) and prunes A and B applied after revision, P2 turned into this record and the replay, 5 parked, 3 killed; four gate rounds, the last three over the staged diff; linter 17 files, 0 findings; **pr-review 0.28.0**; one measurement started (addendum to follow)
+
+**Evidence read.**
+- Every main-session transcript on this machine that launched pr-review: 722, from 2026-09-08 (the oldest
+  surviving transcript) to 2026-11-19, in 21 project folders. 187 of them hold messages the owner typed after the
+  launch, 425 in all once task notifications and compaction summaries are dropped.
+- Calibrated regex counts over those messages, by session: the owner asked why a review missed something in 9,
+  for a reply that does not read as AI-generated in 7 (4 after seeing a draft), for a real-server check in 6, and
+  whether the PR was the best fix in 7.
+- About 20 review lessons that sessions saved to project memories in 8 folders, none of them in this store.
+- This ledger. The proposals and gate 1's reply were kept only in session 44d9b58a's scratchpad.
+
+**Applied, pr-review 0.28.0.**
+- **P1, Step 5:** "**When the review turns out wrong, record it.** In a session the user is part of, not in CI,
+  when another reviewer raises what this or an earlier round should have found, or something a round posted
+  proves wrong, append, under its own `# ` header, to `~/.claude/skill-lessons/<date>-pr-review-<repo>-<n>.md` in
+  that turn: …; and this session's id. A private PR's record goes under `confidential/`."
+  - **Corroborated by:** the owner's direction, and the read above. Misses reached this store only when the owner
+    asked for a write-up: #53, #6827, #781, #6535 and #6790, each after 2026-11-04. Not written: esm-core #1946
+    (2026-10-19, the session ended on "Want me to draft the two proposals?"), core #6757 (2026-10-26, it ended on
+    "Shall I write the capture and run the retro?"), stockmanagement #66 and cohortbuilder #783. The 2026-11-08
+    section had already recorded that `pr-review` has no capture step.
+  - **Revised at the gates:** "attended" became "a session the user is part of, not in CI", because SKILL.md is
+    also the `@claude review` Action's prompt; a transcript path became the session id; a sentence of rationale
+    about memory and a "draft sent back" trigger were dropped; "this review" became "this or an earlier round";
+    "if any" became "or that none did"; "write" became "append, under its own `# ` header", so a second record on
+    the same PR and day does not overwrite the first.
+- **P6(a), Step 3:** "run it before posting" became "run it before you show, stage or post the reply", matching
+  posting.md:7. Incidents: cohortbuilder #783 (2026-11-17, "I skipped it here because this was a draft for you")
+  and appointments #221 (three wrong statements in the evidence behind a draft). Gate 1 asked for records first;
+  it was applied on the owner's direction, as the 2026-11-18 P1 was.
+- **Prunes:**
+  - A: :185's restatement of the label rule, which keeps its homes at :139, :149 and posting.md:13. "Three
+    habits" became "Two habits".
+  - B: :143's first sentence, which keeps its homes at :129, :140 and :145.
+  - No measurement stood behind either.
+- **Budget:** `pr-review` 8513 → 8548, with its `why`.
+
+**Parked by gate 1.**
+- **P3, "code you post always gets the refutation pass".**
+  - It contradicts :127 ("never a default step").
+  - In the memory's incidents a refuter was already running before the post.
+  - CI's `--allowedTools` has no Agent tool.
+  - **REOPEN ON:** the 2026-11-18 P3 conditions, or a record under the new Step 5 paragraph of a posted fix that
+    broke with no refuter run.
+- **P4, a real-server run before a clean verdict on runtime behaviour.**
+  - The four public real-server runs found nothing in the PR under review; one found a master bug instead.
+  - The one catch is on a private PR, and the one timed run took 52 minutes.
+  - **REOPEN ON:** a public record where a real-server run found what the review's tests missed.
+- **P5, running consumers' own tests when a change narrows what the base accepted.**
+  - Every incident is on a private PR, and :88 and :106 cover it.
+  - **REOPEN ON:** a public record of a consumer break the review read past.
+- **P7, any ask on a PR judged ready carries the false-positive bar.**
+  - One event, core #6757, was counted twice; #6701's ask was never posted.
+  - **REOPEN ON:** a second record.
+- **P10, Step 2 names "no change here" and other layers as shapes.**
+  - 1 of the 7 "best fix?" challenges found that shape (fhir2 #635, the locale pinned in the pom). Four of the
+    seven found something, but the others were a simpler implementation, a coverage gap and a private PR.
+  - **REOPEN ON:** a second record where the better fix the review missed was one of those shapes.
+
+**Killed by gate 1.**
+- **P6(b), a voice rule:** :165 and :185 already require it, and 3 of the 7 requests were instructions before any
+  draft existed.
+- **P8, a preference-versus-blocker line in the gate:** wrong place. On webservices.rest #767 the gate already said
+  "none"; the preference came in a later answer that no gate line governs.
+- **P9, shortening the recited gate:** its premise came from a miscalibrated script, which counted only quoted gate
+  lines. All six sampled reports carried all five. No owner message complains of report length, and the edit
+  contradicts :169-171.
+
+**Observed, measurement started.** A second reviewer briefed without the review's findings:
+- It ran in 54 of 59 openmrs-core-folder sessions from 2026-11-05, against 3 of 136 before, and in 8 of 71
+  sessions elsewhere, against 6 of 456 before. It follows a project memory written 2026-11-05, and no owner message
+  asked for it. The classifier was a regex over Agent briefs, checked on 5 known second-reviewer briefs and 3
+  refuter briefs.
+- By the sessions' own statements it found something the review missed in 12 of 71: core #6535 twice, #6597,
+  #6605, #6157, #6171 and #6801; webservices.rest #778 and #779; stockmanagement #52; esm-medication-side-effects
+  #1; and one private PR. 26 say it found nothing new and 33 don't say.
+- The closest ledger shape is the parked union of two reviewers (2026-10-23, 556 arm U). Its pre-registered replay
+  runs now: `artifacts/2026-11-19-6535-second-reviewer/`.
+
+**Outside the skill, for the owner.**
+- "Address the review comments" means commit and push to the PR's branch: 6 sessions on 2026-10-08/09, and the
+  rule lives only in querystore's project memory.
+- `event`'s project memory `pr-review-comment-style.md` (June) prescribes the label openers and footer the skill
+  now forbids.
+
+**Gate sessions.**
+- Gate 1 was an Agent-tool subagent of session 44d9b58a.
+- Gates 2 to 4 ran `claude-opus-5-5` headless from folders of copies, with no project memory and write tools
+  disallowed: `f317a1a6-6cfa-43c0-8794-fdd700a0a80e` ($0.46), `d4f80da8-1d90-4918-a8a1-7bcadd4fcef0` ($0.36) and
+  `2e251b46-86e2-46f8-a7ed-f1ab2bfda231` ($0.34). The fourth found nothing still wrong.
+
+**Running parked counts:** unchanged in run records.
