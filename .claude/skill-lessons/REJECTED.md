@@ -6605,3 +6605,27 @@ prompts from 2026-03-09, and 553 sessions with a `/pr-review` prompt started bef
 - **Gate sessions**, each `claude-opus-5-5` headless from a folder of copies, write tools disallowed: f09274b9 ($0.39),
   ccec55e5 ($0.39) and 849f615a ($0.35). The third found nothing still wrong.
 - **Budgets:** `pr-review` 8987 → 9022 and `skill-retro` 2848 → 2856, with their whys.
+
+## 2026-11-19 (sixth owner-directed pass: two items earlier passes set aside without opening) — 1 applied, 1 recorded as a watch item; two gate rounds over the staged diff, the second finding nothing; linter 17 files, 0 findings; **pr-review 0.32.0**
+
+- **Applied, pr-review 0.32.0.** A Step 3 bullet: a claim about what CI, a deploy or the merge does (which checks ran,
+  what is published and when, what the squash commit message holds) is read off the runs (`gh pr checks <n>`,
+  `gh run list`), the published artifact or the repository's merge settings, not inferred from a workflow file's triggers
+  or from how another repository behaves.
+  - **Evidence:** four wrong claims of that kind in per-PR memory notes, read in context on 2026-11-19.
+    - core PR 6590: a posted comment said SNAPSHOTs publish on every master push. They publish after green builds.
+    - fhir2 PR 606: a posted review body said a stale PR description becomes the squash commit. That repository squashes
+      from commit messages.
+    - A merge assumed a build plan deploys a SNAPSHOT. It did not.
+    - A subagent read a `pull_request: branches` filter and reported no CI had run on stacked PRs. CI ran on every push.
+  - **Coverage:** the rule reaches the two posted claims and the stacked-PR case. The merge-time assumption is outside a
+    review.
+  - **Revised at the gate:** `gh pr checks`, and the note that the squash-setting query returns null with exit 0
+    without push access. The gate ran it: `COMMIT_MESSAGES` on fhir2 and core with admin, `null` on `cli/cli` read-only.
+- **Watch item, not acted on.** The `@claude review` Action posted 5 suggestion blocks among 27 top-level comments in
+  2026-07/08. Authors took 2 and none is recorded as broken. CI cannot start the refuter that 0.29.0 requires for posted
+  code, and 0.28.0's capture skips CI, so a broken CI suggestion would leave no record. **REOPEN ON:** an Action-posted
+  suggestion found broken, or a harvest of the Action's outcomes from GitHub showing one.
+- **Gate sessions**, `claude-opus-5-5` headless from folders of copies, write tools disallowed: ebfa555d ($0.27) and
+  e438931b ($0.25).
+- **Budget:** `pr-review` 9022 → 9090, with its why.
