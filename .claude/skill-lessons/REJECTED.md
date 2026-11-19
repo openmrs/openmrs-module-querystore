@@ -6478,3 +6478,55 @@ and 857b5b65 ($0.67). Round seven found nothing still wrong.
 
 **Running parked counts:** the 2026-11-18 P3 and the first 2026-11-19 pass's P3 are superseded by rule 4. P1b's
 substance is in rule 6.
+
+## 2026-11-19 (third owner-directed pass: the axes the first two did not read — what happened to the comments this skill posted, bot overlap, self-corrections, cost) — 2 applied (a correction to 0.29.0, one new rule), 1 left to the owner, 1 measurement of mine retracted; four gate rounds over the staged diff, the last finding nothing; linter 17 files, 0 findings; **pr-review 0.29.1**
+
+**What the comments posted under the owner's account became** (1,222 top-level comments on other people's PRs among
+the 250):
+- **Mechanical first pass:** 43% agreed or applied in a reply, 26% no reply but the code under them changed, 1.1%
+  declined in a reply.
+- **Retracted:** that pass also said 5.5% got no reply with their line unchanged at merge, and the rate fell from 17% to
+  10% after 2026-10-17. That signal overstated ignoring about fourfold. A fresh judge read the final diffs and found
+  52 of the 67 "unchanged at merge" acted on elsewhere in the PR. Of all 80 flagged comments (those 67 and the 13
+  "declined"), 18 really went unheeded.
+- **What landed:** authors acted on 42 of 48 test, defect and docs findings.
+- **Least effective kinds:**
+  - scope-split, unrelated-hunk and "nothing to change" notes: 8 of the 18, and 5 of those 8 not worth the author's
+    time;
+  - scope/follow-up comments: unheeded 5 times in 12;
+  - comments posted after a merge: 4 of 5 went nowhere. 0.29.0's posting re-read already stops a post to a merged PR.
+
+**Bots.** On 132 of the 250 PRs Greptile also reviewed. Of our comments within 10 lines of an earlier Greptile comment
+on the same file, 34 of 43 made a different point and 7 built on it. 2 repeated it, both while its thread was still
+open. No change.
+
+**Self-corrections in the transcripts:** 19 of 722 sessions, by a calibrated phrase search (3 of 3 known cases found).
+- Most were claims about framework or code behaviour, several of them caught by a refuter or second agent before
+  posting.
+- One was an answer to the owner from a fetch 19 hours old (core PR 6535). The openmrs-core memory note on it says
+  posting's re-fetch rule "applies to every answer about a review's state too".
+
+**Applied, pr-review 0.29.1:**
+1. **Step 3, a correction to 0.29.0's isolation bullet.** Where `~/.m2/repository` and the scratch repository share an
+   APFS volume, the scratch is seeded from a clone of it with each directory holding a `maven-metadata-local.xml`
+   deleted; elsewhere it starts empty.
+   - The memory note on CI-faithful builds records an empty scratch repository's first build at 25-30 minutes.
+   - Measured 2026-11-19: the clone of a 29 GB `~/.m2` took 17-18 s, deleting its 992 local-install directories 2 s,
+     and free disk did not change. `~/.m2` kept its 992 local installs. An openmrs-core `-pl api -am -U compile` on
+     the seed took 23 s.
+   - The gates removed an unchecked claim about GNU `cp -c` and added the same-volume condition: `cp -c` falls back to
+     a full copy when cloning is not possible.
+2. **Step 5.** Before answering the user about a PR's state, re-run Step 1's `gh pr view` and conversation fetches in
+   that turn.
+   - The second incident in that memory note, a status answer that left out decisions another session had recorded
+     in a local note, is not reached by this rule, and the budget `why` does not claim it.
+- **Budget:** `pr-review` 8725 → 8806, with its why.
+
+**Left to the owner.** Scope-split and unrelated-hunk notes are the least effective comment kind here (5 of 12 unheeded;
+one author: "This is a major nitpick :)"). The rule that asks for them came from the owner's own feedback
+(0.15.0). Whether to keep, soften or move them, for example into one PR-level note, is the owner's call.
+
+**Gate sessions**, each `claude-opus-5-5` headless from a folder of copies, write tools disallowed: ce3f8347 ($0.42),
+d036eee8 ($0.26), 4e7d06f2 ($0.26) and c48c8c30 ($0.36). The fourth found nothing still wrong.
+
+**Running parked counts:** unchanged in run records.

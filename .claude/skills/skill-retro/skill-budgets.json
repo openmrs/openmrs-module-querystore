@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 8548,
-      "to": 8725,
-      "why": "six rules from a 2026-11-19 read of 250 reviewed PRs' later comments and 172 per-PR memory notes: a PR whose ticket only the MCP reads is appended to PRS (three were missing); a resolved or outdated thread gets a fresh comment, not a reply (6 PRs); builds and probes use a scratch worktree, Maven repository and data store (8 PRs); added lines are read for what they do (9 no-op points other reviewers raised); a test the PR adds or the review suggests is shown able to fail (9 test-design points); and code posted for the author to commit goes to a refuter first (13 of 88 later points sat in code or text the review suggested, and a refuter saw the suggestion before posting in at most 1 of 26 such rounds); cutting three anti-patterns that restated Step 2, Step 3 and Convergence pays for all but 177 words"
+      "from": 8725,
+      "to": 8806,
+      "why": "two corrections, 2026-11-19: where ~/.m2 and the scratch repository share an APFS volume, 0.29.0's scratch Maven repository is seeded from a clone of it minus its local installs, since an empty one costs each build its dependency downloads (a recorded 25-30 minutes) where the seed took 17-18 s and an openmrs-core api build on it 23 s; and an answer to the user about a PR's state re-runs Step 1's gh pr view and conversation fetches in that turn, after an answer about core PR 6535's maintainer comments came from a fetch 19 hours old (+81 words)"
     },
     "pr-review/posting.md": {
       "from": 2072,
@@ -71,7 +71,7 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 8725,
+    "pr-review": 8806,
     "pr-review/posting.md": 2185,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
