@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request — check that the change actually resolves the issue it claims to and by the best approach available rather than merely one that works, verify every finding empirically, and write clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.33.0
+version: 0.34.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -183,6 +183,8 @@ Before answering the user about a PR's state (what a reviewer said, what is stil
 **When the review turns out wrong, record it.** In a session the user is part of, not in CI, when another reviewer raises what this or an earlier round should have found, or something a round posted proves wrong, append, under its own `# ` header, to `~/.claude/skill-lessons/<date>-pr-review-<repo>-<n>.md` in that turn: the PR, round and head; what was missed or wrong; whether the review saw it and set it aside or never noticed it; the rule that should have caught it, or that none did; and this session's id. A private PR's record goes under `confidential/`.
 
 **At the end of each round, a clean one included, outside CI, append to the PR's round record** with `mkdir -p ~/.claude/pr-review-rounds && cat >> <file> <<'EOF'`, rather than Edit or Write, so a second session's entry is not overwritten, under a `# <date> <head sha>` header: what you posted (links), what you weighed and set aside and why, and what is still owed (a check that did not finish, such as a refuter stopped by a usage limit, a change not yet applied, or a question the user has not answered). Append what the user decides as its own entry, under a `# <date> <head sha> decision` header, in the turn they decide; a staged review not yet submitted or discarded is recorded as pending. A private PR's record stays there with the rest; that directory is not mirrored to a repository.
+
+**Outside CI, when the user asks you to address the review comments** on a PR, that means fixing every open review comment, a bot's included, or telling the user why one stays; building and testing; then committing and pushing to the PR's head branch (`gh pr view <n> --json headRepositoryOwner,headRefName` names it, often a fork), not leaving local changes. Replying in or resolving threads, and editing the PR description, each need their own ask.
 
 ## Anti-patterns
 

@@ -6712,3 +6712,83 @@ resting on two PRs.
 **Budget:** `pr-review` 9090 → 9226, with its why.
 
 **Running parked counts:** unchanged in run records.
+
+## 2026-11-19 (eighth owner-directed pass: the owner's typed messages after each launch, read in full, and the session signals no pass had read) — 2 applied, 1 refuted by its own re-measurement, 9 checked; two gate rounds over the staged diff, the second finding nothing; linter 17 files, 0 findings; **pr-review 0.34.0, skill-retro 0.8.0**
+
+The first pass regex-counted the 425 messages the owner typed after a launch, across the 722 transcripts, and never read
+them. This pass read the 303 non-routine ones in full. It also read the session signals no pass had looked at.
+
+**Applied:**
+1. **pr-review 0.34.0, Step 5.** Outside CI, "address the review comments" means:
+   - fixing every open review comment, a bot's included, or telling the user why one stays;
+   - building and testing;
+   - committing and pushing to the PR's head branch.
+
+   Replies, resolving threads and description edits still need their own ask.
+   - **Evidence:**
+     - On o3forms PR 12 a session stopped at local changes: "you'd asked me to address the comments, not to commit or
+       push". The owner replied: "by address i mean commit and push to the pull request whose comments you were
+       addressing".
+     - Initializer PR 338 took more asks before it pushed.
+     - On fhir2 PR 635 a session left Greptile's finding out, as not "the review comment".
+     - The rule sat in querystore's project memory, written 2026-10-09. 98 address or commit-and-push requests ran
+       across 14 folders, and most of the later ones ran where that memory does not load. From 2026-10-13 the owner
+       spelled out "commit and push" in nearly every request.
+     - The gate confirmed pr-review was loaded in all three incident sessions before the correction.
+   - **The pending owner decision is withdrawn.** The rule goes in pr-review, not `~/.claude/CLAUDE.md`. The memory
+     stays, because it also carries "keep unrelated churn out of the commit" and a single-use scope link.
+   - **Revised at the gate:**
+     - "Outside CI": otherwise a commenter's ask would let the Action push to a contributor's fork.
+     - "telling the user why one stays": otherwise "saying why" could be read as a thread reply.
+2. **skill-retro 0.8.0, Step 3.** The owner can direct a change in place of the corroboration bar. Step 4's prune
+   question and Step 5's refutation still apply, and the report marks the change owner-directed.
+   - Made to agree with it: the description, the single-sighting sentence, the single-record anti-pattern and Step 5's
+     refuter question. "add this to the skill" is now a trigger.
+   - **Evidence:** sessions answered the owner's "add this to the skill" three ways:
+     - core PR 6535: a replay first, after the owner asked "Why do these need a retro when they were real issues...?";
+     - core PR 6790: a direct edit, followed by the owner asking "why is it that this time you did not advise first
+       doing a skill retro?";
+     - this session: retro first, until the owner challenged it.
+   - **The ledger's own count:** it holds 14 owner-directed passes that applied a change. Four of them state that no
+     run record stood behind the change (the gate's count).
+
+**Refuted by its own re-measurement: a merge-readiness line in the report.**
+- The owner asked "is it ready to merge?" in 14 sessions.
+- A first script said 8 of 14 reports did not state readiness. It had read the message just before the question, and
+  in five sessions that message answered "bug fix or new feature?".
+- Re-measured on the review report itself (the last assistant message before the first typed message): 14 of 14 open
+  with readiness ("#615 is ready to merge…").
+
+**Checked, no change:**
+- **Rejected tool calls (7) and interrupts (12)** across the 722 sessions: one-off redirects. What followed each is in
+  the typed messages.
+- **Hook messages (35):**
+  - `/goal` conditions and replay guards;
+  - the unchecked-items gate, in 6 sessions, each time making the session run an item or give its reason, as intended;
+  - a model-override block in 3 sessions on 2026-11-10. pr-review names no model.
+- **Reviews requested without the skill:** none since the first `/pr-review` on 2026-06-12, apart from follow-ups and
+  three `/goal` review-and-fix loops on the owner's own PRs, 2026-10-12 to 10-14.
+- **Reactions on 1,804 of our comments:** 119 +1 and 29 eyes; no -1 and no confused.
+- **29 reviewed PRs closed unmerged:**
+  - 19 were closed in one stack recut, and 2 were the owner's own.
+  - Core PRs 6355 and 6790 are covered by 0.23.0 and 0.24.0, and by Step 1's replacing-PR bullet.
+  - Billing PR 189 closed in favour of the PR our review showed already covered it.
+  - **Observed, 1 record:** core PR 6729 was reviewed 18 hours after a direct commit had put its change on 2.8.x. Step
+    1's bullet looks only for open PRs. **REOPEN ON:** a second review of a change already on its base.
+- **pr-harden's reviewer** loads pr-review and runs its Steps 1 to 3. Of its two extras, one is the merged-result rule
+  and the other is a guard attack specific to chartsearchai.
+- **"Seen, then set aside", checked in the field:** of the 75 items other reviewers caught after us, the per-PR notes
+  record as set aside only the two already known: core PR 6535's streams and a private PR's diagnostics. Run records
+  stay at 2.
+- **Our judgment of other reviewers' comments:**
+  - core PR 6757: the judgment held, with evidence;
+  - stockmanagement PR 66: the answer was right;
+  - core PR 6535: the answer was about an old review, which is 0.29.1's stale-fetch case.
+
+**Gate sessions:**
+- 2fd2a353 ($0.87). Its own Stop hook made it run its unchecked items.
+- 75ed29ef ($0.41). It found nothing still wrong.
+
+**Budgets:** `pr-review` 9226 → 9300 and `skill-retro` 2856 → 2911, with their whys.
+
+**Running parked counts:** unchanged in run records.

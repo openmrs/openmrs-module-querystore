@@ -3,9 +3,9 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2848,
-      "to": 2856,
-      "why": "Step 6 names ~/.claude/pr-review-voice.md beside ~/.claude/pr-review-rounds/ as local and kept out of the repo, since pr-review 0.31.0 reads it and it holds the account owner's writing profile (+8 words)"
+      "from": 2856,
+      "to": 2911,
+      "why": "Step 3 lets the owner direct a change in place of the bar, with the description, the single-sighting line, the single-record anti-pattern and Step 5's refuter question made to agree, keeping Step 4's prune question and Step 5's refutation, after sessions answered the owner's 'add this to the skill' three ways (a replay first on core PR 6535, a direct edit on core PR 6790 followed by 'why is it that this time you did not advise first doing a skill retro?', and retro-first on 2026-11-19 until challenged) while the ledger applied owner-directed changes outside the written bar at least seven times; per the typed messages read 2026-11-19 (+55 words)"
     },
     "pr-harden": {
       "from": 10532,
@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 9090,
-      "to": 9226,
-      "why": "Step 1 and Step 5 carry what a round left owed, after per-PR notes carried owed items the round record had no place for, among them refuters stopped by the weekly limit on esm-stock PR 733 and a private PR, and a private PR whose clean verdict was challenged after an owed item its notes listed was never applied; Step 3 names failure paths, after other reviewers found failure-path defects our reviews missed on core PRs 6544, 6605 and 6744 and cohortbuilder PR 781; Step 4 puts a fix that takes something away from users to the user, after esm-stock PR 734's was posted undecided by the user, applied verbatim and changed a round later; per the notes and outcome judging read 2026-11-19 (+136 words)"
+      "from": 9226,
+      "to": 9300,
+      "why": "Step 5 says what addressing the review comments means outside CI (every open comment, a bot's included, built and tested, committed and pushed to the PR's head branch; replies, resolving threads and description edits need their own ask), after the owner had to spell it out: on o3forms PR 12 a session stopped at local changes ('by address i mean commit and push to the pull request whose comments you were addressing'), initializer PR 338 took two more asks to push, and fhir2 PR 635 left a Greptile comment out as not 'the review comment'; the rule sat in querystore's project memory, and most later requests ran in folders that do not load it; per the typed messages read 2026-11-19 (+74 words)"
     },
     "pr-review/posting.md": {
       "from": 2072,
@@ -71,11 +71,11 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 9226,
+    "pr-review": 9300,
     "pr-review/posting.md": 2185,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2856,
+    "skill-retro": 2911,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1755,

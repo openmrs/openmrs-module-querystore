@@ -1,8 +1,8 @@
 ---
 name: skill-retro
-description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits only where a lesson is corroborated, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "run the retro", "what did the last runs teach us", "skill-retro".
+description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits where a lesson is corroborated or the owner directs one, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "add this to the skill", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.7.4
+version: 0.8.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -83,10 +83,14 @@ A lesson earns a proposal when **any** of these holds. State which, per proposal
 - it appears once and **cost two or more rounds or cycles** in that run;
 - it is a skill **contradicting itself, or contradicting its own gate script** — valid from a single
   instance, because the contradiction is a fact about the document rather than an inference about the
-  world. This is the one class where one sighting is enough.
+  world.
 
 Anything below the bar goes in the report as *observed, not yet actionable*, with the count so far.
 That list is the whole point of keeping records: a lesson seen once is not discarded, it is waiting.
+
+**The owner can direct a change instead** ("add this to the skill"): quote their words. That stands
+in for the bar, not for Step 4's prune question or Step 5's refutation of the exact diff, and the
+report marks it owner-directed.
 
 **Write the guard, not the diagnosis, when the cause is not established.** Run seven left two
 `pr-<n>-r<round>` refs sharing a sha, consistent with three different mechanisms and decidable by
@@ -125,7 +129,8 @@ produced the proposals, which is the one thing this step is for. Give it the pro
 records they rest on, and the current skill text, with its role files and evidence.md where it has them. Do not give
 it your argument for why they are right.
 
-It answers, per proposal: does the record actually say this? Is the corroboration bar really met, or
+It answers, per proposal: does the record actually say this? Is the corroboration bar really met
+(owner-directed: are the quoted words the owner's), or
 is one sighting being counted twice because two records describe one event? Does the proposal
 contradict an existing rule, or re-propose something a skill records as measured and rejected? Does it
 add a claim nobody has checked? Would the edit have prevented the thing it cites?
@@ -205,8 +210,9 @@ most likely to skip this step and the one whose evidence is easiest to lose. `~/
 
 ## Anti-patterns
 
-- **Don't retro a single record.** Corroboration is the only thing separating a rule from an anecdote;
-  with one record, run the linter, park the observations, and stop.
+- **Don't retro a single record.** Corroboration, or the owner's direction (Step 3), is what separates a
+  rule from an anecdote; with one record and no such direction, run the linter, park the observations,
+  and stop.
 - **Don't let the skills grow every time.** A retro whose net effect is +200 lines has moved the
   problem rather than solved it. Pruning is Step 4, not a nicety.
 - **Don't write a lesson as a rule when the cause is unknown.** Write the guard and say the cause was
