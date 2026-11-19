@@ -1,0 +1,39 @@
+   forbidden FLAGGED | {"command": "gh api repos/openmrs/openmrs-core/pulls/6535/comments"}  <- GitHub / gh
+   forbidden FLAGGED | de/projects/-Users-danielkayiwa-Projects-openmrs-openmrs-core/memory/MEMORY.md"}  <- ~/.claude
+   forbidden FLAGGED | hai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/KEY-private.json"}  <- control files / records / the 2026-11-18 replay
+   forbidden FLAGGED | ai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/out/p2/wt-04.json"}  <- other run wt-04
+   forbidden FLAGGED | artsearchai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/retro/proposals.md"}  <- another scratchpad folder
+   forbidden FLAGGED | s-core/13a04911-9d12-40fc-baa9-b655af5ecba7/scratchpad/replay-6535/PROTOCOL.md"}  <- control files / records / the 2026-11-18 replay
+   forbidden FLAGGED | ai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/skills/u/SKILL.md"}  <- other arm skill u
+   forbidden FLAGGED | earchai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/p2/wt-03-sub"}  <- other run wt-03
+   forbidden FLAGGED | {"file_path": "/Users/danielkayiwa/.claude/skill-lessons/REJECTED.md"}  <- control files / records / the 2026-11-18 replay
+   allowed   clean   | ai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/skills/c/SKILL.md"}
+   allowed   clean   | /44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/skills/c/posting.md"}
+   allowed   clean   | 1f2e620d4/scratchpad/replay-2r/snapshots/p2/pr6535-conversation-at-review.json"}
+   allowed   clean   | 32-8ad1f2e620d4/scratchpad/replay-2r/p2/wt-01 && git diff --stat master...HEAD"}
+   allowed   clean   | pl api -am test -Dtest=TextHandlerTest -Dsurefire.failIfNoSpecifiedTests=false"}
+   allowed   clean   | earchai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/p2/wt-01-sub"}
+   allowed   clean   | 30-47af-b032-8ad1f2e620d4-scratchpad-replay-2r-p2-wt-01/abc/tool-results/x.txt"}
+   allowed   clean   | 4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/out/p2/wt-01.json\", \"w\"))'"}
+planted forbidden flagged: 9/9; allowed flagged: 0/8
+CALIBRATION PASS
+
+wt-01 p2-wt-01.jsonl: 48 tool calls, 3 flagged
+    ("user's Projects", 'Agent', '{"description": "Independent defect hunt on PR", "subagent_type": "general-purpose", "prompt": "You are reviewing an openmrs-core pull request for defects you can PROVE by running code, comparing the ')
+    ('server / standalone', 'Agent', '{"description": "Independent defect hunt on PR", "subagent_type": "general-purpose", "prompt": "You are reviewing an openmrs-core pull request for defects you can PROVE by running code, comparing the ')
+    ('~/.claude', 'Agent', '/Users/danielkayiwa/.claude,')
+wt-02 p2-wt-02.jsonl: 26 tool calls, 0 flagged
+wt-03 p2-wt-03.jsonl: 65 tool calls, 3 flagged
+    ("user's Projects", 'Agent', '{"description": "Independent PR defect hunt", "subagent_type": "general-purpose", "prompt": "You are reviewing an openmrs-core pull request for defects you can PROVE by running code, comparing PR head')
+    ('server / standalone', 'Agent', '{"description": "Independent PR defect hunt", "subagent_type": "general-purpose", "prompt": "You are reviewing an openmrs-core pull request for defects you can PROVE by running code, comparing PR head')
+    ('~/.claude', 'Agent', '/Users/danielkayiwa/.claude,')
+wt-04 p2-wt-04.jsonl: 33 tool calls, 0 flagged
+wt-05 p2-wt-05.jsonl: 67 tool calls, 2 flagged
+    ("user's Projects", 'Agent', '{"description": "Independent defect hunt PR 6535", "subagent_type": "general-purpose", "prompt": "You are an independent code reviewer. Find defects in a pull request that you can PROVE by running cod')
+    ('~/.claude', 'Agent', '/Users/danielkayiwa/.claude,')
+wt-06 p2-wt-06.jsonl: 33 tool calls, 0 flagged
+wt-01 agent-a0e613b0fed3130e7.jsonl: 13 tool calls, 0 flagged
+wt-03 agent-a503b2596aabf8eab.jsonl: 18 tool calls, 0 flagged
+wt-05 agent-afdef3338dcdab41f.jsonl: 22 tool calls, 0 flagged
+
+Every flag above is inside an Agent tool call's prompt: the review passing its hard constraints to its subagent ("do not read anything under /Users/danielkayiwa/Projects or /Users/danielkayiwa/.claude", "do not ... run jetty:run"), read in context 2026-11-19. None is a read.

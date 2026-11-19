@@ -1,0 +1,36 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+      "line": 21,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "TRUNK-6682 carries the `backport` label, but the new API is tagged only `@since 3.0.0` (DataWithMetadata:21, StorageService.getDataWithMetadata, the 3-arg injectMissingMetadata, @Deprecated(since=\"3.0.0\")), and the code uses Java 16+ syntax, a record at ImageHandler.java:153 and pattern-matching instanceof at S3StorageService.java:178, which a Java 8 maintenance build rejects; which lines does this backport to? If 2.8.x is one, @since needs those versions and those two constructs need to become a plain class and a cast. This is the surviving half of the earlier @since thread (r4070873955: 'plus whatever maintenance lines it gets backported to').",
+      "failure_mode": "",
+      "evidence": "Ticket JSON labels include 'backport'. StorageService/LocalStorageService/ObjectMetadata carry '@since 2.8.0, 2.7.5, 2.6.16, 2.5.15' (multi-line convention); new members say only 3.0.0. `git show a085b50b6~1:pom.xml` (last 2.8.0-SNAPSHOT commit before the 3.0.0 bump) has <javaCompilerVersion>1.8</javaCompilerVersion>; Java 21 arrived on master later (5f300cfaf/80f3454b0, 2025-07-22/25). `javac --release 8` on a file with a private record and `o instanceof String s` fails: 'records are not supported in -source 8', 'pattern matching in instanceof is not supported in -source 8'; the cast form compiles. Master's versions of the storage/handler files use no Java 9+ syntax (grep), consistent with keeping them backportable. Author converted DataWithMetadata from record to class in 956bc83f9 but left LoadedImage a record.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/obs/handler/AbstractHandler.java",
+      "line": 135,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Reads of legacy-layout obs (valueComplex holding a bare name that parseDataKey prefixes with the obs dir) gain nothing: they still cost 6 filesystem calls with 3 Files.exists plus a failed stat, the same total as master, while new-layout reads drop from 6 to 3 with one exists; TRUNK-6682's 'at most one existence-related check' and the description's '5 \u2192 3' hold only for the new layout, so does the ticket stay open for legacy reads? Follow-up to the unanswered thread r4070873940 on AbstractHandlerTest.",
+      "failure_mode": "",
+      "evidence": "Throwaway JUnit test (deleted) intercepting java.nio.file.Files with Mockito.mockStatic(CALLS real method, recording names), driving AbstractHandler.getObs on a real LocalStorageService. Controls: one Files.exists call recorded exactly [exists], empty runnable recorded []. PR head: new-layout [exists, readAttributes, newInputStream]; legacy-layout [exists(storage/<bare>%2Etxt), exists(appdata/<bare>), readAttributes(storage/obs/<bare>%2Etxt) -> fails, exists(appdata/obs/<bare>), readAttributes, newInputStream]. Master (api/src checked out from master, then restored with git checkout HEAD -- api/src): new-layout 4x exists + newInputStream + readAttributes; legacy-layout 4x exists + newInputStream + readAttributes. Legacy data read correctly on both ('legacy', len=6).",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Close to mergeable: the prior review rounds' findings are fixed at the head and the targeted tests pass, but whether this backports (it uses Java 16+ syntax and @since 3.0.0 only, against a 'backport' ticket) and whether TRUNK-6682 covers legacy-layout reads, which are unchanged at 6 filesystem calls, need answers first.",
+  "what_i_swept": "Read SKILL.md, the PR body, the TRUNK-6682 snapshot and all 31 inline comments, 11 reviews and 13 PR comments. Confirmed the diff stat (21 files, +967/-68) and that there is no base drift. Read every changed main file in full where it mattered (LocalStorageService, AbstractHandler, MediaHandler) plus the full source and test diff. Checked each prior thread against the head: greptile URI_VIEW metadata (fixed, tested), greptile abstract method (now a default method), DataWithMetadata formatting (now a class), ibacher's internal-helper refactor and ordering comment (done), NoSuchFileException documented, S3 duplicate getData (delegates), S3 multipart length (fixed, with a mocked-client test), the ImageHandler early return and obsDir guard (fixed, with a test), exists containment (restored, with a test), the deprecation of the 2-arg injectMissingMetadata (done), the restored AbstractHandler count test, per-handler count tests for all five handlers, the long-name test directory, and the legacy getDataWithMetadata test. That last one was confirmed red by removing read()'s legacy fallback (5 LocalStorageServiceTest failures), then restored. Outward trace: callers of getPath (now purge only), injectMissingMetadata, getDataWithMetadata, and StorageService implementations; exception-type changes per handler compared with master (missing file still ends in Assert IAE or a log, as before); read-vs-purge location preference (current-first vs legacy-first, judged unreachable because '.' is encoded as %2E and keys carry random suffixes); S3 404 translation; stream closing in each handler; the Java level of maintenance lines through pom history. Ran the 8 relevant test classes at the head (78 tests, green) and the spotless check under CI=true (success).",
+  "could_not_verify": [
+    "The current Java level of the 2.8.x (and older) maintenance branches: the clone holds only master history, and the review is pinned away from GitHub. F1 is a question because of this; the evidence is that 2.8.0-SNAPSHOT on master was Java 1.8 when 3.0.0 split off.",
+    "Which maintenance lines TRUNK-6682 will actually be backported to (the ticket has the label but no fixVersions).",
+    "S3 call counts against a real or mocked S3 for the legacy-layout path: I reasoned them from code (HEAD 404, then GET) and did not run them."
+  ],
+  "passes_run": 3,
+  "subagents": [],
+  "notes": "No subagent was started. Both findings ship as questions, which is where a refutation pass would have downgraded them anyway. F2 is a mechanical measurement with calibrated controls, run on both base and head. Per the skill, F1 replies in the existing @since thread (r4070873955) and F2 in dkayiwa's unanswered ticket-scope thread (r4070873940), rather than opening new top-level comments. Every prior finding was confirmed fixed at the head and earns silence. One minor inaccuracy was not raised: the PR description says master cost 5 operations, but I measured 6 for new-layout reads (4 exists + open + stat), which matches dkayiwa's earlier count. A `git grep` using \\b gave a false zero hit; I caught it with a positive control and re-ran without \\b. Working copy restored: git status shows only the pre-existing untracked .mvn/maven.config."
+}

@@ -1,0 +1,11 @@
+--- /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-chartsearchai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/skills/c/SKILL.md	2026-11-19 13:09:55
++++ /private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-chartsearchai/44d9b58a-4830-47af-b032-8ad1f2e620d4/scratchpad/replay-2r/skills/u/SKILL.md	2026-11-19 13:10:01
+@@ -115,6 +115,8 @@
+ 
+ A pass that surfaced a substantive finding cannot be your last pass: one real find is evidence of unexplored ground, so sweep again until a pass turns up nothing substantive. The converse also holds — don't invent findings to fill a quota; a clean PR earns a short review.
+ 
++**A second reviewer, for what you did not find.** Before you settle your findings, where you can start a subagent, start one fresh agent and give it only the PR, the problem it claims to solve, the repository and how to build and test there: not your findings, your notes or your verdict. Ask it for defects it can prove by running code, PR against base. Reproduce what it reports before you file any of it. The refutation pass below tests what you found; this one looks for what you did not.
++
+ ### When an adversarial refutation pass is worth it
+ 
+ The verification above is the default and is usually enough. A heavier technique — challenging each candidate from an independent context (a separate reader per finding, told to *refute* it, and for a high-stakes blocker more than one from distinct angles: does it reproduce, is the mechanism right, does the named consumer actually break; refuted-but-unproven becomes a `question:`, not an `issue`) — pays for its cost only when a single reasoning context's blind spots would otherwise go uncaught. Reach for it when **two or more** of these hold, not by default:

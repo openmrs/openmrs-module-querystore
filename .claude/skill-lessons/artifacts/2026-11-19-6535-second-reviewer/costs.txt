@@ -1,0 +1,8 @@
+p2-wt-01: subtype=success turns=37 cost=$3.47
+p2-wt-02: subtype=success turns=27 cost=$1.93
+p2-wt-03: subtype=success turns=49 cost=$3.99
+p2-wt-04: subtype=success turns=34 cost=$2.24
+p2-wt-05: subtype=success turns=9 cost=$3.75
+p2-wt-06: subtype=success turns=35 cost=$2.20
+canary: cost=$0.24 session=01a05c4a-4138-4f3f-a8b3-10efaf26d7a9
+judge: cost=$0.54 session=e0be79e8-67b8-4662-b250-b154c06432c8

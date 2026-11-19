@@ -1,0 +1,36 @@
+{
+ "findings": [
+  {
+   "id": "F1",
+   "file": "api/src/main/java/org/openmrs/obs/handler/AbstractHandler.java",
+   "line": 135,
+   "where": "inline",
+   "disposition": "question",
+   "claim": "For complex obs saved before 2.8 (bare filename relative to the obs dir, i.e. every existing complex obs on an upgraded install) a read still costs 6 filesystem operations exactly as on master, 3 of them Files.exists plus a failed stat, so TRUNK-6682's 'at most one existence-related check' criterion is met only for new-layout keys, and the PR description's '5 -> 3' figure describes only that case; does the ticket stay open for the legacy half (dkayiwa's unanswered question in thread r4070873940)?",
+   "failure_mode": "",
+   "evidence": "Wrote a throwaway BaseContextSensitiveTest (deleted) that wraps java.nio.file.Files in Mockito.mockStatic(CALLS_REAL_METHODS) and logs exists/readAttributes/newInputStream under the app data dir during AbstractHandler.getObs and TextHandler.getObs(TEXT_VIEW). GP obs.complex_obs_dir=complex_obs. PR head 86b96c7d6: new-layout key = 3 ops (exists=true, readAttributes, newInputStream), matching the PR's claim (known-good control); 2.7-era obs (valueComplex 'title|<name>', file at appData/complex_obs/<name>) = 6 ops: exists=false storage/<name>, exists=false appData/<name> (parseDataKey -> LocalStorageService.exists:279-293), readAttributes FAILED NoSuchFileException storage/complex_obs/<name> then exists=true appData/complex_obs/<name> (LocalStorageService.read:99-112), readAttributes, newInputStream. Same probe on master (git switch --detach master): new layout 6 ops (4 exists), 2.7-era legacy 6 ops (4 exists). So new layout 6->3, legacy 6->6. All handler counting tests (AbstractHandlerTest/BinaryData/BinaryStream/Image/Media/TextHandlerTest getObs_shouldReadDataAndMetadataInASingleStorageCall) save via saveObs, i.e. only new-layout keys; none pins the legacy count. Ticket TRUNK-6682 acceptance criterion 1 and description ('resolve the legacy-vs-new key layout without a separate existence probe where possible (or cache the resolution)').",
+   "confidence": "high"
+  },
+  {
+   "id": "F2",
+   "file": "api/src/main/java/org/openmrs/api/StorageService.java",
+   "line": 197,
+   "where": "inline",
+   "disposition": "question",
+   "claim": "TRUNK-6682 carries the `backport` label and StorageService itself is '@since 2.8.0, 2.7.5, 2.6.16, 2.5.15', but the new API is '@since 3.0.0' only and the handler/storage code uses Java 16+ constructs (private record ImageHandler.LoadedImage at ImageHandler.java:153, pattern-matching instanceof at S3StorageService.java:178) that the maintenance lines, built with javaCompilerVersion 1.8, cannot compile; is this master-only, or should it be written so it can be cherry-picked and @since list the maintenance versions?",
+   "failure_mode": "",
+   "evidence": "Ticket JSON labels: backport, community-priority, performance. `git show a085b50b6^:pom.xml` (last commit before 'Bump version to 3.0.0-SNAPSHOT', i.e. where 2.8.x branched) has <javaCompilerVersion>1.8</javaCompilerVersion> feeding maven-compiler-plugin source/target; master pom has maven.compiler.release 21 (dcf1695d6). grep @since in StorageService.java: class '2.8.0, 2.7.5, 2.6.16, 2.5.15', new method '3.0.0'; DataWithMetadata.java:21 '@since 3.0.0'. ibacher's thread r3990860896 ('We can't backport this implementation') and dkayiwa's r4070873955 asked for the backport versions; the head answers with 3.0.0 only. S3StorageService was added after the 3.0.0 bump (658a3df03), so its line matters only if it was backported.",
+   "confidence": "medium"
+  }
+ ],
+ "verdict": "Close to mergeable for master: the new-layout read drops from 6 to 3 filesystem ops with call-count tests that go red on regression. What's left is a scope decision: legacy-layout obs are not improved at all (6 -> 6 ops), and the ticket's backport label clashes with Java 16+ code and @since 3.0.0.",
+ "what_i_swept": "Pass 1: read SKILL.md, the PR body, the TRUNK-6682 snapshot and all 31 inline comments, 11 reviews and 13 PR comments, then the full diff (21 files, +967/-68, matching the stated stat; master...HEAD == master..HEAD stat, so no drift). Checked every prior maintainer thread against the head. Resolved at head: LocalStorage shared internals and the ordering comment, NoSuchFileException documented, S3 multipart length plus a mocked-client test, the long-name legacy fallback test creating tempDir/obs, exists containment, S3 getData delegating, the deprecated 2-arg injectMissingMetadata, the restored AbstractHandler count test, the obsDir leftover and guard in ImageHandler, the getDataWithMetadata legacy test, and DataWithMetadata now a formatted class. Still open: dkayiwa's ticket-scope question (r4070873940), which is F1. Pass 2 (solution fit): drove AbstractHandler/TextHandler getObs on PR and master under a Files mockStatic op counter, covering new-layout and 2.7-era legacy keys. Pass 3 (outward trace and remaining dimensions): git grep found no other callers of getPath/exists/getDataWithMetadata in api or web main; checked purge's legacy-first getPath against read's current-first order (collision needs the same key in both trees, judged unreachable in practice); checked MediaHandler/BinaryStream/BinaryData/Text exception paths against master (missing file still ends in Assert's IllegalArgumentException, other IOExceptions now APIException); checked S3 404 translation and the null contentRange fallback. Mutation control: forcing injectMissingMetadata to always call getMetadata turned the counting tests in 5 handler test classes red (TextHandler uses its own setContentMetadata path and has its own count test). Pass 3 surfaced nothing new.",
+ "could_not_verify": [
+  "Whether the 2.8.x/2.7.x maintenance branches still build at javaCompilerVersion 1.8 today. The clone holds only master history, so I checked the pom only at the commit where 3.0.0-SNAPSHOT branched off (a085b50b6^).",
+  "Whether S3StorageService was ever backported to a maintenance line (not in this clone's history).",
+  "S3 per-read round-trip counts were not measured against a real S3 or S3Mock; by reading the code, parseDataKey's exists() HEAD plus one GET makes 2. No S3 endpoint is available here, and the S3 IT needs Docker/S3Mock."
+ ],
+ "passes_run": 3,
+ "subagents": [],
+ "notes": "No subagent was started. Both findings are questions, and F1 rests on a mechanical measurement with known-good and known-bad controls (new layout 3 ops on PR vs 6 on master), so an adversarial refutation pass would only re-run the same deterministic count. F1 should go as a reply in dkayiwa's existing thread r4070873940, not as a new top-level comment. The PR body's 'previously cost 5 filesystem operations' is 6 on master by my count (4 exists + open + stat), matching dkayiwa's earlier measurement. The working copy was returned to pr-6535 at 86b96c7d6, and git status --porcelain shows only the pre-existing untracked .mvn/maven.config."
+}

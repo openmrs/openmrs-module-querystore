@@ -1,0 +1,52 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+      "line": 118,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Reply in the open thread r4070873940 (still unanswered): at this head the per-read cost on local storage drops from 6 to 3 filesystem calls only for new-layout keys. A legacy-layout obs, which is every complex obs on an instance upgraded from 2.7 or earlier, still costs 6 calls, the same as master, including 3 existence checks and 1 failed stat. TRUNK-6682's 'at most one existence-related check' criterion and the PR description's 'now costs 3 filesystem operations' therefore hold only for new keys, and no handler-level test counts a legacy read. Does the ticket stay open for legacy reads? A cheap partial step is for LocalStorageService.read() (LocalStorageService.java:110) to try the legacy reader directly and catch NoSuchFileException instead of calling fileExists first, which saves one call.",
+      "failure_mode": "",
+      "evidence": "Throwaway BaseContextSensitiveTest that counts every top-level static java.nio.file.Files call (Mockito mockStatic, callRealMethod) during AbstractHandler.getObs and TextHandler.getObs(TEXT_VIEW). Calibrated first: 2 exists + 1 readAttributes counted exactly. HEAD gave new layout = [exists, readAttributes, newInputStream] and legacy (file at <appdata>/complex_obs/<name>, valueComplex 'l.txt|<name>') = [exists(storage/<name>), exists(appdata/<name>), readAttributes(storage/complex_obs/<name>) fails, exists(appdata/complex_obs/<name>), readAttributes, newInputStream]. The same test on base sources (18 modified files checked out from master, 3 added files moved aside) gave 4 exists + newInputStream + readAttributes = 6 for BOTH layouts. The 3 legacy checks come from AbstractHandler.parseDataKey's exists() (AbstractHandler.java:135; 2 checks) plus read()'s legacy probe (LocalStorageService.java:110). Every PR count test (AbstractHandlerTest:104, LocalStorageServiceTest:127 readAsHandler_*, and the handler tests) saves a new-layout obs first. The independent subagent reproduced the same counts on its own copy.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/api/storage/DataWithMetadata.java",
+      "line": 21,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Reply in thread r4070873955: TRUNK-6682 carries the `backport` label and StorageService is '@since 2.8.0, 2.7.5, 2.6.16, 2.5.15', yet the new API is tagged only '@since 3.0.0'. The PR also uses a record (ImageHandler.java:153 LoadedImage) and an instanceof pattern (S3StorageService.java:178), and neither compiles on the Java 8 level the maintenance lines were on when master moved to 3.0.0. Which lines does this go to? If any, the @since tags need those versions and the backport needs those constructs rewritten.",
+      "failure_mode": "",
+      "evidence": "Read ticket snapshot: labels [backport, community-priority, performance], fixVersions empty. grep @since: StorageService.java:31 '2.8.0, 2.7.5, 2.6.16, 2.5.15'; StorageService.java:197 and DataWithMetadata.java:21 '3.0.0'. `git show a085b50b6^:pom.xml` (the parent of 'Bump version to 3.0.0-SNAPSHOT') line 1234: <javaCompilerVersion>1.8</javaCompilerVersion>. The maintenance branches are not in the clone, so I could not compile a backport.",
+      "confidence": "medium"
+    },
+    {
+      "id": "F3",
+      "file": "api/src/main/java/org/openmrs/api/storage/LocalStorageService.java",
+      "line": 64,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Bundled handlers now read only through getDataWithMetadata, and neither LocalStorageService.getDataWithMetadata (it goes to the private read/getDataInternal) nor S3StorageService.getData (it now delegates to getDataWithMetadata) calls the overridable getData/getMetadata. A subclass that overrides getData, for example to decrypt, is therefore silently bypassed for complex obs reads. Is that acceptable, or should it be recorded in the getDataWithMetadata Javadoc as the method such subclasses must override?",
+      "failure_mode": "",
+      "evidence": "Read LocalStorageService.java:63-72 and :96-119, S3StorageService.java:129-131, and the handler call sites (AbstractHandler.java:72, TextHandler.java:87, BinaryDataHandler.java:67, BinaryStreamHandler.java:72, MediaHandler.java:65, ImageHandler.java:117). The subagent ran a LocalStorageService subclass whose getData upper-cases the content through TextHandler.getObs(TEXT_VIEW): base gave 'HELLO', PR gave 'hello'. I did not re-run that probe myself; the bypass follows directly from the code read above. I don't know of a real module that subclasses LocalStorageService, hence a question.",
+      "confidence": "low"
+    }
+  ],
+  "verdict": "Not ready to merge as a full fix of TRUNK-6682. The new-layout read path is correct and well tested (6 to 3 filesystem calls), but legacy-layout reads are unchanged at 6 calls with 3 existence checks. The unanswered prior thread asking whether the ticket stays open for that half still needs a maintainer decision, as does which backport lines the change targets.",
+  "what_i_swept": "Step 1: PR body, TRUNK-6682 snapshot (including the backport label and acceptance criteria), all 31 inline comments, 11 reviews and 13 PR comments. I checked each prior finding against the head: ABI default method, URI_VIEW metadata, record formatting, shared internals, NoSuchFileException docs, ordering comment, parseDataKey API restored, ImageHandler legacy-filename fallback, S3 multipart length plus mocked-client test, long-name FileSystemException fallback plus the tempDir/obs fix, exists() containment, ImageHandler guard removal, S3 getData delegation, @Deprecated 2-arg injectMissingMetadata, restored AbstractHandler count test, and the legacy getDataWithMetadata test. All are resolved except the ticket-scope thread and the backport sub-point of the @since thread. Stat matches 21 files +967/-68, with no drift against the base. Step 2: compared the read-path I/O on base vs PR for both key layouts with a calibrated Files-call counter, and weighed the alternative (dropping parseDataKey's probe) against ibacher's recorded objection that parseDataKey is public API and can't change for backport. Step 3: mutation controls. Making LocalStorageService.getDataWithMetadata bypass the legacy fallback turned LocalStorageServiceTest.getDataWithMetadata_shouldReturnDataAndMetadataWhenLegacyFileExists red (NoSuchFile). Re-adding a separate getMetadata in TextHandler turned TextHandlerTest.getObs_shouldReadDataAndMetadataInASingleStorageCall red (expected 0 but was 1). Both were restored. Outward trace: every getData/getMetadata/injectMissingMetadata caller in api/src/main, S3 HEAD vs GET metadata field parity (identical: mime and length only), StorageService default-method compatibility for third-party implementations, Java level and @since conventions for the backport label, exception-type changes in the handlers for missing files, and the read-vs-purge precedence asymmetry. Security: exists()/read() containment for absolute and '..' keys (PR tests plus code read). S3 runtime: ran S3StorageServiceIT (28 tests, not skipped, against a local S3Mock 4.5.0 Testcontainer) plus S3StorageServiceTest (3) at the head: all pass. Control: changed getDataWithMetadata to rethrow instead of translateNotFound, and S3StorageServiceIT.getDataWithMetadata_shouldThrowNoSuchFileExceptionWhenFileDoesNotExist went red. Restored afterwards.",
+  "could_not_verify": [
+    "S3 multipart Content-Range length on a real >8 MiB multipart download: needs access to a real S3 endpoint. S3Mock ignores partNumber, so it cannot show this; only the PR's mocked-client unit test covers it. The rest of the S3 path was run (see what_i_swept).",
+    "Whether a backport compiles on the 2.5.x-2.8.x maintenance lines (F2): needs access to those branches, which are not in the clone. Java 1.8 is inferred from pom.xml at a085b50b6^. Which lines it targets also needs your decision, since the ticket's fixVersions is empty.",
+    "Whether any real module subclasses LocalStorageService/S3StorageService and overrides getData (F3): needs access to module sources, which the no-web constraint rules out."
+  ],
+  "passes_run": 3,
+  "subagents": [
+    {
+      "purpose": "Independent second reviewer per Step 3, given only the PR, ticket problem statement and build instructions, on the reserved second working copy.",
+      "what_it_reported": "(1) Legacy-layout reads still cost 3 existence checks (base 4 exists+1 stat, PR 3 exists+2 stat), and no count test covers legacy, which matches F1 and was independently reproduced. (2) LocalStorageService/S3 subclasses overriding getData are bypassed (base HELLO vs PR hello), filed as F3. (3) Handler subclasses overriding the 2-arg injectMissingMetadata are no longer called. Already raised in thread r4512249216 and answered with @Deprecated, so not re-raised. (4) When a key exists in both the current and legacy locations, reads now return the current file while purgeData still deletes the legacy one. Not filed: it needs a file at both <appdata>/K and <appdata>/storage/encode(K), which the obs key formats don't produce, and getPath's Javadoc documents the asymmetry. (5) Third-party backends that signal a missing file with something other than NoSuchFileException now get APIException instead of IllegalArgumentException from Text/BinaryStream handlers. Not filed: both are exceptions, and LocalStorage/S3 behaviour is unchanged."
+    }
+  ],
+  "notes": "Most of this PR's long review history is resolved at the head. Both the new-layout optimisation and the legacy getDataWithMetadata test are sound, and the mutation controls confirm the tests go red. The remaining issues are ticket scope (F1) and backport targeting (F2), which are decisions for maintainers more than code defects. F1 and F2 belong as replies in existing threads (r4070873940, r4070873955), not new top-level comments. The PR description's claim that the 'one remaining Files.exists / HEAD is the layout probe in AbstractHandler' is accurate only for new-layout keys. The working copy was restored and `git status --porcelain` shows only the pre-existing untracked .mvn/maven.config."
+}

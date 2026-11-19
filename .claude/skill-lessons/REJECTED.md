@@ -6381,3 +6381,31 @@ The owner asked why P2 and P3 needed a retro "when they were real issues that wo
   `2e251b46-86e2-46f8-a7ed-f1ab2bfda231` ($0.34). The fourth found nothing still wrong.
 
 **Running parked counts:** unchanged in run records.
+
+## 2026-11-19 (addendum, owner-directed: the second-reviewer replay the section above started) — 1 parked candidate measured, stays parked (U 0 of 3, C 0 of 3); no skill file changed; **Step 5 not run** (nothing to apply)
+
+- **Measurement note:** `2026-11-19-pr-review-6535-second-reviewer-replay.md`.
+- **Artifacts:** `artifacts/2026-11-19-6535-second-reviewer/`.
+- **Arms:** C was `pr-review` 0.27.0 as live. U was C plus 92 words asking the review to start one fresh agent given
+  none of its findings. Agent was allowed in both arms; n=3 each on the 2026-11-18 P2 subject. Cost $17.58 for the
+  six runs.
+
+**The second reviewer stays parked: no maintainer key filed by U 0 of 3 or C 0 of 3.**
+- **Compliance:** U 3 of 3 started the reviewer, and no C run started a subagent.
+- **What it changed:** K-order was noticed by U 3 of 3 and C 0 of 3, two of the three through the second reviewer
+  (one with a probe), and set aside in all three as unrealistic.
+- **Its two extra filed findings,** judged blind: one valid (a missing test for the new `APIException` paths) and one
+  noise.
+- **Cost:** about 76% more per review, and 47% more wall time.
+- **REOPEN ON:** a pre-registered measurement where U files a key, or a known defect, that C does not, at 2 of 3
+  against 0-1. Or a run record under 0.28.0's Step 5 paragraph where a second reviewer's finding was filed and was
+  what the maintainer raised.
+
+**Parked counts advanced (measurement only).**
+- **"Seen, then set aside":** 3 more sightings, the K-order dismissals above, so 11 measurement sightings across the
+  2026-11-04, 2026-11-18 and 2026-11-19 replays. Run records stay at 2.
+- Unlike the 2026-11-04 and 2026-11-18 replays, which disallowed subagents, the dropped item here came from the
+  review's own second agent. Detection improved and filing did not, so the next candidate is the filing judgment (the
+  parked "seen, then set aside" entry of 2026-11-05, and P1a of 2026-11-15), not more reviewers.
+
+**Running parked counts:** unchanged in run records.

@@ -1,0 +1,39 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "file": "api/src/test/java/org/openmrs/obs/AbstractHandlerTest.java",
+      "line": 118,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "Legacy-layout reads (all complex obs saved before 2.8 on an upgraded install) still cost 6 filesystem operations, the same as master: 3 Files.exists calls plus a failed stat before the legacy stat and open. The ticket's 'at most one existence-related check' is met only for current-layout keys, so does TRUNK-6682 stay open for the legacy half? (This is a reply in the existing unanswered thread r4070873940, not a new top-level comment.)",
+      "failure_mode": "",
+      "evidence": "Throwaway instrumentation in my working copy: LocalStorageService's Files.exists, newInputStream and readAttributes were routed through a counting Probe class, and I drove AbstractHandler.getObs and TextHandler.getObs(TEXT_VIEW) through the real Spring context with obs dir 'complex_obs'. PR head: current layout = 3 (exists, stat, open); legacy layout = 6 (exists storage/legacyprobe_abc%2Etxt, exists appdata/legacyprobe_abc.txt, failed stat storage/complex_obs/..., exists appdata/complex_obs/..., stat, open). Master: current layout = 6, legacy layout = 6. Control: one direct getData counted 1 op on the PR and 2 on master, as the code predicts. The independent subagent reproduced 3 fileExists calls plus a failed read for a legacy obs through TextHandler. Sources: AbstractHandler.parseDataKey (AbstractHandler.java:135) calls exists(); LocalStorageService.read (LocalStorageService.java:96) and exists (LocalStorageService.java:278). The PR's count tests only use new-layout keys.",
+      "confidence": "high"
+    },
+    {
+      "id": "F2",
+      "file": "api/src/main/java/org/openmrs/obs/handler/ImageHandler.java",
+      "line": 153,
+      "where": "inline",
+      "disposition": "question",
+      "claim": "The ticket is labelled 'backport', but the 2.8.x line still compiles to Java 8, and two constructs here need Java 16+: `private record LoadedImage` (ImageHandler.java:153) and the pattern-matching `instanceof S3Exception s3Exception` (S3StorageService.java:178). The new APIs also carry only `@since 3.0.0`. Is this going to 2.8.x? If so, those two constructs and the @since tags need changing before a cherry-pick will compile. (This is a reply in the existing thread r4070873955 on @since.)",
+      "failure_mode": "",
+      "evidence": "git show a085b50b6^:pom.xml (the last 2.8.0-SNAPSHOT pom before the 3.0.0 bump) has <javaCompilerVersion>1.8</javaCompilerVersion>. S3StorageService has @since 2.8.0 and StorageService has @since 2.8.0, 2.7.5, 2.6.16, 2.5.15. Ticket labels in trunk-6682-at-review.json: backport; fixVersions is empty. DataWithMetadata was already turned from a record into a class during the PR (956bc83f9), which suggests the author is aware of this. I cannot see the current Java level of the 2.8.x branch. Verified the current 2.8.x target: took openmrs.war out of the local docker image openmrs/openmrs-core:2.8.x-amazoncorretto-21 with docker create/cp, without running it. Its WEB-INF/lib/openmrs-api-2.8.11-SNAPSHOT.jar has ImageHandler.class and StorageService.class at class-file major version 52 (Java 8; Build-Jdk-Spec 21). As a control, the same od probe on this head's api/target/classes ImageHandler.class reads 65 (Java 21).",
+      "confidence": "high"
+    }
+  ],
+  "verdict": "Close to mergeable. Every earlier thread is resolved at head except two open questions, and the bigger one is whether the ticket's 'at most one existence check' is meant to cover legacy-layout obs, where this PR gives no I/O reduction (6 ops before and after).",
+  "what_i_swept": "Read the ticket, the PR body and all 31 inline comments, 11 reviews and 13 PR comments. Checked each prior thread against the head code: URI_VIEW metadata, the default interface method, DataWithMetadata formatting, the internal helpers, NoSuchFileException docs, the ordering comment, ImageHandler's filename fallback, the S3 multipart length, the long-Unicode-name fallback, the exists containment check, the deprecated overload, the restored AbstractHandler count test and the legacy getDataWithMetadata test. Confirmed no drift: git diff master...HEAD and master HEAD stats are identical (21 files, +967/-68). Read the full changed files. Ran all 8 changed test classes (78 tests, green). Measured the real I/O per read on PR and master for both key layouts with an instrumented LocalStorageService. Outward trace: git grep for every StorageService and handler consumer (only obs handlers and TaskData; nothing in web), module ABI (default method, deprecated overload), path containment and traversal in read() and exists(), the legacy-versus-current lookup-order flip against purgeData's getPath, exception types per handler, and the backport Java level from pom history. Ran an independent subagent defect hunt and reconciled its results.",
+  "could_not_verify": [
+    "S3 behaviour against a real S3 endpoint (Content-Range length for multipart downloads, 404 translation) needs access: the S3StorageServiceIT runs on a testcontainers S3Mock image that isn't in the local docker cache, the review runs offline, and S3Mock ignores partNumber anyway, so only the mocked S3StorageServiceTest was run."
+  ],
+  "passes_run": 3,
+  "subagents": [
+    {
+      "purpose": "Independent second reviewer from the skill's Step 3, given only the PR, the ticket and build instructions, to find defects provable PR versus base.",
+      "what_it_reported": "(1) Module overrides of the 2-argument injectMissingMetadata are no longer invoked (base called=true, PR called=false). That was already raised in thread r4512249216 and resolved by the deprecation the reviewer proposed, so not re-filed. (2) Non-missing IOExceptions in TextHandler and BinaryDataHandler now surface as APIException instead of IllegalArgumentException. That follows ibacher's request (r3990887402) to throw APIException, so not filed. (3) Legacy-layout reads still make 3 existence checks plus a failed read. This independently confirms F1."
+    }
+  ],
+  "notes": "The PR description's counts (3 local filesystem ops, HEAD+GET on S3, for current-layout keys) match my measurement. read() now prefers the current location while purgeData/getPath still prefers legacy. That only diverges when one key exists in both locations, for which I could not build a realistic case, so not filed. The approach (keeping the exists() probe in parseDataKey) was settled by ibacher in r3990841768/r3990860896 and is not reopened. Throwaway Probe/test files were removed and git status is clean apart from the pre-existing .mvn/maven.config. The temporary container made from the 2.8.x image to copy the war was removed, along with the extracted files."
+}
