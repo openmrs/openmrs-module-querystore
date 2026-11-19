@@ -3,9 +3,9 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2911,
-      "to": 2916,
-      "why": "Step 6 names ~/.claude/pr-review-recipes.md, this machine's measured how-tos that pr-review reads, among the local files kept out of the repo (+5 words)"
+      "from": 2916,
+      "to": 3044,
+      "why": "Step 1 gains the mining mode the owner asked for on 2026-11-19, so the day's hand-run mining of every pr-review session repeats as one command: mine/mine.py runs headless readers, judges, synthesizers and two mergers over the sessions since a watermark, with a self-test against synthetic transcripts and a fake gh, and a calibrating dry run that reproduced the hand run's sessions, chunks, private flags, refuter pairs, context fill and PRs exactly (compactions 266 against 268: the run leaves two that fell after its window to the next run); Step 6 names ~/.claude/pr-review-mining/ as local (+128 words)"
     },
     "pr-harden": {
       "from": 10532,
@@ -75,7 +75,7 @@
     "pr-review/posting.md": 2236,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 2916,
+    "skill-retro": 3044,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1755,

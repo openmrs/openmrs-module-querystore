@@ -6934,3 +6934,78 @@ $5, the pilot $3 and the gates $2.
 **Budgets:** `pr-review` 9300 → 9756, posting.md 2185 → 2236, `skill-retro` 2911 → 2916.
 
 **Running parked counts:** unchanged in run records.
+
+## 2026-11-19 (owner-directed: a mining mode, so the ninth pass repeats as one command) — 1 applied after nine gate rounds and a live verification run (skill-retro 0.9.0 and `mine/`); 5 shapes rejected with reasons; linter 17 files, 0 findings; **skill-retro 0.9.0**
+
+The owner asked "how can we easily do this again, after running new sessions for like a month?", and answered "ok" to
+packaging the ninth pass's mining: the scripts with their checks, the briefs, a driver, a skill-retro section and a
+watermark.
+
+**Applied, skill-retro 0.9.0:**
+- Step 1, a mining mode. `mine/mine.py` scans the pr-review sessions active since `~/.claude/pr-review-mining/MINED`.
+  It builds the corpus, measures, fetches the PRs' outcomes and reads the review memories. Then it runs read-only
+  headless agents: readers, outcomes judges, a memory reader, an auditor, synthesizers and two mergers. Their two lists
+  go to the owner, and each change the owner directs takes the owner-directed path.
+- Step 6 names `~/.claude/pr-review-mining/` as local.
+- Seven briefs in `mine/briefs/`.
+
+**Calibration:** a dry run over the ninth pass's window (2026-09-01 to 2026-11-19T09:16:23Z).
+- Equal to the hand run: sessions 722, chunks 25, private sessions 30, refuter pairs 337 with 199 signals, context fill
+  224M, PRs 250, closed unmerged 29.
+- Compactions 266 against 268: two fell after the window's end, and go to the next run.
+- Median minutes to the first typed reply 41 against 39: the hand method stopped at 44 sessions' meta notices.
+
+**Self-test:** synthetic transcripts with known answers, a fake `gh`, a local git origin, and stubbed agents driving
+`main()` end to end, and `run_agent` against a fake `claude` binary. Every mutation tried in the nine rounds turned
+it red: each at its own check, but for round 1's task-notification mutation, caught by the corpus control's abort.
+
+**Gate rounds**, each a fresh read-only agent given the code:
+1. 69e6cfcc ($0.85). The agents ran with `--dangerously-skip-permissions`, reading untrusted PR comments while the
+   owner's `gh` token was present; they now get Read, Grep and Glob only. Also fixed: the window and resume, the
+   window's end, the launch-time cut-off, the login check, a ratio corpus control, private flagging, the rewrite rule,
+   `is_error`, timeouts, mergers run over failed inputs, briefs naming absent files, and a committed `__pycache__`.
+2. d7f1e19b ($1.49). A real private number in the self-test; dry runs auto-resumed; `#n` unmatched; a 404 stopping
+   the run; outcomes unbounded by the window; a budget `why` claiming more than the calibration showed.
+3. 97226cb0 ($1.54). An empty window left as an unfinished run, resumed forever; carried PRs losing their earlier
+   review time; launches after the window; ledger rejections missed by case and in lists; a `git` rule that can write
+   (`--output`); `--no-github` moving the watermark; memories and run records unbounded by the window's end.
+4. af87c52a ($1.15). The seed not yet installed; an empty window deleting a whole `--out` folder; "rerun the same
+   command" false for re-mines and dry runs; the watermark able to move backwards. Its two nits were fixed too:
+   owner-directed sections about other skills reached the mergers, and a PR merged just after the window's end was
+   never carried.
+5. 268eb5fd ($1.03). Ship, with two minor items, both fixed. A first attempt mined to the microsecond, while the
+   window and the watermark store whole seconds, so up to a second was mined twice. Three stops gave no resume hint,
+   and one of them, a `gh api user` timeout, ended in a traceback.
+6. 46aec020 ($0.60). Ship, with one nit, fixed: a re-mine given fractional times was refused as "another window".
+   One helper now cuts a given time to the whole second, where a window is made and where it is compared.
+7. 0e21e9b3 ($0.29). Ship, with one lead it could not run: a time with no zone. Run here, it stopped with a
+   `TypeError` after writing a window shifted by the machine's zone; a time with no zone is now read as UTC.
+8. d8a6d1a1 ($0.26). Ship; nothing new.
+9. d052c883 ($0.37). Ship; nothing new.
+
+**Live verification** of the round-8 code, over the sessions since the watermark, given as `--since` so the
+watermark stayed: 10 sessions, 7 agents, $8.25, no failures; `MINED` and `carried.json` byte-identical before and
+after. The skill-text merger made no shell call and dated rules with 16 Greps of the skill's history; both mergers
+read the ledger extract; no report names a private PR. It showed two defects, fixed before round 9:
+- both mergers and the auditor read their own stream, brief or error log, written in their working folder. Each now
+  goes to `<folder>.log/`, and a real probe agent's Glob of its folder returned only its input;
+- "github batches 2" counted PRs, not batch files; the line says "PRs for the judges".
+
+**Rejected:**
+- Agents with `--dangerously-skip-permissions`: gate round 1. They read untrusted text while the owner's token is
+  present.
+- A Bash `git` rule for the skill-text merger: gate round 3, since `git log --output=<file>` writes. The merger greps
+  the skill's history, written before it runs.
+- Resuming any unfinished run: gate round 2. A dry run or an explicit re-mine would be resumed as the next real run.
+- A coverage note instead of carrying open PRs: the first monthly run would not judge maintainers' later comments on
+  the 71 PRs open at the ninth pass's window end.
+- Dropping the owner-directed clause from the ledger rule: it loses the two pr-review replay addenda's six REOPEN ONs
+  (parked 71 → 45). The rule now asks that the section name pr-review somewhere (parked 51).
+
+**Machinery outside the repo:** `~/.claude/pr-review-mining/carried.json`, 71 PRs open at the ninth pass's window end.
+
+**Cost:** gates about $7.58 in all; smoke runs $10.06 and $10.85; the live verification $8.25 and its probe $0.06.
+
+**Budgets:** `skill-retro` 2916 → 3044.
+
+**Running parked counts:** unchanged.

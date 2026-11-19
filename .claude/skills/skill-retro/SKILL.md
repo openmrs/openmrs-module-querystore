@@ -1,8 +1,8 @@
 ---
 name: skill-retro
-description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits where a lesson is corroborated or the owner directs one, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "add this to the skill", "run the retro", "what did the last runs teach us", "skill-retro".
-argument-hint: "[--since <date>] [--lint-only] [--dry-run]"
-version: 0.8.1
+description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits where a lesson is corroborated or the owner directs one, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "add this to the skill", "mine the review sessions", "run the retro", "what did the last runs teach us", "skill-retro".
+argument-hint: "[mine] [--since <date>] [--lint-only] [--dry-run]"
+version: 0.9.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -54,6 +54,16 @@ Each record carries, per run: what the refutation gate objected to and whether i
 finding a FRESH agent raised that the run's own author had missed, with its round; every claim a
 measurement refuted; every place a skill's own text blocked or contradicted the run; what was
 declined and why; and the rounds or cycles each cost.
+
+**Mining the review sessions** (`mine`, or the owner asking to mine past pr-review sessions) reads the sessions
+themselves, where most review lessons never reach a record. Outside CI, run
+`python3 ~/.claude/skills/skill-retro/mine/mine.py`. It mines every pr-review session active since the watermark
+`~/.claude/pr-review-mining/MINED`, and its headless readers, judges, synthesizers and two mergers write
+`final/skill-text/report.md` and `final/machinery/report.md` under `~/.claude/pr-review-mining/<date>/`. The same
+command resumes a stopped run, and only a complete run moves the watermark. Present the two lists to the owner. Each
+change they direct, with their words quoted, is owner-directed and goes through Steps 4 to 6. What they decline goes in
+`REJECTED.md`, where the next run's mergers read it. After editing the script, run its `--self-test`; `--dry-run`
+measures without agents.
 
 ## Step 2 — Run the mechanical linter
 
@@ -195,7 +205,7 @@ The store is the corroboration itself: the counts that decide the Step 3 bar, an
 proposals with the evidence that would reopen each. Left on one machine it is lost with that machine, and
 unavailable to anyone else running these skills. **A retro that applies NOTHING still
 commits here**, because the parked counts and the new records are its whole output — that is the pass
-most likely to skip this step and the one whose evidence is easiest to lose. `~/.claude/pr-review-rounds/`, `~/.claude/pr-review-voice.md` and `~/.claude/pr-review-recipes.md`, the per-PR round records pr-review keeps and the account owner's measured voice and this machine's how-tos it reads, are local and stay out of the repo.
+most likely to skip this step and the one whose evidence is easiest to lose. `~/.claude/pr-review-rounds/`, `~/.claude/pr-review-mining/`, `~/.claude/pr-review-voice.md` and `~/.claude/pr-review-recipes.md`, the per-PR round records pr-review keeps, the mining runs, and the account owner's measured voice and this machine's how-tos pr-review reads, are local and stay out of the repo.
 
 `--dry-run` stops before applying and prints the proposals with their corroboration and objections.
 
