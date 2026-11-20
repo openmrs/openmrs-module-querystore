@@ -27,6 +27,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.querystore.QueryStoreConstants;
+import org.openmrs.module.querystore.SafeLog;
+import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.backend.BackendCapabilities;
 import org.openmrs.module.querystore.backend.BackendDocs;
 import org.openmrs.module.querystore.backend.BackendStore;
@@ -152,7 +154,8 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				// The SPI does not distinguish "applied" from "dropped as stale" — both succeed.
 				return WriteResult.success();
 			}
-			log.warn("upsert failed for " + doc.getResourceType() + "/" + doc.getResourceUuid(), e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "upsert failed for " + doc.getResourceType() + "/"
+			        + SkipLogFormat.loggableUuid(doc.getResourceType(), doc.getResourceUuid()), e);
 			return WriteResult.failed(failure(doc, e));
 		}
 		catch (IOException e) {
@@ -162,7 +165,8 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			if (isVersionConflict(e)) {
 				return WriteResult.success();
 			}
-			log.warn("upsert failed for " + doc.getResourceType() + "/" + doc.getResourceUuid(), e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "upsert failed for " + doc.getResourceType() + "/"
+			        + SkipLogFormat.loggableUuid(doc.getResourceType(), doc.getResourceUuid()), e);
 			return WriteResult.failed(failure(doc, e));
 		}
 	}
@@ -208,11 +212,11 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				// Idempotent delete: a missing index is the second-call no-op outcome.
 				return WriteResult.success();
 			}
-			log.warn("delete failed for " + resourceType + "/" + resourceUuid, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "delete failed for " + resourceType + "/" + SkipLogFormat.loggableUuid(resourceType, resourceUuid), e);
 			return WriteResult.failed(new DocFailure(resourceType, resourceUuid, e.getMessage(), isRetryable(e)));
 		}
 		catch (IOException e) {
-			log.warn("delete failed for " + resourceType + "/" + resourceUuid, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "delete failed for " + resourceType + "/" + SkipLogFormat.loggableUuid(resourceType, resourceUuid), e);
 			return WriteResult.failed(new DocFailure(resourceType, resourceUuid, e.getMessage(), isRetryable(e)));
 		}
 	}
@@ -286,13 +290,13 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 					succeeded += pending.size();
 					continue;
 				}
-				log.warn("bulkDelete chunk failed for " + resourceType, e);
+				SafeLog.warn(ElasticsearchBackendStore.class, "bulkDelete chunk failed for " + resourceType, e);
 				for (String uuid : pending) {
 					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
 				}
 			}
 			catch (IOException e) {
-				log.warn("bulkDelete chunk failed for " + resourceType, e);
+				SafeLog.warn(ElasticsearchBackendStore.class, "bulkDelete chunk failed for " + resourceType, e);
 				for (String uuid : pending) {
 					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
 				}
@@ -350,7 +354,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			}
 		}
 		catch (ElasticsearchException | IOException e) {
-			log.warn("bulkDeleteByPatient failed for " + patientUuid, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "bulkDeleteByPatient failed", e);
 			// Call-level failure: no per-doc telemetry available, so resourceType/resourceUuid stay
 			// null. totalRequested and succeeded keep what the completed passes counted; a failure on
 			// the first read leaves them 0.
@@ -368,8 +372,9 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 	 * The WARN text for a full-chart read disclosed as incomplete. Nothing throws on this path and
 	 * the WARN is the only trace, so it names the signal that fired: a failed shard, a timeout or an
 	 * early termination point an operator at cluster health; only the size limit points at paging.
+	 * It names no patient, since WARN lines carry no patient uuid.
 	 */
-	static String truncationDisclosure(String patientUuid, long total, int returned, boolean shardFailure,
+	static String truncationDisclosure(long total, int returned, boolean shardFailure,
 	        boolean timedOut, boolean terminatedEarly) {
 		List<String> causes = new ArrayList<String>(4);
 		if (shardFailure) {
@@ -385,7 +390,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			causes.add("only " + returned + " of " + total + " matching records were returned under the single-search size of "
 			        + FULL_CHART_MAX_HITS);
 		}
-		return "findAllByPatient(" + patientUuid + ") is disclosed incomplete: " + String.join("; ", causes) + ".";
+		return "A full-chart read is disclosed incomplete: " + String.join("; ", causes) + ".";
 	}
 
 	@Override
@@ -439,7 +444,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 				// max_result_window (default 10k). MySQL and Lucene have no equivalent because they
 				// stream from JDBC/Lucene directly. PIT+search_after pagination is the v1.1 follow-up
 				// if a real consumer ever surfaces here. See ADR Decision 15 for the v1 contract.
-				log.warn(truncationDisclosure(patientUuid, total, hits.size(), shardFailure, resp.timedOut(),
+				log.warn(truncationDisclosure(total, hits.size(), shardFailure, resp.timedOut(),
 				        Boolean.TRUE.equals(resp.terminatedEarly())));
 			}
 			List<QueryDocument> all = new ArrayList<>(hits.size());
@@ -452,7 +457,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		catch (ElasticsearchException | IOException e) {
 			// Preserve the legacy non-throwing read contract, but never describe a backend failure as a
 			// complete empty chart. External consumers fail closed on the explicit incompleteness bit.
-			log.warn("findAllByPatient failed for " + patientUuid, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "findAllByPatient failed", e);
 			return new PatientChartRead(Collections.<QueryDocument> emptyList(), true);
 		}
 	}
@@ -481,7 +486,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			return resp.count() > 0L;
 		}
 		catch (ElasticsearchException | IOException e) {
-			log.warn("existsByPatient failed for " + patientUuid, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "existsByPatient failed", e);
 			return false;
 		}
 	}
@@ -512,12 +517,12 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 		}
 		catch (ElasticsearchException e) {
 			if (e.status() != 404 && !"index_not_found_exception".equals(e.error().type())) {
-				log.warn("findLastModified failed for " + resourceType, e);
+				SafeLog.warn(ElasticsearchBackendStore.class, "findLastModified failed for " + resourceType, e);
 			}
 			return Collections.emptyMap();
 		}
 		catch (IOException | RuntimeException e) {
-			log.warn("findLastModified failed for " + resourceType, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "findLastModified failed for " + resourceType, e);
 			return Collections.emptyMap();
 		}
 		return found;
@@ -540,11 +545,11 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			if (e.status() == 404 || "index_not_found_exception".equals(e.error().type())) {
 				return 0L;
 			}
-			log.warn("countByType failed for " + resourceType, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "countByType failed for " + resourceType, e);
 			return -1L;
 		}
 		catch (IOException e) {
-			log.warn("countByType failed for " + resourceType, e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "countByType failed for " + resourceType, e);
 			return -1L;
 		}
 	}
@@ -663,7 +668,7 @@ public class ElasticsearchBackendStore implements BackendStore, Closeable {
 			return countBulkSuccess(resp, null, failures, true);
 		}
 		catch (ElasticsearchException | IOException e) {
-			log.warn("bulkUpsert chunk failed", e);
+			SafeLog.warn(ElasticsearchBackendStore.class, "bulkUpsert chunk failed", e);
 			for (QueryDocument doc : docs) {
 				failures.add(failure(doc, e));
 			}

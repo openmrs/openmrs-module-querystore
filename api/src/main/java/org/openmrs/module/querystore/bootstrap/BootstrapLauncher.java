@@ -9,13 +9,23 @@
  */
 package org.openmrs.module.querystore.bootstrap;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.context.Daemon;
 import org.openmrs.module.DaemonToken;
+import org.openmrs.module.querystore.SafeLog;
 
 /**
  * Single home for "run the global {@link BootstrapService#bootstrap()} on an OpenMRS daemon thread".
@@ -48,6 +58,154 @@ public class BootstrapLauncher {
 	// concurrent runs from corrupting progress bookkeeping; this additionally stops redundant daemon
 	// threads from piling up parked on those locks and re-scanning an already-complete cursor.
 	private final AtomicBoolean running = new AtomicBoolean(false);
+
+	/** Default for {@code querystore.projection.maxConcurrent}. */
+	public static final int DEFAULT_MAX_CONCURRENT_PROJECTIONS = 4;
+
+	/** Largest {@code querystore.projection.maxConcurrent} honoured. */
+	public static final int MAX_PROJECTION_SLOTS = 32;
+
+	// How many failed patients are remembered. Past this the least recently failed is forgotten, and
+	// then reads as indexed if its failed warm left any document, or not indexed if it left none.
+	static final int MAX_FAILED_PATIENTS = 10_000;
+
+	// Every per-patient projection holds one of these while it runs: a background warm, and a
+	// synchronous cold-touch projection on a request thread alike. Daemon spawns a thread per warm and
+	// each projection saturates the CPU's cores through the embedder, so without one bound a burst of
+	// cold patients would run that many at once. Replaced only by setMaxConcurrentProjections, at
+	// module start.
+	private volatile Semaphore projectionSlots = new Semaphore(DEFAULT_MAX_CONCURRENT_PROJECTIONS);
+
+	// Patients with a projection in flight (a background warm, or a synchronous one holding a slot),
+	// each with a latch released when it finishes: the per-patient in-flight guard, the source of the
+	// "projecting" index status, and what a second projection for the patient waits on instead of
+	// taking a slot of its own. An entry exists only while its projection holds a slot.
+	private final ConcurrentHashMap<String, CountDownLatch> inFlight = new ConcurrentHashMap<>();
+
+	// Resource types with a launchResyncAsync running, so repeated requests share one scan.
+	private final Set<String> resyncing = ConcurrentHashMap.newKeySet();
+
+	// Patients whose last warm failed: the source of the "failed" index status. Bounded, least
+	// recently failed first out, so a caller warming uuids that never index cannot grow it forever.
+	private final Set<String> failedPatients = Collections.synchronizedSet(Collections.newSetFromMap(
+	    new LinkedHashMap<String, Boolean>(16, 0.75f, true) {
+
+		    private static final long serialVersionUID = 1L;
+
+		    @Override
+		    protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+			    return size() > MAX_FAILED_PATIENTS;
+		    }
+	    }));
+
+	/**
+	 * Sets how many per-patient projections may run at once ({@code querystore.projection.maxConcurrent}).
+	 * Called once at module start, before any projection; a later call does not shrink projections
+	 * already holding a slot. Clamped to 1..{@link #MAX_PROJECTION_SLOTS}.
+	 */
+	public void setMaxConcurrentProjections(int max) {
+		this.projectionSlots = new Semaphore(Math.max(1, Math.min(MAX_PROJECTION_SLOTS, max)));
+	}
+
+	/**
+	 * Runs one patient's projection ({@code work}) on the calling thread once a projection slot is
+	 * free, waiting at most {@code timeoutMillis} for one. Backs the synchronous cold-touch projection
+	 * and the bounded reindex, so they share the bound with background warms. While it runs the
+	 * patient reads as warming: the chart is half written until it finishes, and a concurrent status
+	 * read or non-waiting search must not take it as indexed.
+	 *
+	 * <p>If a projection for the patient is already in flight, this one does not run and takes no
+	 * slot: it waits, within the same {@code timeoutMillis}, for that one to finish. Otherwise
+	 * {@code work} runs; it returns whether it re-projected the whole chart, which clears a recorded
+	 * failure, and a thrown exception records one ({@link #hasFailed}) and propagates.
+	 *
+	 * @return {@code true} when this call projected, or the projection it waited for finished;
+	 *         {@code false} when no slot came free, or the other projection did not finish, in time
+	 *         (or the wait was interrupted)
+	 */
+	public boolean runWithProjectionSlot(String patientUuid, BooleanSupplier work, long timeoutMillis) {
+		return runProjection(patientUuid, work, timeoutMillis, true);
+	}
+
+	/**
+	 * Like {@link #runWithProjectionSlot}, but always runs {@code work} itself: if a projection for
+	 * the patient is in flight it waits for that to finish, then takes a slot and runs. For a forced
+	 * re-projection (reindex), which must not settle for a projection that started before it.
+	 *
+	 * @return {@code true} when {@code work} ran; {@code false} when no slot came free in time
+	 */
+	public boolean runExclusiveProjection(String patientUuid, BooleanSupplier work, long timeoutMillis) {
+		return runProjection(patientUuid, work, timeoutMillis, false);
+	}
+
+	private boolean runProjection(String patientUuid, BooleanSupplier work, long timeoutMillis, boolean joinInFlight) {
+		long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(0, timeoutMillis));
+		Semaphore slots = this.projectionSlots;
+		CountDownLatch done = new CountDownLatch(1);
+		while (true) {
+			CountDownLatch running = patientUuid == null ? null : inFlight.get(patientUuid);
+			if (running != null) {
+				if (!awaitUntil(running, deadline)) {
+					return false;
+				}
+				if (joinInFlight) {
+					return true;
+				}
+				continue;
+			}
+			try {
+				if (!slots.tryAcquire(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS)) {
+					log.debug("No projection slot came free in time; not projecting");
+					return false;
+				}
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+			CountDownLatch other = patientUuid == null ? null : inFlight.putIfAbsent(patientUuid, done);
+			if (other == null) {
+				break;
+			}
+			// Another projection registered between the check and the slot: let it run, as above.
+			slots.release();
+			if (!awaitUntil(other, deadline)) {
+				return false;
+			}
+			if (joinInFlight) {
+				return true;
+			}
+		}
+		try {
+			if (work.getAsBoolean() && patientUuid != null) {
+				failedPatients.remove(patientUuid);
+			}
+			return true;
+		}
+		catch (RuntimeException e) {
+			if (patientUuid != null) {
+				failedPatients.add(patientUuid);
+			}
+			throw e;
+		}
+		finally {
+			if (patientUuid != null) {
+				inFlight.remove(patientUuid, done);
+			}
+			done.countDown();
+			slots.release();
+		}
+	}
+
+	private static boolean awaitUntil(CountDownLatch latch, long deadlineNanos) {
+		try {
+			return latch.await(Math.max(0, deadlineNanos - System.nanoTime()), TimeUnit.NANOSECONDS);
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+	}
 
 	public void setDaemonToken(DaemonToken token) {
 		this.daemonToken = token;
@@ -115,13 +273,13 @@ public class BootstrapLauncher {
 	 * needs the {@link DaemonToken} for the daemon-user {@code UserContext} the scan's GP reads
 	 * require, and resolves the service on the daemon thread.
 	 *
-	 * <p>No global running-flag guard (unlike {@link #launchAsync()}): a re-sync is scoped to one
-	 * type, the service serializes same-type work on its per-type lock, and the scan is idempotent —
-	 * so a duplicate request is at worst redundant, not corrupting. The caller is expected to have
-	 * validated {@code resourceType} (e.g. against {@link BootstrapService#getResourceTypeNames()}).
+	 * <p>Single-flight per type: a request for a type whose re-sync is already running joins it and
+	 * starts nothing, so repeated requests cannot pile up daemon threads, each holding a session and a
+	 * full scan, on the type's lock. The caller is expected to have validated {@code resourceType}
+	 * (e.g. against {@link BootstrapService#getResourceTypeNames()}).
 	 *
-	 * @return {@code true} once the re-sync is handed to a daemon thread; {@code false} only when no
-	 *         {@link DaemonToken} is wired yet, in which case nothing runs.
+	 * @return {@code true} once a re-sync of the type is running (newly launched or already);
+	 *         {@code false} only when no {@link DaemonToken} is wired yet, in which case nothing runs.
 	 */
 	public boolean launchResyncAsync(String resourceType) {
 		DaemonToken token = this.daemonToken;
@@ -130,19 +288,114 @@ public class BootstrapLauncher {
 			        + " (BootstrapService.resyncType(String) can still be called programmatically)");
 			return false;
 		}
-		daemonExecutor.execute(() -> {
-			try {
-				log.info("Type re-sync starting for " + resourceType);
-				Context.getService(BootstrapService.class).resyncType(resourceType);
-				log.info("Type re-sync completed for " + resourceType);
-			}
-			catch (RuntimeException e) {
-				// Fire-and-forget on a daemon thread — no caller upstack to surface to, so log here
-				// (mirrors the after-commit sync path's log-and-swallow per ADR Decision 12).
-				log.error("Type re-sync failed for " + resourceType, e);
-			}
-		}, token);
+		if (!resyncing.add(resourceType)) {
+			log.info("Type re-sync already running for " + resourceType + "; ignoring duplicate request");
+			return true;
+		}
+		try {
+			daemonExecutor.execute(() -> {
+				try {
+					log.info("Type re-sync starting for " + resourceType);
+					Context.getService(BootstrapService.class).resyncType(resourceType);
+					log.info("Type re-sync completed for " + resourceType);
+				}
+				catch (RuntimeException e) {
+					// Fire-and-forget on a daemon thread — no caller upstack to surface to, so log here
+					// (mirrors the after-commit sync path's log-and-swallow per ADR Decision 12).
+					SafeLog.error(BootstrapLauncher.class, "Type re-sync failed for " + resourceType, e);
+				}
+				finally {
+					resyncing.remove(resourceType);
+				}
+			}, token);
+		}
+		catch (RuntimeException e) {
+			resyncing.remove(resourceType);
+			throw e;
+		}
 		return true;
+	}
+
+	/**
+	 * Runs one patient's warm ({@code work}, typically {@link BootstrapService#ensureIndexed}) on a
+	 * daemon thread, returning immediately. Backs the omnibar's warm-on-chart-open: the chart is
+	 * projected while the user reads the banner, so the first keystroke doesn't pay the cold
+	 * projection. {@code work} returns whether it re-projected the whole chart, which clears a
+	 * recorded failure; it signals failure by throwing, and the patient then reads as failed
+	 * ({@link #hasFailed}) until a later full projection succeeds.
+	 *
+	 * <p>Idempotent per patient: a request for a patient already in flight is a no-op that reports
+	 * success. Bounded across patients by the projection slots it shares with synchronous projections
+	 * ({@link #runWithProjectionSlot}): with none free it starts nothing.
+	 *
+	 * @return {@code true} once a warm for this patient is in flight (newly launched or already
+	 *         running); {@code false} when no {@link DaemonToken} is wired yet or no projection slot is
+	 *         free, in which case nothing runs and the caller may retry later.
+	 */
+	public boolean launchPatientWarm(String patientUuid, BooleanSupplier work) {
+		DaemonToken token = this.daemonToken;
+		if (token == null || patientUuid == null) {
+			return false;
+		}
+		// Slot first, then the in-flight entry, so a patient is only ever in flight while its
+		// projection holds a slot: registering first let a racing duplicate report "in flight" for a
+		// warm that then found no slot and never ran.
+		Semaphore slots = this.projectionSlots;
+		if (!slots.tryAcquire()) {
+			log.debug("No projection slot free; not launching a warm");
+			return inFlight.containsKey(patientUuid);
+		}
+		CountDownLatch done = new CountDownLatch(1);
+		if (inFlight.putIfAbsent(patientUuid, done) != null) {
+			slots.release();
+			log.debug("Patient warm already in flight; ignoring duplicate");
+			return true;
+		}
+		log.debug("Patient warm starting (" + inFlight.size() + " in flight)");
+		try {
+			daemonExecutor.execute(() -> {
+				try {
+					if (work.getAsBoolean()) {
+						failedPatients.remove(patientUuid);
+					}
+				}
+				catch (RuntimeException e) {
+					// Fire-and-forget: no caller upstack, so the failure is kept for the status read.
+					failedPatients.add(patientUuid);
+					SafeLog.warn(BootstrapLauncher.class, "Background patient warm failed (patient uuid at DEBUG)", e);
+					log.debug("Background warm failed for patient " + patientUuid);
+				}
+				finally {
+					inFlight.remove(patientUuid, done);
+					done.countDown();
+					slots.release();
+				}
+			}, token);
+		}
+		catch (RuntimeException e) {
+			inFlight.remove(patientUuid, done);
+			done.countDown();
+			slots.release();
+			throw e;
+		}
+		return true;
+	}
+
+	/**
+	 * True while a projection for this patient is running: a {@link #launchPatientWarm}, or a
+	 * synchronous one through {@link #runWithProjectionSlot}.
+	 */
+	public boolean isWarming(String patientUuid) {
+		return patientUuid != null && inFlight.containsKey(patientUuid);
+	}
+
+	/**
+	 * True when this patient's last projection through this launcher failed and no full projection
+	 * has succeeded since. Per JVM and not persisted: a restart forgets it, as does the bound on how
+	 * many are remembered.
+	 */
+	public boolean hasFailed(String patientUuid) {
+		return patientUuid != null && failedPatients.contains(patientUuid);
 	}
 
 	/**

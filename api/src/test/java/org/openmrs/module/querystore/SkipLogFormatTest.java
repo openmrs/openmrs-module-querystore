@@ -10,6 +10,7 @@
 package org.openmrs.module.querystore;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -109,5 +110,27 @@ public class SkipLogFormatTest {
 		assertEquals("[querystore-skip] layer=sync type=null uuid=null "
 		        + "retryable=unknown reason=\"no failure detail\"",
 		        SkipLogFormat.format("sync", (org.openmrs.module.querystore.backend.DocFailure) null));
+	}
+
+	@Test
+	public void patientAndEncounterUuidsAreOmitted_otherTypesKeepTheirs() {
+		String patient = SkipLogFormat.format("bootstrap", "patient", "p-uuid", null, "x");
+		String encounter = SkipLogFormat.format("sync", "encounter", "e-uuid", null, "x");
+		String obs = SkipLogFormat.format("sync", "obs", "o-uuid", null, "x");
+
+		assertTrue(patient, patient.contains(" uuid=<omitted> "));
+		assertTrue(encounter, encounter.contains(" uuid=<omitted> "));
+		assertTrue("an obs uuid is how an operator re-projects the record", obs.contains(" uuid=o-uuid "));
+		assertEquals(SkipLogFormat.OMITTED, SkipLogFormat.loggableUuid("patient", "p-uuid"));
+		assertEquals(null, SkipLogFormat.loggableUuid("patient", null));
+	}
+
+	@Test
+	public void uuidsQuotedInTheReasonAreScrubbed() {
+		String line = SkipLogFormat.format("bootstrap", "obs", "u-1", true,
+		    "Encounter 0c1d2e3f-4a5b-4c6d-8e7f-901234567890 does not exist");
+
+		assertTrue(line, line.contains("reason=\"Encounter <uuid> does not exist\""));
+		assertFalse(line, line.contains("0c1d2e3f"));
 	}
 }

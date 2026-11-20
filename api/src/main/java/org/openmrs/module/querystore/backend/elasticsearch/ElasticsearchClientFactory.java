@@ -19,6 +19,7 @@ import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.querystore.QueryStoreConstants;
+import org.openmrs.module.querystore.SafeLog;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
@@ -100,7 +101,7 @@ public class ElasticsearchClientFactory implements Closeable {
 			}
 		}
 		catch (RuntimeException e) {
-			log.warn("Could not read " + QueryStoreConstants.RP_ELASTICSEARCH_URI + " runtime property", e);
+			SafeLog.warn(ElasticsearchClientFactory.class, "Could not read " + QueryStoreConstants.RP_ELASTICSEARCH_URI + " runtime property", e);
 		}
 		return null;
 	}
@@ -113,7 +114,7 @@ public class ElasticsearchClientFactory implements Closeable {
 					restClient.close();
 				}
 				catch (IOException e) {
-					log.warn("Could not close Elasticsearch REST client", e);
+					SafeLog.warn(ElasticsearchClientFactory.class, "Could not close Elasticsearch REST client", e);
 				}
 				restClient = null;
 				client = null;

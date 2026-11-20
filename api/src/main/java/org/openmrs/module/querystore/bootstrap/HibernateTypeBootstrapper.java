@@ -19,6 +19,7 @@ import org.apache.commons.logging.LogFactory;
 import org.hibernate.Session;
 import org.hibernate.query.Query;
 import org.openmrs.api.db.hibernate.DbSessionFactory;
+import org.openmrs.module.querystore.SafeLog;
 import org.openmrs.module.querystore.SkipLogFormat;
 
 /**
@@ -180,8 +181,8 @@ public abstract class HibernateTypeBootstrapper<T> extends TypeBootstrapper<T> {
 			}
 			catch (RuntimeException rowError) {
 				skipped++;
-				log.warn(SkipLogFormat.format("bootstrap", getResourceType(), uuid, null,
-				        "skipped dump-orphaned record (dangling FK): " + rowError.getMessage()), rowError);
+				SafeLog.warn(HibernateTypeBootstrapper.class, SkipLogFormat.format("bootstrap", getResourceType(), uuid, null,
+				    "skipped dump-orphaned record (dangling FK): " + rowError.getMessage()), rowError);
 			}
 		}
 		Object[] last = descriptors.get(descriptors.size() - 1);

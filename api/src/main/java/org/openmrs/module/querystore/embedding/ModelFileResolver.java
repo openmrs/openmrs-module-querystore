@@ -18,6 +18,7 @@ import org.apache.commons.lang3.SystemUtils;
 import org.openmrs.util.OpenmrsUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.openmrs.module.querystore.SkipLogFormat;
 
 /**
  * Resolves a configured model-file path against the OpenMRS application data directory, with
@@ -109,7 +110,7 @@ final class ModelFileResolver {
 		}
 		catch (IOException e) {
 			log.warn("Failed to remove macOS quarantine attribute from {}: {}",
-					path, e.getMessage());
+					path, SkipLogFormat.scrubUuids(e.getMessage()));
 		}
 	}
 }

@@ -9,6 +9,7 @@
  */
 package org.openmrs.module.querystore;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.AdministrationService;
@@ -17,6 +18,7 @@ import org.openmrs.api.context.Daemon;
 import org.openmrs.module.BaseModuleActivator;
 import org.openmrs.module.DaemonToken;
 import org.openmrs.module.DaemonTokenAware;
+import org.openmrs.module.querystore.SafeLog;
 import org.openmrs.module.querystore.api.impl.QueryStoreServiceImpl;
 import org.openmrs.module.querystore.backend.BackendStore;
 import org.openmrs.module.querystore.backend.BackendStoreSelector;
@@ -66,6 +68,8 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 		// before the events consumer can dispatch an index. Activator owns the token (via
 		// DaemonTokenAware); the dispatcher is constructed by Spring without it, so propagation lives here.
 		wireSyncDaemonToken();
+		configureLimits(Context.getAdministrationService(), findBootstrapLauncher(),
+		    Context.getRegisteredComponent("queryStoreService", QueryStoreServiceImpl.class));
 		wireBootstrapLauncherToken();
 		warmupQueryEmbedder();
 		if (isAutostartEnabled(Context.getAdministrationService())) {
@@ -95,7 +99,7 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 				log.info("Query embedder warmup completed in " + (System.currentTimeMillis() - t0) + " ms");
 			}
 			catch (RuntimeException e) {
-				log.warn("Query embedder warmup failed; first real query will pay cold cost", e);
+				SafeLog.warn(QueryStoreActivator.class, "Query embedder warmup failed; first real query will pay cold cost", e);
 			}
 		}, daemonToken);
 	}
@@ -183,6 +187,39 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 	}
 
 	/**
+	 * Applies the projection and query limits from their global properties. A value that is unset
+	 * keeps the default; one that isn't an integer within its range keeps the default too, and is
+	 * logged, so a mistyped limit is visible rather than silently ignored.
+	 */
+	void configureLimits(AdministrationService admin, BootstrapLauncher launcher, QueryStoreServiceImpl service) {
+		launcher.setMaxConcurrentProjections(boundedInt(admin, QueryStoreConstants.GP_PROJECTION_MAX_CONCURRENT,
+		    BootstrapLauncher.DEFAULT_MAX_CONCURRENT_PROJECTIONS, 1, BootstrapLauncher.MAX_PROJECTION_SLOTS));
+		service.setSyncProjectionWaitMillis(1000L * boundedInt(admin, QueryStoreConstants.GP_PROJECTION_SYNC_WAIT_SECONDS,
+		    QueryStoreServiceImpl.DEFAULT_SYNC_PROJECTION_WAIT_SECONDS, 0, QueryStoreServiceImpl.MAX_SYNC_PROJECTION_WAIT_SECONDS));
+		service.setCandidatePool(boundedInt(admin, QueryStoreConstants.GP_QUERY_CANDIDATE_POOL,
+		    QueryStoreServiceImpl.DEFAULT_CANDIDATE_POOL, 1, QueryStoreServiceImpl.MAX_CANDIDATE_POOL));
+	}
+
+	static int boundedInt(AdministrationService admin, String property, int defaultValue, int min, int max) {
+		String raw = admin.getGlobalProperty(property);
+		if (raw == null || raw.trim().isEmpty()) {
+			return defaultValue;
+		}
+		try {
+			int value = Integer.parseInt(raw.trim());
+			if (value >= min && value <= max) {
+				return value;
+			}
+		}
+		catch (NumberFormatException e) {
+			// falls through to the warning
+		}
+		log.warn("Ignoring " + property + " = '" + StringUtils.abbreviate(raw.trim(), 40) + "': expected an integer from "
+		        + min + " to " + max + "; using " + defaultValue);
+		return defaultValue;
+	}
+
+	/**
 	 * Closes the ONNX embedding sessions, which on macOS is also what deletes the CoreML models each
 	 * session compiled into the temp directory (issue #83). The bean's {@code destroy-method} alone
 	 * does not cover a server shutdown: OpenMRS closes the Spring context only when a module start or
@@ -194,7 +231,7 @@ public class QueryStoreActivator extends BaseModuleActivator implements DaemonTo
 			findOnnxEmbeddingProvider().close();
 		}
 		catch (RuntimeException ex) {
-			log.warn("Could not close the ONNX embedding provider; its sessions stay open until the JVM exits", ex);
+			SafeLog.warn(QueryStoreActivator.class, "Could not close the ONNX embedding provider; its sessions stay open until the JVM exits", ex);
 		}
 	}
 
