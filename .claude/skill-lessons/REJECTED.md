@@ -7009,3 +7009,136 @@ read the ledger extract; no report names a private PR. It showed two defects, fi
 **Budgets:** `skill-retro` 2916 → 3044.
 
 **Running parked counts:** unchanged.
+
+## 2026-11-20 (owner-directed: pr-review lessons from the reviews since the 2026-11-19 mining, and a fresh audit of 0.35.0; no run-record window) — 20 edits applied: 3 new rules, 13 text fixes from 12 of the auditor's 14 findings, and a 4-part privacy fix for a PR with several tickets; thirteen gate rounds over the staged diff, the last finding nothing; 5 shapes rejected and 4 parked with reasons; linter 17 files, 0 findings; **pr-review 0.36.0**
+
+The owner asked "Could there be any other lessons that we should apply to the pr-review skill?" and, shown the
+proposal below, answered "apply".
+
+**Evidence read:** the live verification run of `skill-retro mine` (the 2026-11-19 section above), over the 10 sessions
+since the watermark: its skill-text merger's ranked list, its auditor's 14 findings on pr-review 0.35.0, and the
+2026-11-19 run records (two in `…-patientqueueing-41.md`, one in `…-openmrs-core-6605.md`). That run was given
+`--since`, so the watermark stayed at 2026-11-19T09:16:23Z: the next `mine` re-reads these sessions, and its mergers
+read this section.
+
+**Applied, new rules (Step 3):**
+- **Privilege probes one at a time.** A privilege or scope claim, the PR's or one the review suggests: where it names
+  several privileges, withhold each in turn with the rest granted; where it says "only when" or "unless", also run with
+  that condition false and the privilege it names withheld. Corroboration: the two run records in
+  `2026-11-19-pr-review-patientqueueing-41.md`. In round 11, round 9's posted README row still missed a privilege
+  that only the no-open-visit branch needs; 0.35.0's "(an open visit and none)" came from that one. In round 12, round
+  11's refuter had granted every privilege on a line at once, so the line's conditions were never tested. Both rows were
+  posted, so the seventh pass's "the verification already required caught each wrong premise before posting" (:6673)
+  no longer holds. The records also meet the 2026-11-18 P3's first REOPEN ON (:6217). P3 itself stays parked: the
+  addendum (:6276) also asks for a replay showing that a wording changes the posted block, and none was run.
+- **A fix's refuter gets its callers.** Put the `git grep` list of every caller of each method or query the fix
+  changes in the brief; outside CI, while it runs, drive each caller a request reaches. Corroboration: three sessions
+  (8fda42a9, 9145b9ab, 8820e7ac) each spent a refuter round finding a caller the suggested fix broke, all caught before
+  posting. The merger also counts about 207 minutes of refuter rounds across three sessions.
+- **Mutate in your own worktree, one you deploy nothing from.** Session 8fda42a9 nearly deployed the jar it had
+  mutated (clean head `ffd3199d…`, mutated `e478cbf5…`). The text caused the hazard: the mutation probe and the
+  build-and-deploy line both said "your worktree". That is a defect in the document, valid from one instance.
+
+**Applied, the auditor's text fixes** (its numbers):
+- **#2:** the rule that every fix you recommend goes to a refuter gets its own paragraph and the bold lead "A fix you
+  recommend is different.", out from under the paragraph that calls the pass a conditional escalation. The heading
+  `### When an adversarial refutation pass is worth it` is unchanged, since `pr-harden` cites it (:2171).
+- **#3:** "say nothing" names its exceptions, so it no longer contradicts "say plainly what you confirmed is safe".
+- **#5:** the pending-review check runs outside CI, where there is a user to ask.
+- **#6:** the open-PR rule's three conditions read "when all three hold", and the list ends before "A shared hunk
+  alone".
+- **#7:** the re-review closure rule gets its own paragraph and bold lead.
+- **#8, #9, #12:** three rules stated twice are stated once: the no-label rule (−31), no body when only blockers would
+  be in it, keeping "one blocker or several" (−13), and the blocking rule in the anti-pattern, which keeps only the
+  under-labeling warning (−7).
+- **#10:** a result that must be on the record goes in a note doing one of the note rule's two jobs. The old "(no
+  action needed)" note was one the note rule forbids.
+- **#11:** the sample question loses its em-dash, which the skill's own em-dash rule bans.
+- **#13, half:** line 24's "and confirm it silently, by not commenting" goes (−8). Line 48's half stays, since only it
+  reconciles the hunk rule with the anti-pattern.
+- **#14:** posting.md's thread-reply line points at "Step 1's reply-in-thread rule"; the "Needs action before merge:"
+  example says it never goes in the review, and that outside CI it belongs in the report.
+
+**Applied, a privacy fix for a PR with several tickets**, found by gate round 4. The private list holds one PR under two
+advisory keys, and the text assumed one ticket:
+- nothing posted names any of its tickets, quotes one or links one; posting.md's gate line says the same;
+- the append to `PRS` fires when the private check does not list that key for the PR's `url`, so a second key goes in;
+- an auth PR "whose ticket, or any one of its tickets, is blank or unreadable stays private". The old condition survives
+  word for word, so the edit can only add PRs to the private set.
+
+**Gate rounds**, each a fresh read-only headless agent given the base and new files, the edit list, the Action's
+workflow file and the private list, never the argument for the edits:
+1. d5b0ec33 ($0.75). 7 of 18 edits needed changes:
+   - the privilege rule named no list, and "run each clause false without its privilege" read two ways;
+   - the caller rule delayed the refuter, against the same paragraph's "start each agent as soon as…". It assumed an
+     HTTP request, and in CI it would have run the PR's code;
+   - "a worktree you deploy nothing from" dropped "your own", so the user's checkout qualified;
+   - #2's lead said "not conditional" two clauses before "where you can start one", and CI has no agent tool;
+   - #4's "its ticket" narrowed "a ticket"; #6's list ran into the next clause; #14's half pointed CI at posting.md,
+     which CI never loads; #9 lost the several-blockers case.
+2. c5b8d1cb ($0.71). #4's "it" had two antecedents; #9's "none" read as "no blockers" and lost "several"; #14's
+   "outside CI" scoped the whole ban; #3 named one of three exceptions.
+3. c5ca4132 ($0.88). #4 moved the append to `PRS` two bullets ahead of the MCP read that triggers it. Dropped.
+4. c3f782fa ($0.76). Nothing wrong with #4 dropped, but #4's "any of its tickets" had been the set's only fix for a PR
+   with several tickets: the privacy fix's first three parts.
+5. 67e42cc2 ($0.42). CI's only privacy guard still said "whose ticket": an auth PR citing a public and a private ticket
+   reads as public there. The fourth part.
+6. 63309d1e ($0.46). The fourth part's first text dropped "blank" and narrowed "ticket" to "key".
+7. 2ec36fa2 ($0.40). A key-shaped string that is no ticket (`SHA-512`) answers 404 and made an auth PR private.
+8. cd6e69bf ($0.43). "Cites" said nowhere where a citation can be, so a key only in the branch name stayed public in CI.
+9. 6826573c ($0.39). A non-closing reference ("Part of #N") counted as no ticket.
+10. 18bbb275 ($0.56). An advisory ID was not clearly a ticket.
+11. 29aafa83 ($0.47). "Issue reference" counted a reference to a PR, and `gh issue view` reads a PR with exit 0. So
+    "Backport of #N" of a private PR became a readable ticket and went public, a regression on the base text.
+12. 519b9ed2 ($0.39). Nothing the skill runs shows that a `#N` is a PR. The fourth part went back to the base wording
+    plus one "or" case.
+13. 2965c0f4 ($0.40). "Nothing is still wrong." It found no PR, locally or in CI, that the new text leaves
+    public and the base text makes private.
+
+**Rejected:**
+- **Auditor #1, the "run it" rules limited to outside CI.** The Action's prompt (`claude-pr-review.yml`,
+  openmrs-contrib-gha-workflows) says "this OVERRIDES the skill wherever they differ" and "never execute the
+  repository's own code", and turns a check that cannot run into a question.
+- **The merger's open item, whether `--post` leaves the Action posting nothing:** read. The Action's prompt says to
+  post "the way the skill's `--post` does".
+- **Auditor #4, the private-PR definition moved into the private-check bullet:** gate round 3.
+- **Defining what counts as a ticket**, in the wordings of rounds 5 to 11. Each traded a leak for false privacy or
+  the reverse, and round 11's let a backport of a private PR go public.
+- **Counting only keys of projects the tracker has**, round 7's fix. Measured 2026-11-20 against the tracker's REST API
+  with no login: `/project/TRUNK` and `/project/O3` 200, a private project 404, `/project/SHA` 404, `/issue/TRUNK-1`
+  200 and `/issue/SHA-512` 404. A private project and a made-up one answer alike, so the rule reopens the leak.
+
+**Parked:**
+- **A fix's refuters run in parallel, one per angle.** The largest speed lever in view, unmeasured. REOPEN ON a timed
+  review round of both shapes.
+- **A private key cited only in commit messages** (round 9's lead). Older than these edits, and no case is known.
+  REOPEN ON such a PR.
+- **A backport of a private fix that is not an auth change stays public** (round 12). Older than these edits; the
+  narrower fix would add to the ticket bullet that a PR referencing a pull request carries that pull request's tickets.
+  REOPEN ON such a backport.
+- **Key-shaped strings make an auth PR private** (`SHA-512`, `AES-256`, `RFC-6749`), round 13's cost, in the safe
+  direction. REOPEN ON a public auth PR a CI review limited to code facts for that reason.
+
+**From the merger's list, parked or left:**
+- Parked, one instance each, REOPEN ON a second: testing a suggested test against cross-wiring mutants (3 instances in
+  session 9145b9ab, all caught by its refuter); "here only" on a sibling-match suggestion; saying that an expected red
+  build is expected; a measured pick for a fix outside the PR (near parked O1 and P10, which need a run record); the
+  log-check half of "both arms start the same way"; two outcome misses, openmrs-esm-stock-management-app PR 734's
+  batch picker loading 10 batches and openmrs-module-stockmanagement PR 65's README placeholder.
+- Left, already covered: a time limit on refuters and the control arm started the same way (0.35.0, after these
+  instances); quoting acceptance criteria; verifying a draft reply's claims; probe tests writing to `~/.OpenMRS`; `-am`
+  beside `-pl`. One comment carrying three asks breaks a rule in force since 0.19.0, in one session.
+- Not skill text: tested snippets for recurring parsers, which the merger points at the recipes file. None was written
+  this pass.
+- **Needs the owner's decision:** whether "push the fix" also replies in that comment's thread. It would widen Step 5's
+  "any other write needs its own ask", which governs replies posted under the owner's name; on
+  openmrs-module-webservices.rest PR 780 the owner asked for the reply separately.
+
+**Machinery outside the repo:** `~/.claude/pr-review-recipes.md` gains 8 recipes, and its copy line now names
+`posting.md` beside SKILL.md.
+
+**Cost:** gates $7.00.
+
+**Budgets:** `pr-review` 9756 → 9837; `pr-review/posting.md` 2236 → 2226.
+
+**Running parked counts:** unchanged.

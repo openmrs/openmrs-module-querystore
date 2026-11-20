@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 9300,
-      "to": 9756,
-      "why": "Owner-directed final pass over all 722 review sessions (25 readers), 117 review memories and a fresh audit of the skill: a blocker checks the base and names its reach, severity being the refuter tallies' most common error; every fix recommended, prose included, goes to a refuter, broken or untested fixes being the next; agents start early, carry a budget in their brief and stop at 30 minutes, after 82 waits and a 16-hour unbounded refuter (def9cf70); probes count on the same terms as searches; runtime, consumer and privilege checks run where the code runs, P4 and P5 reopened by core PR 6462 (base 200, PR 500) and core PR 6694 (legacyui red); the private check runs first; CI that never ran a head is said and run; an exploitable defect the base already has goes to the user privately; addressing replies in its threads and, on the owner's own PR, fixes the description, because 0.34.0 took its 'own ask' boundary from a session's memory while the owner had asked for replies on legacyui PR 277 and fhir2 PR 635; the owner's own PR ends with an offer to apply and push, after 57 loops of the owner asking next; a recipes file, where it exists, holds this machine's how-tos; the round record is written mid-round with what a resumed session needs (c6f5028a); prunes, mostly the auditor's consolidation edits, remove about 290 words; per the readers' catalogs, 2026-11-19 (+456 words)"
+      "from": 9756,
+      "to": 9837,
+      "why": "Owner-directed pass over the reviews since the 2026-11-19 mining, read by skill-retro mine's live verification run, and that run's fresh audit of 0.35.0: a privilege or scope probe, the PR's or one the review suggests, withholds each named privilege in turn and runs each \"only when\" or \"unless\" condition false, after patientqueueing PR 41's two run records (rounds 11 and 12) found privilege rows the review had posted in rounds 9 and 11 still wrong; a recommended fix's refuter gets the git grep list of its callers, after three sessions spent refuter rounds finding the callers a suggested fix broke; a mutation probe runs in your own worktree, one you deploy nothing from, after a session nearly deployed a mutated jar; a PR is private when any one of its tickets is blank or unreadable, and nothing posted names any of them, the private list holding one PR under two advisory keys; the auditor's twelve applied edits remove 60 words and add 41, mostly by merging rules stated twice; thirteen gate rounds, the last finding nothing; 2026-11-20 (+81 words)"
     },
     "pr-review/posting.md": {
       "from": 2185,
@@ -71,8 +71,8 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 9756,
-    "pr-review/posting.md": 2236,
+    "pr-review": 9837,
+    "pr-review/posting.md": 2226,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 3044,
