@@ -7191,3 +7191,41 @@ bare `mine` does not resume: it is finished, and was not started from the waterm
   claim note, and the Action's "post nothing" when an author has asked a question.
 
 **Running parked counts:** unchanged.
+
+## 2026-11-20 (second addendum, owner-directed: the parked parallel refuters, checked against their own evidence) — 1 parked item rejected without its replay; 1 lesson parked; 1 memory note corrected outside the repo; no skill file changed; **Step 5 not run** (nothing to apply)
+
+The owner asked "why Later, no action now?". Offered a replay of session 9145b9ab's three serial refuter rounds as
+parallel ones, they answered "yes"; shown why the replay could not measure the lever, they answered "push it".
+
+**Rejected: a fix's refuters run in parallel, one per angle** (parked in the 2026-11-20 section above). Its saving, in
+the live run's machinery report, "assumes about one serial round saved per affected session". Neither review it cites
+had a round to save:
+- fhir2 PR 644 (session 9145b9ab). Each later round ran to check text revised after the round before, so none ran only
+  to find what an earlier refuter had missed.
+  - Round 2's first finding came from its own revision. It replaced round 1's three no-match tests with four
+    match-only tests, and its refuter measured that the no-match tests catch the gap it found: a filter that is never
+    applied.
+  - Round 3 checked the tests that put them back, with a new comment. Its refuter found a sentence in that comment
+    ambiguous, and measured a case-sensitivity dependence round 2's refuter had already reported unmeasured.
+  - One smaller miss in round 1's text, an `identifier=<user system>|` search its fix also broke, surfaced in round 2,
+    a round the revision needed anyway.
+- patientqueueing PR 41 (sessions f7c8e2e1 and c0de4167, and their two run records). One miss was a probe whose data
+  took one branch, the other a refuter that granted every privilege at once. The privilege-probe rule now names both:
+  data that takes each branch (0.35.0), and each privilege withheld in turn, with each condition false (0.36.0).
+
+The replay was not run and cost nothing: round 1's text did not hold round 2's gap, so parallel refuters on it could
+not have saved a round. The three original refuters cost about $33 together ($13.14, $13.68 and $6.47), from their
+transcripts' token counts at the per-token prices that reproduce 20 runs' billed costs exactly. REOPEN ON a review that
+needed a round only because a refuter missed a defect already in the text it was given, of a kind no content rule
+covers.
+
+**Parked, one instance, REOPEN ON a second:** revise a refuted test by adding the missing case, not by swapping its
+style. In fhir2 PR 644, round 2 replaced round 1's no-match tests instead of adding match cases beside them, so its
+refuter found a gap the replaced tests had closed. For a filter test, the recipes file's "a match and a no-match case
+per field" already rules the swap out; the general form waits for a second instance.
+
+**Outside the repo:** the fhir2 review's project memory, whose summary of its three rounds the machinery report quoted
+as this item's evidence, now says why it is not: each later round checked revised text, and the swap opened round 2's
+gap.
+
+**Running parked counts:** the parallel-refuter item leaves the parked list; "add the missing case" enters at 1.
