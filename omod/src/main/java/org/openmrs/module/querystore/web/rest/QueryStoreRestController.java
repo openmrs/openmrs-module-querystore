@@ -26,12 +26,15 @@ import org.openmrs.api.APIException;
 import org.openmrs.api.PatientService;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.context.ContextAuthenticationException;
+import org.openmrs.module.querystore.SafeLog;
+import org.openmrs.module.querystore.api.IndexStatus;
+import org.openmrs.module.querystore.api.QueryResult;
+import org.openmrs.module.querystore.api.QuerySpec;
 import org.openmrs.module.querystore.api.QueryStoreService;
 import org.openmrs.module.querystore.backend.PatientChartRead;
 import org.openmrs.module.querystore.bootstrap.BootstrapLauncher;
 import org.openmrs.module.querystore.bootstrap.BootstrapService;
 import org.openmrs.module.querystore.bootstrap.BootstrapStatusReport;
-import org.openmrs.module.querystore.bootstrap.IncompleteProjectionException;
 import org.openmrs.module.querystore.events.SerializerRegistry;
 import org.openmrs.module.querystore.model.ContextSlice;
 import org.openmrs.module.querystore.model.ContextSliceRequest;
@@ -39,14 +42,13 @@ import org.openmrs.module.querystore.model.QueryDocument;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.module.webservices.rest.web.RestUtil;
 import org.openmrs.util.PrivilegeConstants;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -74,13 +76,19 @@ import org.springframework.web.bind.annotation.ResponseBody;
  *   -&gt; 200 {"patient":"&lt;uuid&gt;", "documentsIndexed": 154}
  * POST /ws/rest/v1/querystore/reindex   {"scope":"all"}
  *   -&gt; 202 {"accepted": true}   (then poll indexingstatus)
+ *
+ * POST /ws/rest/v1/querystore/patient/{uuid}/warm     -&gt; 202 {"status": "projecting"}
+ *   (200 when already indexed; 503 with Retry-After when no projection slot is free)
+ * GET  /ws/rest/v1/querystore/patient/{uuid}/status   -&gt; {"status": "indexed"}
+ *   (status is one of indexed, projecting, failed, not_indexed; a uuid that is no live patient's is a 404)
+ * GET  /ws/rest/v1/querystore/patient/{uuid}/recent?limit=5&amp;types=obs
+ * GET  /ws/rest/v1/querystore/patient/{uuid}/search?q=cd4&amp;mode=keyword&amp;collapse=concept&amp;limit=5&amp;wait=false
  * </pre>
  */
 @Controller
 @RequestMapping("/rest/" + RestConstants.VERSION_1 + "/querystore")
 public class QueryStoreRestController {
 
-	private static final Logger log = LoggerFactory.getLogger(QueryStoreRestController.class);
 
 	/**
 	 * Per-resource-type bootstrap status plus a derived {@code complete} flag. Gated by
@@ -466,25 +474,205 @@ public class QueryStoreRestController {
 			return errorResponse(HttpStatus.BAD_REQUEST, "patient or scope (\"all\" or \"type\") is required");
 		}
 
-		String incomplete = null;
-		try {
-			bootstrapService().reindexPatient(patientUuid);
+		// Bounded like any projection: inside a projection slot, waiting for one at most
+		// querystore.projection.syncWaitSeconds, and 503 when none came free.
+		IndexStatus reindexed = queryStoreService().reindex(patientUuid);
+		if (reindexed == IndexStatus.NOT_INDEXED) {
+			Map<String, Object> busy = new HashMap<String, Object>();
+			busy.put("error", "No projection slot free; retry later");
+			return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+			        .header("Retry-After", String.valueOf(WARM_RETRY_AFTER_SECONDS)).<Object> body(busy);
 		}
-		catch (IncompleteProjectionException e) {
-			// Every type was attempted and what projected stays indexed, but records were left out:
-			// report the gap instead of a success. The message carries counts, not record content.
-			incomplete = e.getMessage();
-		}
-
 		int documentsIndexed = queryStoreService().getPatientChart(patientUuid).size();
 		Map<String, Object> result = new HashMap<String, Object>();
 		result.put("patient", patientUuid);
 		result.put("documentsIndexed", documentsIndexed);
-		if (incomplete != null) {
-			result.put("error", incomplete);
+		result.put("status", reindexed.wireName());
+		if (reindexed == IndexStatus.FAILED) {
+			// Every type was attempted and what projected stays indexed, but records were left out:
+			// report the gap instead of a success. The reason goes to the server log, not the body.
+			result.put("error", "Re-projection left records out; see the server log");
 			return new ResponseEntity<Object>(result, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 		return new ResponseEntity<Object>(result, HttpStatus.OK);
+	}
+
+	// ---------- patient-scoped consumer endpoints (omnibar prototype) ----------
+	//
+	// The patient is always a path segment, and these endpoints offer no cross-patient search and no
+	// full chart (recent is capped at MAX_PAGE); /patientrecord above is the read adapter for those. Gated by Get Patients, the privilege the service
+	// methods themselves declare via @Authorized, and by core's own read of the patient (requirePatient).
+
+	/** Largest page the REST surface serves, so {@code recent} can't become a full-chart dump. */
+	static final int MAX_PAGE = 50;
+
+	/** Longest query text accepted; see {@link PatientRequests#MAX_QUERY_LENGTH}. */
+	static final int MAX_QUERY_LENGTH = PatientRequests.MAX_QUERY_LENGTH;
+
+	/** Largest offset accepted. Past the candidate pool a page is empty, so this only stops abuse. */
+	static final int MAX_OFFSET = 1000;
+
+	/** Seconds a caller is told to wait before retrying a warm that could not start. */
+	static final int WARM_RETRY_AFTER_SECONDS = 5;
+
+	/**
+	 * Starts projecting a never-indexed patient in the background, or retries one whose last warm
+	 * failed, and returns at once: {@code 200 {"status": "indexed"}} when there was nothing to do,
+	 * {@code 202 {"status": "projecting"}} when a warm started or is already running, and {@code 503}
+	 * with a {@code Retry-After} header when none could start (the daemon isn't up, or every
+	 * projection slot is busy, or a failed patient's retry backoff has not run out); its body carries
+	 * the patient's status. {@code Retry-After} is the remaining backoff (whole seconds, rounded up)
+	 * for a failed patient in its backoff, else {@value #WARM_RETRY_AFTER_SECONDS}.
+	 */
+	@RequestMapping(value = "/patient/{patientUuid}/warm", method = RequestMethod.POST)
+	@ResponseBody
+	public ResponseEntity<Object> warm(@PathVariable("patientUuid") String patientUuid) {
+		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
+		requirePatient(patientUuid);
+		IndexStatus status = queryStoreService().warm(patientUuid);
+		if (status == IndexStatus.INDEXED) {
+			return statusResponse(status, HttpStatus.OK);
+		}
+		if (status == IndexStatus.PROJECTING) {
+			return statusResponse(status, HttpStatus.ACCEPTED);
+		}
+		Map<String, Object> body = new HashMap<String, Object>();
+		body.put("status", status.wireName());
+		// A failed chart in its retry backoff: come back when it runs out, not in 5 seconds.
+		long backoffMillis = status == IndexStatus.FAILED ? queryStoreService().getRetryAfterMillis(patientUuid) : 0;
+		long retryAfterSeconds = backoffMillis > 0 ? Math.max(1, (backoffMillis + 999) / 1000) : WARM_RETRY_AFTER_SECONDS;
+		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", String.valueOf(retryAfterSeconds))
+		        .<Object> body(body);
+	}
+
+	/** {@code {"status": "indexed" | "projecting" | "failed" | "not_indexed"}}. */
+	@RequestMapping(value = "/patient/{patientUuid}/status", method = RequestMethod.GET)
+	@ResponseBody
+	public ResponseEntity<Object> status(@PathVariable("patientUuid") String patientUuid) {
+		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
+		requirePatient(patientUuid);
+		return statusResponse(queryStoreService().getIndexStatus(patientUuid), HttpStatus.OK);
+	}
+
+	/**
+	 * The patient's newest documents: {@code {"status", "hits": [...]}}. Doesn't block on a cold
+	 * patient unless {@code wait=true}: a never-indexed one is warmed and answered {@code projecting},
+	 * a projecting one gets the documents indexed so far with {@code projecting}, and one whose last
+	 * warm failed is answered {@code failed} with no hits, retried in
+	 * the background only once its retry backoff has run out.
+	 */
+	@RequestMapping(value = "/patient/{patientUuid}/recent", method = RequestMethod.GET)
+	@ResponseBody
+	public ResponseEntity<Object> recent(@PathVariable("patientUuid") String patientUuid,
+	        @RequestParam(value = "limit", required = false) Integer limit,
+	        @RequestParam(value = "types", required = false) String types,
+	        @RequestParam(value = "wait", required = false, defaultValue = "false") boolean wait) {
+		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
+		requirePatient(patientUuid);
+		QuerySpec spec = QuerySpec.forPatient(patientUuid).sort(QuerySpec.Sort.RECENT).types(readableTypes(types))
+		        .limit(pageSize(limit, 5)).wait(wait).partialResults(canReadEveryType()).build();
+		return new ResponseEntity<Object>(queryStoreService().query(spec).toMap(), HttpStatus.OK);
+	}
+
+	/**
+	 * Patient-scoped search; see {@link QuerySpec} for what each parameter does. The body is
+	 * {@link QueryResult#toMap()}: {@code status}, {@code hits}, plus {@code groups} when
+	 * {@code collapse=concept}, {@code facets} when {@code facets=resourceType}, and {@code progress}
+	 * ({@code {"done": n, "total": m}}, in resource types) while the chart is projecting. Defaults:
+	 * {@code mode=hybrid}, {@code sort=relevance}, {@code collapse=none}, {@code limit=10},
+	 * {@code offset=0}, {@code wait=true}. An unknown value for any of them is a {@code 400}.
+	 */
+	@RequestMapping(value = "/patient/{patientUuid}/search", method = RequestMethod.GET)
+	@ResponseBody
+	public ResponseEntity<Object> search(@PathVariable("patientUuid") String patientUuid,
+	        @RequestParam(value = "q", required = false) String q,
+	        @RequestParam(value = "mode", required = false) String mode,
+	        @RequestParam(value = "types", required = false) String types,
+	        @RequestParam(value = "sort", required = false) String sort,
+	        @RequestParam(value = "collapse", required = false) String collapse,
+	        @RequestParam(value = "facets", required = false) String facets,
+	        @RequestParam(value = "limit", required = false) Integer limit,
+	        @RequestParam(value = "offset", required = false) Integer offset,
+	        @RequestParam(value = "wait", required = false, defaultValue = "true") boolean wait) {
+		Context.requirePrivilege(PrivilegeConstants.GET_PATIENTS);
+		requirePatient(patientUuid);
+		QuerySpec.Builder spec = QuerySpec.forPatient(patientUuid).query(PatientRequests.requireQuery(q))
+		        .mode(parse(QuerySpec.Mode.class, "mode", mode, QuerySpec.Mode.HYBRID))
+		        .sort(parse(QuerySpec.Sort.class, "sort", sort, QuerySpec.Sort.RELEVANCE))
+		        .collapse(parse(QuerySpec.Collapse.class, "collapse", collapse, QuerySpec.Collapse.NONE))
+		        .types(readableTypes(types)).limit(pageSize(limit, QuerySpec.DEFAULT_LIMIT)).wait(wait)
+		        .partialResults(canReadEveryType());
+		if (offset != null) {
+			if (offset < 0 || offset > MAX_OFFSET) {
+				throw new BadParameterException("offset must be between 0 and " + MAX_OFFSET);
+			}
+			spec.offset(offset);
+		}
+		for (String facet : PatientRequests.splitList(facets)) {
+			if (!"resourceType".equals(facet)) {
+				throw new BadParameterException("Unknown facet '" + PatientRequests.echo(facet) + "'; supported: resourceType");
+			}
+			spec.facet(QuerySpec.Facet.RESOURCE_TYPE);
+		}
+		return new ResponseEntity<Object>(queryStoreService().query(spec.build()).toMap(), HttpStatus.OK);
+	}
+
+	private void requirePatient(String patientUuid) {
+		PatientRequests.requirePatient(patientService(), patientUuid);
+	}
+
+	private List<String> readableTypes(String csv) {
+		return PatientRequests.readableTypes(csv, bootstrapService().getResourceTypeNames());
+	}
+
+	private boolean canReadEveryType() {
+		return PatientRequests.canReadEvery(bootstrapService().getResourceTypeNames());
+	}
+
+	private static ResponseEntity<Object> statusResponse(IndexStatus status, HttpStatus httpStatus) {
+		Map<String, Object> body = new HashMap<String, Object>();
+		body.put("status", status.wireName());
+		return new ResponseEntity<Object>(body, httpStatus);
+	}
+
+	private static int pageSize(Integer limit, int defaultLimit) {
+		if (limit == null) {
+			return defaultLimit;
+		}
+		if (limit <= 0 || limit > MAX_PAGE) {
+			throw new BadParameterException("limit must be between 1 and " + MAX_PAGE);
+		}
+		return limit;
+	}
+
+	private static <E extends Enum<E>> E parse(Class<E> type, String name, String value, E defaultValue) {
+		if (StringUtils.isBlank(value)) {
+			return defaultValue;
+		}
+		for (E constant : type.getEnumConstants()) {
+			if (constant.name().equalsIgnoreCase(value.trim())) {
+				return constant;
+			}
+		}
+		throw new BadParameterException("Unknown " + name + " '" + PatientRequests.echo(value) + "'");
+	}
+
+	@ExceptionHandler(PatientNotFoundException.class)
+	@ResponseBody
+	public ResponseEntity<Object> handlePatientNotFound(PatientNotFoundException e) {
+		return errorResponse(HttpStatus.NOT_FOUND, "Patient not found");
+	}
+
+	@ExceptionHandler(BadParameterException.class)
+	@ResponseBody
+	public ResponseEntity<Object> handleBadParameter(BadParameterException e) {
+		return errorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
+	}
+
+	@ExceptionHandler(TypeNotAvailableException.class)
+	@ResponseBody
+	public ResponseEntity<Object> handleTypeNotAvailable(TypeNotAvailableException e) {
+		return errorResponse(HttpStatus.FORBIDDEN, "Type not available");
 	}
 
 	/** Non-null only when a test injects a launcher via {@link #setBootstrapLauncher}; production
@@ -589,7 +777,7 @@ public class QueryStoreRestController {
 	@ExceptionHandler(Exception.class)
 	@ResponseBody
 	public ResponseEntity<Object> handleUnexpected(Exception e) {
-		log.error("Unexpected error handling a querystore REST request", e);
+		SafeLog.error(QueryStoreRestController.class, "Unexpected error handling a querystore REST request", e);
 		return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal error");
 	}
 

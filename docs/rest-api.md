@@ -111,6 +111,96 @@ Explicit context `types` must name registered serializers; unknown names return
 
 ---
 
+## Patient-scoped endpoints: `/ws/rest/v1/querystore/patient/{uuid}/...`
+
+Four endpoints for a client working inside one patient's chart, such as the O3 omnibar's chart
+lookup. They differ from `/patientrecord` on purpose:
+
+- **The patient is always in the path,** so every call reads in an access log as "this user looked
+  at this patient".
+- **There is no cross-patient mode and no full chart.** A page holds at most 50 records, and
+  `offset` stops at 1000.
+- **Each call asks core for the patient** (`PatientService.getPatientByUuid`) before touching the
+  index, so whatever patient-level restriction a deployment applies to core's patient read applies
+  here too. A uuid core doesn't return, a voided patient among them, is a `404`.
+- **Privilege:** `Get Patients`, plus each type's core read privilege, as for `/patientrecord`
+  (obs needs `Get Observations`, and so on). A type with no mapped privilege, such as one a module
+  contributes, is never searched. Naming a type in `types` that the caller can't read, or that isn't
+  registered, gets the same `403`, so the answer doesn't say which types exist. A caller who can read
+  no registered type gets a `403` too.
+
+Errors are `{"error": "..."}` with `400`, `403` or `404`. A server or backend message is never
+echoed.
+
+### POST `.../patient/{uuid}/warm`
+
+Projects a never-indexed patient on a background thread, or retries one whose last projection
+failed, and returns at once.
+
+| Status | Body | Meaning |
+|---|---|---|
+| `200` | `{"status": "indexed"}` | Nothing to do. |
+| `202` | `{"status": "projecting"}` | A projection started, or one is already running. |
+| `503` + `Retry-After` | `{"status": "not_indexed" \| "failed"}` | Nothing could start: every projection slot is busy, or the daemon isn't up yet (`Retry-After: 5`), or a failed chart is still in its retry backoff (`Retry-After` is the backoff's remaining seconds). |
+
+A `failed` chart is retried with a full re-projection, but only once its backoff has run out: 30
+seconds after one failure, doubling with each failure in a row, up to an hour. A retry deletes the
+chart first, so until that delete lands every search on the patient answers `projecting` with no
+hits rather than rows that are about to go.
+
+### GET `.../patient/{uuid}/status`
+
+`{"status": "indexed" | "projecting" | "not_indexed" | "failed"}`. A patient reads `projecting`
+while any projection of it runs, and `failed` when its last one threw or left records out. The
+projecting and failed states are held per JVM.
+
+### GET `.../patient/{uuid}/recent`
+
+The patient's newest records: `limit` (default 5, at most 50), `types` (comma-separated), and
+`wait` (default `false`). A cold patient is warmed and answered `projecting` unless `wait=true`.
+
+While a chart is `projecting`, a caller who can read every registered type gets the records indexed
+so far with the `projecting` status, plus `progress: {"done", "total"}` counted in resource types.
+Any other caller gets `projecting` with no hits and no progress until the chart is indexed, because
+rows land type by type, and their timing would show how much of an unreadable type the patient has.
+
+A `failed` patient is answered `failed` with no hits. The warm a search makes retries it once its
+backoff has run out, as `POST warm` does.
+
+### GET `.../patient/{uuid}/search`
+
+| Parameter | Values | Default |
+|---|---|---|
+| `q` | Up to 500 characters; required | |
+| `mode` | `keyword` (BM25 only, no encoder call: for type-ahead) \| `hybrid` | `hybrid` |
+| `types` | Comma-separated registered types | every type the caller can read |
+| `sort` | `relevance` \| `recent` | `relevance` |
+| `collapse` | `none` \| `concept` | `none` |
+| `facets` | `resourceType` | none |
+| `limit`, `offset` | 1–50, 0–1000 | 10, 0 |
+| `wait` | `true` projects a cold patient first, within the slot wait | `true` |
+
+The body is `{"status", "hits": [...]}`, with `groups` when `collapse=concept` and `facets` when
+asked for. A hit carries `resourceType`, `resourceUuid`, `date`, `snippet` (the stored text) and
+`score` (not comparable across queries), plus `conceptUuid`, `conceptName`, `valueNumeric` and
+`units` when the record has them. A `projecting` or `failed` chart is answered as for `recent`: the rows indexed so far and `progress` only for a caller who can read every type, no hits otherwise.
+
+- **`collapse=concept`** groups hits by concept. Each group carries `count` and `latest` (that
+  concept's newest value) and `recentValues` (its last five values with dates). Both come from the
+  patient's whole chart, not only from the hits, because a relevance-ranked pool need not hold the
+  newest value. A group whose concept's name or synonym is the query comes first.
+- **`sort=recent` and facets** run over the keyword matches only, since a hybrid pool has no
+  "matches" boundary. The facet counts are marked `approximate`.
+
+```bash
+curl -s -u admin:Admin123 \
+  'https://your-server/openmrs/ws/rest/v1/querystore/patient/dd9836d7-1691-11df-97a5-7038c432aabf/search?q=cd4&mode=keyword&collapse=concept&limit=5'
+```
+
+See the ADR's "Consumer query API and REST surface" section for the design and what is still open.
+
+---
+
 ## GET `/ws/rest/v1/querystore/indexingstatus`
 
 Returns the per-resource-type bootstrap (initial-backfill) status, plus a single derived
@@ -185,18 +275,21 @@ have *some* documents.
 
 - **Synchronous:** runs in the request thread; latency scales with the patient's record count
   (each record is re-embedded). Bounded to one patient.
+- **Bounded:** it runs in one of the per-patient projection slots (`querystore.projection.maxConcurrent`,
+  default 4), waiting at most `querystore.projection.syncWaitSeconds` (default 10) for one. When
+  none comes free it answers `503` with a `Retry-After` header and runs nothing.
 
 **Response `200`:**
 
 ```json
-{ "patient": "dd9836d7-1691-11df-97a5-7038c432aabf", "documentsIndexed": 154 }
+{ "patient": "dd9836d7-1691-11df-97a5-7038c432aabf", "documentsIndexed": 154, "status": "indexed" }
 ```
 
 If any record could not be re-projected (a type failed, or a record could not be embedded or
 written), the call returns `500` with the same `patient` and `documentsIndexed` (what did project
-stays indexed) and an `error` naming how many types and records failed. Full-chart reads of that
-patient then report `chartTruncated: true` until a projection completes, or until a restart, since
-the mark is held in memory.
+stays indexed), `status: "failed"`, and an `error` saying records were left out; the counts are in
+the server log. Full-chart reads of that patient then report `chartTruncated: true` until a
+projection completes, or until a restart, since the mark is held in memory.
 
 ```bash
 curl -s -X POST -u admin:Admin123 -H 'Content-Type: application/json' \
