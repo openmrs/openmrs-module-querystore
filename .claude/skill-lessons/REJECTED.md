@@ -7018,8 +7018,8 @@ proposal below, answered "apply".
 **Evidence read:** the live verification run of `skill-retro mine` (the 2026-11-19 section above), over the 10 sessions
 since the watermark: its skill-text merger's ranked list, its auditor's 14 findings on pr-review 0.35.0, and the
 2026-11-19 run records (two in `…-patientqueueing-41.md`, one in `…-openmrs-core-6605.md`). That run was given
-`--since`, so the watermark stayed at 2026-11-19T09:16:23Z: the next `mine` re-reads these sessions, and its mergers
-read this section.
+`--since`, so it left the watermark at 2026-11-19T09:16:23Z; on the owner's ask it was then moved by hand to the
+run's end, 2026-11-19T20:55:21Z (addendum below).
 
 **Applied, new rules (Step 3):**
 - **Privilege probes one at a time.** A privilege or scope claim, the PR's or one the review suggests: where it names
@@ -7140,5 +7140,54 @@ workflow file and the private list, never the argument for the edits:
 **Cost:** gates $7.00.
 
 **Budgets:** `pr-review` 9756 → 9837; `pr-review/posting.md` 2236 → 2226.
+
+**Running parked counts:** unchanged.
+
+## 2026-11-20 (addendum, owner-directed: the live run's machinery list, and its watermark) — 8 memory corrections and 3 recipes applied, all outside the repo; 3 hooks and 3 recipes declined with reasons; the watermark moved by hand to the run's end; no skill file changed; **Step 5 not run** (nothing to apply)
+
+The owner asked "can you move the mining bookmark?" and then "anything else?". Shown the machinery list, they
+answered "apply", and then "Push the REJECTED.md commit".
+
+**Watermark.** The live run (2026-11-19T09:16:23Z to 20:55:21Z) finished with both reports, no failures and its GitHub
+stage. It left the watermark only because it was given `--since`. `MINED` was set to 2026-11-19T20:55:21Z, and the
+run's `carried-next.json` (70 PRs) was copied to `carried.json`: the two writes `mine.py` makes when a complete run
+from the watermark ends. A dry run with no agents and no GitHub then started at 20:55:21Z on its own, found 3
+sessions, and left both files unchanged. The run's folder is kept at `~/.claude/pr-review-mining/2026-11-19/`, which a
+bare `mine` does not resume: it is finished, and was not started from the watermark.
+
+**Applied from the machinery list, outside the repo**, each checked at its source first:
+- 8 memory corrections:
+  - a note that recommended posting a bare "Looks good to me." now says a clean verdict is never posted (Step 5);
+  - a resync command that piped a fetch straight into the installed SKILL.md now fetches both files to scratch and
+    copies only on success, tested against `main` and against a missing ref;
+  - a third note grounds a review in `posting.md` as well as SKILL.md;
+  - a private PR's two notes and its round record point at its latest round, checked on GitHub;
+  - the cohortbuilder PR 783 note names the posted draft, v10, which is identical to the posted comment;
+  - the restws PR 779 note says core WAR 485 still has joda.
+- 3 recipes in `~/.claude/pr-review-recipes.md`: the interdiff after a force-push; a PostgreSQL changeset IT failure
+  that is a harness artifact; the head checked before composing, and `commit_id` pinned.
+
+**Declined:**
+- **A hook refusing a refuter brief without the 25-minute stop line**, which the ninth pass also left to the owner as
+  its refuter time box. Its evidence predates the rule. Session 9145b9ab loaded a skill without the 30-minute limit,
+  and its refuters started between 13:53 and 15:36 UTC on 2026-11-19, before 0.35.0 was committed at 17:01 UTC; the
+  16-hour refuter (:6836) is older still. The ten reviews measured since 0.35.0 all kept the limit. REOPEN ON a
+  refuter brief without the stop line, or a round past 30 minutes, under 0.35.0 or later.
+- **A hook refusing a deploy from a worktree with changes under `src/`.** One near miss (8fda42a9), which 0.36.0's
+  worktree rule and the checksum recipe answer. REOPEN ON a second, under 0.36.0.
+- **A hook checking a review payload's `commit_id` and `state` against the PR.** Its two incidents are from 2026-09-25
+  and 2026-10-06. `posting.md` now re-reads the head sha and state just before posting, and the recipe above pins
+  `commit_id`. REOPEN ON a review posted against a head it did not verify, under 0.36.0.
+- **Three recipes:**
+  - "another session's hollow Tomcat" appears in neither source session (8820e7ac, 8f72a176), and the recipes already
+    cover another session's server on a port;
+  - a test class whose shared `setup()` grants a privilege contradicts its source session (d9ae5118), where the new
+    test caught the mutation;
+  - the resolved-thread follow-up is already in Step 1.
+
+**Still the owner's:**
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question.
 
 **Running parked counts:** unchanged.
