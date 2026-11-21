@@ -51,6 +51,17 @@
   `harden`): its Stop gate refuses a mid-run yield on a background build or a `Monitor`. There, wait
   inside the turn with one foreground until-loop bounded under the tool's timeout, as `pr-harden`'s
   *this session must not busy-wait either* gives it.
+- **A wait also fails when what it waits on never started.** An empty run id, a server answering with a
+  redirect to its setup page, or a process that never launched reads as "not done yet" forever: check
+  it exists before the loop, and give the loop a deadline. `gh-run-wait-guard.py` refuses the run-id
+  form (2026-11-20: a loop waited two hours on an empty one).
+- macOS `tmp_cleaner` deletes `/tmp` files, the session scratchpad included, left unmodified for 3
+  days, every midnight; reading them does not count. A session that runs for days keeps its inputs
+  elsewhere (a sweep lost its plans this way, 2026-11-16).
+- Apple git's `git grep -E` treats `\b` as matching nothing, with no error (Git 2.39.5): use `-w` or `-P`.
+- A wildcard or `!` in `-Dtest=` replaces the pom's surefire includes and excludes, so excluded classes
+  run too: a whole-suite run, and its control, take no `-Dtest` (2026-10-09: a master control run that
+  way read as red).
 - Read an issue with `gh issue view <n> --json title,body,comments`, never `--comments`: off a
   terminal that prints the comments and not the body, so an issue without comments reads as empty and
   one with comments reads as its comments alone (gh 2.87.3, measured 2026-09-23).

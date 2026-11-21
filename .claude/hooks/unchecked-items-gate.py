@@ -31,6 +31,16 @@ BOLD = re.compile(r"^\s*(?:[-*]\s+|\d+[.)]\s+)?\*\*(.+?)\*\*(.*)$")
 ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
 # A code span names a file or a symbol, never a label: `unchecked-items-gate.py` in a bold run is not one (2026-11-02).
 CODE = re.compile(r"`[^`]*`")
+# A label lists the reply's OWN open items. Two things that carry the words never do: the gate's own name, and a label
+# that already gives the reason for its one item. Of the 57 blocks this gate made from 2026-11-02, when it was added,
+# to 2026-11-20, 25 were not open-item lists, and these two rules pass 2 of them. Wording rules for the rest (quoted
+# mentions, review-checklist categories, numbered lesson titles) each let through a real list written the same way,
+# so those still block (REJECTED.md, 2026-11-22). Dropping either rule reddens unchecked-items-gate-test.py.
+OWN_NAME = re.compile(r"\bunchecked-[\w-]+", re.IGNORECASE)
+
+
+def is_open_items_label(text):
+    return bool(LABEL.search(OWN_NAME.sub("", CODE.sub("", text))))
 
 
 def final_reply(transcript_path):
@@ -75,11 +85,11 @@ def labels_with_items(text):
             continue
         label, trailing = None, ""
         m = HEADING.match(line)
-        if m and LABEL.search(CODE.sub("", m.group(1))):
+        if m and is_open_items_label(m.group(1)):
             label = m.group(1)
         else:
             m = BOLD.match(line)
-            if m and LABEL.search(CODE.sub("", m.group(1))):
+            if m and is_open_items_label(m.group(1)):
                 label, trailing = m.group(1), m.group(2).strip(" :.-—")
         if label is None:
             i += 1
@@ -98,7 +108,9 @@ def labels_with_items(text):
             j += 1
         if not items and trailing:
             items = [trailing]
-        yield label, items
+        # A reason in the label covers its one item; it cannot excuse a list.
+        if not (REASONS.search(label) and len(items) <= 1):
+            yield label, items
         i = j if j > i else i + 1
 
 

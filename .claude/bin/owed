@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""List the work the machinery recorded as owed and nothing has picked up since. No model; reads files and asks gh.
+
+Usage: owed [--no-github] [--repo PATH]      owed --self-test
+
+Why (2026-11-20 retro): owed items sat in five places no step reads together. A release note owed for two merged core
+PRs sat in project-memory PR notes; a staged review stayed PENDING on GitHub; a merged PR's master regression and a reply
+waited in round records; two owner decisions sat in REJECTED.md; an instructions edit and a live hook were never
+vendored. pr-review surfaces a PR's owed items only when that PR is reviewed again.
+
+Sources, each with its age in days:
+- ~/.claude/pr-review-rounds/*.md: the latest entry's lines naming something owed ("Owed: nothing" is skipped), with the
+  PR's live state from gh;
+- ~/.claude/projects/*/memory/*.md: lines saying something is still owed;
+- ~/.claude/skill-lessons/REJECTED.md: the latest "Left to the owner" / "Still the owner's" list. skill-retro's
+  Reporting has each retro restate there what is still open, so an older entry later settled does not come back;
+- GitHub: your own PENDING reviews on the open PRs those round records name;
+- drift: files under ~/.claude/{skills,hooks,bin} and the instruction files that differ from, or are missing in, the
+  source repo's origin/main (default ~/Projects/openmrs/openmrs-module-querystore; fetch it first for a current answer).
+"""
+import argparse
+import concurrent.futures
+import datetime
+import filecmp
+import glob
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+OWED = re.compile(r"\b(?:still owed|owed)\b", re.IGNORECASE)
+NOTHING = re.compile(r"\bowed\b\W*(?:nothing|none)\b|\bnothing\b[^.]{0,20}\bowed\b|\bno\b[^.]{0,30}\bowed\b|"
+                     r"\bowed by the author\b", re.IGNORECASE)
+OWNER = re.compile(r"^\*\*(?:Left to the owner|Still the owner's)[^*]*\*\*", re.MULTILINE)
+
+
+def gist(lines, i, width=200):
+    """The words around "owed" on line i; a heading ("**Owed:**", "## Owed") takes the next two non-empty lines too."""
+    ln = lines[i].strip()
+    m = OWED.search(ln)
+    text = ln[max(0, m.start() - 60):] if m else ln
+    if ln.startswith("#") or re.sub(r"[*\s]", "", ln).endswith(":"):
+        nxt = [x.strip() for x in lines[i + 1:i + 4] if x.strip()]
+        text = (ln + " " + " ".join(nxt[:2])).strip()
+    return text[:width]
+
+
+def age(path):
+    return (datetime.datetime.now() - datetime.datetime.fromtimestamp(os.path.getmtime(path))).days
+
+
+def gh(*args):
+    r = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=60)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def rounds(home):
+    out = []
+    for p in sorted(glob.glob(os.path.join(home, ".claude", "pr-review-rounds", "*.md"))):
+        m = re.match(r"(.+?)__(.+?)__(\d+)\.md$", os.path.basename(p))
+        if not m:
+            continue
+        entries = [e for e in re.split(r"(?m)^(?=# )", open(p, errors="replace").read()) if e.startswith("# ")]
+        if not entries or "decision" in entries[-1].splitlines()[0].lower():
+            continue
+        body = entries[-1].splitlines()[1:]
+        lines = [gist(body, i).strip(" -") for i, ln in enumerate(body) if OWED.search(ln) and not NOTHING.search(ln)]
+        if lines:
+            d = re.match(r"# (\d{4}-\d{2}-\d{2})", entries[-1])
+            days = (datetime.date.today() - datetime.date.fromisoformat(d.group(1))).days if d else age(p)
+            out.append({"pr": (m.group(1), m.group(2), m.group(3)), "age": days, "head": entries[-1].splitlines()[0][2:],
+                        "lines": lines})
+    return out
+
+
+def memories(home):
+    out = []
+    for p in sorted(glob.glob(os.path.join(home, ".claude", "projects", "*", "memory", "*.md"))):
+        if os.path.basename(p) == "MEMORY.md" or "index" in os.path.basename(p):
+            continue
+        text = open(p, errors="replace").read().splitlines()
+        for i, ln in enumerate(text):
+            if OWED.search(ln) and not NOTHING.search(ln) and not ln.lstrip().startswith("description:"):
+                folder = re.sub(r"^-Users-[^-]+-(?:Projects-)?", "", os.path.basename(os.path.dirname(os.path.dirname(p))))
+                out.append({"file": f"{folder}/{os.path.basename(p)}", "age": age(p), "line": gist(text, i)})
+                break
+    return out
+
+
+def owner_decisions(home):
+    p = os.path.join(home, ".claude", "skill-lessons", "REJECTED.md")
+    if not os.path.exists(p):
+        return []
+    text = open(p, errors="replace").read()
+    heads = list(OWNER.finditer(text))
+    items = []
+    if heads:
+        for ln in text[heads[-1].end():].split("\n\n")[0].splitlines():
+            if ln.strip().startswith("-"):
+                items.append(ln.strip(" -"))
+            elif items and ln.strip():
+                items[-1] += " " + ln.strip()
+    return items
+
+
+def drift(home, repo):
+    out = []
+    if not os.path.isdir(os.path.join(repo, ".git")) and not os.path.isfile(os.path.join(repo, ".git")):
+        return [f"no source repo at {repo}"]
+    listed = gh_free(["git", "-C", repo, "ls-tree", "-r", "--name-only", "origin/main", ".claude"]) or ""
+    pushed = {ln[len(".claude/"):] for ln in listed.splitlines()}
+    live = []
+    for top in ("skills", "hooks", "bin"):
+        for p in glob.glob(os.path.join(home, ".claude", top, "**", "*"), recursive=True):
+            rel = os.path.relpath(p, os.path.join(home, ".claude"))
+            if os.path.isfile(p) and "__pycache__" not in rel and not rel.endswith((".log", ".pyc", ".DS_Store")) and "/synced/" not in "/" + rel:
+                live.append(rel)
+    live += [f for f in ("CLAUDE.md", "proposing-fixes.md") if os.path.exists(os.path.join(home, ".claude", f))]
+    with tempfile.TemporaryDirectory() as t:
+        for rel in sorted(live):
+            if rel not in pushed:
+                out.append(f"live only: {rel}")
+                continue
+            blob = subprocess.run(["git", "-C", repo, "show", "origin/main:.claude/" + rel], capture_output=True).stdout
+            q = os.path.join(t, "x")
+            open(q, "wb").write(blob)
+            if not filecmp.cmp(os.path.join(home, ".claude", rel), q, shallow=False):
+                out.append(f"differs from origin/main: {rel}")
+    return out
+
+
+def gh_free(cmd):
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def total(pages):
+    """`gh --paginate --jq` prints one result per page."""
+    return sum(int(x) for x in (pages or "").split() if x.isdigit())
+
+
+def github(records):
+    def one(rec):
+        o, r, n = rec["pr"]
+        state = gh("api", f"repos/{o}/{r}/pulls/{n}", "--jq", '(.state) + (if .merged then " merged" else "" end)')
+        pages = gh("api", f"repos/{o}/{r}/pulls/{n}/reviews", "--paginate", "--jq",
+                   '[.[] | select(.state == "PENDING") | .id] | length') if state == "open" else None
+        return rec["pr"], state, total(pages)
+    with concurrent.futures.ThreadPoolExecutor(8) as ex:
+        return list(ex.map(one, records))
+
+
+def show(home, repo, use_github):
+    recs = rounds(home)
+    all_prs = []
+    for p in sorted(glob.glob(os.path.join(home, ".claude", "pr-review-rounds", "*.md"))):
+        m = re.match(r"(.+?)__(.+?)__(\d+)\.md$", os.path.basename(p))
+        if m and age(p) <= 45:
+            all_prs.append({"pr": (m.group(1), m.group(2), m.group(3))})
+    states = {pr: (s, pend) for pr, s, pend in github(all_prs)} if use_github else {}
+    print(f"## Round records whose latest entry owes something ({len(recs)})")
+    for r in sorted(recs, key=lambda x: -x["age"]):
+        o, rp, n = r["pr"]
+        s = states.get(r["pr"], ("?", None))[0] or "?"
+        print(f"- {rp}#{n} ({s}, {r['age']}d): {r['lines'][0][:160]}" + (f" (+{len(r['lines']) - 1} more)" if len(r["lines"]) > 1 else ""))
+    pend = [(pr, p) for pr, (s, p) in states.items() if p]
+    print(f"\n## Your PENDING reviews on open PRs ({len(pend)})")
+    for (o, rp, n), p in pend:
+        print(f"- {o}/{rp}#{n}: {p} pending")
+    mem = memories(home)
+    print(f"\n## Project-memory notes saying something is owed ({len(mem)})")
+    for m in sorted(mem, key=lambda x: -x["age"]):
+        print(f"- {m['file']} ({m['age']}d): {m['line'][:160]}")
+    dec = owner_decisions(home)
+    print(f"\n## Left to the owner in the latest retro ({len(dec)})")
+    for d in dec:
+        print(f"- {d[:200]}")
+    dr = drift(home, repo)
+    print(f"\n## Live machinery not matching the pushed copy ({len(dr)})")
+    for d in dr:
+        print(f"- {d}")
+
+
+def self_test():
+    t = tempfile.mkdtemp()
+    c = os.path.join(t, ".claude")
+    os.makedirs(os.path.join(c, "pr-review-rounds"))
+    os.makedirs(os.path.join(c, "projects", "-Users-x-p", "memory"))
+    os.makedirs(os.path.join(c, "skill-lessons"))
+    w = lambda p, s: open(os.path.join(c, p), "w").write(s)
+    w("pr-review-rounds/o__r__1.md", "# 2026-11-01 aaa\n- Owed: a follow-up on master\n")
+    w("pr-review-rounds/o__r__2.md", "# 2026-11-01 bbb\n- Owed: nothing.\n")
+    w("pr-review-rounds/o__r__3.md", "# 2026-11-01 ccc\n- Still owed: the reply\n# 2026-11-02 ccc decision\n- posted it\n")
+    w("projects/-Users-x-p/memory/a.md", "---\nname: a\n---\nA release note is owed for legacy formats.\n")
+    w("projects/-Users-x-p/memory/b.md", "---\nname: b\n---\nNothing is owed by the author.\n")
+    w("projects/-Users-x-p/memory/MEMORY.md", "- owed index line\n")
+    w("projects/-Users-x-p/memory/pr-records-index.md", "- an index naming what is owed elsewhere\n")
+    w("projects/-Users-x-p/memory/c.md", "---\nname: c\ndescription: \"a release note is owed\"\n---\n**Owed:**\n- the 2.9.x backport\n")
+    w("pr-review-rounds/o__r__4.md", "# 2026-11-03 ddd\n## Owed\n- a reply to the reviewer\n")
+    w("skill-lessons/REJECTED.md", "**Left to the owner:**\n- old item; is the owner's call\n\n**Settled.** old item.\n\n**Still the owner's:**\n- whether to push the hook;\n- the CI half, and\n  its install guard.\n\nlater text\n")
+    checks = [
+        ("an owing latest entry is listed", [r["pr"] for r in rounds(t)] == [("o", "r", "1"), ("o", "r", "4")]),
+        ("'Owed: nothing' and a decided record are skipped", len(rounds(t)) == 2),
+        ("a memory owing something is listed; 'nothing is owed', MEMORY.md and an index are not", [m["file"] for m in memories(t)] == ["p/a.md", "p/c.md"]),
+        ("only the latest owner list is read, a wrapped bullet whole; a settled older one is not",
+         owner_decisions(t) == ["whether to push the hook;", "the CI half, and its install guard."]),
+        ("a bare 'Owed' heading shows what follows it", any("the 2.9.x backport" in m["line"] for m in memories(t)) and any("a reply to the reviewer" in l for r in rounds(t) for l in r["lines"])),
+        ("a paginated count is summed", total("0\n0") == 0 and total("1\n0") == 1 and total(None) == 0),
+        ("a round record's age is its latest entry's", rounds(t)[0]["age"] == (datetime.date.today() - datetime.date(2026, 11, 1)).days),
+    ]
+    failed = [n for n, ok in checks if not ok]
+    for n in failed:
+        print("FAIL", n)
+    print(f"{len(checks) - len(failed)} of {len(checks)} checks pass")
+    return 1 if failed else 0
+
+
+def main():
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(self_test())
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--no-github", action="store_true")
+    ap.add_argument("--repo", default=os.path.expanduser("~/Projects/openmrs/openmrs-module-querystore"))
+    a = ap.parse_args()
+    show(os.path.expanduser("~"), a.repo, not a.no_github)
+
+
+if __name__ == "__main__":
+    main()

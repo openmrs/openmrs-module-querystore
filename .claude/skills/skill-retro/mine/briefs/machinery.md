@@ -12,9 +12,11 @@ where review time goes in this run. They want reviews faster and more accurate.
 **Inputs:**
 - `catalog-*-timesinks-practices.md`: time sinks and practices that caught real defects, merged from the readers of the
   @@SESSIONS@@ review sessions of @@WINDOW@@.
-- `memreader-*.md`: lessons, contradictions and recipes found in the @@N_MEM@@ review-related project-memory files
-  changed during the window. A
+- `memreader-*.md`: lessons, contradictions and recipes found in the @@N_MEM@@ project-memory files with a review,
+  build, probe or tooling lesson changed during the window. A
   project memory loads only in the folder that wrote it, so its recipe is relearned elsewhere.
+- `challenges.md`: each time the owner challenged a pick ("are you sure", "best and most generic") in any session, with
+  the reply's opening. A reply conceding the pick was never proven means a pick went out before it was refuted.
 - `parked.txt`, `killed.md`: earlier decisions. A shape they rejected returns only with new evidence, which you name.
 - `measurements.md`, `runrecords/`, `SKILL.md`, `posting.md`.
 

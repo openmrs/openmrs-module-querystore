@@ -8,7 +8,10 @@ limit resumes where it stopped:
             brief and report (a background agent's report arrives as a task notification)
   measure   time to first report, context fill, compactions, refuter verdicts
   github    PR outcomes: threads, reactions, PRs closed unmerged, other reviewers' later comments
-  memories  review-related project memories changed inside the window
+  memories  project memories changed inside the window (from --memories-since, for a backfill) that carry a
+            review lesson or a build, probe, shell or tooling one; a lesson kept only there reaches one folder
+  challenges every time the owner challenged a pick ("are you sure", "best and most generic") in any session,
+            not only reviews, with the reply's opening: how often a pick went out before it was refuted
   agents    headless readers, outcomes judges, memory readers, a skill auditor, synthesizers, and the
             two final mergers (skill text, machinery)
 A run's folder (~/.claude/pr-review-mining/<date>/) holds window.json, its fixed window. With no
@@ -47,6 +50,13 @@ VERDICTS = [('REFUTED', r'\bREFUTED\b|\brefuted\b|\bRefuted\b'),
             ('HELD', r'\bSTANDS\b|\bHOLDS\b|\bholds\b|\bstands\b|\bsurvives\b'),
             ('WRONG', r"\bwrong\b|incorrect|does not hold|doesn.t hold|is false")]
 REVIEWISH = re.compile(r'review|refut|reviewer|comment|post(ing|ed)? (on|to) (the )?(pr|pull)|maintainer|approv|nitpick', re.I)
+# Build, probe, shell and tooling lessons. REVIEWISH alone skipped every such memory, so the ~/.OpenMRS flag, the -Dtest
+# trap and the git grep -E \b trap stayed in one folder each while sessions elsewhere broke them (2026-11-20 retro); the
+# git grep trap had been learned separately in four folders.
+TOOLISH = re.compile(r'\b(?:mvn|maven|gradle|surefire|-Dtest|builds?|probes?|rigs?|standalone|docker|worktrees?|grep|sed|shell|'
+                     r'bash|zsh|curl|jdk|classpath|lib-cache|wait loops?|scratchpad|tmp)\b', re.I)
+CHALLENGE = re.compile(r'\b(?:are you (?:absolutely |very |really |100% )*sure|very,? very sure|absolutely sure|'
+                       r'(?:is|was) (?:this|that|it) (?:really )?the best|best and (?:the )?most generic|the most generic)\b', re.I)
 ASYNC_ACK = 'Async agent launched'
 READ_ONLY = ['Read', 'Grep', 'Glob']
 DENY = ['Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent', 'Task', 'Skill', 'Workflow']
@@ -528,7 +538,8 @@ def github(meta, since, until, out):
 
 # ---------------------------------------------------------------- memories
 def memories(since, until, out_dir, chunk_chars=350000):
-    """Review-related memories changed inside the window, in chunks one reader can read in full."""
+    """Memories changed inside the window that carry a review or a tooling lesson, in chunks one reader can read in
+    full. A file name's _ and - read as spaces, so feedback_wait_loops_... matches 'wait loops'."""
     files = []
     for p in sorted(glob.glob(os.path.join(PROJECTS, '*', 'memory', '*.md'))):
         b = os.path.basename(p)
@@ -537,7 +548,8 @@ def memories(since, until, out_dir, chunk_chars=350000):
             continue
         t = open(p, errors='replace').read()
         desc = (re.search(r'description:\s*"?(.*?)"?\n', t[:1200]) or [None, ''])[1]
-        if REVIEWISH.search(b + ' ' + desc):
+        words = re.sub(r'[_-]', ' ', b) + ' ' + desc
+        if REVIEWISH.search(words) or TOOLISH.search(words):
             files.append(f'\n##### FILE {os.path.basename(os.path.dirname(os.path.dirname(p)))}/{b}\n' + t)
     chunks, cur = [], []
     for f in files:
@@ -550,6 +562,43 @@ def memories(since, until, out_dir, chunk_chars=350000):
     for k, c in enumerate(chunks, 1):
         open(os.path.join(out_dir, f'memories-{k:02d}.txt'), 'w').write(''.join(c))
     return len(files), len(chunks)
+
+
+# ---------------------------------------------------------------- challenges
+def challenges(since, until, path):
+    """Every owner challenge to a pick inside the window, from every session the owner typed in, each with the reply's
+    opening. Replays (/private/tmp folders), blind runs (~/.claude/blind-runs) and pipeline sessions
+    (~/.claude/pipeline) are skipped: their prompts are briefs, not the owner. A PR link is masked: this file goes to agents."""
+    rows = []
+    for p in glob.glob(os.path.join(PROJECTS, '*', '*.jsonl')):
+        folder = os.path.basename(os.path.dirname(p))
+        if folder.startswith('-private-') or '-claude-blind-runs-' in folder or '-claude-pipeline-' in folder:
+            continue
+        typed, pending = 0, None
+        for _, d in entries(p, until):
+            t = typed_text(d)
+            if t is not None:
+                if pending:
+                    rows.append(pending + ['(no reply text)'])
+                pending = None
+                if d.get('timestamp') and T(d['timestamp']) > since and CHALLENGE.search(t):
+                    pending = [d['timestamp'][:16], os.path.basename(p)[:8], typed > 0, PULL.sub('a PR', t)[:200]]
+                typed += 1
+            elif pending and d.get('type') == 'assistant':
+                a = ' '.join(x.strip() for x in texts((d.get('message') or {}).get('content')) if x.strip())
+                if a:
+                    rows.append(pending + [PULL.sub('a PR', a)[:240]])
+                    pending = None
+        if pending:
+            rows.append(pending + ['(no reply text)'])
+    rows.sort()
+    after = sum(1 for r in rows if r[2])
+    lines = [f'# Owner challenges to a pick, {iso(since)} to {iso(until)}', '',
+             f'{len(rows)} challenges; {after} came after a pick or claim in the same session, the rest opened one.',
+             "A reply conceding the pick was never proven is a pick presented before proposing-fixes.md's steps 4 and 5.", '']
+    lines += [f'- {ts} {sid}{"" if prior else " (opened the session)"}: "{q}" -> "{a}"' for ts, sid, prior, q, a in rows]
+    open(path, 'w').write('\n'.join(lines) + '\n')
+    return len(rows), after
 
 
 # ---------------------------------------------------------------- headless agents
@@ -725,6 +774,7 @@ def agents(out, args, n_chunks, sessions_n, window, login, n_mem, since, until):
         for r in glob.glob(os.path.join(LESSONS, '*pr-review*.md')):
             if since < dt.datetime.fromtimestamp(os.path.getmtime(r), dt.timezone.utc) <= until:
                 shutil.copy(r, os.path.join(x, 'runrecords'))
+    stage(D2, {'challenges.md': os.path.join(out, 'challenges.md')})
     for i, c in enumerate(cats):
         a, b = split_catalog(open(c).read())
         open(os.path.join(D1, f'catalog-{i + 1}.md'), 'w').write(a)
@@ -795,6 +845,7 @@ def main():
     ap.add_argument('--repo', default=os.path.join(HOME, 'Projects', 'openmrs', 'openmrs-module-querystore'),
                     help='querystore checkout, for dating skill rules')
     ap.add_argument('--no-github', action='store_true', help='skip the GitHub outcomes stage')
+    ap.add_argument('--memories-since', help='ISO time: read memories changed since then, not since the window start (a backfill)')
     ap.add_argument('--dry-run', action='store_true', help='scan, corpus, measure, github and memories only; no agents, watermark kept')
     ap.add_argument('--self-test', action='store_true', help='check the measurements against synthetic transcripts, then exit')
     args = ap.parse_args()
@@ -838,8 +889,12 @@ def main():
     if os.path.isdir(mdir):
         n_mem = sum(open(m).read().count('\n##### FILE ') for m in glob.glob(os.path.join(mdir, 'memories-*.txt')))
     else:
-        n_mem, _ = memories(since, until, mdir)
-    print(f'github: PRs for the judges {n_batches}, fetch errors {len(gh_errors)}; memories changed {n_mem}', flush=True)
+        n_mem, _ = memories(T(args.memories_since) if args.memories_since else since, until, mdir)
+    cp = os.path.join(out, 'challenges.md')
+    if not os.path.exists(cp):
+        challenges(since, until, cp)
+    print(f'github: PRs for the judges {n_batches}, fetch errors {len(gh_errors)}; memories changed {n_mem}; '
+          + open(cp).read().split('\n')[2], flush=True)
     if gh_errors:
         print(f'github fetch incomplete; {again} to fetch the rest before any agent runs:')
         print('\n'.join('  ' + e for e in gh_errors)); return
@@ -1055,6 +1110,32 @@ def self_test():
         open(p, 'w').write(f'---\nname: r-{name}\ndescription: "a review lesson, {name}"\n---\nbody\n')
         os.utime(p, (t0.timestamp() + when,) * 2)
     check('memories: only those changed inside the window', memories(since, until, os.path.join(tmp, 'mem'))[0], 1)
+    # trap: REVIEWISH alone kept every build and tooling lesson from the readers; a backfill reaches one older than the window
+    for name, desc, when in (('probes-write-to-dot-openmrs.md', 'a probe that loads core logging writes to ~/.OpenMRS', 100),
+                             ('feedback_wait_loops_must_detect_not_started.md', 'a readiness wait must fail fast', 100),
+                             ('feedback_no_medical_knowledge.md', 'keep the algorithm domain-agnostic', 100),
+                             ('apple-git-grep-ignores-backslash-b.md', 'git grep -E with a word boundary matches nothing', -86400 * 30)):
+        p = os.path.join(mem, name)
+        open(p, 'w').write(f'---\nname: {name[:-3]}\ndescription: "{desc}"\n---\nbody\n')
+        os.utime(p, (t0.timestamp() + when,) * 2)
+    check('memories: a build or tooling lesson is read, a product one is not', memories(since, until, os.path.join(tmp, 'mem2'))[0], 3)
+    check('memories: a backfill reaches lessons older than the window', memories(since - dt.timedelta(days=60), until, os.path.join(tmp, 'mem3'))[0], 5)
+    # challenges: one after a pick and one opening a session; a compaction summary, a replay and a status question are none
+    chd = os.path.join(PROJECTS, '-Users-x-Projects-openmrs-chartsearchai'); os.makedirs(chd)
+    U = lambda ts, c: json.dumps({'type': 'user', 'timestamp': ts, 'message': {'content': c}})
+    A = lambda ts, c: json.dumps({'type': 'assistant', 'timestamp': ts, 'message': {'content': [{'type': 'text', 'text': c}]}})
+    open(os.path.join(chd, 'eeeeeeee-0000.jsonl'), 'w').write('\n'.join([
+        U(at(200), 'What should we fix next?'), A(at(210), 'Fix A.'),
+        U(at(220), 'is that the best and most generic fix? https://github.com/openmrs/openmrs-core/pull/4242'), A(at(230), 'No, it is not proven yet.'),
+        U(at(240), 'This session is being continued from a previous conversation. Are you sure it held?'),
+        U(at(250), 'how far?'), A(at(260), 'Halfway.')]) + '\n')
+    open(os.path.join(chd, 'ffffffff-0000.jsonl'), 'w').write(U(at(300), 'Are you sure there is nothing to improve here?') + '\n' + A(at(310), 'Checking.') + '\n')
+    for fd in ('-private-tmp-replay', '-Users-x--claude-blind-runs-2026-11-20-r-work', '-Users-x--claude-pipeline-worktrees-o-r-1'):
+        os.makedirs(os.path.join(PROJECTS, fd))
+        open(os.path.join(PROJECTS, fd, 'gggggggg-0000.jsonl'), 'w').write(U(at(400), 'Are you sure?') + '\n')
+    cpath = os.path.join(tmp, 'challenges.md'); got = challenges(since, until, cpath); ctext = open(cpath).read()
+    check('challenges: every owner session but replays, after a pick or opening one', got, (2, 1))
+    check('challenges: a PR link is masked, the reply opening kept', ('pull/4242' in ctext, '"No, it is not proven yet."' in ctext), (False, True))
     # trap: an agent given its own log beside its inputs reads it; and it must run with read-only tools only
     fakec = os.path.join(tmp, 'cbin'); os.makedirs(fakec)
     open(os.path.join(fakec, 'claude'), 'w').write('#!' + sys.executable + '\nimport json, os, sys\n'

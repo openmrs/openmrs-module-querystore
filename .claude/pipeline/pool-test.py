@@ -414,6 +414,10 @@ def test_slots(tmp: Path) -> None:
           f"-Dmaven.repo.local={slots[0].m2}" in env["MAVEN_ARGS"]
           and f"-Dmaven.repo.local.tail={Path.home() / '.m2/repository'}" in env["MAVEN_ARGS"])
     check("the session is told it has co-tenants", env["CLAUDE_PIPELINE_SLOT"] == slots[0].name)
+    data = [re.search(r"-DOPENMRS_APPLICATION_DATA_DIRECTORY=(\S+)/", s.env()["MAVEN_ARGS"]) for s in slots]
+    check("each slot's OpenMRS data directory is its own, never ~/.OpenMRS",
+          all(data) and data[0].group(1) != data[1].group(1) and all(os.path.isdir(d.group(1)) for d in data)
+          and not any(d.group(1).startswith(str(Path.home() / ".OpenMRS")) for d in data))
 
     check("ports are read off the standalone", slots[0].tomcatport == 8081 and slots[0].dbport == 3316)
 

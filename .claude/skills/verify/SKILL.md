@@ -1,7 +1,7 @@
 ---
 name: verify
 description: Verify a claim or behavior by running the real system rather than reasoning from code. Use when the user asks "does X work?", "did that change behavior on the demo?", "is this actually fixed?", or whenever a claim about runtime state needs grounding. Trigger phrases: "verify", "test on the demo", "check this works", "prove it", "is this actually fixed".
-version: 0.1.0
+version: 0.1.1
 ---
 
 # Verify
@@ -28,7 +28,7 @@ If a claim is about runtime behavior — a demo, a deployed service, a database,
 ## Per-project gates
 
 Each project may have specific evaluation gates that block "is this fixed?" claims:
-- `chartsearchai` / `querystore`: run the 10-query × 4-patient rubric (`/tmp/qs_fire_queries.sh` + `/tmp/qs_multi_patient_eval.py`) when retrieval/embedding/LLM-prompt behavior changes; eyeball the LLM answers, not just the rubric P@5
+- `querystore`: on a retrieval change, run `RetrievalQualityEvalTest` with `-Dquerystore.eval.modelDir=<a directory holding model.onnx and its vocab>`, and its MySQL and Elasticsearch `*RetrievalQualityEvalIntegrationTest` siblings with `-Pintegration` where the change reaches them. Without the model directory both tests skip and the build still passes: a skip is not a run. `chartsearchai`: on a prompt change, read the answers, not only a score
 - General Java projects: `mvn test` must pass before reporting completion
 - Demo-server changes: smoke-test the actual deployed surface, not just the build artifact
 

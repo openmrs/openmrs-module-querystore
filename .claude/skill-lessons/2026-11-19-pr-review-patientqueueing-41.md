@@ -20,3 +20,24 @@
 - **Seen or not:** round 11 never noticed. Its refuter granted every privilege the line names at once, so it proved the union and never withheld a conditional privilege where the condition is false. Round 12's first refuter found both defects that way: patient 2 with an open visit and auto-assign off, then a `provider` in the request with auto-assign off.
 - **Rule that should have caught it:** the recipe "Privilege-table probe: list the branches…" covers branches, not conditions. Lesson: for each privilege a line makes conditional, probe the state where the condition is false without that privilege and expect success. Also probe each unconditional privilege removed one at a time.
 - **Session:** c0de4167-d24e-4fc8-93b6-1f916b64c600.
+
+# patientqueueing #41 round 13 (head efdc5d9): three earlier-round suggestions caused or missed defects an unanchored reviewer found
+
+- **PR:** https://github.com/openmrs/openmrs-module-patientqueueing/pull/41, round 13, head efdc5d9204820acbb7d641d2cf583806e27722c2, 2026-11-20.
+- **Round 12's prose premise was false, and the author's fix for it created a new docs defect.**
+  - Round 12's r4633893217 said "This should name `queueType`, the property in the request body above." At 29f101b the request example had no `queueType`; only the response did.
+  - The author then added `"queueType"` to the request example (docs line 176). Line 167's Requires then lacked `Get Concepts` (a checkIn-only user gets 400), and line 189's response still showed `null`.
+  - Never noticed: round 12's three refuters were given the suggestion lines (s1/s2/s3) only, not the comment prose.
+  - **Lesson:** a refuter gets the full comment body, prose included, and checks every factual phrase in it ("the request body above") against the file.
+- **Round 8's reorder suggestion opened a commit-then-403 path.**
+  - Round 8's r4551262360 had the dashboard update run the status transition before `savePatientQue`. That stopped refused transitions committing other fields.
+  - But the transition (manageQueue) commits on its own. A user without sendPatientToQueue then gets 403 for a change already saved. The same shape exists in FORWARD with a comment, and in non-patient completion without manageQueue.
+  - Found by this round's unanchored reviewer; confirmed with NOT_SUPPORTED probes and a second JDBC connection.
+  - Never noticed: rounds 9-12 probed with the default transactional harness, which cannot show a commit, and built roles from documented rows.
+  - **Lesson:** for any write path that makes more than one service call, probe each refusal with production transaction semantics (NOT_SUPPORTED, a bound session, a second connection that sees only commits). Check what was committed, not only the status code.
+- **Round 9's README kiosk row over-grants.**
+  - The row I suggested gives the unattended kiosk account `viewQueue`. That privilege also returns `GET /patientqueue?v=full`: every patient ever queued, with full name and birthdate, which the kiosk and display endpoints mask.
+  - Never noticed: rounds 9-12 checked the row only for privileges it lacked (403s).
+  - **Lesson:** for a privilege row meant for an unattended or public account, also probe what the row unlocks beyond its own endpoints.
+- **Rule that should have caught these:** none in the skill. The recipes cover branch and condition probes for privilege lines, not refusal commits or over-grant.
+- **Session:** 38a4e348-b2c7-4393-9e9e-70f57bfe44fc.

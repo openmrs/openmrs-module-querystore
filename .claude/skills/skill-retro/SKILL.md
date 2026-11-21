@@ -2,7 +2,7 @@
 name: skill-retro
 description: Turn the run records the pipeline skills leave behind into skill improvements — read the accumulated evidence, propose edits where a lesson is corroborated or the owner directs one, have every proposal refuted by a fresh agent, prune as much as you add, then version-bump and push. Also runs the mechanical self-contradiction linter over the skill files. Use when asked to improve the skills from what recent runs learned, or on a cadence. Trigger phrases include "improve the skills", "add this to the skill", "mine the review sessions", "run the retro", "what did the last runs teach us", "skill-retro".
 argument-hint: "[mine] [--since <date>] [--lint-only] [--dry-run]"
-version: 0.9.0
+version: 0.10.0
 ---
 
 # Skill retro — evidence in, governance change out
@@ -63,7 +63,9 @@ themselves, where most review lessons never reach a record. Outside CI, run
 command resumes a stopped run, and only a complete run moves the watermark. Present the two lists to the owner. Each
 change they direct, with their words quoted, is owner-directed and goes through Steps 4 to 6. What they decline goes in
 `REJECTED.md`, where the next run's mergers read it. After editing the script, run its `--self-test`; `--dry-run`
-measures without agents.
+measures without agents. A memory changed before the window reaches the readers only through a one-time
+`--memories-since <date>` backfill, which a run after a change to what `memories()` reads owes: on 2026-11-20, 486 of the
+953 memory files, six readers.
 
 ## Step 2 — Run the mechanical linter
 
@@ -134,8 +136,9 @@ budget lowered in the same commit. And:
 
 ## Step 5 — Refute every proposal, with a fresh agent
 
-One subagent, read-only, **never `subagent_type: "fork"`** — a fork inherits the reasoning that
-produced the proposals, which is the one thing this step is for. Give it the proposals, the run
+One agent, read-only and blind: run it with `~/.claude/bin/blind-run`. **Never a fork**, which inherits the reasoning
+that produced the proposals, the one thing this step is for, and not an Agent-tool subagent either, which loads this
+folder's memory index and with it notes on what it judges (measured 2026-11-20). Give it the proposals, the run
 records they rest on, and the current skill text, with its role files and evidence.md where it has them. Do not give
 it your argument for why they are right.
 
@@ -205,7 +208,7 @@ The store is the corroboration itself: the counts that decide the Step 3 bar, an
 proposals with the evidence that would reopen each. Left on one machine it is lost with that machine, and
 unavailable to anyone else running these skills. **A retro that applies NOTHING still
 commits here**, because the parked counts and the new records are its whole output — that is the pass
-most likely to skip this step and the one whose evidence is easiest to lose. `~/.claude/pr-review-rounds/`, `~/.claude/pr-review-mining/`, `~/.claude/pr-review-voice.md` and `~/.claude/pr-review-recipes.md`, the per-PR round records pr-review keeps, the mining runs, and the account owner's measured voice and this machine's how-tos pr-review reads, are local and stay out of the repo.
+most likely to skip this step and the one whose evidence is easiest to lose. `~/.claude/pr-review-rounds/`, `~/.claude/pr-review-mining/`, `~/.claude/blind-runs/`, `~/.claude/pr-review-voice.md` and `~/.claude/pr-review-recipes.md`, the per-PR round records pr-review keeps, the mining runs, blind agents' folders, and the account owner's measured voice and this machine's how-tos pr-review reads, are local and stay out of the repo.
 
 `--dry-run` stops before applying and prints the proposals with their corroboration and objections.
 
@@ -216,7 +219,10 @@ most likely to skip this step and the one whose evidence is easiest to lose. `~/
 - per applied change: the rule, what corroborated it, and what it pruned;
 - per parked lesson: the observation and its count so far;
 - every proposal the refuter killed, with its citation. **This list is the evidence the bar is real** —
-  a retro that applies everything it proposed did not have a bar.
+  a retro that applies everything it proposed did not have a bar;
+- the output of `~/.claude/bin/owed`, so what is still waiting reaches the owner every retro;
+- every decision still the owner's, restated under **Still the owner's:** in this pass's `REJECTED.md` section, since
+  `bin/owed` reads only the latest such list (a decision recorded in prose on 2026-11-08 appeared in neither of the next two).
 
 ## Anti-patterns
 

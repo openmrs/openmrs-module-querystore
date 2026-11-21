@@ -14,6 +14,16 @@ measured rule is not deleted without the measurement that retires it (`skill-ret
 
 ## Roles — and the one rule that makes them roles
 
+*Corrected in 0.41.2, the 2026-11-20 retro — the rule it supports:* “Any other subagent type starts without this
+conversation, but it is not blind”
+
+The line used to say such a subagent "starts clean" and reads only `CLAUDE.md` and the skills. REJECTED.md parked the
+correction (two observations: queue96's canary and a refuter whose transcript held the `MEMORY.md` index as an `AutoMem`
+record) until a reviewer's or refuter's loaded memory carried content about the change under review. On 2026-11-20 three
+refutation rounds spawned from a chartsearchai session each carried that folder's index, which held the source notes of
+two findings they were judging, and a 2026-10-23 "blind classifier" spawned in the querystore folder carried the owner's
+stated position on what it classified. Four later rounds started as `claude -p` from an empty folder loaded no index.
+
 *Cut down in 0.36.1, R5-01 — the rule it supports:* “refuses such a call, so this is enforced rather than asked”
 
 > **And never pass `model`.** A per-call override beats both the agent definition's frontmatter and

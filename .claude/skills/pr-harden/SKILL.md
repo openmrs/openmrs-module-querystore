@@ -2,7 +2,7 @@
 name: pr-harden
 description: Harden an open pull request by cycling clean-context review rounds against it — a fresh agent reviews the pushed head, a second fresh agent implements every finding it agrees with and declines the rest on the record, the build is proved green, the change is verified on a real standalone where runtime behaviour is at stake, and the round is committed and pushed. The cycle repeats until the sha being handed over has been reviewed with zero blocking findings. Use when a PR should be hardened by reviewers who have never seen it being written. Trigger phrases include "harden this PR", "review and fix the PR until it's clean", "cycle review rounds on PR N".
 argument-hint: <pr-number-or-url> [--max-rounds N] [--no-verify]
-version: 0.41.1
+version: 0.41.2
 ---
 
 # PR harden — clean-context review rounds until nothing blocks
@@ -39,9 +39,10 @@ that round**.
 | verifier | fresh, when needed | what the running server actually does, and the environment |
 
 > **Never spawn any of them with `subagent_type: "fork"`.** A fork inherits this conversation, which
-> is the one thing the loop exists to prevent. Any other subagent type starts clean. It still reads
-> `CLAUDE.md` and the repo's skills — that is intended; what it must not have is the transcript of
-> the code being argued for.
+> is the one thing the loop exists to prevent. Any other subagent type starts without this conversation, but it is not
+> blind: it reads `CLAUDE.md`, the repo's skills and the project's memory index (`MEMORY.md`). The first two are
+> intended; a memory entry about the change reaches it too, so a check that must be blind runs through
+> `~/.claude/bin/blind-run` instead. What it must not have is the transcript of the code being argued for.
 
 > **And never pass `model`.** A `PreToolUse` hook (`~/.claude/hooks/no-subagent-model-override.sh`)
 > refuses such a call, so this is enforced rather than asked; if a different model is genuinely

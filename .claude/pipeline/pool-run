@@ -830,6 +830,10 @@ class Slot:
         it means run A's classes silently under run B's tests.
       * the working tree — a git worktree per ticket, which is `work_ticket`'s job rather than this
         one's, since it is per ticket and the slot is per worker.
+      * the OpenMRS application data directory — one per slot, beside its maven repository. Tests
+        write into it (chartsearchai's DrugReferenceTestSupport and ChartSearchAiUtilsTest create
+        files under `<data dir>/chartsearchai`), so the default made every run write into the owner's
+        live `~/.OpenMRS`, which their running servers use too (2026-11-20 retro).
 
     `CLAUDE_PIPELINE_SLOT` is the session's own notice that it has co-tenants: the skills read it and
     stop doing the things that are correct alone and destructive beside a sibling — killing whatever
@@ -848,8 +852,11 @@ class Slot:
     def env(self) -> dict[str, str]:
         self.m2.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ)
+        appdata = self.m2.with_name(self.m2.name + "-appdata")
+        appdata.mkdir(parents=True, exist_ok=True)
         env["MAVEN_ARGS"] = (f"-Dmaven.repo.local={self.m2} "
-                             f"-Dmaven.repo.local.tail={self.tail}")
+                             f"-Dmaven.repo.local.tail={self.tail} "
+                             f"-DOPENMRS_APPLICATION_DATA_DIRECTORY={appdata}/")
         env["CLAUDE_PIPELINE_SLOT"] = self.name
         if self.standalone:
             env["OPENMRS_STANDALONE_HOME"] = str(self.standalone)

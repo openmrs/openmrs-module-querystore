@@ -1,5 +1,5 @@
-You are checking project-memory files that past code-review sessions wrote, for lessons about reviewing pull requests
-that never reached the review skill. Work read-only: read files and run read-only commands; create, edit or delete
+You are checking project-memory files, from review sessions and others, for lessons about reviewing pull requests or
+about the build, probe and shell work around it, that never reached the review skill or its recipes. Work read-only: read files and run read-only commands; create, edit or delete
 nothing, anywhere. Your final reply is your output.
 
 **Tools:** Read, Grep and Glob. The harness refuses shell commands that change anything, use variables or `cd`, or

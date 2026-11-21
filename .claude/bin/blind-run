@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+"""Run one headless agent that is blind to the calling session: an empty folder, its own stores, a deadline.
+
+Usage: blind-run [--deadline SECS] [--allow TOOL ...] [--repo PATH --ref REF] NAME BRIEF_FILE
+       blind-run --self-test
+
+Why it exists (2026-11-20 retro):
+- An Agent-tool subagent is not blind. It loads the calling project's memory index: three "independent" refutation
+  rounds that day all carried the chartsearchai index, which held the source notes of two findings they were judging, and
+  a 2026-10-23 "blind classifier" carried the owner's stated position on what it classified. A `claude -p` started in a
+  folder no project owns loads none; four rounds run that way loaded no index and cost $1.08 to $1.85 each.
+- Replays kept their isolation in an untracked `.mvn/maven.config` that `git worktree add` does not copy (a control run
+  used the default Maven and OpenMRS locations, 2026-11-18), and shared `/tmp` paths (a log overwritten by a concurrent
+  replay, the same day). Here the isolation is in the environment every child inherits, as pool-run does with MAVEN_ARGS.
+- The folder lives under ~/.claude/blind-runs, not /tmp: macOS tmp_cleaner deletes /tmp files untouched for 3 days.
+  Claude Code still keeps its own per-session notes under /private/tmp; this script does not move those.
+
+Layout: ~/.claude/blind-runs/<date>-<NAME>/{work,m2,appdata,tmp,log}. `work` is empty, or a detached worktree of --repo
+at --ref. The agent gets read-only tools plus Bash unless --allow says otherwise, and never Agent, Write or Edit. The
+report (log/report.md) is its last text, with a short Stop-hook amendment appended and a longer rewrite replacing it,
+as skill-retro's mine.py reads one. Exit 2 when the agent never started (no init event), 3 when the deadline hit.
+"""
+import argparse
+import contextlib
+import datetime
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+DENY = ["Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task", "Skill", "Workflow",
+        # Tools that reach other sessions or publish (ListAgents listed 32 peers on 2026-11-20). Bash stays allowed, and
+        # Bash can still post or push, so a brief that must not change anything says so.
+        "ListAgents", "SendMessage", "RemoteTrigger", "PushNotification", "CronCreate", "CronDelete", "ScheduleWakeup",
+        "Artifact", "ArtifactData", "ArtifactComments", "AskUserQuestion", "PublishPlugin", "ShareOnboardingGuide",
+        "DesignSync"]
+ALLOW = ["Bash", "Read", "Grep", "Glob"]
+
+
+def report(stream_path):
+    texts, result = [], None
+    with open(stream_path, errors="replace") as f:
+        for line in f:
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if d.get("type") == "result":
+                result = d
+            if d.get("type") != "assistant":
+                continue
+            for b in (d.get("message") or {}).get("content") or []:
+                if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip():
+                    t = b["text"].strip()
+                    if texts and len(t) < len(texts[-1]) / 2:
+                        texts[-1] += "\n\n" + t
+                    else:
+                        texts.append(t)
+    return (texts[-1] if texts else ""), result
+
+
+def run(name, brief, deadline, allow, repo=None, ref=None, base=None):
+    base = base or os.path.join(os.path.expanduser("~"), ".claude", "blind-runs")
+    d = os.path.join(base, datetime.date.today().isoformat() + "-" + name)
+    dirs = {k: os.path.join(d, k) for k in ("work", "m2", "appdata", "tmp", "log")}
+    if os.path.exists(dirs["work"]) and os.listdir(dirs["work"]):
+        sys.exit(f"blind-run: {dirs['work']} is not empty; pick another NAME")
+    for k, p in dirs.items():
+        if not (k == "work" and repo):
+            os.makedirs(p, exist_ok=True)
+    os.makedirs(dirs["log"], exist_ok=True)
+    if repo:
+        subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", dirs["work"], ref or "HEAD"], check=True,
+                       stdout=subprocess.DEVNULL)
+    with open(os.path.join(dirs["log"], "BRIEF.md"), "w") as f:
+        f.write(brief)
+    env = dict(os.environ, TMPDIR=dirs["tmp"] + "/", MAVEN_ARGS=(
+        f"-Dmaven.repo.local={dirs['m2']} -Dmaven.repo.local.tail={os.path.expanduser('~')}/.m2/repository "
+        f"-DOPENMRS_APPLICATION_DATA_DIRECTORY={dirs['appdata']}/"))
+    cmd = ["claude", "-p", brief, "--output-format", "stream-json", "--verbose", "--strict-mcp-config",
+           "--allowedTools", *allow, "--disallowedTools", *DENY]
+    out, err = os.path.join(dirs["log"], "out.jsonl"), os.path.join(dirs["log"], "err.txt")
+    with open(out, "w") as o, open(err, "w") as e:
+        # At the deadline, SIGTERM goes to the agent's process group; once the agent exits, or after 5 s, SIGKILL goes
+        # to whatever is left of that group. Claude Code runs each Bash command in a process group of its own and stops
+        # those shells on SIGTERM; a SIGKILL alone left one running (measured 2026-11-20).
+        proc = subprocess.Popen(cmd, cwd=dirs["work"], env=env, stdin=subprocess.DEVNULL, stdout=o, stderr=e,
+                                start_new_session=True)
+        try:
+            rc = proc.wait(timeout=deadline)
+        except subprocess.TimeoutExpired:
+            rc = 3
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGTERM)
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=5)
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+    with open(out, errors="replace") as f:
+        started = any('"subtype":"init"' in line.replace(" ", "") for line in f)
+    text, result = report(out)
+    with open(os.path.join(dirs["log"], "report.md"), "w") as f:
+        f.write(text + "\n")
+    if not started:
+        print(f"blind-run: the agent never started; see {err}", file=sys.stderr)
+        return 2, d
+    if rc == 3:
+        print(f"blind-run: deadline of {deadline}s reached; partial report in {dirs['log']}/report.md", file=sys.stderr)
+        return 3, d
+    if result:
+        print(f"blind-run: {result.get('num_turns')} turns, ${round(result.get('total_cost_usd') or 0, 2)}, "
+              f"{round((result.get('duration_ms') or 0) / 60000, 1)} min; report in {dirs['log']}/report.md", file=sys.stderr)
+    print(text)
+    return rc, d
+
+
+FAKE = r'''#!/usr/bin/env python3
+import json, os, sys, time
+open(os.environ["FAKE_LOG"], "w").write(json.dumps({"cwd": os.getcwd(), "args": sys.argv[1:],
+    "maven": os.environ.get("MAVEN_ARGS", ""), "tmp": os.environ.get("TMPDIR", "")}))
+mode = os.environ.get("FAKE_MODE", "ok")
+if mode == "silent":
+    sys.exit(1)
+print(json.dumps({"type": "system", "subtype": "init"}))
+if mode == "slow":
+    import subprocess
+    child = subprocess.Popen(["sleep", "300"])
+    open(os.environ["FAKE_LOG"] + ".child", "w").write(str(child.pid))
+    sys.stdout.flush(); time.sleep(30)
+print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Full report: " + "x" * 300}]}}))
+print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Amendment."}]}}))
+print(json.dumps({"type": "result", "num_turns": 3, "total_cost_usd": 0.5, "duration_ms": 60000}))
+'''
+
+
+def self_test():
+    t = tempfile.mkdtemp()
+    os.makedirs(os.path.join(t, "bin"))
+    fake = os.path.join(t, "bin", "claude")
+    with open(fake, "w") as f:
+        f.write(FAKE)
+    os.chmod(fake, 0o755)
+    os.environ["PATH"] = os.path.join(t, "bin") + os.pathsep + os.environ["PATH"]
+    os.environ["FAKE_LOG"] = os.path.join(t, "call.json")
+    checks = []
+    os.environ["FAKE_MODE"] = "ok"
+    rc, d = run("ok", "the brief", 20, ALLOW, base=os.path.join(t, "runs"))
+    call = json.load(open(os.environ["FAKE_LOG"]))
+    checks += [
+        ("exit 0", rc == 0),
+        ("cwd is the empty work folder", call["cwd"] == os.path.realpath(os.path.join(d, "work")) or call["cwd"] == os.path.join(d, "work")),
+        ("maven repo is the run's own", f"-Dmaven.repo.local={d}/m2" in call["maven"]),
+        ("openmrs data directory is the run's own", f"-DOPENMRS_APPLICATION_DATA_DIRECTORY={d}/appdata/" in call["maven"]),
+        ("tmp is the run's own", call["tmp"] == os.path.join(d, "tmp") + "/"),
+        ("Agent is disallowed", "Agent" in call["args"][call["args"].index("--disallowedTools"):]),
+        ("Bash is allowed", "Bash" in call["args"][call["args"].index("--allowedTools"):call["args"].index("--disallowedTools")]),
+        ("report keeps the full text and appends the short amendment",
+         open(os.path.join(d, "log", "report.md")).read().startswith("Full report") and "Amendment." in open(os.path.join(d, "log", "report.md")).read()),
+    ]
+    os.environ["FAKE_MODE"] = "silent"
+    rc, _ = run("silent", "b", 20, ALLOW, base=os.path.join(t, "runs"))
+    checks.append(("never started exits 2", rc == 2))
+    os.environ["FAKE_MODE"] = "slow"
+    rc, _ = run("slow", "b", 2, ALLOW, base=os.path.join(t, "runs"))
+    checks.append(("deadline exits 3", rc == 3))
+    child = int(open(os.environ["FAKE_LOG"] + ".child").read())
+    time.sleep(0.5)
+    try:
+        os.kill(child, 0)
+        alive = True
+        os.kill(child, signal.SIGKILL)
+    except ProcessLookupError:
+        alive = False
+    checks.append(("the deadline stops what the agent started", not alive))
+    checks.append(("messaging other sessions is disallowed", "SendMessage" in call["args"] and "ListAgents" in call["args"]))
+    shutil.rmtree(t)
+    failed = [n for n, ok in checks if not ok]
+    for n in failed:
+        print("FAIL", n)
+    print(f"{len(checks) - len(failed)} of {len(checks)} checks pass")
+    return 1 if failed else 0
+
+
+def main():
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(self_test())
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("name")
+    ap.add_argument("brief_file")
+    ap.add_argument("--deadline", type=int, default=2700)
+    ap.add_argument("--allow", nargs="+", default=ALLOW)
+    ap.add_argument("--repo")
+    ap.add_argument("--ref")
+    a = ap.parse_args()
+    if not a.name.replace("-", "").replace("_", "").isalnum():
+        sys.exit("blind-run: NAME may hold letters, digits, - and _ only")
+    with open(a.brief_file) as f:
+        brief = f.read()
+    rc, _ = run(a.name, brief, a.deadline, a.allow, a.repo, a.ref)
+    sys.exit(rc)
+
+
+if __name__ == "__main__":
+    main()

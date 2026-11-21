@@ -14,8 +14,9 @@ the last one. A proposal that changes under a bare "are you sure?" was offered b
 4. **Measure, don't argue**: drive the real code on real data across many cases (other patients, other wordings, the
    none / one / several cases). Count what each shape fixes, what it leaves, and what it loses. Test the measuring
    script against a known-good and a known-bad case first.
-5. **Refute the winner**: give it to a fresh agent with the code, not your conclusion, and ask for the case that breaks
-   it. Repeat until a round finds nothing new.
+5. **Refute the winner**: give it to a blind agent with the code, not your conclusion, and ask for the case that breaks
+   it. An Agent-tool subagent loads this folder's memory index and is not blind: use `~/.claude/bin/blind-run`.
+   Repeat until a round finds nothing new.
 
 ## The proposal
 

@@ -16,7 +16,17 @@ gate running old logic, which is why `skill-retro` Step 6 requires `cmp` across 
   three reasons, in these words: "needs the implementation", "needs your decision" or "needs access". Added 2026-11-02,
   after a proposal listed two items it could have checked and did not. It checks that a reason is GIVEN, never that it
   is true. It blocks once per stop (`stop_hook_active` allows) and allows on any read failure, because a Stop hook that
-  fails closed traps every session. No skill-side copy.
+  fails closed traps every session. The gate's own name, and a label already giving the reason for its one item, are
+  not open-item labels. Of its 57 blocks from 2026-11-02, when it was added, to 2026-11-20, 25 were on replies that
+  listed no open item of their own; those two rules pass 2. Wording rules for the rest (quoted mentions,
+  review-checklist categories, numbered lesson titles) each let a real list written the same way through, so they
+  still block. No skill-side copy.
+- `gh-run-wait-guard.py` — PreToolUse(Bash). Refuses a loop that waits on a GitHub Actions run id `gh run list` looked
+  up without checking it found one: an empty id never reaches `completed`, so the wait never ends (two hours on
+  2026-11-20; the same stall on 11-05 and 11-17). Of the 40 commands from 2026-09-28 to 2026-11-20 15:00 UTC that looked
+  a run id up and polled it, it refuses the 21 with that shape, the three stalls among them, and leaves the 19 that
+  guard the id, bound the loop or poll once. A loop that waits for `gh run list` to return a run, with no deadline, is
+  outside it: 8 of the 40 had one, none measured stalling. No skill-side copy.
 - `no-subagent-model-override.sh` — PreToolUse(Agent). Refuses an `Agent` call that sets an explicit
   `model`, so a running session cannot downgrade a subagent per call — `harden` and `pr-harden` both
   carry the matching rule, and until 2026-09-02 `pr-harden` named a cheaper agent as the remedy for a
@@ -41,14 +51,17 @@ gate running old logic, which is why `skill-retro` Step 6 requires `cmp` across 
   `git checkout -- <path>` / `git restore <path>` runs. Vendored here 2026-08-27; it had existed only on
   one machine, which is what `21b0e7e` fixed for two skills. It has no skill-side copy.
 
-Registration lives in the user's own `~/.claude/settings.json` (`Stop` for the two gates and the unchecked-items gate, `PreToolUse`
-matcher `Bash` for the rm-shape guard and the backup, matcher `Agent` for the model guard) and is not vendored — it is user configuration, not pipeline code.
+Registration lives in the user's own `~/.claude/settings.json` (`Stop` for the two gates and the unchecked-items gate,
+`PreToolUse` matcher `Bash` for the rm-shape guard, the backup and the run-wait guard, matcher `Agent` for the model
+guard) and is not vendored — it is user configuration, not pipeline code.
 
 Tests: `bash .claude/skills/harden/gate-test.sh .claude/hooks/harden-cycle-gate.sh` and the pr-harden
 equivalent (either path form works; the harness resolves it and exits 2 on a hook it cannot find).
 `bash ~/.claude/hooks/pipeline-rm-shape-test.sh` covers the rm-shape guard; its cases are shapes
 measured to prompt and real commands lifted from pool-run transcripts, and dropping any one of the
-guard's rules reddens it.
+guard's rules reddens it. `python3 .claude/hooks/unchecked-items-gate-test.py`
+and `python3 .claude/hooks/gh-run-wait-guard-test.py` drive their hooks the same way, with measured cases in both
+directions; dropping any one rule of either reddens its test.
 
 `git-restore-backup.sh` has no tests, and that is a gap rather than a property of the script. It looks
 like a fail-open `cp`, but it decides which commands are destructive, and review measured that decision

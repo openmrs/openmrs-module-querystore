@@ -3,14 +3,14 @@
   "raise": "only in the commit that needs it, recorded in `raises` as {\"from\": <old>, \"to\": <new>, \"why\": \"<the sentence skill-retro Step 4 asks for>\"}; `skill-lint.py --against <ref>` fails a rise without one",
   "raises": {
     "skill-retro": {
-      "from": 2916,
-      "to": 3044,
-      "why": "Step 1 gains the mining mode the owner asked for on 2026-11-19, so the day's hand-run mining of every pr-review session repeats as one command: mine/mine.py runs headless readers, judges, synthesizers and two mergers over the sessions since a watermark, with a self-test against synthetic transcripts and a fake gh, and a calibrating dry run that reproduced the hand run's sessions, chunks, private flags, refuter pairs, context fill and PRs exactly (compactions 266 against 268: the run leaves two that fell after its window to the next run); Step 6 names ~/.claude/pr-review-mining/ as local (+128 words)"
+      "from": 3044,
+      "to": 3162,
+      "why": "Owner-directed, 2026-11-20 retro: Step 5's refuter runs through bin/blind-run because an Agent-tool subagent carries this folder's memory index; the mining paragraph names the one-time --memories-since backfill and its cost; the report ends with bin/owed's list and restates every decision still the owner's, which bin/owed reads; the local-files list names ~/.claude/blind-runs/."
     },
     "pr-harden": {
-      "from": 10532,
-      "to": 10625,
-      "why": "State says that where CLAUDE_CODE_RETRY_WATCHDOG is on a live agent can outlast the gates' one-hour await bound, since its requests wait at a usage limit for the reset and the harness does not report it stalled (measured against a stub, artifacts/2026-10-21-retry-watchdog-limit), and that only the gate sees that hour pass, so its block past the bound opens on that await and the run records it again with the command that recorded it, --only and --run included, rather than re-dispatching its phase beside the live agent; once, an await naming one agent so that a name listed twice is that once spent, after which the agent is stopped with TaskStop before the dead-phase contract retries its phase; the rule moves here from resolve-ticket's Step 1 because resolve-ticket's alias reaches a standalone pr-harden or harden too"
+      "from": 10625,
+      "to": 10658,
+      "why": "The 'starts clean' line was false: an Agent-tool subagent loads the project's memory index, and REJECTED.md's reopen condition for it was met on 2026-11-20. The correction names the index and where a check that must be blind runs."
     },
     "pr-harden/fixer.md": {
       "from": 1134,
@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 9756,
-      "to": 9837,
-      "why": "Owner-directed pass over the reviews since the 2026-11-19 mining, read by skill-retro mine's live verification run, and that run's fresh audit of 0.35.0: a privilege or scope probe, the PR's or one the review suggests, withholds each named privilege in turn and runs each \"only when\" or \"unless\" condition false, after patientqueueing PR 41's two run records (rounds 11 and 12) found privilege rows the review had posted in rounds 9 and 11 still wrong; a recommended fix's refuter gets the git grep list of its callers, after three sessions spent refuter rounds finding the callers a suggested fix broke; a mutation probe runs in your own worktree, one you deploy nothing from, after a session nearly deployed a mutated jar; a PR is private when any one of its tickets is blank or unreadable, and nothing posted names any of them, the private list holding one PR under two advisory keys; the auditor's twelve applied edits remove 60 words and add 41, mostly by merging rules stated twice; thirteen gate rounds, the last finding nothing; 2026-11-20 (+81 words)"
+      "from": 9837,
+      "to": 10026,
+      "why": "Owner-directed, 2026-11-20 retro: the literal OpenMRS data-directory flags at the scratch-build bullet, after two pr-review sessions run outside the core folder rolled the live openmrs.log (2026-11-18, 2026-11-20); a Step 1 watch on the PR's state, head and review decision, after stockmanagement #72 and #73 merged mid-review with #72's verified blockers held; patientqueueing #41 round 13's lessons on refusal commits and over-grants at the privilege bullet, and the comment's prose going to a fix's refuter; and a mutation worktree nothing else reads. None restates an existing rule, so a raise pays for it."
     },
     "pr-review/posting.md": {
       "from": 2185,
@@ -61,25 +61,30 @@
       "from": 1859,
       "to": 1889,
       "why": "the paragraph on a --work session's environment no longer says nothing else is touched: while the launcher's carry is on, the session starts without CLAUDE_CODE_RETRY_WATCHDOG and its cap and with CLAUDE_PIPELINE_CARRY=work, which pausing.md explains, and while it is off without a CLAUDE_PIPELINE_CARRY it inherited, since the marker says the launcher carries the session"
+    },
+    "verify": {
+      "from": 658,
+      "to": 692,
+      "why": "The chartsearchai/querystore gate named two /tmp scripts that exist nowhere; it now gives querystore's runnable RetrievalQualityEvalTest with the model-directory flag it skips without, the integration profile its siblings need, and that a skip is not a run, and keeps reading the answers on a prompt change (2026-11-20 retro, four refutation rounds)."
     }
   },
   "words": {
     "harden": 7538,
     "measure-first": 892,
     "openmrs-module-review": 1534,
-    "pr-harden": 10625,
+    "pr-harden": 10658,
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 9837,
+    "pr-review": 10026,
     "pr-review/posting.md": 2226,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
-    "skill-retro": 3044,
+    "skill-retro": 3162,
     "ticket-pool": 5111,
     "ticket-pool/by-hand.md": 1889,
     "ticket-pool/pausing.md": 1755,
-    "verify": 658,
+    "verify": 692,
     "verify-frontend-change": 1844
   }
 }
