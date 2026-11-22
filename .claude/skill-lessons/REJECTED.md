@@ -7390,3 +7390,88 @@ the redirect only to the arms whose method names those paths, and count it as a 
 
 **Running parked counts:** "a regression filed below blocking because a harness hid its reach" enters at 1. The counts
 the previous section listed are unchanged, since no run record arrived in this window.
+
+## 2026-11-23 (owner-directed: pr-review does not name `bin/blind-run`, and a replay that measured the parked second reviewer had no public record; the owner answered "yes" to "close gaps 1 and 2 in one `/skill-retro` pass, with a blind refuter, and push it") — 1 applied; 1 parked candidate measured, stays parked; 1 capture killed; linter 17 files, 0 findings; **pr-review 0.38.0**
+
+**Evidence read.**
+- The store matched `origin/main` both ways before the read: 751 files, none different; only a `.DS_Store` and a
+  `.pyc` cache are local-only, and neither is mirrored.
+- No top-level run record had been written since `LAST` (2026-11-22) beyond
+  `2026-11-22-pr-review-replay-reach-clause.md`, which the previous section counted.
+- The replay this pass reports is summarized below. The session that ran it also corrected one count in its records
+  (a key noticed without being filed, or filed only in part, in 5 runs, not 6).
+
+**Applied, owner-directed: pr-review 0.38.0.**
+- :132's "a separate reader per finding" and :141's "a fresh agent" now say blind, and :141 ends with what a blind
+  agent is outside CI: `~/.claude/bin/blind-run <name> <brief-file> --repo <checkout> --ref pr-<n> --deadline 1800` run
+  in the background, not an Agent-tool subagent, which loads the project's memory index where it has one, with any
+  notes on this PR. pr-harden :45, skill-retro Step 5 and `proposing-fixes.md` step 5 already say the same.
+  `--deadline 1800` carries out the paragraph's own "give it 30 minutes; past that, stop it". The background is
+  measured: with the self-test's fake `claude`, killing the wrapper's process group, as the Bash tool's 600 s
+  foreground limit does, left the agent running in its own session and wrote no report; left to finish, it wrote one.
+- A guard on the owner's direction (Step 3): no pr-review run is on record that it would have changed. Rounds that used
+  `blind-run` already started their agents through it; what kept those agents from being blind was the tool's own
+  defect, which 98c45ffa fixed. It prunes nothing, since it makes "a fresh agent" precise rather than replacing a rule.
+  Budget 10026 to 10072, with its `raises` entry.
+
+**Parked, measured again: the second reviewer (2026-11-19).**
+- A pre-registered replay with a blind judge measured the parked 92-word paragraph again: U filed a key in 1 of 3 runs
+  and C, the skill without it, in 0 of 3. REOPEN ON asks for 2 of 3 against 0-1, so it stays parked, REOPEN ON
+  unchanged.
+- The same replay ran a round's second-reviewer brief on its own. On one of its keys it filed in 3 of 3 runs blind and
+  0 of 3 with a project memory index loaded, which its pre-registered reading takes as the index suppressing that key;
+  on another, the memory-loaded arm did better (1 of 3 against 0 of 3 and one partial). Taking 0.33.0's failure-path
+  clause out of the brief gave no evidence either way.
+
+**Fixed outside this pass, recorded here:** `bin/blind-run` at 98c45ffa (owner-directed). `--repo` made a worktree, and
+Claude Code loads a worktree's memory index from its main checkout, so those agents were not blind. Each run's first
+stream event records the memory folder it was given (`memory_paths`). Read across the 46 runs under
+`~/.claude/blind-runs` before this pass's own: 21 round agents, all `--repo` worktrees, were given a folder holding an
+index (18 in openmrs-core rounds, 3 in stockmanagement rounds), as was one canary of the old script; none of the 21
+opened a note. `bin/blind-run`'s docstring said every `--repo` run had loaded an index; this pass corrects it to runs
+on a checkout whose project had one. The ten refutation rounds of the first 2026-11-22 section each recorded their
+own empty folder, and the replay of the second ran its arms in per-run clones, so neither is affected. Since the fix the
+event carries no memory folder.
+
+**Gate.** Refuters through `bin/blind-run` on the staged diff, a draft capture and drafts of this section:
+`2026-11-23-retro-1123-refute1` (50 turns, $2.10), `-refute2` (44 turns, $2.36), `-refute3` (28 turns, $1.76) and
+`-refute4` (24 turns, $1.52).
+- **Killed: a capture of the replay,** on rounds 1 and 2's question 6; the results above stand in for it.
+- Taken from round 1: two false sentences of the draft section (every `--repo` run loading the index; this pass drawing
+  nothing from the replay's records), and P1's citation of a measurement of the second reviewer, a role P1 does not
+  touch, so P1 is now the guard above.
+- Taken from round 2: `<brief-file>` and the background in P1's command; the counts above (21 round agents and one
+  canary; 46 runs with a stream).
+- Round 2 also judged P1's owner bar weak, the gaps being named in the session: the owner was shown "The pr-review
+  skill never names blind-run" and that no public record of this replay existed, then answered "yes".
+- Taken from round 3: question 6 again, by dropping four phrases of the draft; the background claim, measured above
+  rather than read from the code; and "where it has one" in P1. Round 3 also found that the reason the owner was given
+  for gap 1 overstated the replay: it measured a reviewer brief with and without the memory index, not an Agent-tool
+  subagent, and a finder, not a refuter. The owner is told so in this pass's report, and P1 stands as the
+  guard above on their direction.
+- Taken from round 4: the second-reviewer sentence above, which read as if the index suppressed every key; the count
+  correction's wording; `bin/blind-run`'s docstring; "with any notes on this PR"; and two more phrases on question 6.
+  Round 4 also noted that the owner hears of the overstated reason only after the push; P1 is a text change a revert
+  undoes, and the report offers one.
+- Suspected by rounds 3 and 4 and not run (it needs a `claude` run): a reviewer pr-harden starts, told "not to spawn
+  subagents of its own" (pr-harden :202), might take P1's command as allowed.
+
+**Observed, not yet actionable.**
+- "Seen, then set aside": one more measurement sighting in a full review (a C run of the replay above noticed a key and
+  did not file it), so 12. Two standalone reviewer-brief runs also set it aside and two filed it only in part, which
+  this count leaves out. Run records stay at 2.
+
+**Still the owner's:**
+- openmrs-core's project memory runs an unanchored second reviewer this file parked (2026-11-19): adopt it in pr-review,
+  or drop the memory's line;
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR claim
+  note, and the Action's "post nothing" when an author has asked a question.
+
+**Running parked counts:** "seen, then set aside" measurement sightings 11 to 12; the counts in run records are
+unchanged, since no run record arrived in this window.

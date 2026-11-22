@@ -16,8 +16,8 @@ Why it exists (2026-11-20 retro):
   Claude Code still keeps its own per-session notes under /private/tmp; this script does not move those.
 - --repo made a `git worktree` until 2026-11-22, and Claude Code takes a worktree's memory folder from its main
   repository: a canary run that way on a checkout a project owns quoted that project's memory index back, so every
-  --repo run had loaded it. A worktree also shares the checkout's refs, so the agent could list the session's branches
-  and worktrees, and its own git writes landed in the checkout. `work` is now a repository of its own, and
+  --repo run on a checkout whose project had an index had loaded it. A worktree also shares the checkout's refs, so
+  the agent could list the session's branches and worktrees, and its own git writes landed in the checkout. `work` is now a repository of its own, and
   CLAUDE_CODE_DISABLE_AUTO_MEMORY keeps a memory index out wherever `work` is.
 
 Layout: ~/.claude/blind-runs/<date>-<NAME>/{work,m2,appdata,tmp,log}. `work` is empty, or a repository of its own
