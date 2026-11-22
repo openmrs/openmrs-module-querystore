@@ -7338,3 +7338,55 @@ without `curl -L` (57; none of the cases read led to a wrong conclusion); answer
 **Running parked counts:** the reply-side pick gate enters at 1 (owner-directed, measured); the deadline-on-every-loop
 hook enters at 1; the run guard's find-loop extension enters at 1; the gate's category and title exemptions enter at 1;
 "add the missing case" stays at 1.
+
+## 2026-11-22 (owner-directed: "run the skill-retro on this replay", the blind replay of pr-review 0.25.1 against 0.37.0 on a private-ticket core PR) — 0 applied; 1 parked; 1 not re-proposed; no skill file changed; linter 17 files, 0 findings; **Step 5 not run** (nothing to apply)
+
+**Evidence read.**
+- The store matched `origin/main` both ways before the read: no file missing on either side, none different.
+- No top-level record had been written since `LAST` (2026-11-22). The replay's own records are under `confidential/`
+  because the subject's ticket is private, and this pass drew nothing from them. Its window is the one capture it wrote,
+  `2026-11-22-pr-review-replay-reach-clause.md`, read against the records it bears on: `2026-10-18-pr-review-lens-replay-queue96.md`,
+  `2026-10-18-pr-review-heldout-6551.md`, `2026-11-19-pr-review-patientqueueing-41.md`, and this file's 2026-10-23
+  (*Measured and not adopted*) and 2026-11-19 (pr-review 0.35.0) sections.
+
+**Parked, 1 measurement record and 0 run records: a real regression filed below blocking because a test harness hid its
+reach.**
+- 0.37.0 filed the blocker in 1 of 3 runs; 0.25.1 pointed at the same notes filed it in 3 of 3; 0.25.1 alone in 0 of 3.
+- Both E downgrades trace to pr-review :172's "a reach you cannot name makes it a question" (0.35.0), reached through
+  :101's "can't run ... ships as a question": the FHIR2 path failed inside the test transaction on every core, base
+  included, or was not run. The E run that suspended the transaction blocked.
+- Candidate wording, untested and not proposed: at :172, a reach counts as named when each link is measured on base and
+  head, and a harness whose base control fails the same way decides nothing.
+- Why parked: one record; and 0.35.0's clause rests on severity being the refuter tallies' most common error across 722
+  sessions (2026-11-19 section, change 1), which one replay cannot outweigh.
+- **REOPEN ON:** a run record where a regression was filed below blocking because its reach failed only inside a test
+  harness, or a pre-registered measurement of a candidate wording on another PR.
+
+**Not re-proposed: a transaction-semantics remedy (`NOT_SUPPORTED`).**
+- The replay is another sighting of the harness theme: only the one E run that suspended the test transaction reached the
+  defect through FHIR2.
+- Sightings so far: queue96 (0 of 12 runs ran anything able to observe a transaction), 6551 (`NOT_SUPPORTED` in 0 of 3
+  runs that had read it), patientqueueing 41 (rounds 9-12 probed inside the transaction and missed a commit), this replay
+  (1 of 3 E runs).
+- The candidate texts are recorded as measured and not adopted (2026-10-23, (a) and (b)). Their REOPEN ON asks for a
+  measurement in which a candidate moves a pre-registered outcome. This replay tested skill versions, not a candidate, so
+  it does not meet it.
+
+**Observed, for the next replay's protocol rather than a skill:** a brief that redirects `~/.claude` paths for every arm
+hands the treatment arm's inputs to a control whose method never names them; 2 of 3 C runs read the notes that way. Give
+the redirect only to the arms whose method names those paths, and count it as a threat otherwise.
+
+**Still the owner's:**
+- whether to direct a change to pr-review :172's reach clause now, on this one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- openmrs-core's project memory runs an unanchored second reviewer this file parked (2026-11-19): adopt it in pr-review,
+  or drop the memory's line;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR claim
+  note, and the Action's "post nothing" when an author has asked a question.
+
+**Running parked counts:** "a regression filed below blocking because a harness hid its reach" enters at 1. The counts
+the previous section listed are unchanged, since no run record arrived in this window.
