@@ -14,11 +14,23 @@ Why it exists (2026-11-20 retro):
   replay, the same day). Here the isolation is in the environment every child inherits, as pool-run does with MAVEN_ARGS.
 - The folder lives under ~/.claude/blind-runs, not /tmp: macOS tmp_cleaner deletes /tmp files untouched for 3 days.
   Claude Code still keeps its own per-session notes under /private/tmp; this script does not move those.
+- --repo made a `git worktree` until 2026-11-22, and Claude Code takes a worktree's memory folder from its main
+  repository: a canary run that way on a checkout a project owns quoted that project's memory index back, so every
+  --repo run had loaded it. A worktree also shares the checkout's refs, so the agent could list the session's branches
+  and worktrees, and its own git writes landed in the checkout. `work` is now a repository of its own, and
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY keeps a memory index out wherever `work` is.
 
-Layout: ~/.claude/blind-runs/<date>-<NAME>/{work,m2,appdata,tmp,log}. `work` is empty, or a detached worktree of --repo
-at --ref. The agent gets read-only tools plus Bash unless --allow says otherwise, and never Agent, Write or Edit. The
-report (log/report.md) is its last text, with a short Stop-hook amendment appended and a longer rewrite replacing it,
-as skill-retro's mine.py reads one. Exit 2 when the agent never started (no init event), 3 when the deadline hit.
+Layout: ~/.claude/blind-runs/<date>-<NAME>/{work,m2,appdata,tmp,log}. `work` is empty, or a repository of its own
+detached at --ref that reads --repo's objects through git's alternates and holds its tags, its origin/* and upstream/*
+branches as --repo has them with those remotes' settings, --ref's own ref, and the ref it tracks when that is a
+branch; the checkout's other branches, remotes, stash and worktrees stay out of its refs. The objects stay shared
+read-only, so `git fsck` or `git cat-file --batch-all-objects` in `work` still reaches the checkout's other commits, as
+reading the checkout's folder always could: blind-run is no sandbox (no earlier blind-run agent ran either, 0 of 876
+Bash calls on 2026-11-22; copying only the reachable objects instead took 6.5 s and 258 MB for openmrs-core, against
+0.6 s and 2.3 MB). The agent gets read-only tools plus Bash unless --allow says otherwise, and never
+Agent, Write or Edit. The report (log/report.md) is its last text, with a short Stop-hook amendment appended and a
+longer rewrite replacing it, as skill-retro's mine.py reads one. Exit 2 when the agent never started (no init event),
+3 when the deadline hit.
 """
 import argparse
 import contextlib
@@ -63,22 +75,108 @@ def report(stream_path):
     return (texts[-1] if texts else ""), result
 
 
+def git(*args, stdin=None, need=True):
+    p = subprocess.run(["git", *args], input=stdin, capture_output=True, text=True)
+    if p.returncode and need:
+        sys.exit(f"blind-run: git {' '.join(args)} failed: {p.stderr.strip()}")
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
+REMOTES = ("origin", "upstream")
+
+
+def clone(repo, ref, sha, work):
+    """Make `work` a repository of its own at `sha`, reading `repo`'s objects through alternates, so nothing is copied
+    and nothing is written to `repo`. origin/* comes from `repo`'s own origin/*: a plain clone would turn `repo`'s local
+    branches into origin/*, and openmrs-core's local master was 76 commits behind its origin/master on 2026-11-22.
+    upstream/* comes too, for a checkout whose origin is a fork (1 of the owner's 220 checkouts, 2026-11-22).
+    The copy needs those objects to stay. A gc in `repo` drops objects no ref there reaches once they are older than
+    gc.pruneExpire (two weeks by default, at once with --prune=now), so a ref the copy holds, such as an origin/* branch
+    a fetch --prune removed or a --ref whose branch was deleted, can break mid-run; a worktree's HEAD kept its commit."""
+    git("init", "-q", "--object-format=" + git("-C", repo, "rev-parse", "--show-object-format"), work)
+    meta = os.path.join(work, ".git")
+    with open(os.path.join(meta, "objects", "info", "alternates"), "w") as f:
+        f.write(git("-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects") + "\n")
+    shallow = git("-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "shallow")
+    if os.path.exists(shallow):
+        shutil.copyfile(shallow, os.path.join(meta, "shallow"))
+    keep = [f"refs/remotes/{r}/" for r in REMOTES] + ["refs/tags/"]
+    # Without --verify, git 2.39 prints --end-of-options back as a line of its own.
+    branch = git("-C", repo, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", "--end-of-options",
+                 ref or "HEAD", need=False)
+    short = branch[len("refs/heads/"):] if branch.startswith("refs/heads/") else ""
+    tracked = ""
+    if branch.startswith("refs/"):
+        keep.append(branch)  # --ref's own ref in any namespace (fork/x too), so the name the caller gave resolves
+    if short:
+        # and the one ref --ref's branch tracks, whatever remote that is on, so <branch>@{u} still resolves
+        tracked = git("-C", repo, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", f"{short}@{{u}}",
+                      need=False)
+        if tracked.startswith(("refs/remotes/", "refs/heads/")):
+            keep.append(tracked)
+    packed, links = [], []
+    for line in git("-C", repo, "for-each-ref", "--format=%(objectname) %(refname) %(symref)", *keep).splitlines():
+        oid, name, target = (line.split(" ") + [""])[:3]
+        if target:
+            links.append((name, target))
+        else:
+            packed.append(f"{oid} {name}\n")
+    # One packed-refs file, not a file per ref: macOS folds case in file names, so two tags differing only in case
+    # (ugandaemr has 3.3.10_Beta and 3.3.10_beta) collided as files, and update-ref refused a ref whose object is gone.
+    with open(os.path.join(meta, "packed-refs"), "w") as f:
+        f.writelines(packed)
+    for name, target in links:
+        git("-C", work, "symbolic-ref", name, target)
+    # Every setting of those remotes, the partial-clone ones too: a copy of a partial clone (4 of the owner's checkouts)
+    # then fetches the blobs it lacks into its own object store, where without them its checkout came out half empty.
+    settings = []
+    for entry in git("-C", repo, "config", "-z", "--get-regexp", r"^remote\.", need=False).split("\0"):
+        key, sep, value = entry.partition("\n")
+        if key:
+            settings.append((key, value if sep else "true"))  # a key written with no value is a boolean true
+    remote = git("-C", repo, "config", "--get", f"branch.{short}.remote", need=False) if tracked else ""
+    partial = git("-C", repo, "config", "--get", "extensions.partialclone", need=False)
+    for r in set(REMOTES) | ({remote} - {"", "."}):
+        for key, value in settings:
+            if key[len("remote."):key.rindex(".")] == r:
+                git("-C", work, "config", "--add", key, value)
+        if partial == r:
+            git("-C", work, "config", f"remote.{r}.promisor", "true")
+    if remote:
+        git("-C", work, "config", f"branch.{short}.remote", remote)
+        git("-C", work, "config", f"branch.{short}.merge", git("-C", repo, "config", "--get", f"branch.{short}.merge"))
+    # git checkout can exit 0 after "error: unable to read sha1 file" lines, leaving files out of the tree.
+    p = subprocess.run(["git", "-C", work, "-c", "advice.detachedHead=false", "checkout", "-q", "--detach", sha],
+                       capture_output=True, text=True)
+    errors = [line for line in p.stderr.splitlines() if line.startswith(("error:", "fatal:"))]
+    if p.returncode or errors:
+        sys.exit(f"blind-run: checking out {sha} from {repo} failed: {' / '.join(errors[:3]) or p.stderr.strip()}")
+
+
 def run(name, brief, deadline, allow, repo=None, ref=None, base=None):
     base = base or os.path.join(os.path.expanduser("~"), ".claude", "blind-runs")
     d = os.path.join(base, datetime.date.today().isoformat() + "-" + name)
     dirs = {k: os.path.join(d, k) for k in ("work", "m2", "appdata", "tmp", "log")}
     if os.path.exists(dirs["work"]) and os.listdir(dirs["work"]):
         sys.exit(f"blind-run: {dirs['work']} is not empty; pick another NAME")
-    for k, p in dirs.items():
-        if not (k == "work" and repo):
-            os.makedirs(p, exist_ok=True)
-    os.makedirs(dirs["log"], exist_ok=True)
+    sha = None
     if repo:
-        subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", dirs["work"], ref or "HEAD"], check=True,
-                       stdout=subprocess.DEVNULL)
+        git("-C", repo, "rev-parse", "--git-dir")  # stops with git's own message when --repo is no repository
+        sha = git("-C", repo, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{ref or 'HEAD'}^{{commit}}",
+                  need=False)
+        if not sha:
+            sys.exit(f"blind-run: {ref or 'HEAD'} names no commit in {repo}")
+    for p in dirs.values():
+        os.makedirs(p, exist_ok=True)
+    if repo:
+        try:
+            clone(repo, ref, sha, dirs["work"])
+        except BaseException:
+            shutil.rmtree(dirs["work"], ignore_errors=True)  # so a rerun under the same NAME is not refused
+            raise
     with open(os.path.join(dirs["log"], "BRIEF.md"), "w") as f:
         f.write(brief)
-    env = dict(os.environ, TMPDIR=dirs["tmp"] + "/", MAVEN_ARGS=(
+    env = dict(os.environ, TMPDIR=dirs["tmp"] + "/", CLAUDE_CODE_DISABLE_AUTO_MEMORY="1", MAVEN_ARGS=(
         f"-Dmaven.repo.local={dirs['m2']} -Dmaven.repo.local.tail={os.path.expanduser('~')}/.m2/repository "
         f"-DOPENMRS_APPLICATION_DATA_DIRECTORY={dirs['appdata']}/"))
     cmd = ["claude", "-p", brief, "--output-format", "stream-json", "--verbose", "--strict-mcp-config",
@@ -122,7 +220,8 @@ def run(name, brief, deadline, allow, repo=None, ref=None, base=None):
 FAKE = r'''#!/usr/bin/env python3
 import json, os, sys, time
 open(os.environ["FAKE_LOG"], "w").write(json.dumps({"cwd": os.getcwd(), "args": sys.argv[1:],
-    "maven": os.environ.get("MAVEN_ARGS", ""), "tmp": os.environ.get("TMPDIR", "")}))
+    "maven": os.environ.get("MAVEN_ARGS", ""), "tmp": os.environ.get("TMPDIR", ""),
+    "memory": os.environ.get("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "")}))
 mode = os.environ.get("FAKE_MODE", "ok")
 if mode == "silent":
     sys.exit(1)
@@ -136,6 +235,182 @@ print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", 
 print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Amendment."}]}}))
 print(json.dumps({"type": "result", "num_turns": 3, "total_cost_usd": 0.5, "duration_ms": 60000}))
 '''
+
+
+def repo_checks(t):
+    """--repo on a shallow checkout whose local main is ahead of origin/main, holding a branch, a stash and a second
+    remote that the agent must not see. The fixture's git ignores the owner's config; the clone's git does not."""
+    fx = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t",
+              GIT_AUTHOR_EMAIL="t@example.invalid", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+
+    def g(*a):
+        return subprocess.run(["git", *a], env=fx, check=True, capture_output=True, text=True).stdout.strip()
+
+    def commit(repo, text, msg):
+        with open(os.path.join(repo, "f"), "w") as f:
+            f.write(text)
+        g("-C", repo, "add", "f")
+        g("-C", repo, "commit", "-qm", msg)
+
+    full, src, runs = os.path.join(t, "full"), os.path.join(t, "src"), os.path.join(t, "runs")
+    g("init", "-q", "-b", "main", full)
+    for i in range(3):
+        commit(full, str(i), f"c{i}")
+    g("clone", "-q", "--depth", "2", "file://" + full, src)
+    upstream = g("-C", src, "rev-parse", "origin/main")
+    g("-C", src, "tag", "v1", upstream)
+    lower = g("-C", src, "rev-parse", upstream + "~1")
+    g("-C", src, "tag", "Case-Tag", upstream)
+    g("-C", src, "pack-refs", "--all")
+    pr = os.path.join(src, ".git", "packed-refs")
+    kept = [line for line in open(pr).read().splitlines() if not line.startswith("#")]  # headerless: git sorts it
+    with open(pr, "w") as f:
+        f.write("".join(line + "\n" for line in kept + [f"{lower} refs/tags/case-tag"]))
+    commit(src, "ahead", "local main ahead")
+    g("-C", src, "branch", "pr-1")
+    g("-C", src, "branch", "-q", "--set-upstream-to=origin/main", "pr-1")
+    head = g("-C", src, "rev-parse", "pr-1")
+    g("-C", src, "checkout", "-qb", "secret-branch")
+    commit(src, "s", "secret commit")
+    g("-C", src, "checkout", "-q", "main")
+    g("-C", src, "update-ref", "refs/remotes/fork/secret-fork", "secret-branch")
+    g("-C", src, "remote", "add", "upstream", "file://" + full)
+    below = g("-C", src, "rev-parse", upstream + "~1")
+    g("-C", src, "update-ref", "refs/remotes/upstream/main", below)
+    g("-C", src, "remote", "add", "fork", "file://" + full)
+    g("-C", src, "update-ref", "refs/remotes/fork/pr-2", head)
+    g("-C", src, "branch", "pr-2", head)
+    g("-C", src, "branch", "-q", "--set-upstream-to=fork/pr-2", "pr-2")
+    with open(os.path.join(src, ".git", "config"), "a") as f:
+        f.write('[remote "origin"]\n\tprune\n')
+    g("-C", src, "config", "remote.origin.note", "two\nlines")
+    with open(os.path.join(src, "f"), "w") as f:
+        f.write("dirty")
+    g("-C", src, "stash", "push", "-qm", "secret stash")
+    before = g("-C", src, "for-each-ref"), g("-C", src, "worktree", "list", "--porcelain")
+    os.environ["FAKE_MODE"] = "ok"
+    rc, d = run("repo", "b", 20, ALLOW, repo=src, ref="pr-1", base=runs)
+    w = os.path.join(d, "work")
+    call = json.load(open(os.environ["FAKE_LOG"]))
+
+    def wg(*a):
+        return subprocess.run(["git", "-C", w, *a], capture_output=True, text=True)
+
+    try:
+        run("badref", "b", 20, ALLOW, repo=src, ref="no-such-ref", base=runs)
+        refused = False
+    except SystemExit:
+        refused = True
+    common = wg("rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+
+    # A partial clone: its copy must fetch the blob it lacks into its own store, not the checkout's.
+    g("-C", full, "config", "uploadpack.allowFilter", "true")
+    g("-C", full, "config", "uploadpack.allowAnySHA1InWant", "true")
+    partial = os.path.join(t, "partial")
+    g("clone", "-q", "--filter=blob:none", "file://" + full, partial)
+
+    def missing():
+        listing = g("-C", partial, "rev-list", "--objects", "--all", "--missing=print")
+        return sum(1 for line in listing.splitlines() if line.startswith("?"))
+
+    lacked = missing()
+    try:
+        prc, pd = run("partial", "b", 20, ALLOW, repo=partial, ref="main~2", base=runs)
+        old_f = subprocess.run(["git", "-C", os.path.join(pd, "work"), "show", "HEAD:f"], capture_output=True,
+                               text=True).stdout
+    except SystemExit:
+        prc, old_f = 1, None
+
+    # A checkout that cannot be made (a blob is gone) must stop the run and leave no work folder behind.
+    brk = os.path.join(t, "brk")
+    g("init", "-q", "-b", "main", brk)
+    commit(brk, "x", "x")
+    blob = g("-C", brk, "rev-parse", "HEAD:f")
+    os.remove(os.path.join(brk, ".git", "objects", blob[:2], blob[2:]))
+    try:
+        run("broken", "b", 20, ALLOW, repo=brk, base=runs)
+        stopped = False
+    except SystemExit:
+        stopped = True
+
+    rc2, d2 = run("forkref", "b", 20, ALLOW, repo=src, ref="pr-2", base=runs)
+
+    def wg2(*a):
+        return subprocess.run(["git", "-C", os.path.join(d2, "work"), *a], capture_output=True, text=True).stdout
+
+    rc3, d3 = run("forktip", "b", 20, ALLOW, repo=src, ref="fork/pr-2", base=runs)
+    rc4, d4 = run("noref", "b", 20, ALLOW, repo=src, base=runs)
+
+    def wg4(*a):
+        return subprocess.run(["git", "-C", os.path.join(d4, "work"), *a], capture_output=True, text=True).stdout
+
+    def wg3(*a):
+        return subprocess.run(["git", "-C", os.path.join(d3, "work"), *a], capture_output=True, text=True).stdout
+
+    brref = os.path.join(t, "brref")
+    g("init", "-q", "-b", "main", brref)
+    commit(brref, "y", "y")
+    with open(os.path.join(brref, ".git", "packed-refs"), "w") as f:
+        f.write("1" * 40 + " refs/tags/gone\n")
+    try:
+        brc, _ = run("brokenref", "b", 20, ALLOW, repo=brref, base=runs)
+    except SystemExit:
+        brc = 1
+    nothing = os.path.join(t, "nothing")
+    os.makedirs(nothing)
+    try:
+        run("norepo", "b", 20, ALLOW, repo=nothing, base=runs)
+        said = ""
+    except SystemExit as e:
+        said = str(e.code)
+    return [
+        ("--repo: exit 0", rc == 0),
+        ("--repo: work is a repository of its own", common and os.path.realpath(common) == os.path.realpath(w + "/.git")),
+        ("--repo: the agent starts in it", os.path.realpath(call["cwd"]) == os.path.realpath(w)),
+        ("--repo: HEAD is --ref, detached", wg("rev-parse", "HEAD").stdout.strip() == head
+         and wg("symbolic-ref", "-q", "HEAD").returncode != 0),
+        ("--repo: --ref's branch is there", wg("rev-parse", "--verify", "-q", "refs/heads/pr-1").stdout.strip() == head),
+        ("--repo: origin/main is the checkout's origin/main, not its local main",
+         wg("rev-parse", "origin/main").stdout.strip() == upstream),
+        ("--repo: the tags are there", wg("rev-parse", "--verify", "-q", "v1^{commit}").stdout.strip() == upstream),
+        ("--repo: no other branch, remote or stash of the checkout",
+         "secret" not in wg("for-each-ref").stdout + wg("log", "--all", "--format=%s").stdout),
+        ("--repo: history reads down to the shallow boundary", wg("log", "--format=%s").returncode == 0
+         and wg("log", "--format=%s").stdout.split() == ["local", "main", "ahead", "c2", "c1"]),
+        ("--repo: the working tree is clean", wg("status", "--porcelain").returncode == 0
+         and wg("status", "--porcelain").stdout == ""),
+        ("--repo: origin's url and refspec are the checkout's",
+         wg("config", "remote.origin.url").stdout.strip() == "file://" + full
+         and wg("config", "--get-all", "remote.origin.fetch").stdout.strip()
+         == g("-C", src, "config", "--get-all", "remote.origin.fetch") != ""),
+        ("--repo: origin/HEAD is still a symbolic ref",
+         wg("symbolic-ref", "refs/remotes/origin/HEAD").stdout.strip() == "refs/remotes/origin/main"),
+        ("--repo: the checkout is unchanged", (g("-C", src, "for-each-ref"), g("-C", src, "worktree", "list",
+                                                                                "--porcelain")) == before),
+        ("--repo: a --ref naming no commit stops before anything is made",
+         refused and not os.path.exists(os.path.join(runs, datetime.date.today().isoformat() + "-badref"))),
+        ("--repo: upstream/* and its url are there too", wg("rev-parse", "upstream/main").stdout.strip() == below
+         and wg("config", "remote.upstream.url").stdout.strip() == "file://" + full),
+        ("--repo: --ref's branch keeps its upstream", wg("rev-parse", "pr-1@{u}").stdout.strip() == upstream),
+        ("--repo: a partial clone's copy fetches what it lacks into its own store",
+         lacked > 0 and prc == 0 and old_f == "0" and missing() == lacked),
+        ("--repo: a checkout that cannot be made stops the run and leaves no work folder",
+         stopped and not os.path.exists(os.path.join(runs, datetime.date.today().isoformat() + "-broken", "work"))),
+        ("--repo: a remote setting written with no value stays true, and one holding a newline keeps it",
+         wg("config", "--type=bool", "--get", "remote.origin.prune").stdout.strip() == "true"
+         and wg("config", "--get", "remote.origin.note").stdout == "two\nlines\n"),
+        ("--repo: --ref's branch keeps an upstream on another remote, whose other refs stay out",
+         rc2 == 0 and wg2("rev-parse", "pr-2@{u}").strip() == head and "secret" not in wg2("for-each-ref")),
+        ("--repo: a --repo that is no repository says so", "not a git repository" in said),
+        ("--repo: two tags differing only in case both come through, each to its own commit",
+         wg("rev-parse", "Case-Tag").stdout.strip() == upstream and wg("rev-parse", "case-tag").stdout.strip() == lower),
+        ("--repo: a --ref on another remote keeps its name, and that remote's other refs stay out",
+         rc3 == 0 and wg3("rev-parse", "fork/pr-2").strip() == head and "secret" not in wg3("for-each-ref")),
+        ("--repo: a ref to a missing object does not stop the run", brc == 0),
+        ("--repo: with no --ref, the checked-out branch and its upstream come too, as with --ref HEAD",
+         rc4 == 0 and wg4("rev-parse", "refs/heads/main").strip() == head
+         and wg4("rev-parse", "main@{u}").strip() == upstream),
+    ]
 
 
 def self_test():
@@ -174,10 +449,12 @@ def self_test():
         os.kill(child, 0)
         alive = True
         os.kill(child, signal.SIGKILL)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):  # EPERM: the pid now belongs to another user's process
         alive = False
     checks.append(("the deadline stops what the agent started", not alive))
     checks.append(("messaging other sessions is disallowed", "SendMessage" in call["args"] and "ListAgents" in call["args"]))
+    checks.append(("the memory index is switched off", call["memory"] == "1"))
+    checks += repo_checks(t)
     shutil.rmtree(t)
     failed = [n for n, ok in checks if not ok]
     for n in failed:
