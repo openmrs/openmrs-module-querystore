@@ -7475,3 +7475,48 @@ event carries no memory folder.
 
 **Running parked counts:** "seen, then set aside" measurement sightings 11 to 12; the counts in run records are
 unchanged, since no run record arrived in this window.
+
+## 2026-11-23 (second owner-directed pass: the parked second reviewer into pr-review for `--post` rounds, then left parked on the owner's choice) — 0 applied; 1 owner-directed proposal killed; linter 17 files, 0 findings; no skill file changed
+
+**Evidence read.**
+- The store matched `origin/main` both ways before the read: 751 files, none different; only a `.DS_Store` and a
+  `.pyc` cache are local-only, and neither is mirrored.
+- No run record has been written since `LAST` (2026-11-23). The pass rested on the owner's direction and on the
+  measurements this file holds: the 2026-11-19 sections and the previous section's replay.
+
+**Killed: the second reviewer in pr-review for `--post` rounds.**
+- The owner asked "isn't a a finding in 1 of 3 runs better than no blind reviewer at all?" and answered "put it into
+  pr-review for --post rounds". The reply they answered had credited the second reviewer with catching, in 1 of 3 runs
+  of the previous section's replay, a defect the review alone missed.
+- The refuter (`2026-11-23-retro2-1123-refute1`, 25 turns, $1.43) showed that credit false, and the run's own log
+  confirms it. In the one U run that filed a key, the main review found it by reading the code before it started its
+  second reviewer, whose report found no defect it could prove; the other two U runs' second reviewers reported neither
+  key. Across that replay and 2026-11-19's, the second reviewer's own reports carried a key in 2 of the 6 runs, both
+  K-order on 2026-11-19, which the review set aside each time, and in none of the previous section's three. On
+  2026-11-19 it also added one valid finding (a missing test) and one noise, at 76% more cost. In neither replay did it
+  change what the review filed.
+- The refuter put its own reports at 0 keys in 6 runs. That held for one replay only; the session passed it to the
+  owner unchecked, then checked it and gave the owner the 2 of 6. The owner chose "Leave it parked" both times.
+- The refuter's other objections fell with the proposal: the draft
+  clashed with :26's "post the blockers now" on an approval mid-round; it moved the measured paragraph from "before you
+  settle your findings" to Step 1 without saying so; it named the 2026-11-19 REOPEN ON and not the 556 union's; it left
+  out `--stage` and a post the user asks for without `--post`; and its REVERT ON read ambiguously.
+
+**Correction to the previous section.** Its "U filed a key in 1 of 3 runs" holds for the arm, and that key was the main
+review's own, not its second reviewer's. Read the second reviewer's REOPEN ON (2026-11-19, unchanged) with that in
+mind: a U catch is the second reviewer's only where its own report carries the key.
+
+**Decided by the owner:** the second reviewer stays parked in the skill, and keeps running from openmrs-core's project
+memory on `--post` rounds, now through the fixed `bin/blind-run`.
+
+**Still the owner's:**
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR claim
+  note, and the Action's "post nothing" when an author has asked a question.
+
+**Running parked counts:** unchanged; no run record arrived in this window.
