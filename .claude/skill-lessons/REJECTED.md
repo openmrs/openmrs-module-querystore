@@ -7520,3 +7520,197 @@ memory on `--post` rounds, now through the fixed `bin/blind-run`.
   note, and the Action's "post nothing" when an author has asked a question.
 
 **Running parked counts:** unchanged; no run record arrived in this window.
+
+## 2026-11-24 (owner-directed: blind agents on each acceptance criterion in pr-review, reopening the parked second reviewer for those PRs on the owner's choice; and the four files since `LAST`) — 2 applied; 0 killed; linter 18 files, 0 findings; **pr-review 0.39.0**
+
+**Evidence read.**
+- The store matched `origin/main` before the read: every one of its 751 files is here and identical. 52 files are
+  here only; this commit mirrors them, except a `.DS_Store` and a `.pyc` cache.
+- Since `LAST` (2026-11-23), four files that no section names:
+  - `2026-11-23-pr-review-openmrs-module-stockmanagement-71.md`, three run records (rounds 5 to 7);
+  - `2026-11-23-pr-review-setaside-filing-probe-6535.md`, a measurement note, not a run record;
+  - `2026-11-24-pr-review-openmrs-core-6801.md` and `2026-11-24-pr-review-openmrs-module-stockmanagement-86.md`, one
+    run record each.
+  That is five run records over three PRs, and one measurement.
+- P1 rests on the owner's direction and on what the owner was shown from a private-ticket PR, whose record is not in
+  this repository.
+
+**Applied, owner-directed: P1, pr-review 0.39.0, Step 2, with a new role file `blind-agents.md`.**
+- **The direction.** The owner asked "If the blind review runs found things that other reviews did not catch,
+  shouldn't we incorporate it in the pr-review skill by default to increase the comprehensiveness of the review?". The
+  answer they were given opened "Yes, as the default for pull requests whose ticket lists acceptance criteria, not for
+  every review". They then said "yes, run the skill-retro pass".
+- **The rule, in SKILL.md.**
+  - Outside CI, where the PR's ticket lists acceptance criteria, each round starts, on the head it reviews, one blind
+    agent per criterion and one on the whole PR. Criteria are grouped so a round starts no more than six.
+  - A reviewer pr-harden started is exempt.
+  - The review records its own findings before it reads the agents' reports, then reproduces or refutes each defect
+    they report before the verdict.
+  - An agent still running holds back no verified blocker. One past its deadline, or with no report, is owed.
+- **The launch and brief, in `blind-agents.md`,** which is read only where the step applies. This is the setup of the
+  rounds the evidence comes from:
+  - a 90-minute deadline and a 75-minute stop line;
+  - proxies at a closed local port, except the Anthropic and claude.ai hosts, localhost and 127.0.0.1;
+  - Maven offline, and each server with its own data directory and a free port between 18000 and 19000, touching no
+    server the agent did not start;
+  - a brief with the ticket in full and the decisions already made, but none of the review's own findings;
+  - "use no network", plus "post nothing, push nothing, change nothing outside its folder", and the PR's base named.
+- **What the owner was shown.** One private-ticket PR, two rounds with one agent per criterion and one on the whole PR.
+  They ran with the deadline, stop line, proxies, offline Maven, no-network brief and server rules above, and no memory
+  index.
+  - Seven defects, all reproduced and then fixed in that PR.
+  - The whole-PR agents' own reports carried 4 of them, 2 that no other agent carried.
+  - The agent for the one criterion the head missed carried 4, 3 that no other agent carried.
+  - The other criteria's agents carried one of the seven, which a whole-PR agent also carried. Two of them carried
+    three older defects outside the PR that no other agent found.
+  - $17.00 and $18.65 a round.
+  - An earlier round, run before `bin/blind-run`'s fix, missed five of them.
+- **It reopens the second reviewer (parked 2026-11-19, kept parked on the owner's choice 2026-11-23) for these PRs.**
+  - Neither of its REOPEN ONs is met (2026-11-19's, and the 556 union's at :5675): one PR, no control arm, no
+    pre-registered bar, and no run record in which a second reviewer's filed finding was what the maintainer raised.
+  - The first refuter named this. The owner was then asked whether to keep the whole-PR agent, and was told the 2 of 7
+    only it found, that there was no control run, and the confound below. They chose "Keep whole-PR agent
+    (Recommended)".
+  - By the 2026-11-23 correction, these catches are the agents' own, since their reports carry the defects.
+- **Confound.** The round that missed five of them ran its agents before `bin/blind-run`'s fix at 98c45ffa, which
+  removes the memory index they had loaded. So part of the gain may be blindness, or the 90-minute deadline and the
+  break-it target, rather than the split by criterion.
+- **It is not P-A** (per-dimension fan-out, parked :2143, :2307-2327).
+  - It splits by the ticket's criteria, not by review dimension, and it is no selectable mode.
+  - Its evidence is uncontrolled, so P-A stays parked.
+- **REVERT ON:** three consecutive rounds under it, on at least two PRs whose tickets list acceptance criteria, where
+  the agents report no defect in the PR's change that is missing from the findings the review recorded before it read
+  their reports.
+
+**Applied: P2, pr-review 0.39.0, Step 3's test coverage.**
+- **Bar:** skill-retro Step 3, two run records.
+  - Predicate enumeration rests on rounds 5 and 6 of stockmanagement #71.
+  - The fixture-input check rests on round 7 (role inheritance; one item and only dated batches) and round 5 (every
+    actor but one held every privilege at both ends).
+- **Distinct from (c)**, the per-condition mutation sentence that was measured and not adopted (:5633-5637).
+  - (c) targeted the conditions a PR adds ("For each one the PR adds, delete or invert it alone"). P2 targets a PR that
+    adds only tests, for the code that serves what its ticket describes.
+  - The ruling that a run record does not meet (c)'s REOPEN (:6160) concerned a PR that adds conditions. A tests-only
+    PR adds none, so (c) cannot apply to one, and the fixture-input check is not in (c).
+- **What the ticket describes.** #71's ticket names queries and checks rather than methods, so P2 lists the methods that
+  serve what the ticket describes.
+- **Where the ticket points at no code,** the review asks the user, or in CI the author. Under another skill, it returns
+  the question.
+- **Survivors.** A survivor counts as a gap only where a caller can see its change.
+- **Examples.** The examples are #71's own answers, so they stay illustrations.
+
+**Budget.**
+- pr-review/SKILL.md goes from 10072 to 10381 words.
+- The new role file pr-review/blind-agents.md goes from 0 to 288.
+- Both carry `raises` entries. Neither proposal retires a rule.
+- Putting the launch detail in a role file keeps what every review reads down to the rule itself.
+
+**Gate.** Refuters through `bin/blind-run`:
+- **`2026-11-24-retro-1124-refute1`:** P1 REVISE, P2 REVISE. Taken:
+  - P1: it names the parked second reviewer it reopens, which went to the owner;
+  - P1: an exemption for pr-harden's reviewer, since pr-harden:202 tells it to start no agents;
+  - P1: the citation of *A fix you recommend is different*;
+  - P1: the brief's stop line, the agent owed past its deadline, verified blockers not held back while agents run, and
+    "ticket" only;
+  - P2: round 7's attribution;
+  - P2: the PR's test classes before the whole suite;
+  - P2: tickets that name no methods.
+- **Corrected after round 1.**
+  - The owner and the first refuter had been told "up to 45 minutes". The rounds ran with `--deadline 5400` and a
+    75-minute stop line.
+  - The first refuter had also been told that the other criteria's agents carried none of the seven. One carried one,
+    which a whole-PR agent also carried.
+- **`2026-11-24-retro-1124-refute2`:** P1 REVISE, P2 REVISE, eight sentences of this section to fix. Taken:
+  - P1: the proxy variables named, with localhost among the exceptions;
+  - P1: an agent with no report counted as owed;
+  - P1: the review's findings recorded first, so the REVERT ON can be measured;
+  - P2: "reverse the check";
+  - P2: asking where the ticket names no method;
+  - this section's REOPEN ONs, the 98c45ffa fix, (c)'s ruling, the counts below, the open question on the memory's
+    second reviewer, and wording that narrowed down which PR this is.
+- **`2026-11-24-retro-1124-refute3`:** P1 REVISE, P2 REVISE, seven sentences to fix.
+  - **Measured by the refuter:** Maven 3.9.10 downloaded with `JAVA_TOOL_OPTIONS` and `HTTPS_PROXY` at a dead port, so
+    the agents build offline. Offline, an artifact in `~/.m2` resolved under `blind-run`'s repository settings, and one
+    missing from it failed. A finished background run's notice shows no output, so the review can record its findings
+    before it reads a report.
+  - Taken: offline Maven; each agent's own data directory and port, touching no server it did not start; the
+    exemption narrowed to pr-harden's reviewer; "invert or remove ... keeping the code compiling", since reverting to
+    base changes nothing on a tests-only PR; asking the author in CI; the REVERT ON's rounds and PRs; and this
+    section's bar, confound, P-A and #86 sentences.
+- **After round 3:** the launch and brief moved to `blind-agents.md`.
+- **`2026-11-24-retro-1124-refute4`:** P1 REVISE, P2 REVISE, eight sentences to fix.
+  - Taken for P1:
+    - one set of agents per round, on the head it reviews (pr-review:26);
+    - no more than six a round, grouping criteria;
+    - "post nothing, push nothing" and the base in the brief (blind-run:48-49, pr-harden:228);
+    - the port range the evidence used.
+  - Taken for P2:
+    - keyed to what the ticket describes, since #71's ticket names no method;
+    - the question returned under another skill (pr-harden:195-197);
+    - a survivor counted as a gap only where a caller can see its change (#6801's record);
+    - the fixture-input bar resting on round 5 as well.
+  - Taken for this section: :7123.
+  - **Rejected, with the evidence's briefs as citation:** that offline Maven departs from the evidence. Those briefs
+    said "Keep it, and Maven offline (`-o`)" and "Use no network", and their launch excepted localhost from the proxy.
+    So "use no network" goes into the brief too.
+- **`2026-11-24-retro-1124-refute5`:** P1 REVISE (role file only), P2 STANDS, three sentences to fix.
+  - **Measured by the refuter:**
+    - curl reached the agent's own server at 127.0.0.1 only once 127.0.0.1 joined `NO_PROXY` (exit 7 before).
+    - Java skips the proxy for loopback either way.
+    - Maven 3.9.10 downloaded behind the dead proxy with `MAVEN_ARGS` cleared, and the offline control with an empty
+      repository failed.
+  - Taken:
+    - 127.0.0.1 and `no_proxy` in the exceptions;
+    - the evidence's "Keep `MAVEN_ARGS`" line, which carries `blind-run`'s fallback to `~/.m2`;
+    - the server rules moved inside the brief, since an agent knows only its brief;
+    - this section's #86, setup and #71 sentences.
+- **`2026-11-24-retro-1124-refute6`:** P1 REVISE, P2 STANDS, five sentences of this section to fix.
+  - Taken for P1: the proxy exceptions named as the evidence's launch named them, and "any of these agents'
+    reports", so the rule does not catch Step 3's agents.
+  - Taken for this section: the REOPEN ON reason, :6043-6044, round 5's set-aside, the proxy exceptions and this
+    entry.
+  - Those replacements restore the evidence's own wording or narrow a scope, and were applied as the refuter wrote
+    them, with no seventh round.
+
+**Observed, not yet actionable.**
+- **stockmanagement #71, rounds 6 and 7:** two set-asides of another shape were re-raised by the blind reviewer and
+  found valid. One was set aside as unverified, the other for a false reason. Neither is a sighting of "seen, then set
+  aside as outside the ticket".
+  - In round 5 the review re-weighed and posted its own rounds 1-4 set-aside (`urs.enabled = 1`, set aside as
+    "notifications only"), since the ticket names that query.
+  - That is a set-aside of the parked shape, but the review raised it, not a maintainer. So it does not meet the
+    REOPEN ON (:6043-6044), and the run-record count stays at 2.
+- **stockmanagement #86, round 2:** a suggested test was checked against its trigger but not mutated on the predicate it
+  pins (a location carrying another tag). The blind unanchored reviewer found it.
+  - It is near the parked "testing a suggested test against cross-wiring mutants" (:7123, REOPEN ON a second), but it
+    is not that second instance: its mutant weakens the predicate, and does not cross-wire it.
+  - Its record names a line of the local recipes file that asked for a no-match case. It also says no skill sentence
+    asks a suggested test to be mutated on the predicate it pins as well as on its trigger. 1 record.
+- **openmrs-core #6801:** Step 3's "Read each added line" rule existed, and six rounds did not apply it to a file they
+  probed in depth. 1 record of a rule not applied, and no new rule.
+- **The set-aside filing measurement on 6535 (2026-11-23):** W2 filed K-order in 4 of 5 runs against C's 1 of 5, with
+  noise in 1 of 5 against 0 of 5. This is development evidence. A held-out validation is what would make it
+  proposable.
+- **stockmanagement #71's ticket** lists four acceptance criteria, so P1 would apply to that PR too.
+- **Suspected, not run:**
+  - whether parallel agents that each start servers clash on ports. In the evidence's rounds, each brief gave its agent
+    its own data directory and a free port between 18000 and 19000, and none clashed;
+  - whether an offline build finds every artifact a head needs in `~/.m2`. One missing there leaves that agent unable
+    to build, which its report then marks as not run.
+
+**Still the owner's:**
+- whether openmrs-core's project-memory second reviewer still runs on rounds where P1 starts a whole-PR agent;
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question.
+
+**Running parked counts:**
+- "Seen, then set aside" is unchanged: run records 2, measurement sightings 12.
+- The second reviewer is reopened for PRs whose tickets list acceptance criteria, and stays parked for the rest.
+- P-A is unchanged.
+- The cross-wiring item at :7123 stays at one instance.

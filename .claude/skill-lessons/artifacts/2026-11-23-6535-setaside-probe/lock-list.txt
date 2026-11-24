@@ -1,0 +1,11 @@
+/Users/danielkayiwa/.claude/pr-review-rounds/openmrs__openmrs-core__6535.md
+/Users/danielkayiwa/.claude/projects/-Users-danielkayiwa-Projects-openmrs-openmrs-core/memory/pr-6535-trunk-6682-complex-obs-storage-reads.md
+/Users/danielkayiwa/.claude/skill-lessons/2026-11-18-pr-review-core-6535-maintainer-changes-requested.md
+/Users/danielkayiwa/.claude/skill-lessons/2026-11-19-pr-review-6535-second-reviewer-replay.md
+/Users/danielkayiwa/.claude/skill-lessons/proposals/2026-11-18-owner-directed-pr-review-6535.md
+/Users/danielkayiwa/.claude/skill-lessons/REJECTED.md
+/Users/danielkayiwa/.claude/skill-lessons/artifacts/2026-11-18-6535-replay-p2-p3
+/Users/danielkayiwa/.claude/skill-lessons/artifacts/2026-11-19-6535-second-reviewer
+/Users/danielkayiwa/.claude/pr-review-mining/2026-11-19
+/Users/danielkayiwa/.claude/pr-review-mining/2026-11-20-insights-audit
+/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-openmrs-core/4af4e956-314b-4f19-90e1-df1f26e4f888/scratchpad/probe-setaside/private

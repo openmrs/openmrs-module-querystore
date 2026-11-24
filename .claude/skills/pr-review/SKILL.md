@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request — check that the change actually resolves the issue it claims to and by the best approach available rather than merely one that works, verify every finding empirically, and write clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.38.0
+version: 0.39.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -34,6 +34,8 @@ Line-level review of code that shouldn't exist wastes both sides' time, so settl
 **Does it actually resolve that problem?** A different question from "is the code correct", and a PR can pass every line-level check while failing it. The strongest evidence is the issue's own reproduction: run it against the PR branch and against the base, and expect failure on base and success on the PR — the bar the test-coverage section applies to behavior changes.
 
 The PR's own description is acceptance criteria too, and with no ticket and no repro the only ones. A "key guarantees", "review focus", or "what changed" list has told you exactly what to test, and working through it one claim at a time is the highest-yield pass available. Read each guarantee as the general statement it is rather than as a description of the diff: "a handled backend failure cannot be reported as a complete chart" is a claim about every backend, and the one the author just fixed is the least likely to be the one that breaks it. Those lists are also where an author writes down what they believe rather than what they checked, so a guarantee with no test behind it is worth probing even when the code on the screen looks right.
+
+**Outside CI, where the PR's ticket lists acceptance criteria, have blind agents try to break them**, unless you are a reviewer pr-harden started. Once per round, on the head it reviews (a head pushed mid-round waits for the next round), start one agent per criterion and one on the whole PR, grouping criteria so a round starts no more than six, briefed and launched as `blind-agents.md`, beside this file, says. Before reading any of these agents' reports, append to the round record what your own review has found. Reproduce or refute each defect they report before the verdict. One still running holds back no blocker you have verified, and one past its deadline, or that reports nothing, is owed (Step 5).
 
 Ways a technically-correct change misses:
 
@@ -122,6 +124,8 @@ The diff is a piece of a bigger machine; review the machine, not the patch. Foll
 ### Test coverage is a review dimension
 
 For each behavior change the PR introduces, name the test that exercises it — one that would fail on the base branch, passes on the PR, and asserts the **runtime effect**, not a proxy ("the generated string looks right" or "mirrors an existing pattern" verifies the shape or the sibling, not the behavior). A behavior change with no such test is a finding, even when the code looks obviously correct. If part of the path genuinely can't be tested, name the specific blocked sub-path — and confirm the adjacent runnable path is still exercised. For the test you name, or one you suggest, undo each line it guards in your own worktree (above), one nothing else reads or deploys while a line is undone, one per run (revert it to base, or invert it, keeping the code compiling), confirm through a build that recompiles it that the test fails on its assertion, then restore the line: a test that passes either way verifies nothing.
+
+A PR that only adds tests has no behavior change to name a test for, so reverse the check. From the code, list every predicate, branch and guard of each method that serves what its ticket names (a query it describes, a check it asks to cover), and each kind of input those methods take from outside, such as roles a user inherits, several items or a null date. Where the ticket points at no code, ask the user which code the PR is meant to cover, or, in CI, ask the author in the review; under another skill, return it as a question. Invert or remove each predicate, branch or guard alone, keeping the code compiling, as above, running the PR's test classes and then the whole suite on each survivor, and check that a fixture holds each kind of input: each survivor whose change a caller can see, and each input no fixture holds, is a gap the PR leaves. On stockmanagement #71, rounds 5 and 6 found filters and guards that hand-picked mutations had left unpinned, and round 7 found role inheritance no fixture held.
 
 ### Convergence
 

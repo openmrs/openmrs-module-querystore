@@ -1,0 +1,11 @@
+sb-05 exit=0 start=00:28:16 end=00:29:22 blind-run: 8 turns, $0.6, 1.1 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-05/log/report.md
+sb-04 exit=0 start=00:28:14 end=00:29:41 blind-run: 12 turns, $0.73, 1.4 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-04/log/report.md
+sb-06 exit=0 start=00:28:18 end=00:29:44 blind-run: 14 turns, $0.98, 1.4 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-06/log/report.md
+sb-01 exit=0 start=00:28:08 end=00:29:46 blind-run: 12 turns, $0.81, 1.6 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-01/log/report.md
+sb-07 exit=0 start=00:28:20 end=00:29:55 blind-run: 13 turns, $0.78, 1.6 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-07/log/report.md
+sb-02 exit=0 start=00:28:10 end=00:30:06 blind-run: 17 turns, $0.82, 1.9 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-02/log/report.md
+sb-09 exit=0 start=00:28:24 end=00:30:14 blind-run: 15 turns, $0.88, 1.8 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-09/log/report.md
+sb-03 exit=0 start=00:28:12 end=00:30:18 blind-run: 15 turns, $1.29, 2.1 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-03/log/report.md
+sb-10 exit=0 start=00:28:26 end=00:30:27 blind-run: 15 turns, $1.17, 2.0 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-10/log/report.md
+sb-08 exit=0 start=00:28:22 end=00:30:58 blind-run: 20 turns, $1.0, 2.6 min; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-23-probe-sb-08/log/report.md
+wave done 00:30:58

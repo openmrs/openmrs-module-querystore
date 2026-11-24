@@ -33,14 +33,19 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 10026,
-      "to": 10072,
-      "why": "Owner-directed, 2026-11-23 retro: a fix's refuter and a finding's reader are named blind, and outside CI that means bin/blind-run with the PR head and a 30-minute deadline, run in the background, not an Agent-tool subagent, which loads the project's memory index, as pr-harden, skill-retro Step 5 and proposing-fixes step 5 already say. A guard on the owner's direction: no pr-review run is on record that it would have changed. It makes 'a fresh agent' precise rather than replacing a rule, so a raise pays for it."
+      "from": 10072,
+      "to": 10381,
+      "why": "Owner-directed, 2026-11-24 retro: outside CI, where a PR's ticket lists acceptance criteria, blind agents on each criterion and on the whole PR before the verdict, reopening the parked second reviewer for those PRs on the owner's choice (P1), and the reversed coverage check for a PR that only adds tests, from stockmanagement #71 rounds 5 to 7 (P2). Neither retires a rule. The launch and brief went to blind-agents.md, so what every review reads grows by the two rules alone."
     },
     "pr-review/posting.md": {
       "from": 2185,
       "to": 2236,
       "why": "posting.md's gate fills its brackets each round and names the stacked PRs that merge first, after 47 sessions recited the bracket unfilled and 15 said 'not posted' after posting; the pre-post re-fetch covers every open PR in a stack, after six duplicate asks across one; posting waits for agents only up to their budget; per the readers' catalogs, 2026-11-19 (+51 words)"
+    },
+    "pr-review/blind-agents.md": {
+      "from": 0,
+      "to": 288,
+      "why": "New role file, 2026-11-24 retro (owner-directed): the launch and brief of pr-review's acceptance-criteria agents, read only where that step applies. It holds the deadline and stop line of the rounds the step rests on, their dead proxy with the Anthropic, claude.ai and loopback hosts excepted, offline Maven under blind-run's MAVEN_ARGS, each agent's own servers on free ports, and a brief with the ticket and the decisions already made but none of the review's findings."
     },
     "ticket-pool": {
       "from": 5084,
@@ -76,8 +81,9 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 10072,
+    "pr-review": 10381,
     "pr-review/posting.md": 2226,
+    "pr-review/blind-agents.md": 288,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 3162,
