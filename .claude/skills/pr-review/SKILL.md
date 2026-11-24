@@ -2,7 +2,7 @@
 name: pr-review
 description: Review a GitHub pull request — check that the change actually resolves the issue it claims to and by the best approach available rather than merely one that works, verify every finding empirically, and write clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
 argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.39.0
+version: 0.40.0
 ---
 
 # PR review — verified findings, unambiguous comments
@@ -35,7 +35,7 @@ Line-level review of code that shouldn't exist wastes both sides' time, so settl
 
 The PR's own description is acceptance criteria too, and with no ticket and no repro the only ones. A "key guarantees", "review focus", or "what changed" list has told you exactly what to test, and working through it one claim at a time is the highest-yield pass available. Read each guarantee as the general statement it is rather than as a description of the diff: "a handled backend failure cannot be reported as a complete chart" is a claim about every backend, and the one the author just fixed is the least likely to be the one that breaks it. Those lists are also where an author writes down what they believe rather than what they checked, so a guarantee with no test behind it is worth probing even when the code on the screen looks right.
 
-**Outside CI, where the PR's ticket lists acceptance criteria, have blind agents try to break them**, unless you are a reviewer pr-harden started. Once per round, on the head it reviews (a head pushed mid-round waits for the next round), start one agent per criterion and one on the whole PR, grouping criteria so a round starts no more than six, briefed and launched as `blind-agents.md`, beside this file, says. Before reading any of these agents' reports, append to the round record what your own review has found. Reproduce or refute each defect they report before the verdict. One still running holds back no blocker you have verified, and one past its deadline, or that reports nothing, is owed (Step 5).
+**Outside CI, have blind agents try to break the PR**, unless you are a reviewer pr-harden started. Once per round, on the head it reviews (a head pushed mid-round waits for the next round), start one on the whole PR and, where the PR's ticket lists acceptance criteria, one per criterion, grouping criteria so a round starts no more than six, briefed and launched as `blind-agents.md`, beside this file, says. Before reading any of these agents' reports, append to the round record what your own review has found. Reproduce or refute each defect they report before the verdict. Until each has reported or passed its deadline, post nothing but the blockers Step 1's watch bullet posts on an approval, counting one the PR already had when the round started. One past its deadline, or that reports nothing, is owed (Step 5).
 
 Ways a technically-correct change misses:
 
@@ -136,7 +136,7 @@ A pass that surfaced a substantive finding cannot be your last pass: one real fi
 The verification above is the default and is usually enough. A heavier technique — challenging each candidate from an independent context (a separate blind reader per finding, told to *refute* it, and for a high-stakes blocker more than one from distinct angles: does it reproduce, is the mechanism right, does the named consumer actually break; refuted-but-unproven becomes a question, not a blocker) — pays for its cost only when a single reasoning context's blind spots would otherwise go uncaught. Reach for it, where you can start one, when **two or more** of these hold, not by default:
 
 - the finding is a **judgment call, not a mechanical fact** — "is this actually a race?", "does this design break the consumer's contract?" rather than "does `from + size` overflow?" A second context re-tracing a deterministic claim reaches the same answer, so independence adds nothing there; it earns its keep only where reasonable reviewers could differ. Every Step 2 approach objection meets this one by construction, so for those it takes just one of the others to make the pass worth running.
-- you are reviewing **solo in one pass, without a fan-out of independent finders** — the independence a refutation pass buys is already present when several finders disagree and hedge their own confidence.
+- you are reviewing **solo in one pass, without a fan-out of independent finders** (Step 2's blind agents do not count: they never weigh your findings) — the independence a refutation pass buys is already present when several finders disagree and hedge their own confidence.
 - the pass is **rushed or low-effort**, where the "verify before asserting" discipline is the thing most likely to be skipped — here the refutation raises the floor rather than the ceiling.
 - the **cost of a false positive is high** — a blocking `issue` on a `--post` round, or a request-changes verdict, where a wrong call burns author trust.
 

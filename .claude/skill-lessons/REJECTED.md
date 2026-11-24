@@ -7714,3 +7714,134 @@ memory on `--post` rounds, now through the fixed `bin/blind-run`.
 - The second reviewer is reopened for PRs whose tickets list acceptance criteria, and stays parked for the rest.
 - P-A is unchanged.
 - The cross-wiring item at :7123 stays at one instance.
+
+## 2026-11-24 (second owner-directed pass: the second reviewer in pr-review for every PR outside CI) — 1 applied; 0 killed; linter 18 files, 0 findings; **pr-review 0.40.0**
+
+**Evidence read.**
+- The store matched `origin/main` before the read: 801 files both ways, none different.
+- No record has been written since `LAST`, which this morning's pass set to 2026-11-24. This pass rests on the owner's
+  direction and on the records that pass read.
+
+**Applied, owner-directed: P3, pr-review 0.40.0.**
+- **The direction.**
+  - The owner asked "why does the blind reviewer run for only openmrs-core?", and was told it lives in that folder's
+    project memory.
+  - They then asked "Can we have it for every pull request?". The answer opened "Yes, outside CI. The simplest way is
+    to start the whole-PR blind agent from pr-review 0.39.0 on every review round, instead of only on PRs whose ticket
+    lists acceptance criteria". They said "ok".
+  - The first refuter showed that one reason in that answer was false (below). The owner was asked again, with the
+    correction and the measured cost, and chose "Apply it to every PR (Recommended)", whose text read "Whole-PR blind
+    agent every review round outside CI, at $0.69–$3.43 a round".
+- **The rule.**
+  - Step 2's blind-agent paragraph starts the whole-PR agent every round outside CI, and per-criterion agents only where
+    the ticket lists acceptance criteria.
+  - Where no per-criterion agents run (no ticket, an unreadable one, or one that lists no acceptance criteria), the
+    whole-PR agent runs at `--deadline 1800` with a 25-minute stop line, the setup of 10 of the 12 public agents
+    measured below. Criteria rounds keep 5400 and 75 minutes.
+  - Until each agent has reported or passed its deadline, the review posts nothing but the blockers Step 1's watch
+    bullet posts on an approval, counting one the PR already had when the round started.
+  - Step 3's "solo in one pass, without a fan-out of independent finders" says these agents do not count as that
+    fan-out, since they never weigh the review's findings.
+  - `blind-agents.md` briefs the whole-PR agent with the PR's description where there is no ticket, or the ticket could
+    not be read.
+- **It adopts the second reviewer for every PR outside CI.** That reviewer was parked 2026-11-19, kept parked on the
+  owner's choice 2026-11-23, and reopened for PRs with acceptance criteria by this morning's pass. Neither of its
+  REOPEN ONs is met (2026-11-19's, and the 556 union's at :5675). There is no new evidence since this morning's pass,
+  so the change rests on the owner's direction alone.
+- **What the owner was shown.**
+  - **Against:** the two replays on 6535. In neither did it change what the review filed, and on 2026-11-19 it cost
+    about 76% more and took 47% longer per review.
+  - **For, uncontrolled:**
+    - stockmanagement #86 round 2, where its own report found the case the review's suggested test missed;
+    - stockmanagement #71, where it re-raised an item the review had set aside for a false reason;
+    - a private-ticket PR, where the whole-PR agents' reports carried 4 of 7 defects, 2 that nothing else carried.
+  - **The false reason.** The first answer said the replays' failure, the review setting the reviewer's finding aside,
+    is what 0.39.0's "reproduce or refute each defect they report" targets. It is not.
+    - In the 2026-11-19 replay the review noticed K-order in all three U runs, two through the second reviewer, one of
+      those with a probe, and set it aside in all three (:6395-6396). A reproduced defect can still be set aside.
+    - The 2026-11-19 addendum put the next candidate at the filing judgment, not at more reviewers (:6408-6409).
+    - The owner was given this correction before their second answer. That correction itself said the review
+      "reproduced the defect", where the record shows a probe once.
+- **Also on the record, not shown to the owner:** by the sessions' own statements it found something the review missed
+  in 12 of the 71 sessions that ran it, and 26 say it found nothing new (:6365-6367).
+- **Cost.** The 12 public whole-PR and unanchored agents of 2026-11-23 and 24 cost $0.69 to $3.43 a round and ran 3.1 to
+  22.5 minutes. 10 had a 25-minute stop line, one had 60, and one, at $3.43, had the 75-minute line.
+  - The 25-minute agents cost $0.69 to $1.88, so the top of the range is the 75-minute one.
+  - The owner was told 5 to 22 minutes.
+- **Posting.** Posting only after the agents report or pass their deadline is what `posting.md`:23 already required
+  ("a second reviewer").
+  - This reverses 0.39.0's "One still running holds back no blocker you have verified", which this morning's first
+    refuter had asked for.
+  - This pass's first refuter said `posting.md` has no wait for agents. Its search missed :23.
+- **Memory, outside this repo.**
+  - openmrs-core's project memory starts no unanchored reviewer of its own any more, so it does not run twice there.
+  - Its lines that briefed or timed that reviewer now brief and time pr-review's whole-PR agent: post only after it
+    reports, a narrower brief on auth PRs, and packaging and release in the brief.
+  - Its refuter instruction stays.
+- **REVERT ON:**
+  - **When:** three consecutive such rounds whose whole-PR agent reported, on at least two PRs where no per-criterion
+    agents ran, where that agent reports no defect in the PR's change that the review then reproduced and that is
+    missing from the findings it recorded before it read the report.
+  - **What it restores:** 0.39.0's Step 2 paragraph and `blind-agents.md`, and openmrs-core's memory reviewer.
+  - **How to check it:** read those rounds' records in `~/.claude/pr-review-rounds/`, which skill-retro's Step 1 does not
+    read.
+
+**Budget.**
+- pr-review/SKILL.md goes from 10381 to 10413 words, with a `raises` entry.
+- pr-review/blind-agents.md goes from 288 to 332, with a `raises` entry. It is now read on every round outside CI.
+- Nothing is retired.
+
+**Gate.** Refuters through `bin/blind-run`:
+- **`2026-11-24-retro-1124b-refute1`:** P3 REVISE.
+  - **Taken:**
+    - the false reason, put to the owner, who answered again;
+    - the measured cost;
+    - posting only after the agents report;
+    - Step 3's fan-out clause;
+    - the REVERT ON's PRs with no ticket, and where its evidence is kept;
+    - the full memory edit;
+    - the 12-of-71 sentence moved out of what the owner was shown.
+  - **Left as is:** giving every agent the PR's description as well as the ticket, which would depart from the briefs
+    the evidence rests on.
+- **`2026-11-24-retro-1124b-refute2`:** P3 REVISE.
+  - **Measured by the refuter:** the 12 public agents' stop lines, costs and run times, which showed the owner's price
+    came from 25-minute runs.
+  - **Taken:**
+    - the 25-minute setup for whole-PR agents without criteria;
+    - an approval already present when a round starts;
+    - "never weigh", not "never see";
+    - unreadable tickets;
+    - the posting reversal named;
+    - the REVERT ON counting reproduced defects and naming skill-retro's Step 1;
+    - the correction's "reproduced" noted.
+  - **Not run, and the owner's:** whether a 25-minute agent finds what a 75-minute one does. That needs the replay the
+    owner declined.
+- **`2026-11-24-retro-1124b-refute3`:** P3 REVISE. It found no contradiction with pr-review, its role files or
+  pr-harden.
+  - **Measured by the refuter:** the 12 agents' times, 3.1 to 22.5 minutes, and that the 25-minute ones cost $0.69 to
+    $1.88.
+  - **Taken:**
+    - the deadline keyed to whether per-criterion agents run, so an unreadable ticket gets 1800;
+    - the posting wait ending at the deadline as well as at a report (`posting.md`:23);
+    - the REVERT ON counting only rounds whose agent reported, and naming what a revert restores;
+    - the cost and replay sentences.
+  - **Applied as written,** with no fourth round, since they narrow wording the earlier rounds had settled.
+
+**Observed, not yet actionable.** None new since this morning's section.
+
+**Still the owner's:**
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question.
+
+**Running parked counts:**
+- The second reviewer is adopted for every PR outside CI (pr-review 0.40.0).
+- This morning's question about openmrs-core's memory reviewer is settled by the memory edit above.
+- "Seen, then set aside" is unchanged: run records 2, measurement sightings 12. It stays the candidate the 2026-11-19
+  addendum named.
+- P-A is unchanged.
