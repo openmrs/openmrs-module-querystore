@@ -1,0 +1,32 @@
+13:10:40 wave 1 start load={ 28.75 42.41 49.75 }
+13:10:40 start blindz-s2-a75-1 load={ 28.75 42.41 49.75 }
+13:10:40 start blindz-s1-a25-1 load={ 28.75 42.41 49.75 }
+13:10:40 start blindz-s2-a25-1 load={ 28.75 42.41 49.75 }
+13:10:40 start blindz-s1-a75-1 load={ 28.75 42.41 49.75 }
+13:29:26 end blindz-s1-a75-1 rc=143
+13:39:22 end blindz-s1-a25-1 rc=0
+13:40:43 end blindz-s2-a25-1 rc=3
+13:46:38 end blindz-s2-a75-1 rc=0
+13:46:38 wave 1 done
+13:47:44 wave 2 start load={ 9.88 16.84 32.94 }
+13:47:44 start blindz-s1-a75-2 load={ 9.88 16.84 32.94 }
+13:47:44 start blindz-s2-a75-2 load={ 9.88 16.84 32.94 }
+13:47:44 start blindz-s1-a25-2 load={ 9.88 16.84 32.94 }
+13:47:44 start blindz-s2-a25-2 load={ 9.88 16.84 32.94 }
+13:47:44 start blindz-s1-a75-4 load={ 9.88 16.84 32.94 }
+14:04:55 end blindz-s1-a25-2 rc=0
+14:16:14 end blindz-s2-a25-2 rc=0
+14:26:11 end blindz-s2-a75-2 rc=0
+14:26:41 end blindz-s1-a75-2 rc=0
+14:30:06 end blindz-s1-a75-4 rc=0
+14:30:06 wave 2 done
+14:30:28 wave 3 start load={ 3.29 9.13 21.88 }
+14:30:28 start blindz-s2-a25-3 load={ 3.29 9.13 21.88 }
+14:30:28 start blindz-s1-a75-3 load={ 3.29 9.13 21.88 }
+14:30:28 start blindz-s2-a75-3 load={ 3.29 9.13 21.88 }
+14:30:28 start blindz-s1-a25-3 load={ 3.29 9.13 21.88 }
+14:54:21 end blindz-s1-a25-3 rc=0
+14:57:24 end blindz-s1-a75-3 rc=0
+14:57:26 end blindz-s2-a25-3 rc=0
+15:00:13 end blindz-s2-a75-3 rc=0
+15:00:13 wave 3 done

@@ -1,0 +1,26 @@
+{
+ "U1": {
+  "source": "25-1",
+  "path": "/Users/danielkayiwa/.claude/blind-runs/2026-11-25-dlr2-s1-a25-1/log/report.md"
+ },
+ "U2": {
+  "source": "25-2",
+  "path": "/Users/danielkayiwa/.claude/blind-runs/2026-11-25-dlr2-s1-a25-2/log/report.md"
+ },
+ "U3": {
+  "source": "25-3",
+  "path": "/Users/danielkayiwa/.claude/blind-runs/2026-11-25-dlr2-s1-a25-3/log/report.md"
+ },
+ "U4": {
+  "source": "75-1",
+  "path": "/Users/danielkayiwa/.claude/blind-runs/2026-11-25-dlr2-s1-a75-1/log/report.md"
+ },
+ "U5": {
+  "source": "75-2",
+  "path": "/Users/danielkayiwa/.claude/blind-runs/2026-11-25-dlr2-s1-a75-2/log/report.md"
+ },
+ "U6": {
+  "source": "75-3",
+  "path": "/Users/danielkayiwa/.claude/blind-runs/2026-11-25-dlr2-s1-a75-3/log/report.md"
+ }
+}

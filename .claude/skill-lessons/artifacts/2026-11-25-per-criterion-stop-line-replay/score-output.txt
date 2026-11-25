@@ -1,0 +1,12 @@
+== s1: 32 marks; problems: none; calibration: passes
+   known-good: G=FOUND I=FOUND H=FOUND J=FOUND | known-bad: G=ABSENT I=ABSENT H=ABSENT J=ABSENT
+   G   A25 FOUND 3/3 NAMED 0/3 ['FOUND', 'FOUND', 'FOUND'] | A75 FOUND 3/3 NAMED 0/3 ['FOUND', 'FOUND', 'FOUND']
+   I   A25 FOUND 1/3 NAMED 0/3 ['ABSENT', 'ABSENT', 'FOUND'] | A75 FOUND 3/3 NAMED 0/3 ['FOUND', 'FOUND', 'FOUND']
+   H   A25 FOUND 0/3 NAMED 0/3 ['ABSENT', 'ABSENT', 'ABSENT'] | A75 FOUND 1/3 NAMED 0/3 ['ABSENT', 'ABSENT', 'FOUND']
+   J   A25 FOUND 1/3 NAMED 0/3 ['ABSENT', 'FOUND', 'ABSENT'] | A75 FOUND 2/3 NAMED 0/3 ['FOUND', 'FOUND', 'ABSENT']
+== s2: 16 marks; problems: none; calibration: passes
+   known-good: T=FOUND D2=NAMED | known-bad: T=ABSENT D2=ABSENT
+   T   A25 FOUND 1/3 NAMED 2/3 ['NAMED', 'FOUND', 'NAMED'] | A75 FOUND 3/3 NAMED 0/3 ['FOUND', 'FOUND', 'FOUND']
+   D2  A25 FOUND 1/3 NAMED 2/3 ['NAMED', 'FOUND', 'NAMED'] | A75 FOUND 3/3 NAMED 0/3 ['FOUND', 'FOUND', 'FOUND']
+TOTAL key-runs (of 18 per arm): A25 FOUND 7 NAMED 4 | A75 FOUND 15 NAMED 0
+DECISION: move per-criterion agents to 25 (no key FOUND in >=2 of 3 A75 runs and 0 of 3 A25 runs)

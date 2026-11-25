@@ -1,0 +1,5 @@
+zombie leader, unreaped: PermissionError [Errno 1] Operation not permitted
+leader reaped, group empty: ProcessLookupError [Errno 3] No such process
+rc=0
+15.7.4
+Python 3.14.7

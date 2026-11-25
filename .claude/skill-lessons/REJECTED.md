@@ -7845,3 +7845,237 @@ memory on `--post` rounds, now through the fixed `bin/blind-run`.
 - "Seen, then set aside" is unchanged: run records 2, measurement sightings 12. It stays the candidate the 2026-11-19
   addendum named.
 - P-A is unchanged.
+
+## 2026-11-25 (owner-directed pass: what pr-review's blind agents cost, and what a starved one leaves on record) — 3 applied (Q1-Q3), 1 part put to the owner; seven refutation rounds; linter 18 files, 0 findings; **pr-review 0.41.0**, **bin/blind-run**
+
+**Evidence read.**
+- Before the read, every file the repo holds under `.claude/` matched its live copy except the user-level `CLAUDE.md`
+  (still the owner's, below). Live only: this window's records and artifact folders, and
+  `kill-session-scratchpad-procs.sh` with its log (still the owner's).
+- Records since `LAST` (2026-11-24) that no section names: three, all 2026-11-25.
+  - `2026-11-25-blind-agent-cost-review.md`, a hand-written capture with a 19:00 addendum. This pass rests on it.
+  - `2026-11-25-blind-agent-concurrency-load.md`, a hand-written capture.
+  - `2026-11-25-pr-review-openmrs-module-stockmanagement-71.md`, the run record of #71 round 9.
+- One measurement note, `artifacts/2026-11-25-whole-agent-time-replay/protocol.md`. Its result, "stay at 25", changes
+  nothing.
+- `confidential/` was read for names only. The cost review's `runs.tsv` named runs of two PRs `PRS` lists, in 22 rows,
+  and the capture named one of them. The full table moved to `confidential/artifacts/`, the public one lost those rows,
+  and the capture now says "the private-ticket subject".
+
+**The direction.** The owner asked "Is it still worth it? Or should we remove it from the default such that we make it
+optional. For instance only do when a given parameter is passed? Or any other better strategy that you can think of?",
+then "what do you recommend?". The answer was to keep every agent, the whole-PR one included, to build no concurrency
+cap until the load is on record, and to make three fixes either way. They said "yes go ahead".
+- Q3 first skipped starved rounds in the count. After the fifth refutation round, asked how a starved round that still
+  found something should count, the owner answered "why shouldn't a starved round just run again?". The answer: it
+  should, by making a starved agent owed, so the next round runs it, with the count left to the owed rule and a
+  reproduced defect still breaking a run. They said "ok".
+- That answer gave pr71-r10-whole as an agent that named the load but lost nothing. Its report lists its REST class and
+  JDK 21 runs as not run under the load, so it lost runs too, and the owed rule takes it.
+
+**Applied, owner-directed: Q1 and Q2, `bin/blind-run`.**
+- **Q1:** `log/blind-run-load.tsv`, the 1-, 5- and 15-minute load averages at launch, every 60 seconds and at exit. A
+  sample that cannot be written is skipped, so the deadline loop still reaches its kill.
+- **Q2:** the summary line, now also in `log/blind-run-summary.txt`, and printed on a deadline kill too. Both files
+  carry `blind-run` in their names because agents write into `log/` too: a replay agent's own `summary.txt` is there.
+  - Turns are Claude Code's `num_turns` summed over every result event, plus the tool results after the last one.
+  - Cost is the last result event's. Minutes are measured by `blind-run`, launch to exit.
+  - The line ends with the load's median and maximum.
+- **Also in Q2, beyond the owner's words, because fix 2 needs them:**
+  - The kill moved into `stop()`, which suppresses `PermissionError` as well as `ProcessLookupError`. macOS raises it
+    from `killpg` on a group whose only member is an unreaped zombie, the state of an agent that exits just as its
+    deadline passes. `blind-run` then stopped with a traceback before writing its report or summary. It was found
+    while checking a mutation (`artifacts/2026-11-25-blind-run-load-summary/killpg-zombie-output.txt`).
+  - A load sample that cannot be written, or a load file the agent removed, no longer ends the run before its
+    summary.
+- **Measured** over the 273 runs with a result event in `~/.claude/blind-runs` at 20:26 on 2026-11-25:
+  - 55 had several result events, from a Stop hook's or a background task's continuation. The old line printed the
+    last segment's turns in all 55, and its minutes were off the file times by more than a minute and 10% in 57.
+    sm80-r2-whole read "2 turns, 0.5 min" for 58 turns and 73 minutes.
+  - Summed `num_turns` equalled tool results plus result events in 241. In the other 32 the gap is text-only turns,
+    such as a Stop-hook amendment, which a count of the stream misses.
+  - Cost never fell across a run's result events (0 of 55), so the last one is the run's.
+- **Self-test:** 38 checks to 55. Each new one goes red under a mutation of the code it guards: fifteen mutations,
+  five of them from the refuters' findings (`mutations-output.txt` in that artifact folder, with the calibration
+  scripts and their outputs, re-run at about 21:25 when the counts had moved on).
+- **Real agents:**
+  - With the final file, `brfix2-real-ok` finished and printed Claude Code's own count, 3 turns. `brfix2-real-kill`
+    was killed at 45 s inside a foreground `ping` and printed the kill's summary.
+  - With earlier drafts, `brfix-real-kill3` was killed at 20 s while the model was writing.
+  - `brfix-real-kill` never reached its deadline: the owner's sleep hook refused its `sleep 200`, so hooks reach
+    blind agents too.
+
+**Applied, owner-directed: Q3, pr-review 0.41.0.**
+- **The rule:** Step 2's owed sentence reads "One past its deadline, that reports nothing, or whose report says the
+  machine's load kept it from a run it planned, is owed (Step 5)." Step 1 already has each round run or apply every
+  owed item before its verdict, or say it is still owed (`SKILL.md:22`). A re-run costs one more agent run; the #67
+  round re-ran its killed whole-PR agent within the round (`pr67-r1-whole2`).
+- **Budget:** pr-review/SKILL.md goes from 10413 to 10426 words, with a `raises` entry. Nothing is retired; the rule
+  amends 0.40.0's REVERT ON, below.
+
+**0.40.0's REVERT ON (:7781-7787), amended.**
+- **When:** as at :7782-7784, counting only rounds whose whole-PR agent reported and is not owed. A round counts by
+  that agent's last run in the round that reported and is not owed, a re-run after a kill included (`pr67-r1-whole2`
+  in the #67 round record). A round whose agent is still owed when the round ends neither counts toward the three nor
+  breaks a run of them; the next round's own agent counts for that next round. A round in which that agent reported a
+  defect that :7783-7784 counts (the review reproduced it, and had not recorded it before reading the report) breaks
+  the run, owed or not.
+- **Owed,** from pr-review 0.41.0 (Step 2's blind-agent paragraph): past its deadline, reporting nothing, or with a
+  report that says the machine's load kept it from a run it planned, or, per `blind-agents.md`:11, whose log shows it
+  never reached the model. The next round runs it or says it is still owed, as with any owed item (`SKILL.md:22`).
+- **How to check it:** the rounds' records in `~/.claude/pr-review-rounds/`, as before, which name owed agents, and each
+  whole-PR agent's `~/.claude/blind-runs/<date>-<name>/log/`.
+  - **A deadline kill:** `log/blind-run-summary.txt` opens "blind-run: deadline of". Where that file is missing or
+    opens otherwise, as for a run from before it existed, the agent's `log/out.jsonl` ends with an event other than a
+    result event and was last written 0 to 30 seconds after its deadline, counted from when `log/BRIEF.md` was
+    written. The deadline is the round record's, else `blind-agents.md`'s 1800 s for a whole-PR agent without
+    per-criterion agents. An agent the kill found waiting on the model with nothing streamed may have written nothing;
+    no run on record shows that.
+  - **The load:** read the report in full, since a pattern finds only the wordings it lists. This one finds the
+    wordings the record held on 2026-11-25:
+
+    ```
+    load average|machine (was|is) (at load|(very )?(slow|loaded|busy|saturated)|shared)|machine was shared|loading the machine|machine load|slowed|under load|heavily loaded|very slow
+    ```
+- **Evidence:**
+  - **Report words,** as of 21:25: of 293 `blind-run` reports written from 2026-11-20, 33 match that pattern, 25 of
+    them round agents', and each of those 25 hits is about the machine
+    (`artifacts/2026-11-25-blind-run-load-summary/starved-grep-output.txt`).
+  - **Kills,** as of 21:15: of the 20 streams that ended with an event other than a result event, the 10 deadline
+    kills, 8 of round or replay agents and 2 staged with a draft of the new copy, are the ones last written 0 to 30
+    seconds after their deadline: 5400.5 to 5402.2 s, 1800.1 and 1803.1 s, 45.0 s at 45 and 20.4 s at 20. The others
+    were stopped another way or were still running. Of the 273 streams that ended with a result event, the five last
+    written within 30 seconds of a 30-, 45- or 90-minute mark each ended on its own with a `success` result.
+  - **A re-run recovers the work:** in the cost review's replay, #80 r1's behaviour brief, killed at its 90-minute
+    deadline at a load of about 170, finished in 29.7 to 38.4 minutes, and #71 r8's lifecycle brief, 47.4 minutes at
+    about 86, took 26.9 to 42.3.
+- **Not in the test, and the owner's:** a load threshold read from `blind-run-load.tsv`. The owed clause misses agents
+  that describe what the load did without naming it, or blame a time limit for a run the load slowed: pr69-whole's
+  MariaDB "was stopped by the 10-minute background limit during the install", pr85-r1-whole's test classes each "took
+  about 15 minutes to start", and at least seven more round agents of 2026-11-25 (pr71-r9-whole, pr71-r10-permissions,
+  pr69-ac1-fresh, pr69-ac2-existing, pr69-ac3-restart, sm80-r1-privileges, sm80-r2-structure). None ran in a round this
+  REVERT ON counts, since all those rounds had per-criterion agents. At loads of 55 to 85, by pr71-r10-lifecycle's own
+  estimate, every agent of four overlapping reviews reported, but three said the load cut their work, so the data
+  neither sets nor rules out a threshold.
+
+**Gate.** Refuters through `bin/blind-run`:
+- **`2026-11-25-retro-1125-refute1`:** Q1 REVISE, Q2 STANDS, Q3 REVISE.
+  - **Measured by the refuter:**
+    - a kill one sampling period early passed all 48 checks;
+    - Q3's first pattern hit 21 of 279 reports and missed sm80-r1-whole, sm80-r2-whole and pr71-r9-unchanged;
+    - its own `load.tsv` read 49 to 97 while it ran.
+  - **Taken:**
+    - a check that the kill comes no earlier than the deadline;
+    - the wider pattern, re-measured;
+    - the load threshold out of the test and put to the owner, since the owner agreed to two halves;
+    - a fallback for runs from before `summary.txt`, since a run folder records no deadline.
+- **`2026-11-25-retro-1125-refute2`:** Q1 STANDS, Q2 STANDS, Q3 REVISE.
+  - **Measured by the refuter:** a loop that waits a full sampling period past the deadline passed all 50 checks.
+  - **Taken:**
+    - a check that the kill comes on time when the period is longer than the deadline;
+    - "any of the round's blind agents", the owner's "an agent", where Q3 had said the whole-PR agent;
+    - the pattern on a line of its own;
+    - "runs with a result event", not "finished runs";
+    - the overlap that reported at 55 to 85 stated as the record states it.
+  - **Its suspicion, measured instead of noted:** a kill while the model is writing. `brfix-real-kill3` shows it ends
+    with an event other than a result, which made that the fallback test, checked over every stream on record.
+  - **Also added:** a check for a machine where `os.getloadavg()` fails, which neither refuter could run.
+- **`2026-11-25-retro-1125-refute3`:** Q1 and Q2 REVISE, Q3 REVISE.
+  - **Measured by the refuter:**
+    - two of six `summary.txt` files on record were written by agents;
+    - Q3's fallback took runs stopped another way for kills, where 0 to 30 seconds after a deadline separates the 8
+      kills from every other run;
+    - six round agents' reports say the machine was saturated, shared and busy, loaded by builds, or under load, in
+      words the pattern missed.
+  - **Taken:**
+    - the files renamed `blind-run-summary.txt` and `blind-run-load.tsv`;
+    - the timing condition, re-measured;
+    - the agents named as Step 2's, which excludes a fix's refuter;
+    - the wider pattern, with each report read in full;
+    - the threshold's reason restated, since three agents that reported at 55 to 85 said the load cut their work;
+    - the counts dated;
+    - a load sample that cannot be written is skipped, so the loop still reaches `stop()`.
+- **`2026-11-25-retro-1125-refute4`:** Q1, Q2 and Q3 REVISE.
+  - **Measured by the refuter:** the real runs then cited came from earlier drafts, whose files had the old names.
+  - **Taken:**
+    - two real runs of the final file;
+    - a file for the EPERM measurement;
+    - "by pr71-r10-lifecycle's own estimate" for 55 to 85;
+    - the two agents the report test misses named as outside this REVERT ON's rounds;
+    - a kill while the agent waits on the model with nothing streamed named as a gap of the fallback;
+    - the turn in flight at a kill named as uncounted.
+  - **Also taken:** a load file the agent removed. The refuter listed it as not run, and it crashed `summary()` before
+    the summary was written.
+- **`2026-11-25-retro-1125-refute5`:** Q1 and Q2 STAND, Q3 REVISE.
+  - **Taken:** 293 reports at 21:25, the artifact's count; ten deadline kills counting the two staged ones.
+  - **Put to the owner:** whether a starved round that found something breaks a run. The owner answered with the re-run
+    design above, which replaced the skip.
+- **`2026-11-25-retro-1125-refute6`:** Q1 and Q2 STAND, and Q3's skill change and budget hold; its amendment REVISE.
+  - **Measured by the refuter:**
+    - the amendment's defect sentence had dropped :7784's "missing from the findings it recorded before it read the
+      report";
+    - the #67 round re-ran its killed agent within the round, as `pr67-r1-whole2`, which a test reading only the first
+      run's folder would have dropped;
+    - at least seven more round agents blame a time limit for a run the load slowed.
+  - **Taken:**
+    - the defect sentence restored to :7783-7784's test;
+    - a round counted by its agent's last run in that round, rather than "in that round or a later one" as the refuter
+      wrote, so one run cannot count for two rounds;
+    - the seven agents named in what the test misses;
+    - what the change amends, for Step 4.
+  - **Answered, no change:** whether owed re-runs push a round past six agents. The answer first given was struck in
+    round 7.
+- **`2026-11-25-retro-1125-refute7`,** on the changed text only: REVISE.
+  - **Taken as written:**
+    - a sentence deleted, which said the next round's own agents cover an owed agent at no extra start; no skill text
+      says so, and the owner was told a re-run costs one more agent run;
+    - `blind-agents.md`:11's never-reached-the-model case added to **Owed**.
+  - **No eighth round,** since one change deletes a sentence and the other cites existing skill text.
+
+**Observed, not yet actionable.**
+- **#71 round 9:** a maintainer raised two nits that rounds 4 to 8 had carried as set aside while each posted 3 to 5
+  other comments. It meets the wording of the "seen, then set aside" REOPEN ON (:6043-6044). But the set-aside reason
+  was "nit", not "outside the ticket", and W2 (2026-11-23) is a wording for defects judged unlikely, not this. The
+  record's own lesson, posting verified one-line nits in a round that posts anyway, has 1 record.
+- **A run that ends on the account's usage limit** reads like any other in the summary line: 4 of 276 runs end with
+  `is_error` and the limit's message, and their reports are that message. The reviews' own "reports nothing, is owed"
+  covers them (esm-core #2022's round record has its agent owed). 1 window.
+- **`blind-run` with no report:** a run whose agent backgrounds its work and ends its turn can end with none
+  (blindz-s1-a75-1, in the cost review). 1 sighting.
+
+**Killed before this pass,** by the cost review's refuters (`~/.claude/blind-runs/2026-11-25-blindcost-refute1` to
+`refute6`), each with what would reopen it:
+- **Making the agents opt-in.** Round agents are about 28% of the spend on 10 reviewed PRs, and 8 posted comments
+  rest on their findings. **REOPEN ON:** a measured share well above that, or posted findings that stop coming.
+- **Dropping the whole-PR agent beside per-criterion agents.** It is about 9% of that spend, and the only source of
+  #71 round 10's SUB1, which survives the whole suite. **REOPEN ON:** a run of rounds, none starved, in which it is the
+  only source of nothing the review reproduced.
+- **A cap of five agents queued in `blind-run`** (refute5): five has no support in the data, is below `SKILL.md:38`'s
+  six-agent round, and posting would wait on a queued agent with no bound; agents are not the only load.
+- **A start-of-round wait, two rounds at a time** (refute6): no round-in-progress state exists to count, a bounded
+  wait ends in no cap or owed agents, and it would hold up pr-harden's reviewers. Two rounds were already starved at a
+  load of about 60, while the 13 round agents of four overlapping reviews all reported.
+- **Admission with deferral:** #83's D and #85's E came from rounds started 7th and 8th in the night burst.
+  `queue_sim.py` with six slots delays those rounds 121 and 142 minutes on the recorded wall times, and finishes every
+  round 5 to 60 minutes sooner on a third of them; without a load record, nothing says which.
+- **25-minute per-criterion agents:** the pre-registered replay backed 15 of 18 key-runs at 75 minutes and 7 at 25.
+- **REOPEN ON, for any cap:** load records from Q1 showing agents starved at a load the machine reaches routinely.
+
+**Still the owner's:**
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question;
+- whether a load threshold read from `blind-run-load.tsv` makes an agent owed, once Q1's records show the load at which
+  agents lose their runs;
+- whether 0.39.0's REVERT ON (:7581-7583) leaves out rounds whose agents are owed, as 0.40.0's now does;
+- whether a round that posts other comments anyway also posts the verified nits it would set aside (#71 round 9).
+
+**Running parked counts:**
+- "Seen, then set aside" as outside the ticket is unchanged: run records 2, measurement sightings 12.
+- Every blind agent stays, the whole-PR one included; 0.41.0 changes only what makes one owed.
+- P-A is unchanged.

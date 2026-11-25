@@ -1,0 +1,2 @@
+finished runs 286; several result events 56; old turns != summed turns 56; old minutes off the file wall by >1 min and >10%: 58; runs whose cost ever decreased: 0
+single-result runs, file wall minus duration_ms (min): min 0.00 median 0.01 max 37.11

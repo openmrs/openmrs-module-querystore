@@ -1,0 +1,39 @@
+03:05:05 rerun start (dlr2)
+03:05:06 quiet: other agents 0, load 2
+03:05:06 wave 1 start
+03:10:09 wave 1: dlr2-s1-a25-1 ended (exit=0)
+03:13:22 wave 1: dlr2-s1-a75-1 ended (exit=0)
+03:13:52 wave 1: dlr2-s3-a75-1 ended (exit=0)
+03:17:42 wave 1: dlr2-s2-a25-1 ended (exit=0)
+03:18:16 wave 1: dlr2-s3-a25-1 ended (exit=0)
+03:30:39 wave 1: dlr2-s2-a75-1 ended (exit=0)
+03:30:39 wave 1 done
+03:30:39 quiet: other agents 0, load 3
+03:30:39 wave 2 start
+03:35:30 wave 2: dlr2-s1-a25-2 ended (exit=0)
+03:38:03 wave 2: dlr2-s3-a25-2 ended (exit=0)
+03:46:28 wave 2: dlr2-s1-a75-2 ended (exit=0)
+03:47:16 wave 2: dlr2-s2-a25-2 ended (exit=0)
+03:55:52 wave 2: dlr2-s2-a75-2 ended (exit=0)
+03:56:45 wave 2: dlr2-s3-a75-2 ended (exit=0)
+03:56:45 wave 2 done
+03:58:45 quiet: other agents 0, load 3
+03:58:45 wave 3 start
+04:04:30 wave 3: dlr2-s1-a25-3 ended (exit=0)
+04:12:22 wave 3: dlr2-s2-a25-3 ended (exit=0)
+04:12:42 wave 3: dlr2-s1-a75-3 ended (exit=0)
+04:12:43 wave 3: dlr2-s3-a25-3 ended (exit=0)
+04:21:52 wave 3: dlr2-s3-a75-3 ended (exit=0)
+04:28:46 wave 3: dlr2-s2-a75-3 ended (exit=0)
+04:28:46 wave 3 done
+04:28:46 all waves done
+04:33:49 judges start
+04:33:56 judge s1 ended (exit=0)
+04:34:09 judge s2 ended (exit=0)
+04:34:17 judge s3 ended (exit=0)
+04:34:17 judges done
+04:39:18 union judges start
+04:39:56 union judge s1 ended (exit=0)
+04:40:14 union judge s3 ended (exit=0)
+04:40:47 union judge s2 ended (exit=0)
+04:40:47 union judges done

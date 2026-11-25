@@ -1,0 +1,34 @@
+reports: 293; hits: 33; round agents among them: 25
+other 2026-11-25-blindcost-refute2:  64.0 minutes, against 21.4 for the 9 `dlr2` 75-minute runs. I did not read the load averages or the 02:07 and 02:40 limit times. - **E6 HOLDS as output
+other 2026-11-25-blindcost-refute3: -byte `report.md`: "The suite got stuck in `StockManagementDaoTest` because the machine is shared and busy. Running just the new test now." Its round record 
+other 2026-11-25-blindcost-refute5: agents count as owed. A round's agents then start together. - Or gate starts on load average, which would also catch the review builds and refuters that
+other 2026-11-25-blindcost-refute6: one reached the 90-minute deadline.    - `pr71-r10-lifecycle` line 34 reports a load average of 55–85, with each full-suite build taking about 7.5 minut
+other 2026-11-25-dlr-s1-a25-1: " in `stockmanagement-api` when I stopped at the 25-minute limit. The machine's load average was about 225, with dozens of other Java processes, none st
+ROUND 2026-11-25-pr67-r1-whole: The suite got stuck in `StockManagementDaoTest` because the machine is shared and busy. Running just the new test now. 
+ROUND 2026-11-25-pr71-r10-lifecycle: spotless:check`.  I stopped there to stay inside the ~75 minutes: the machine's load average was 55–85, so each full-suite build took about 7.5 minutes.
+ROUND 2026-11-25-pr71-r10-unchanged:  | JDK 11 | green, but slow (684 s + 477 s) because other sessions' builds were loading the machine | | JDK 21 with CI's own command (`CI=true mvn -o --batch-m
+ROUND 2026-11-25-pr71-r10-whole: *JDK 8, the service class only:** 44/44 green, though it took 802 s because the machine was loaded by other sessions' builds. - **Mutations:** whole suite, on
+ROUND 2026-11-25-pr71-r9-balances: mutation. Two more mutations turned out partial or not run, because the machine slowed and I hit the 75-minute stop.  ## 1. Balances without child
+ROUND 2026-11-25-pr71-r9-lifecycle: I'm over the 75-minute budget: the builds took about 10 minutes each under machine load. One gap in the evidence: **my control mutation did not com
+ROUND 2026-11-25-pr71-r9-unchanged: ad fresh, not cached in a static field.  ## Not run - **JDK 8, 11 and 21:** the machine was at load around 75 from other sessions' builds. The JDK 8 run took o
+ROUND 2026-11-25-pr85-r1-c14: Undecidable on "the build and all tests pass": no build finished. The machine was at load average ~200 and nearly out of memory, so neither of my Mav
+other 2026-11-25-retro-1125-refute1: 20 to 11-25. 16 of those are round agents.    - It misses `sm80-r1-whole` ("the machine was shared with other sessions' Maven builds and very slow"), `sm80-r2
+other 2026-11-25-retro-1125-refute2: ng sm77-r1-ac1, sm80-r2-privileges and sm83-r1-priv, which say "the machine was heavily loaded".    - **Fix:** put the pattern on its own line, in a code 
+other 2026-11-25-retro-1125-refute3:  3. **CONFIRMED: the grep pattern misses six round agents' reports that say the machine was loaded.**    - pr67-r1-whole: "the machine is shared and busy"    
+ROUND 2026-11-25-sm68-whole: I built that mutant (`../mut2`) but stopped its run twice because the machine's load average was about 140. - `origin/core-3.x` also has no test for thi
+ROUND 2026-11-25-sm77-r1-ac1: ding the POMs, not on a build.  **What did not run or finish** (the machine was heavily loaded by other builds): - **First `mvn clean install` on Java 8:*
+ROUND 2026-11-25-sm77-r1-ac2: er:compile` for the api module by 01:24. Many other sessions' Maven builds were loading the machine, and it was still running when I stopped.  **What I didn't 
+ROUND 2026-11-25-sm77-r1-ac3: ackground limit and was stopped. A thread dump showed it running, not hung; the machine was loaded by other builds. There are no Java 8 results.  ## Not run -
+ROUND 2026-11-25-sm77-r1-whole: der than 2023c. - **Not yet run:** the actual red `mvn` test run on Java 8. The machine was saturated by other sessions, and both Java 8 Maven runs were stopped 
+ROUND 2026-11-25-sm78-r1-whole: sed 60 tests with 0 failures, including `ReportGeneratorCsvTest` (2 tests). The load average was about 180, so the first test class alone took 1127 s. -
+ROUND 2026-11-25-sm79-r1-ac2: l result for any test, including the PR's `HelperFormattingTest`. The machine's load average was about 225 at the time. - **The omod module** never got 
+ROUND 2026-11-25-sm79-r1-ac3: tests pass": the JDK 8 build was still compiling the API module when I stopped (load average about 200).  ## Finding 1: grouping order changes with the 
+ROUND 2026-11-25-sm79-r1-whole:  or test suite, because neither Maven run reached the test phase: the machine's load average was 167–216, with 144 Maven processes from other sessions. 
+ROUND 2026-11-25-sm80-r1-behaviour: of them is confirmed: every build I started was killed or is still running. The machine was at load average 145–225 because of other sessions, and nothing got 
+ROUND 2026-11-25-sm80-r1-structure: EAD, origin/master and the merged tree, on Java 8 and 21): none finished.** The machine was saturated by many other parallel sessions. HEAD on Java 8 was still s
+ROUND 2026-11-25-sm80-r1-whole: om reading the code. Almost none of my own runtime checks finished, because the machine was shared with other sessions' Maven builds and very slow; the list a
+ROUND 2026-11-25-sm80-r2-behaviour: ed when it hit the one-hour background limit I set for it. The machine was at a load average of about 60. Here is how far it got:  - **Master, api modul
+ROUND 2026-11-25-sm80-r2-privileges: ). The omod suite at HEAD and both suites at master didn't run. The machine was heavily loaded by about 25 other Maven runs. - **Mutation check of the PR'
+ROUND 2026-11-25-sm80-r2-whole: probe.  ## Not run, or not finished  - **Full api and omod suites:** the shared machine was very slow (master's api tests alone took about 50 minutes). Master's 
+ROUND 2026-11-25-sm83-r1-priv: build:** killed at 40 minutes, while compiling the api module.  The machine was heavily loaded (about 70 Maven processes running). Everything below comes 
+ROUND 2026-11-25-sm83-r1-whole: n either tree: the HEAD build was still compiling the API module 63 minutes in (load average about 185) when it hit its background time limit and was ki

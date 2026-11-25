@@ -31,12 +31,23 @@ Bash calls on 2026-11-22; copying only the reachable objects instead took 6.5 s 
 Agent, Write or Edit. The report (log/report.md) is its last text, with a short Stop-hook amendment appended and a
 longer rewrite replacing it, as skill-retro's mine.py reads one. Exit 2 when the agent never started (no init event),
 3 when the deadline hit.
+
+log/blind-run-load.tsv holds the machine's 1-, 5- and 15-minute load averages, sampled at launch, every LOAD_EVERY
+seconds and at exit. log/blind-run-summary.txt holds the summary line, which also goes to stderr: turns, cost, wall minutes and load, on a
+deadline kill too. Turns are Claude Code's num_turns summed over every result event, plus the tool results after the
+last one, which a deadline leaves without a result of their own; a turn still in flight at the kill is not counted. Minutes are measured here, launch to exit. Until
+2026-11-25 the line printed the last result event's num_turns and duration_ms. Those count one segment, so in the 55 of
+the 273 runs with a result event on record at 20:26 that a Stop hook or a background task had continued, both read low (sm80-r2-whole: "2
+turns, 0.5 min" for 58 turns and 73 minutes). A deadline kill printed neither. And with no load on record, a starved agent showed only
+in what its report said: two whole-PR agents that ran in that night's burst, at loads of 160 to 223, listed builds or
+servers as not run without naming the load.
 """
 import argparse
 import contextlib
 import datetime
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -51,10 +62,12 @@ DENY = ["Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task
         "Artifact", "ArtifactData", "ArtifactComments", "AskUserQuestion", "PublishPlugin", "ShareOnboardingGuide",
         "DesignSync"]
 ALLOW = ["Bash", "Read", "Grep", "Glob"]
+LOAD_EVERY = 60  # seconds between load samples
 
 
 def report(stream_path):
-    texts, result = [], None
+    """The agent's last text, its last result event, and its turns (see the module's docstring)."""
+    texts, result, turns, tail = [], None, 0, 0
     with open(stream_path, errors="replace") as f:
         for line in f:
             try:
@@ -63,6 +76,12 @@ def report(stream_path):
                 continue
             if d.get("type") == "result":
                 result = d
+                turns += d.get("num_turns") or 0
+                tail = 0
+            if d.get("type") == "user":
+                content = (d.get("message") or {}).get("content")
+                if isinstance(content, list):
+                    tail += sum(1 for b in content if isinstance(b, dict) and b.get("type") == "tool_result")
             if d.get("type") != "assistant":
                 continue
             for b in (d.get("message") or {}).get("content") or []:
@@ -72,7 +91,52 @@ def report(stream_path):
                         texts[-1] += "\n\n" + t
                     else:
                         texts.append(t)
-    return (texts[-1] if texts else ""), result
+    return (texts[-1] if texts else ""), result, turns + tail
+
+
+def sample_load(f):
+    try:
+        one, five, fifteen = os.getloadavg()
+    except OSError:
+        return
+    with contextlib.suppress(OSError):  # a full disk must not end the loop before the deadline's stop()
+        f.write(f"{datetime.datetime.now().isoformat(timespec='seconds')}\t{one:.2f}\t{five:.2f}\t{fifteen:.2f}\n")
+        f.flush()
+
+
+def stop(proc):
+    """SIGTERM to the agent's process group; once the agent exits, or after 5 s, SIGKILL to whatever is left of that
+    group. Claude Code runs each Bash command in a process group of its own and stops those shells on SIGTERM; a SIGKILL
+    alone left one running (measured 2026-11-20). macOS answers EPERM rather than ESRCH when a group's only member is a
+    zombie, as it is when the agent exits just as the deadline passes, and blind-run then stopped with a traceback
+    before writing its report (measured 2026-11-25)."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(proc.pid, signal.SIGTERM)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=5)
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(proc.pid, signal.SIGKILL)
+    proc.wait()
+
+
+def summary(rc, deadline, turns, result, wall, load_path, log):
+    ones = []
+    with contextlib.suppress(OSError), open(load_path) as f:  # the agent can write into log/, and remove from it
+        for line in f:
+            with contextlib.suppress(IndexError, ValueError):
+                ones.append(float(line.split("\t")[1]))
+    ones.sort()
+    load = (f"1-minute load median {ones[len(ones) // 2]:.0f}, max {ones[-1]:.0f} on {os.cpu_count()} cores" if ones
+            else "no load sample")
+    cost = (result or {}).get("total_cost_usd")
+    said = f"{turns} turn{'' if turns == 1 else 's'}"
+    if rc == 3:
+        paid = "no cost reported" if cost is None else f"at least ${cost:.2f}"
+        return (f"blind-run: deadline of {deadline}s reached after {said}, {wall / 60:.1f} min, {paid}, {load}; "
+                f"partial report in {log}/report.md")
+    paid = "no cost reported" if cost is None else f"${cost:.2f}"
+    return (f"blind-run: {'' if rc == 0 else f'exit {rc}, '}{said}, {paid}, {wall / 60:.1f} min, {load}; "
+            f"report in {log}/report.md")
 
 
 def git(*args, stdin=None, need=True):
@@ -182,37 +246,39 @@ def run(name, brief, deadline, allow, repo=None, ref=None, base=None):
     cmd = ["claude", "-p", brief, "--output-format", "stream-json", "--verbose", "--strict-mcp-config",
            "--allowedTools", *allow, "--disallowedTools", *DENY]
     out, err = os.path.join(dirs["log"], "out.jsonl"), os.path.join(dirs["log"], "err.txt")
-    with open(out, "w") as o, open(err, "w") as e:
-        # At the deadline, SIGTERM goes to the agent's process group; once the agent exits, or after 5 s, SIGKILL goes
-        # to whatever is left of that group. Claude Code runs each Bash command in a process group of its own and stops
-        # those shells on SIGTERM; a SIGKILL alone left one running (measured 2026-11-20).
+    load_path = os.path.join(dirs["log"], "blind-run-load.tsv")
+    with open(out, "w") as o, open(err, "w") as e, open(load_path, "w") as lf:
+        lf.write("time\tload1\tload5\tload15\n")
+        start = time.monotonic()
         proc = subprocess.Popen(cmd, cwd=dirs["work"], env=env, stdin=subprocess.DEVNULL, stdout=o, stderr=e,
                                 start_new_session=True)
-        try:
-            rc = proc.wait(timeout=deadline)
-        except subprocess.TimeoutExpired:
-            rc = 3
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(proc.pid, signal.SIGTERM)
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                proc.wait(timeout=5)
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(proc.pid, signal.SIGKILL)
-            proc.wait()
+        rc = None
+        while rc is None:
+            sample_load(lf)
+            left = start + deadline - time.monotonic()
+            try:
+                rc = proc.wait(timeout=max(0, min(LOAD_EVERY, left)))
+            except subprocess.TimeoutExpired:
+                if left > LOAD_EVERY:
+                    continue
+                rc = 3
+                stop(proc)
+        wall = time.monotonic() - start
+        sample_load(lf)
     with open(out, errors="replace") as f:
         started = any('"subtype":"init"' in line.replace(" ", "") for line in f)
-    text, result = report(out)
+    text, result, turns = report(out)
     with open(os.path.join(dirs["log"], "report.md"), "w") as f:
         f.write(text + "\n")
+    line = (f"blind-run: the agent never started; see {err}" if not started
+            else summary(rc, deadline, turns, result, wall, load_path, dirs["log"]))
+    with open(os.path.join(dirs["log"], "blind-run-summary.txt"), "w") as f:
+        f.write(line + "\n")
+    print(line, file=sys.stderr)
     if not started:
-        print(f"blind-run: the agent never started; see {err}", file=sys.stderr)
         return 2, d
     if rc == 3:
-        print(f"blind-run: deadline of {deadline}s reached; partial report in {dirs['log']}/report.md", file=sys.stderr)
         return 3, d
-    if result:
-        print(f"blind-run: {result.get('num_turns')} turns, ${round(result.get('total_cost_usd') or 0, 2)}, "
-              f"{round((result.get('duration_ms') or 0) / 60000, 1)} min; report in {dirs['log']}/report.md", file=sys.stderr)
     print(text)
     return rc, d
 
@@ -225,15 +291,36 @@ open(os.environ["FAKE_LOG"], "w").write(json.dumps({"cwd": os.getcwd(), "args": 
 mode = os.environ.get("FAKE_MODE", "ok")
 if mode == "silent":
     sys.exit(1)
+if mode == "ok":  # agents write into log/ too: a replay agent's run.sh appended to log/summary.txt
+    open(os.path.join(os.getcwd(), "..", "log", "summary.txt"), "w").write("the agent's own\n")
 print(json.dumps({"type": "system", "subtype": "init"}))
-if mode == "slow":
+
+
+def tool_turn():
+    print(json.dumps({"type": "assistant", "message": {"id": "m", "content": [{"type": "tool_use", "id": "t", "name": "Bash",
+                                                                              "input": {}}]}}))
+    print(json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t", "content": "ok"}]}}))
+
+
+if mode in ("slow", "slowbare"):
     import subprocess
+    if mode == "slow":  # a segment that ended, then one the deadline cuts after a tool call
+        print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Partial."}]}}))
+        print(json.dumps({"type": "result", "num_turns": 2, "total_cost_usd": 0.3, "duration_ms": 1000}))
+    tool_turn()
     child = subprocess.Popen(["sleep", "300"])
     open(os.environ["FAKE_LOG"] + ".child", "w").write(str(child.pid))
     sys.stdout.flush(); time.sleep(30)
+if mode == "rmload":
+    os.remove(os.path.join(os.getcwd(), "..", "log", "blind-run-load.tsv"))
+if mode == "pause":  # outlives several load samples, and ends well inside its deadline
+    sys.stdout.flush(); time.sleep(1.6)
 print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Full report: " + "x" * 300}]}}))
 print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Amendment."}]}}))
 print(json.dumps({"type": "result", "num_turns": 3, "total_cost_usd": 0.5, "duration_ms": 60000}))
+if mode == "multi":  # a background task's notification continues the session
+    tool_turn()
+    print(json.dumps({"type": "result", "num_turns": 2, "total_cost_usd": 0.7, "duration_ms": 1000}))
 '''
 
 
@@ -414,6 +501,8 @@ def repo_checks(t):
 
 
 def self_test():
+    global LOAD_EVERY
+    LOAD_EVERY = 0.5
     t = tempfile.mkdtemp()
     os.makedirs(os.path.join(t, "bin"))
     fake = os.path.join(t, "bin", "claude")
@@ -437,21 +526,105 @@ def self_test():
         ("report keeps the full text and appends the short amendment",
          open(os.path.join(d, "log", "report.md")).read().startswith("Full report") and "Amendment." in open(os.path.join(d, "log", "report.md")).read()),
     ]
-    os.environ["FAKE_MODE"] = "silent"
-    rc, _ = run("silent", "b", 20, ALLOW, base=os.path.join(t, "runs"))
-    checks.append(("never started exits 2", rc == 2))
-    os.environ["FAKE_MODE"] = "slow"
-    rc, _ = run("slow", "b", 2, ALLOW, base=os.path.join(t, "runs"))
-    checks.append(("deadline exits 3", rc == 3))
-    child = int(open(os.environ["FAKE_LOG"] + ".child").read())
-    time.sleep(0.5)
+
+    def said(run_dir):
+        return open(os.path.join(run_dir, "log", "blind-run-summary.txt")).read()
+
+    def samples(run_dir):
+        return [line.split("\t") for line in open(os.path.join(run_dir, "log", "blind-run-load.tsv")).read().splitlines()]
+
+    minutes = re.search(r", (\d+\.\d) min, ", said(d))
+
+    class Full:
+        def write(self, text):
+            raise OSError(28, "No space left on device")
+
+        def flush(self):
+            raise OSError(28, "No space left on device")
+
     try:
-        os.kill(child, 0)
-        alive = True
-        os.kill(child, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):  # EPERM: the pid now belongs to another user's process
-        alive = False
-    checks.append(("the deadline stops what the agent started", not alive))
+        sample_load(Full())
+        survived = True
+    except OSError:
+        survived = False
+    checks += [
+        ("a file the agent wrote into log/ under a name of its own is left alone",
+         open(os.path.join(d, "log", "summary.txt")).read() == "the agent's own\n"),
+        ("a load sample that cannot be written does not end the deadline loop", survived),
+        ("summary: Claude Code's turns and cost", said(d).startswith("blind-run: 3 turns, $0.50, ")),
+        ("summary: minutes are wall time, not the result's duration_ms", bool(minutes) and float(minutes.group(1)) < 0.5),
+        ("summary: the load is named", "1-minute load median " in said(d)),
+        ("the load file: a header, then a sample at launch and one at exit",
+         samples(d)[0] == ["time", "load1", "load5", "load15"] and len(samples(d)) >= 3
+         and all(len(r) == 4 for r in samples(d))),
+    ]
+    os.environ["FAKE_MODE"] = "pause"
+    rc, d = run("pause", "b", 20, ALLOW, base=os.path.join(t, "runs"))
+    checks.append(("an agent that outlives several load samples runs to its own end",
+                   rc == 0 and said(d).startswith("blind-run: 3 turns, ") and len(samples(d)) >= 5))
+    os.environ["FAKE_MODE"] = "rmload"
+    rc, d = run("rmload", "b", 20, ALLOW, base=os.path.join(t, "runs"))
+    checks.append(("an agent that removes the load file still gets its summary", rc == 0 and "no load sample" in said(d)))
+    os.environ["FAKE_MODE"] = "multi"
+    rc, d = run("multi", "b", 20, ALLOW, base=os.path.join(t, "runs"))
+    checks.append(("summary: turns sum over every result event, and cost is the last one's",
+                   rc == 0 and said(d).startswith("blind-run: 5 turns, $0.70, ")))
+    os.environ["FAKE_MODE"] = "silent"
+    rc, d = run("silent", "b", 20, ALLOW, base=os.path.join(t, "runs"))
+    checks.append(("never started exits 2", rc == 2))
+    checks.append(("the summary file says the agent never started", "the agent never started" in said(d)))
+
+    def child_stopped():
+        child = int(open(os.environ["FAKE_LOG"] + ".child").read())
+        time.sleep(0.5)
+        try:
+            os.kill(child, 0)
+            os.kill(child, signal.SIGKILL)
+            return False
+        except (ProcessLookupError, PermissionError):  # EPERM: the pid now belongs to another user's process
+            return True
+
+    os.environ["FAKE_MODE"] = "slow"
+    t0 = time.monotonic()
+    rc, d = run("slow", "b", 2, ALLOW, base=os.path.join(t, "runs"))
+    checks.append(("deadline exits 3", rc == 3))
+    checks.append(("the deadline kill comes no earlier than the deadline", time.monotonic() - t0 >= 2))
+    checks.append(("the deadline stops what the agent started", child_stopped()))
+    checks.append(("summary on a deadline kill: the ended segment's turns plus the cut one's tool calls, and its cost so far",
+                   said(d).startswith("blind-run: deadline of 2s reached after 3 turns, ") and "at least $0.30" in said(d)))
+    checks.append(("the load file: sampled every LOAD_EVERY seconds until the kill", len(samples(d)) >= 5))
+    zombie = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
+    os.waitid(os.P_PID, zombie.pid, os.WEXITED | os.WNOWAIT)  # it has exited and is not reaped: a zombie-only group
+    try:
+        stop(zombie)
+        stopped = zombie.returncode == 0
+    except OSError:
+        stopped = False
+    checks.append(("stopping an agent that exited just as its deadline passed does not crash", stopped))
+    os.environ["FAKE_MODE"] = "slowbare"
+    LOAD_EVERY = 10  # longer than the deadline: the last wait must still end at the deadline
+    t0 = time.monotonic()
+    rc, d = run("slowbare", "b", 2, ALLOW, base=os.path.join(t, "runs"))
+    took = time.monotonic() - t0
+    LOAD_EVERY = 0.5
+    checks.append(("summary on a deadline kill before any result event",
+                   rc == 3 and child_stopped() and said(d).startswith("blind-run: deadline of 2s reached after 1 turn, ")
+                   and "no cost reported" in said(d)))
+    checks.append(("the deadline kill comes on time when the sampling period is longer than the deadline",
+                   2 <= took < 6))
+    real_getloadavg = os.getloadavg
+
+    def no_load():
+        raise OSError("no load average here")
+
+    os.getloadavg = no_load
+    os.environ["FAKE_MODE"] = "ok"
+    try:
+        rc, d = run("noload", "b", 20, ALLOW, base=os.path.join(t, "runs"))
+    finally:
+        os.getloadavg = real_getloadavg
+    checks.append(("no load average: the run goes on, the load file keeps its header only, and the summary says so",
+                   rc == 0 and len(samples(d)) == 1 and "no load sample" in said(d)))
     checks.append(("messaging other sessions is disallowed", "SendMessage" in call["args"] and "ListAgents" in call["args"]))
     checks.append(("the memory index is switched off", call["memory"] == "1"))
     checks += repo_checks(t)
