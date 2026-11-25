@@ -1,0 +1,1 @@
+blind-run: 3 turns, $0.29, 0.6 min, 1-minute load median 7, max 7 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-noblind-probe-proposed/log/report.md

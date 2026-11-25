@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 10413,
-      "to": 10426,
-      "why": "Step 2's owed sentence adds a blind agent whose report says the machine's load kept it from a run it planned, so the next round re-runs it as Step 1's owed items do, rather than the review keeping a starved run as done and 0.40.0's REVERT ON counting it as a round that found nothing (owner-directed 2026-11-25, answering \"ok\" to a starved agent being run again; refuted by blind rounds)."
+      "from": 10426,
+      "to": 10493,
+      "why": "The arguments line and Step 2 gain `--no-blind`: with it, or when the user asks for a review without blind agents, Step 2 starts none of its blind agents that round, the round record says so, and none is owed for it, while an earlier round's owed agent is not run and stays owed; Step 3's blind readers still run. Owner-directed 2026-11-26 (\"can we make blind runs the default but include an optional parameter for turning them off when one wants to?\"); the agents stay on by default, so this is not the opt-in REJECTED.md's 2026-11-25 section killed."
     },
     "pr-review/posting.md": {
       "from": 2185,
@@ -43,9 +43,9 @@
       "why": "posting.md's gate fills its brackets each round and names the stacked PRs that merge first, after 47 sessions recited the bracket unfilled and 15 said 'not posted' after posting; the pre-post re-fetch covers every open PR in a stack, after six duplicate asks across one; posting waits for agents only up to their budget; per the readers' catalogs, 2026-11-19 (+51 words)"
     },
     "pr-review/blind-agents.md": {
-      "from": 288,
-      "to": 332,
-      "why": "Owner-directed, 2026-11-24 second retro: the whole-PR agent now runs every round outside CI, at --deadline 1800 with a 25-minute stop line where no per-criterion agents run, the setup of the public agents behind the price the owner chose, and is briefed with the PR's description where there is no readable ticket. The file is now read on every round outside CI."
+      "from": 332,
+      "to": 339,
+      "why": "Its opening sentence, that Step 2 starts the whole-PR agent every round outside CI, adds \"unless the user turned them off\", which pr-review 0.42.0's `--no-blind` would otherwise make false (owner-directed 2026-11-26)."
     },
     "ticket-pool": {
       "from": 5084,
@@ -81,9 +81,9 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 10426,
+    "pr-review": 10493,
     "pr-review/posting.md": 2226,
-    "pr-review/blind-agents.md": 332,
+    "pr-review/blind-agents.md": 339,
     "resolve-ticket": 8028,
     "resolve-ticket/refuter.md": 601,
     "skill-retro": 3162,

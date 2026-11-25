@@ -1,7 +1,7 @@
 # Blind agents on the PR and its acceptance criteria
 
-pr-review's Step 2 starts these, outside CI: one agent on the whole PR every round, and, where the PR's ticket
-lists acceptance criteria, one per criterion.
+pr-review's Step 2 starts these, outside CI and unless the user turned them off: one agent on the whole PR every
+round, and, where the PR's ticket lists acceptance criteria, one per criterion.
 
 - **Launch.** Use the command that *A fix you recommend is different* (pr-review's Step 3) gives, at
   `--deadline 5400`, or `--deadline 1800` for a whole-PR agent started without per-criterion agents, in the

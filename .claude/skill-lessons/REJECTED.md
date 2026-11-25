@@ -8290,3 +8290,97 @@ ticket" needs (:6043-6044), so that count is unchanged.
 - A set-aside reason naming a test that pins something else: 2 run records (#71 rounds 7 and 12), at the bar.
 - Every blind agent stays; 0.39.0's and 0.40.0's REVERT ONs now both leave out rounds with an owed agent.
 - P-A is unchanged.
+
+## 2026-11-26 (second owner-directed pass: `--no-blind` turns pr-review's blind agents off for a round) — 1 applied; two refutation rounds, six blind probes of the text; linter 18 files, 0 findings; **pr-review 0.42.0**
+
+**Evidence read.** No record has been written since this morning's pass, whose push left every file the repo holds
+under `.claude/` matching its live copy but the user-level `CLAUDE.md` (still the owner's).
+
+**The direction.** The owner asked: "Just for the sake of testing, can we make blind runs the default but include an
+optional parameter for turning them off when one wants to?" Step 2's blind agents have been the default outside CI
+since pr-review 0.40.0 (:7736-7737), so the change is the parameter.
+
+**Applied, owner-directed: pr-review 0.42.0, `--no-blind`.**
+- **The rule.** The arguments line: "With `--no-blind`, or when the user asks for a review without blind agents, Step 2
+  starts none this round; say so in the round record, and owe none for it, while an agent an earlier round owes is not
+  run and stays owed. Step 3's blind readers, of a finding or of a fix you recommend, still run." Step 2's blind-agent
+  paragraph names it beside pr-harden's exemption, and `blind-agents.md`'s opening sentence, which said the whole-PR
+  agent starts every round, adds "unless the user turned them off". The argument hint lists it.
+- **Beyond the owner's words, by the proposer:** a plain request for a review without blind agents works as the flag
+  does. The owner asked for "an optional parameter"; on 0.41.0 such a request was undecidable, read literally still
+  four agents (`probe-current-report.md`, scenario D).
+- **What it covers.** Step 2's agents, the whole-PR one and the per-criterion ones: the agents the owner's 2026-11-25
+  question called "blind runs" ("we recently added blind runs to the pr-review skill", in this session's transcript)
+  and the cost review measured. Step 3's blind readers, of a finding (:136) and of a fix the review recommends (:145),
+  keep running, and the arguments line says so, since drafts without that left readers unsure (below); whether the
+  flag should stop them too is put to the owner.
+- **For one round.** The next round starts its agents unless the flag is passed again, and owes none for the round
+  that went without. An agent an earlier round owes is not run in a round under the flag and stays owed, the branch
+  of Step 1's owed items (`SKILL.md:22`, "or say it is still owed") the arguments line now names.
+- **The REVERT ONs.** A round that started no Step 2 agent, by `--no-blind` as by the CI and pr-harden exemptions, is
+  not a round under 0.39.0's REVERT ON (:7581-7583, as amended at :8102-8108) or 0.40.0's (:7781-7787, as amended at
+  :7916-7922): it neither counts toward the three nor breaks a run. Nor is it a round under the 2026-11-25 REOPEN ONs
+  for opt-in agents and for dropping the whole-PR agent (:8048-8052): it neither extends nor breaks their runs, and its
+  cost is not in a share measured for them. 0.40.0's amended text already counts only rounds whose whole-PR agent
+  reported, so for it this adds only "nor breaks a run". 0.39.0's needs it: this morning's amendment, "counting only
+  rounds in which each of the round's Step 2 agents reported and none is owed", would hold of a round with no agent at
+  all, a CI or pr-harden round's included.
+- **Not the killed opt-in.** REJECTED.md's 2026-11-25 section killed making the agents opt-in (:8048-8049), on their
+  share of the spend and the posted comments resting on them. The default stays on here; the flag turns them off where
+  the owner asks.
+- **Measured** (`artifacts/2026-11-26-no-blind-probe/`): six blind agents that read only the skill text answered
+  scenarios. On 0.41.0, the control, `--no-blind` and a plain "skip the blind agents" were undecidable, read literally
+  still four agents. On the first draft, both started none, recorded it and owed none, and the next round started its
+  agents again; the plain request left open whether Step 3's fix refuter stops too. On the second, two scenarios the
+  first refuter raised were undecided: an earlier round's owed agent under "owe none", and Step 3's reader of a
+  finding. The third settled both, with a tension the second refuter also found: `SKILL.md:22` still let an owed item
+  be run. On the final text, all eight are decided but one 0.41.0 leaves silent as well: what a pr-harden reviewer's
+  round record says about the agents it does not start. The README gives the sentence each probe read.
+
+**Budget.** pr-review/SKILL.md goes from 10426 to 10493 words and `blind-agents.md` from 332 to 339, each with a
+`raises` entry. Nothing is retired: the flag adds a case to an exemption the paragraph already has.
+
+**Gate.** Refuters through `bin/blind-run`:
+- **`2026-11-26-retro-1126c-refute1`:** the skill change STANDS, on the 10473-word draft, before the arguments line
+  gained its owed and Step 3 sentences; the section REVISE.
+  - **Measured by the refuter:** the linter, 0 findings with the proposed files and budgets and 2 with the proposed
+    files and the old budgets, its control; the word counts; the citations.
+  - **Taken:** the 2026-11-25 REOPEN ONs that count rounds (:8048-8052); 0.40.0's REVERT ON cited as amended, with the
+    reason this morning's 0.39.0 amendment needs the sentence and 0.40.0's does not.
+  - **Probed, then taken:** its two suspected gaps, an earlier round's owed agent under the flag and Step 3's reader of
+    a finding (`probe-gh-report.md`), which the arguments line now decides.
+  - **Kept, with its reason:** the CI and pr-harden rounds in the REVERT ON sentence, which the refuter called beyond
+    the ask; this morning's amendment would otherwise count them.
+- **`2026-11-26-retro-1126c-refute2`:** the skill change STANDS; the section REVISE, with every count, citation and the
+  linter re-run.
+  - **Taken:** "is not run and" before "stays owed", its alternative to a section fix, re-probed
+    (`probe-final2-report.md`); refute1's verdict qualified by the draft it judged; the plain-request trigger named as
+    the proposer's, with its reason; "final text" where the section said "as committed"; each probe's sentence in the
+    README.
+  - **No third round:** the skill change is the refuter's own words, re-probed on all eight scenarios, and the rest
+    corrects the section's account of the gate; the earlier passes stopped on the same ground (:7828, :8033).
+
+**Observed, not yet actionable.** None new.
+
+**Still the owner's:**
+- whether `--no-blind` should also stop Step 3's blind readers, of a finding and of a fix the review recommends;
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question;
+- whether a load threshold read from `blind-run-load.tsv` makes an agent owed, once Q1's records show the load at which
+  agents lose their runs; #69's first round in this morning's section is a round it would decide;
+- whether a round that posts other comments anyway also posts the verified nits it would set aside (#71 round 9);
+- whether the reading of "a defect" this morning's measurement used becomes part of 0.39.0's amended REVERT ON, the
+  survivor and base-shared readings each deciding its verdict on the record when #57's first round counts, and
+  whether it also governs 0.40.0's (:7782-7784), which uses the same words;
+- whether a ticket whose only criteria are an "Expected" section lists acceptance criteria, for pr-review's
+  per-criterion agents and for 0.39.0's REVERT ON: #57's and #68's reviews started agents on one (O3-6248, O3-6261);
+- whether to run the pass the set-aside-reason lesson in this morning's section earns now, rather than at the next
+  retro.
+
+**Running parked counts:** unchanged from this morning's section.

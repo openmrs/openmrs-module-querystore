@@ -1,13 +1,13 @@
 ---
 name: pr-review
 description: Review a GitHub pull request — check that the change actually resolves the issue it claims to and by the best approach available rather than merely one that works, verify every finding empirically, and write clearly-labeled review comments, optionally posting them inline on GitHub or staging them as a pending draft review the user finishes in the GitHub UI. Use when asked to review a PR, post review findings as PR comments, or stage them for approval. Trigger phrases include "review PR", "review this pull request", "post review comments", "stage review comments".
-argument-hint: <pr-number-or-url> [--post|--stage]
-version: 0.41.0
+argument-hint: <pr-number-or-url> [--post|--stage] [--no-blind]
+version: 0.42.0
 ---
 
 # PR review — verified findings, unambiguous comments
 
-Arguments: `$ARGUMENTS` — a PR number or URL (if omitted, run `gh pr list` and ask which one), plus optionally one of `--post` (publish the review to GitHub after composing it) or `--stage` (create it on GitHub as a **pending draft review** — nothing reaches the PR author unless the user submits it from the GitHub UI; Step 5 owns the semantics and mechanics). If both flags are passed, stage — it is the reversible reading of an ambiguous ask.
+Arguments: `$ARGUMENTS` — a PR number or URL (if omitted, run `gh pr list` and ask which one), plus optionally one of `--post` (publish the review to GitHub after composing it) or `--stage` (create it on GitHub as a **pending draft review** — nothing reaches the PR author unless the user submits it from the GitHub UI; Step 5 owns the semantics and mechanics). If both flags are passed, stage — it is the reversible reading of an ambiguous ask. With `--no-blind`, or when the user asks for a review without blind agents, Step 2 starts none this round; say so in the round record, and owe none for it, while an agent an earlier round owes is not run and stays owed. Step 3's blind readers, of a finding or of a fix you recommend, still run.
 
 ## Step 1 — Gather
 
@@ -35,7 +35,7 @@ Line-level review of code that shouldn't exist wastes both sides' time, so settl
 
 The PR's own description is acceptance criteria too, and with no ticket and no repro the only ones. A "key guarantees", "review focus", or "what changed" list has told you exactly what to test, and working through it one claim at a time is the highest-yield pass available. Read each guarantee as the general statement it is rather than as a description of the diff: "a handled backend failure cannot be reported as a complete chart" is a claim about every backend, and the one the author just fixed is the least likely to be the one that breaks it. Those lists are also where an author writes down what they believe rather than what they checked, so a guarantee with no test behind it is worth probing even when the code on the screen looks right.
 
-**Outside CI, have blind agents try to break the PR**, unless you are a reviewer pr-harden started. Once per round, on the head it reviews (a head pushed mid-round waits for the next round), start one on the whole PR and, where the PR's ticket lists acceptance criteria, one per criterion, grouping criteria so a round starts no more than six, briefed and launched as `blind-agents.md`, beside this file, says. Before reading any of these agents' reports, append to the round record what your own review has found. Reproduce or refute each defect they report before the verdict. Until each has reported or passed its deadline, post nothing but the blockers Step 1's watch bullet posts on an approval, counting one the PR already had when the round started. One past its deadline, that reports nothing, or whose report says the machine's load kept it from a run it planned, is owed (Step 5).
+**Outside CI, have blind agents try to break the PR**, unless you are a reviewer pr-harden started or the user turned them off (`--no-blind`, above). Once per round, on the head it reviews (a head pushed mid-round waits for the next round), start one on the whole PR and, where the PR's ticket lists acceptance criteria, one per criterion, grouping criteria so a round starts no more than six, briefed and launched as `blind-agents.md`, beside this file, says. Before reading any of these agents' reports, append to the round record what your own review has found. Reproduce or refute each defect they report before the verdict. Until each has reported or passed its deadline, post nothing but the blockers Step 1's watch bullet posts on an approval, counting one the PR already had when the round started. One past its deadline, that reports nothing, or whose report says the machine's load kept it from a run it planned, is owed (Step 5).
 
 Ways a technically-correct change misses:
 
