@@ -1,0 +1,12 @@
+# --deadline control: pr67-r1-whole ran at --deadline 1800 and its round record says it hit that deadline
+# (~/.claude/pr-review-rounds/openmrs__openmrs-module-stockmanagement__67.md:15). Expected KILL at 1800, not at 5400.
+$ criteria_rounds_owed.py --deadline 1800 2026-11-25:pr67-r1
+== pr67-r1 (2 agents) on 2026-11-25
+  pr67-r1-whole                  30.1 min  KILL LOADHIT
+      load: ...The suite got stuck in `StockManagementDaoTest` because the machine is shared and busy. Running just the new test now. ...
+  pr67-r1-whole2                  3.8 min  -
+$ criteria_rounds_owed.py 2026-11-25:pr67-r1
+== pr67-r1 (2 agents) on 2026-11-25
+  pr67-r1-whole                  30.1 min  LOADHIT
+      load: ...The suite got stuck in `StockManagementDaoTest` because the machine is shared and busy. Running just the new test now. ...
+  pr67-r1-whole2                  3.8 min  -

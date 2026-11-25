@@ -1,0 +1,20 @@
+base: launch/as written 2; launch/amended 2; last_write/as written 2; last_write/amended 2
+pr71-r8      defect none    -> launch/as written: MET (pr71-r8, pr57-r1, pr69)
+pr71-r8      defect none    -> launch/amended: MET (pr71-r8, pr57-r1, pr69)
+pr71-r8      defect none    -> last_write/as written: MET (pr71-r8, pr57-r1, pr69)
+pr71-r8      defect none    -> last_write/amended: MET (pr71-r8, pr57-r1, pr69)
+sm77-r1      defect none    -> launch/as written: MET (pr57-r1, pr69, sm77-r1)
+sm77-r1      defect none    -> last_write/as written: MET (sm78-r1, sm77-r1, sm79-r1)
+sm80-r1      defect none    -> launch/as written: MET (sm80-r1, sm79-r1, sm78-r1)
+sm83-r1      defect none    -> launch/as written: MET (sm79-r1, sm78-r1, sm83-r1)
+pr85-r1      defect none    -> last_write/as written: MET (pr57-r1, pr69, pr85-r1, sm78-r1)
+pr85-r1      defect none    -> last_write/amended: MET (pr57-r1, pr69, sm78-r1)
+rounds whose single flip changes no verdict are not listed
+== readings taken the other way
+   a survivor is no defect                  launch/as written MET; launch/amended MET; last_write/as written MET; last_write/amended MET
+   a set-aside item is no defect            launch/as written MET; launch/amended not met; last_write/as written MET; last_write/amended not met
+   a defect the base shares is no defect    launch/as written not met; launch/amended not met; last_write/as written MET; last_write/amended MET
+== readings taken the other way without pr57-r1
+   a survivor is no defect                  launch/as written MET; launch/amended not met; last_write/as written not met; last_write/amended not met
+   a set-aside item is no defect            launch/as written not met; launch/amended not met; last_write/as written MET; last_write/amended not met
+   a defect the base shares is no defect    launch/as written not met; launch/amended not met; last_write/as written MET; last_write/amended not met

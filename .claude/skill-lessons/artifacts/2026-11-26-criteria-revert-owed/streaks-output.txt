@@ -1,0 +1,10 @@
+== ordered by first agent launch
+   pr71-r8:bb pr57-r1:cc pr69:cc sm77-r1:bb sm80-r1:bb sm79-r1:cn sm78-r1:cc sm83-r1:bb pr85-r1:bb sm68:cn pr71-r9:bb sm80-r2:bb pr71-r10:bb pr6502-r1:bb core6835-r3:bb pr71-r11:bb pr71-r12:bb
+   as written: longest run 2 (pr57-r1, pr69) on 2 PR(s) -> not met
+   amended   : longest run 2 (pr57-r1, pr69) on 2 PR(s) -> not met
+== ordered by agents' last write
+   pr71-r8:bb pr57-r1:cc pr69:cc pr85-r1:bb sm78-r1:cc sm77-r1:bb sm79-r1:cn sm80-r1:bb sm83-r1:bb sm68:cn sm80-r2:bb pr71-r9:bb pr6502-r1:bb core6835-r3:bb pr71-r10:bb pr71-r11:bb pr71-r12:bb
+   as written: longest run 2 (pr57-r1, pr69) on 2 PR(s) -> not met
+   amended   : longest run 2 (pr57-r1, pr69) on 2 PR(s) -> not met
+rounds: 17; with an owed agent: 9; of those, broken by a defect an agent reported: 7; counted as written and neither under the amendment: sm79-r1, sm68
+owed agents: 27 (6 by a deadline kill)

@@ -8079,3 +8079,214 @@ cap until the load is on record, and to make three fixes either way. They said "
 - "Seen, then set aside" as outside the ticket is unchanged: run records 2, measurement sightings 12.
 - Every blind agent stays, the whole-PR one included; 0.41.0 changes only what makes one owed.
 - P-A is unchanged.
+
+## 2026-11-26 (owner-directed pass: 0.39.0's REVERT ON takes the owed rule) — 1 applied, its reading of "a defect" put to the owner; seven refutation rounds, the first run twice; linter 18 files, 0 findings; no skill file changed
+
+**Evidence read.**
+- Before the read, every file the repo holds under `.claude/` matched its live copy except the user-level `CLAUDE.md`
+  (still the owner's) and `2026-11-25-pr-review-openmrs-module-stockmanagement-71.md`, which gained a record after the
+  last push. Live only, outside the pipeline's run state: `kill-session-scratchpad-procs.sh` with its log (still the
+  owner's), and the Anthropic skills Claude Code syncs into `skills/synced/` and `skills/.trash/`, which are not this
+  repo's.
+- Records since `LAST` (2026-11-25) that no section names: one, #71 round 12, appended at 23:43 to that file.
+- `confidential/` was read for names only.
+- The measurement below read the round records in `~/.claude/pr-review-rounds/` and the agents' folders in
+  `~/.claude/blind-runs/`, which skill-retro's Step 1 does not read.
+
+**The direction.** The 2026-11-25 pass left with the owner "whether 0.39.0's REVERT ON (:7581-7583) leaves out rounds
+whose agents are owed, as 0.40.0's now does" (:8075), put to them as "whether 0.39.0's revert condition for the
+per-criterion agents gets the same owed rule". They answered "yes, apply the owed rule to 0.39.0 too".
+
+**Applied, owner-directed: 0.39.0's REVERT ON (:7581-7583), amended.** No skill file changes: pr-review 0.41.0's owed
+sentence (`SKILL.md:38`) already covers every Step 2 agent, per-criterion ones included.
+- **When:** as at :7581-7583, counting only rounds in which each of the round's Step 2 agents reported and none is
+  owed. An agent counts by its last run in the round that reported and is not owed, a re-run after a kill included, as
+  0.40.0's amendment counts `pr67-r1-whole2` (:7917-7919); no round with per-criterion agents has re-run one yet. A
+  round with an agent still owed when the round ends neither counts toward the three nor breaks a run of them; the
+  next round's own agents count for that next round. A round in which any of its agents, owed or not, reported a
+  defect in the PR's change that is missing from the findings the review recorded before it read their reports
+  (:7582-7583), and that the review reproduced, as the owed rule the owner was shown reads, breaks the run.
+- **How this pass's measurement read "a defect", for the owner to decide:** "reproduced" is not in :7582-7583; it is in
+  the owed rule the owner was shown ("which the review reproduced and hadn't already recorded") and in `SKILL.md:38`
+  ("Reproduce or refute each defect they report"). The rest is this pass's reading of :7582-7583's "defect", which the
+  evidence below applies and the owner has not agreed to, so it is not part of the amended test:
+  - "the review" is this round's (`SKILL.md:38`, "what your own review has found"), so an earlier round's set-aside
+    item that this round's agents re-raise counts unless this round's review recorded it first; no round's class turns
+    on it;
+  - a reproduced item set aside for another reason, such as inputs no caller sends, counts (:7761, "A reproduced
+    defect can still be set aside");
+  - a nit, or what the ticket requires, does not, which #69's first round relies on (its round record :14, :16) and
+    #78's in part (:18);
+  - one the base shares counts when the PR rewrote the code that carries it, as #85's E (its round record :29);
+  - where the ticket asks for tests, a survivor whose change a caller can see counts: #71 only adds tests, for
+    coverage criteria (`SKILL.md:128`; its round record :2), and #83's criteria include "behaviour unchanged and
+    covered by tests" (its round record :2). #71's rounds 8 and 10 to 12 rest on it (its round record :333, :435,
+    :509, :565), and so does #83's first round (:41, :47).
+- **Owed, and how to check it:** as in 0.40.0's amendment (:7923-7939), for each of the round's agents and not its
+  whole-PR agent alone. The deadline the fallback reads is the round record's, else `blind-agents.md`'s 5400 s for a
+  round with per-criterion agents. `artifacts/2026-11-26-criteria-revert-owed/scripts/criteria_rounds_owed.py
+  [--deadline SECS] <date>:<round>` lists each run's kill, missing report and load words, a re-run included. Read
+  every agent's report in full, the pattern's hits being leads only (:7934), and count an agent by its last run in the
+  round.
+- **Evidence:** the 17 rounds with per-criterion agents that ended between 0.39.0's push (2026-11-24 20:35) and
+  2026-11-26, #80's second when its PR closed, with the lines of each round record the reading rests on
+  (`artifacts/2026-11-26-criteria-revert-owed/criteria-rounds.tsv`, `streaks-output.txt`, `sensitivity-output.txt`).
+  One more, started 2026-11-26 on a private-ticket PR, was still running. A round counts here where its review
+  started per-criterion agents. #57's ticket (O3-6248) and #68's (O3-6261) never say "acceptance", and their only
+  criteria are an "Expected" section, which their reviews took as the criteria (round records :9, :6;
+  `tickets-expected-sections.txt`); read strictly, :7581 leaves both out, which only shortens runs.
+  - 9 rounds had an agent owed under 0.41.0's sentence, 27 agents in all: 6 killed at the deadline, 1 that wrote no
+    report before the usage limit stopped it, and 20 whose reports name the load and say a run they planned did not
+    run or finish because it slowed them, directly or by using up their time. The reports of the agents not marked
+    owed were scanned with a wider net than the pattern and each sentence it found read (`scripts/unowed_scan.py`);
+    that found sm79-r1-ac1's "too loaded", which the pattern misses.
+  - 7 of those 9 break a run anyway, by a defect an agent's report carried; in 6 of them an owed agent carried it.
+  - Neither test is met on the record: as written and as amended, the longest run is #57's and #69's first rounds, in
+    the order the rounds' agents launched and in the order they last wrote, to the second. The REVERT ON names no order
+    for rounds that overlap. The amendment takes #79's and #68's first rounds out of the count. "As written" applies
+    the reading above too; read literally, :7582-7583 would also let a report the review did not reproduce break a
+    run, which only adds breaks.
+  - **Where a reading decides it** (`sensitivity-output.txt`), each reading above taken the other way:
+    - Each of three readings read the other way, so that a survivor, a set-aside item or a defect the base shares on
+      code the PR rewrote is no defect, meets the REVERT ON as written in at least one order, whether #57's first
+      round counts or not. The nit-and-ticket reading read the other way only adds breaks.
+    - Two of them, the survivor and base-shared readings, meet the amended test, and only with #57's first round
+      counted; left out, as a strict reading of :7581 leaves it, none does.
+    - Round by round, five rounds read as finding no defect would each meet it as written, three of them rounds whose
+      every agent was owed (#77's, #80's and #83's first); as amended, two would (#71's round 8 and #85's first).
+  - **Checks:** `criteria_rounds_owed.py --calibrate` gives the state each round record gives nine control agents
+    (three kills, two clean finishes, two usage-limit stops, a load hit, a clean report), and the expected state for
+    four synthetic folders that test the summary file; with `--deadline 1800` it finds pr67-r1-whole's kill, which
+    the default 5400 does not (`criteria-rounds-owed-deadline-control.txt`). `streaks.py --self-test` passes 8 of 8,
+    and each of five mutations of `streaks.py` turns it red (`streaks-mutations-output.txt`).
+- **Not in the test, and the owner's:** as at :7952-7959, and here it reaches a counted round. #69's first round counts
+  under the amendment though its four agents blame a time limit for runs the load slowed (:7953-7956). It is in the
+  longest run, and in both runs of three that a single reading makes under the amendment. #78's first round, in one
+  of those, counts with sm78-r1-whole read as not owed: its report names the load as slowing a test class and a build
+  its time limit stopped, which it then ran again. With that agent owed, the run #85's E would make falls to two.
+
+**Budget.** No SKILL.md or role file changes, so no budget moves and nothing is retired.
+
+**Gate.** Refuters through `bin/blind-run`:
+- **`2026-11-26-retro-1126-refute1`:** dropped 2.5 minutes in, with no report, when the background task that started it
+  ended with exit 144. No hook fired, and the cause was not established; #71's round-9 record logs the same exit as
+  "cause unknown". Rerun in a session of its own.
+- **`2026-11-26-retro-1126-refute1b`:** REVISE.
+  - **Measured by the refuter:** the first draft counted a reproduced item that was set aside and told to the user as a
+    defect in #80's second round and #6835's third, and not in #77's first, where ac3 reported it on its own criterion.
+    Counted alike, neither test is met in either order; the first draft said the record met the REVERT ON as written.
+  - **Taken:**
+    - one reading of "a defect" in every round, a reproduced one set aside for another reason counting (:7761), which
+      moves #77's first round and deletes the first draft's claim;
+    - that reading written into **When**, with "reproduced", and named as going beyond the owner's words;
+    - #71 round 12's OF1 and E1, and the round that set F1 aside;
+    - the set-aside-reason lesson moved out of **Observed**, and the first draft's claim that the owner scoped this
+      pass deleted;
+    - `criteria_rounds_owed.py` taking rounds as arguments, and its fallback running on a summary that opens otherwise
+      (:7929), with four synthetic folders that test it.
+  - **Not taken:** marking pr71-r9-lifecycle, pr71-r10-unchanged and sm78-r1-whole owed. Their reports blame a budget
+    or a time limit, the gap :7952-7959 names, and no verdict turns on them (`sensitivity-output.txt`).
+  - **Added by the proposer after it:** the single-reading check, `scripts/sensitivity.py`.
+- **`2026-11-26-retro-1126-refute2`:** REVISE, with every figure re-derived.
+  - **Measured by the refuter:** `streaks.py` tested only the longest run, so a met run after a longer run on one PR
+    read as not met (four rounds on one PR, a break, three rounds on three PRs).
+  - **Taken:**
+    - `streaks.py` testing every run, with that case in its self-test and a fifth mutation it catches;
+    - :7582-7583's "findings the review recorded" restored in **When**, where the first revision had "what the round
+      record held", so an earlier round's set-aside item that this round's agents re-raise counts; a round-12 item
+      under **Observed** that rested on the replaced wording, deleted;
+    - the nit and ticket-required exclusions named as beyond the owner's words, with the rounds that rely on them, and
+      "reproduced" credited to the owed rule the owner was shown;
+    - one owed reading for every load report, which marks pr71-r9-lifecycle and pr71-r10-unchanged owed as well;
+    - `criteria_rounds_owed.py --deadline`, and a round named once per date.
+  - **Its finding on At the bar:** holding the proposal for the next pass breaks no rule, with :1598 and :1628 as
+    precedent (withdrawn in round 4: those items were blocked).
+- **`2026-11-26-retro-1126-refute3`:** REVISE. It re-ran the calibration, the deadline control and the five mutations,
+  and read each of the 19 load sentences marked owed.
+  - **Taken:**
+    - the reading #85's first round rests on, a defect on code the PR rewrote counting though the base has it too
+      (#85's round record :29), written into **When** as the refuter asked, with "code" for its "line" so that a
+      reformatted line does not count, and listed beyond the owner's words with "this round's review";
+    - #6502's and #83's reproduction lines in the TSV.
+  - **Answered, no change:** whether #57's "user-scope half untested" was reproduced and set aside. The review judged it
+    no defect, the per-user cache being gone and its removal pinned by M1 (#57's round record :14, :20); the TSV row
+    now says so.
+- **`2026-11-26-retro-1126-refute4`:** REVISE; the verdict survived its re-run.
+  - **Measured by the refuter:** sm79-r1-ac1's report says the machine was too loaded for any of its Maven runs to
+    finish, which the pattern misses; the revision's "read each load hit in full" was narrower than 0.40.0's "read the
+    report in full" (:7934).
+  - **Taken:**
+    - sm79-r1-ac1 owed (27 agents, 20 by report), and a wider scan of every unowed agent's report, which found no other;
+    - 0.40.0's "read every report in full" restored in **Owed, and how to check it**;
+    - the test-gap reading named beyond the owner's words, and the readings put to the owner, with whether they govern
+      0.40.0's REVERT ON too;
+    - sm78-r1-whole named under **Not in the test**;
+    - the rounds counted as under 0.39.0's rule defined, with #57's and #68's expected-behaviour criteria;
+    - the **Observed** line on round 12, which said none of its set-asides was outside the ticket, corrected;
+    - a clause under **At the bar** citing :1598 and :1628 as precedent, deleted: those items were blocked, not held.
+- **`2026-11-26-retro-1126-refute5`:** REVISE, with no verdict changed.
+  - **Measured by the refuter:** both amended single-reading runs depend on #57's first round; #83's first round rests
+    on the test-gap reading too, so the round-by-round list counted that reading twice.
+  - **Taken:** the readings' effect stated reading by reading (`sensitivity.py`'s second part) as well as round by
+    round, with #57's dependence; #83 under the test-gap reading, with `SKILL.md:128`'s definition; the **Observed**
+    wording; "ended" for #80's second round; refute2's withdrawn precedent marked.
+  - **Checked by the proposer after it:** #57's and #68's tickets on the public tracker, which have an "Expected"
+    section and none named acceptance criteria, put to the owner.
+- **`2026-11-26-retro-1126-refute6`:** REVISE, with no verdict changed.
+  - **Measured by the refuter:** #83's and #68's first rounds last wrote in the same minute, and to the second #83's
+    comes first, which drops one last-write line from the round-by-round sensitivity.
+  - **Taken:**
+    - the TSV's times to the second (`scripts/round_times.py`), and both scripts re-run;
+    - #83's untested outputs credited to `SKILL.md:126`, so the survivors reading covers #71's tests-only rounds
+      only;
+    - the readings beyond the owner's words moved out of **When**, which now holds only what the owner was shown, as
+      0.40.0's amendment did (:7920-7922), into a bullet the owner decides;
+    - "as written" said to apply the same reading;
+    - the reason for holding the set-aside-reason proposal stated as the proposer's choice, and its timing put to the
+      owner.
+- **`2026-11-26-retro-1126-refute7`:** REVISE, two small objections, no figure wrong and no verdict changed.
+  - **Taken:** its wording for **When**, which credits "reproduced" to the owed rule the owner was shown and not to
+    :7582-7583; and #83's first round back under the survivor reading, its ticket asking for "covered by tests", where
+    round 6 had credited `SKILL.md:126`, which covers a behaviour change the PR introduces. Re-run, the survivor reading
+    meets the test as written without #57's first round too.
+  - **No eighth round:** both changes are the refuter's, the first its own words and the second one of the two options
+    it gave, re-run through `sensitivity.py`; the 2026-11-24 and 2026-11-25 passes stopped on the same ground
+    (:7828, :8033).
+
+**At the bar, not proposed in this pass:** a set-aside reason that names a test which pins something else, found when a
+blind reviewer re-raised the item: #71 round 7's B4 ("the two-role test pins the APPROVE-gated ones"; that test uses a
+receipt, which cannot be dispatched), and round 12's F1 (PL2 pins `getCompleteLocationTree`, not the method's own child
+mapping and tag filter) and record filters (RP1 pins `if (!hasPrivilege)` only). 2 run records, two separate events, so
+Step 3 says it earns a proposal; round 7's half was logged as observed at :7676-7677, and pr-review has no sentence on
+checking a set-aside reason. Not proposed in this pass, by the proposer's choice: this pass applies one owner
+direction, and a new pr-review rule needs its own design, budget and refutation rounds. The proposal is owed to the
+next pass.
+
+**Observed, not yet actionable.** None new. Round 12 set O3-6311's three report filters aside as a follow-up (#71's
+round record :531, :547). No maintainer has raised them, which the REOPEN ON of "seen, then set aside as outside the
+ticket" needs (:6043-6044), so that count is unchanged.
+
+**Still the owner's:**
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question;
+- whether a load threshold read from `blind-run-load.tsv` makes an agent owed, once Q1's records show the load at which
+  agents lose their runs; #69's first round, above, is a round it would decide;
+- whether a round that posts other comments anyway also posts the verified nits it would set aside (#71 round 9);
+- whether the reading of "a defect" this pass's measurement used becomes part of 0.39.0's amended REVERT ON, the
+  survivor and base-shared readings each deciding its verdict on the record when #57's first round counts, and
+  whether it also governs 0.40.0's (:7782-7784), which uses the same words;
+- whether a ticket whose only criteria are an "Expected" section lists acceptance criteria, for pr-review's
+  per-criterion agents and for this REVERT ON: #57's and #68's reviews started agents on one (O3-6248, O3-6261);
+- whether to run the pass the set-aside-reason lesson above earns now, rather than at the next retro.
+
+**Running parked counts:**
+- "Seen, then set aside" as outside the ticket is unchanged: run records 2, measurement sightings 12.
+- A set-aside reason naming a test that pins something else: 2 run records (#71 rounds 7 and 12), at the bar.
+- Every blind agent stays; 0.39.0's and 0.40.0's REVERT ONs now both leave out rounds with an owed agent.
+- P-A is unchanged.

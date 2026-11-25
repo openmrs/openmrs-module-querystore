@@ -1,0 +1,13 @@
+  pr71-r9-lifecycle              85.4 min  LOADHIT   <- expected LOADHIT (its report: builds took ~10 min each under machine load)
+  pr71-r10-balances              48.5 min  -   <- expected not killed (#71 record :433, '48.5 min')
+  pr57-r1-crit                   25.5 min  -   <- expected not killed (#57 record :27, '25.5 min')
+  pr6502-r1-ac145                17.6 min  -   <- expected reported, no load words (#6502 record :21)
+  sm80-r1-behaviour              90.0 min  KILL LOADHIT   <- expected KILL (#80 record :20)
+  sm80-r1-privileges             90.0 min  KILL   <- expected KILL (#80 record :20)
+  sm80-r1-whole                  90.0 min  KILL LOADHIT   <- expected KILL (#80 record :20, 'hit the 5400 s deadline (exit 3)')
+  2026-11-25-sm80-r1-refute       1.1 min  NOREPORT   <- expected NOREPORT (usage limit, per its round record)
+  2026-11-25-esm2022r2-wholepr    3.6 min  NOREPORT   <- expected NOREPORT (usage limit, per its round record)
+  synthetic: no summary file                  KILL=True   <- expected KILL=True  ok
+  synthetic: summary the agent wrote          KILL=True   <- expected KILL=True  ok
+  synthetic: blind-run's own line, finished   KILL=False   <- expected KILL=False  ok
+  synthetic: blind-run's own line, a kill     KILL=True   <- expected KILL=True  ok

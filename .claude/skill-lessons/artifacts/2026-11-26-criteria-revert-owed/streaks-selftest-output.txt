@@ -1,0 +1,9 @@
+ok   three counting rounds on two PRs: run 3, met
+ok   three counting rounds on one PR: run 3, not met
+ok   a break ends the run: run 2, not met
+ok   as written, an owed round counts: run 3, met
+ok   amended, an owed round neither counts nor breaks: run 3, met
+ok   amended, an owed round that found a defect breaks: run 2, not met
+ok   amended, owed rounds alone are no run: run 0, not met
+ok   a met run after a longer one-PR run: run 3, met
+8/8 passed

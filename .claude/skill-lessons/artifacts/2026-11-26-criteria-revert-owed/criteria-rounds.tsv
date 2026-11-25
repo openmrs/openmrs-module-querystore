@@ -1,0 +1,42 @@
+# The 17 pr-review rounds that started per-criterion blind agents and ended between pr-review 0.39.0's push
+# (2026-11-24 20:35 +03:00) and 2026-11-26, sm80-r2 when its PR closed (#80's round record :75-76). One more, started
+# 2026-11-26 on a private-ticket PR, was still running and is left out. pr57-r1's and sm68's reviews took a ticket's
+# "Expected" section as its criteria; neither ticket (O3-6248, O3-6261) has a section named acceptance criteria.
+#
+# launch / last_write: the earliest log/BRIEF.md and latest log/out.jsonl mtime among the round's Step 2 agents
+#   (~/.claude/blind-runs/<date>-<agent>/), local time +03:00, to the second (scripts/round_times.py).
+# owed: each agent pr-review 0.41.0's sentence (SKILL.md:38) makes owed, from criteria-rounds-owed-output.txt and
+#   each LOADHIT report read in full: K killed at its deadline, N no report, R its report names the machine's load
+#   and says a run it planned did not run or finish because the load slowed it, directly or by using up its time
+#   budget or limit. "-" none. The reports of the agents not marked owed were scanned with a wider net
+#   (scripts/unowed_scan.py, unowed-scan-output.txt) and each sentence it found read: that added sm79-r1-ac1 ("the
+#   machine was too loaded for any of my Maven runs to finish"), which the pattern misses. Read as not owed:
+#   sm78-r1-whole, whose report names the load as slowing a test class and a build its time limit stopped and that it
+#   then ran again, and gives no reason for what it did not run; and pr69-ac1-fresh, whose "too slow to finish in the
+#   time" does not name the load (the gap REJECTED.md :7953-7956 names for #69's agents).
+# defect_by: the agents whose own report first carried a defect in the PR's change that the review reproduced and
+#   that was missing from the findings this round's review recorded before it read the reports. An earlier round's
+#   set-aside item that this round's agents re-raise counts unless this round's review recorded it first. One the
+#   review then set aside as unlikely, unreachable or low in impact still counts (REJECTED.md :7761, "A reproduced
+#   defect can still be set aside"). Not counted: an item the review had recorded first ("independently",
+#   "re-found", "= my"), one it found pre-existing or outside the PR's change, one the ticket requires, a nit, or one
+#   it did not reproduce. One also on the base counts when the PR rewrote the code that carries it (pr85-r1). "-" none.
+# record: lines of ~/.claude/pr-review-rounds/<owner>__<repo>__<n>.md the two columns rest on.
+round	pr	launch	last_write	owed	defect_by	record
+pr71-r8	stockmanagement#71	2026-11-24T22:30:44	2026-11-24T23:25:32	-	balances,permissions,lifecycle	:325-333 (scoped reads, transaction search, NEW-state paths survive the whole suite), :342ff posted
+pr57-r1	stockmanagement#57	2026-11-25T00:15:52	2026-11-25T00:41:29	-	-	:6,:11,:13 own (StockRuleResource field, core-3.x port); :20,:27 agents re-found them; whole's "user-scope half untested" judged no defect, the per-user cache being gone and its removal pinned by M1 (:14, :20); rest nits or pre-existing
+pr69	stockmanagement#69	2026-11-25T00:24:51	2026-11-25T01:41:54	-	-	:14 whole re-found both own findings; :15-17 ac agents nothing new or set aside; :35 set aside
+sm77-r1	stockmanagement#77	2026-11-25T00:25:03	2026-11-25T01:55:06	whole:K,ac1:K,ac2:R,ac3:R	ac3	:24 ac3, briefed on "behave as before": offset-less values move by an hour (tz data source, EST/MST); :26 reproduced; :25, :47 set aside as reaching no in-tree caller
+sm80-r1	stockmanagement#80	2026-11-25T00:32:44	2026-11-25T02:02:57	whole:K,privileges:K,behaviour:K,structure:R	whole,behaviour	:20 "New: voided-filter exclusion unpinned; .trim() ... (whole + behaviour)"; :36, :40 posted D2 and T
+sm79-r1	stockmanagement#79	2026-11-25T00:35:32	2026-11-25T01:57:40	whole:R,ac1:R,ac2:R,ac3:R	-	:19 whole's items = own or set aside; :30 ac3 re-found own (a)
+sm78-r1	stockmanagement#78	2026-11-25T00:36:16	2026-11-25T01:46:55	-	-	:17-18 criteria no miss, lead set aside; :21 whole no defect; :26 the review's own NEW finding
+sm83-r1	stockmanagement#83	2026-11-25T00:36:57	2026-11-25T02:07:08	behaviour:K,priv:R,whole:R	behaviour	:31 behaviour read-found "rewritten display fields untested"; :41 reproduced by mutation (MUT2-5 survive the suite); :47 posted (R938)
+pr85-r1	stockmanagement#85	2026-11-25T00:43:28	2026-11-25T01:43:45	c14:R	c2	:18 c2's new lead: a blank search limit -> NPE on the PR's rewritten read, against its description's "blank means no limit"; :29 reproduced on head and base, "Comment E holds (master same; the line is rewritten and parseOptionalInteger exists to produce that null)"; :45 posted (E)
+sm68	stockmanagement#68	2026-11-25T01:11:07	2026-11-25T02:07:59	crit:N,whole:R	-	:16-17 whole's items pre-existing, set aside; :24 crit stopped on the usage limit, no report, nothing introduced by the PR
+pr71-r9	stockmanagement#71	2026-11-25T11:41:32	2026-11-25T13:06:54	balances:R,lifecycle:R,unchanged:R	unchanged,permissions	:386 first reports (locale; record filters); :399-402 posted search (RP1) and locale
+sm80-r2	stockmanagement#80	2026-11-25T11:43:18	2026-11-25T12:56:33	behaviour:R,privileges:R,whole:R	privileges	:66 "privileges agent NEW: proxy privilege ... leaks"; :71 reproduced, set aside for posting, told to the user
+pr71-r10	stockmanagement#71	2026-11-25T17:21:13	2026-11-25T18:26:22	whole:R,lifecycle:R,unchanged:R	balances,whole,permissions	:435 "New, planned to post" (ml, ae, sub, src); :455-460 posted
+pr6502-r1	openmrs-core#6502	2026-11-25T17:30:42	2026-11-25T17:57:04	-	ac23	:23 OutOfMemoryError at login; :26 reproduced on the merged tree, base logs in; :38 posted as a question
+core6835-r3	openmrs-core#6835	2026-11-25T17:32:01	2026-11-25T18:10:29	-	fresh	:142-146 move case reproduced (master correct), set aside (no shipped caller moves parts), told to the user
+pr71-r11	stockmanagement#71	2026-11-25T20:36:40	2026-11-25T21:17:23	-	lifecycle,permissions,balances	:487 "New, being measured: NC, ND, SG, PL"; :504ff posted
+pr71-r12	stockmanagement#71	2026-11-25T22:34:57	2026-11-25T23:27:48	-	permissions,lifecycle,balances	:530 OF1 and re-raised SM4 (lifecycle); :540 re-raised F1, and E1 (balances); :543 TL1 and re-raised record filters (permissions), none in this round's own findings (:522-526); :546, :557ff posted (h, of, sm4, f, e)

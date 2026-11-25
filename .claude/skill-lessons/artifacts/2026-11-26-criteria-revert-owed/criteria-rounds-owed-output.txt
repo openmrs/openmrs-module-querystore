@@ -1,0 +1,106 @@
+== pr71-r8 (5 agents)
+  pr71-r8-balances               40.8 min  -
+  pr71-r8-lifecycle              47.4 min  -
+  pr71-r8-permissions            45.2 min  -
+  pr71-r8-unchanged              54.6 min  -
+  pr71-r8-whole                  46.3 min  -
+== pr71-r9 (5 agents)
+  pr71-r9-balances               75.0 min  LOADHIT
+      load: ...Two more mutations turned out partial or not run, because the machine slowed and I hit the 75-minute stop.  ## 1. Balances wit...
+  pr71-r9-lifecycle              85.4 min  LOADHIT
+      load: ...ver the 75-minute budget: the builds took about 10 minutes each under machine load. One gap in the evidence: **my control mutation d...
+  pr71-r9-permissions            65.4 min  -
+  pr71-r9-unchanged              61.6 min  LOADHIT
+      load: ...not cached in a static field.  ## Not run - **JDK 8, 11 and 21:** the machine was at load around 75 from other sessions' builds. The JDK 8 ...
+  pr71-r9-whole                  72.2 min  -
+== pr71-r10 (5 agents)
+  pr71-r10-balances              48.5 min  -
+  pr71-r10-lifecycle             60.8 min  LOADHIT
+      load: ...heck`.  I stopped there to stay inside the ~75 minutes: the machine's load average was 55–85, so each full-suite build took about 7....
+  pr71-r10-permissions           65.1 min  -
+  pr71-r10-unchanged             63.0 min  LOADHIT
+      load: ...| green, but slow (684 s + 477 s) because other sessions' builds were loading the machine | | JDK 21 with CI's own command (`CI=true mvn -o...
+  pr71-r10-whole                 61.5 min  LOADHIT
+      load: ...e service class only:** 44/44 green, though it took 802 s because the machine was loaded by other sessions' builds. - **Mutations:** whole...
+== pr71-r11 (5 agents)
+  pr71-r11-balances              39.1 min  -
+  pr71-r11-lifecycle             35.4 min  -
+  pr71-r11-permissions           30.2 min  -
+  pr71-r11-unchanged             40.6 min  -
+  pr71-r11-whole                 23.8 min  -
+== pr71-r12 (5 agents)
+  pr71-r12-balances              46.9 min  -
+  pr71-r12-lifecycle             21.9 min  -
+  pr71-r12-permissions           52.8 min  -
+  pr71-r12-unchanged             43.9 min  -
+  pr71-r12-whole                 23.0 min  -
+== pr69 (4 agents)
+  pr69-ac1-fresh                 77.0 min  -
+  pr69-ac2-existing              53.4 min  -
+  pr69-ac3-restart               42.9 min  -
+  pr69-whole                     66.9 min  -
+== pr57-r1 (2 agents)
+  pr57-r1-crit                   25.5 min  -
+  pr57-r1-whole                   4.9 min  -
+== pr6502-r1 (3 agents)
+  pr6502-r1-ac145                17.6 min  -
+  pr6502-r1-ac23                 20.8 min  -
+  pr6502-r1-whole                26.4 min  -
+== pr85-r1 (4 agents)
+  pr85-r1-c14                    25.4 min  LOADHIT
+      load: ...Undecidable on "the build and all tests pass": no build finished. The machine was at load average ~200 and nearly out of memory, so neither...
+  pr85-r1-c2                     44.9 min  -
+  pr85-r1-c3                     60.0 min  -
+  pr85-r1-whole                  45.2 min  -
+== sm68 (2 agents)
+  sm68-crit                      56.9 min  NOREPORT
+  sm68-whole                     34.5 min  LOADHIT
+      load: ...at mutant (`../mut2`) but stopped its run twice because the machine's load average was about 140. - `origin/core-3.x` also has no te...
+== sm77-r1 (4 agents)
+  sm77-r1-ac1                    90.0 min  KILL LOADHIT
+      load: ...OMs, not on a build.  **What did not run or finish** (the machine was heavily loaded by other builds): - **First `mvn clean install` o...
+  sm77-r1-ac2                    84.4 min  LOADHIT
+      load: ...` for the api module by 01:24. Many other sessions' Maven builds were loading the machine, and it was still running when I stopped.  **What...
+  sm77-r1-ac3                    77.5 min  LOADHIT
+      load: ...limit and was stopped. A thread dump showed it running, not hung; the machine was loaded by other builds. There are no Java 8 results.  ##...
+  sm77-r1-whole                  90.0 min  KILL LOADHIT
+      load: ...023c. - **Not yet run:** the actual red `mvn` test run on Java 8. The machine was saturated by other sessions, and both Java 8 Maven runs wer...
+== sm78-r1 (2 agents)
+  sm78-r1-criteria               43.7 min  -
+  sm78-r1-whole                  70.7 min  LOADHIT
+      load: ...ts with 0 failures, including `ReportGeneratorCsvTest` (2 tests). The load average was about 180, so the first test class alone took...
+== sm79-r1 (4 agents)
+  sm79-r1-ac1                    28.2 min  -
+  sm79-r1-ac2                    82.0 min  LOADHIT
+      load: ...or any test, including the PR's `HelperFormattingTest`. The machine's load average was about 225 at the time. - **The omod module** ...
+  sm79-r1-ac3                    61.5 min  LOADHIT
+      load: ...": the JDK 8 build was still compiling the API module when I stopped (load average about 200).  ## Finding 1: grouping order changes...
+  sm79-r1-whole                  28.4 min  LOADHIT
+      load: ...uite, because neither Maven run reached the test phase: the machine's load average was 167–216, with 144 Maven processes from other ...
+== sm80-r1 (4 agents)
+  sm80-r1-behaviour              90.0 min  KILL LOADHIT
+      load: ... confirmed: every build I started was killed or is still running. The machine was at load average 145–225 because of other sessions, and no...
+  sm80-r1-privileges             90.0 min  KILL
+  sm80-r1-structure              84.5 min  LOADHIT
+      load: ...n/master and the merged tree, on Java 8 and 21): none finished.** The machine was saturated by many other parallel sessions. HEAD on Java 8 w...
+  sm80-r1-whole                  90.0 min  KILL LOADHIT
+      load: ... the code. Almost none of my own runtime checks finished, because the machine was shared with other sessions' Maven builds and very slow; ...
+== sm80-r2 (4 agents)
+  sm80-r2-behaviour              65.4 min  LOADHIT
+      load: ... hit the one-hour background limit I set for it. The machine was at a load average of about 60. Here is how far it got:  - **Master,...
+  sm80-r2-privileges             71.1 min  LOADHIT
+      load: ...d suite at HEAD and both suites at master didn't run. The machine was heavily loaded by about 25 other Maven runs. - **Mutation check ...
+  sm80-r2-structure              60.4 min  -
+  sm80-r2-whole                  73.2 min  LOADHIT
+      load: ... Not run, or not finished  - **Full api and omod suites:** the shared machine was very slow (master's api tests alone took about 50 minutes)....
+== sm83-r1 (3 agents)
+  sm83-r1-behaviour              90.0 min  KILL
+  sm83-r1-priv                   52.3 min  LOADHIT
+      load: ...illed at 40 minutes, while compiling the api module.  The machine was heavily loaded (about 70 Maven processes running). Everything be...
+  sm83-r1-whole                  64.0 min  LOADHIT
+      load: ...ree: the HEAD build was still compiling the API module 63 minutes in (load average about 185) when it hit its background time limit ...
+== core6835-r3 (4 agents)
+  core6835-r3-fresh              26.2 min  -
+  core6835-r3-nosql              38.4 min  -
+  core6835-r3-regions            16.2 min  -
+  core6835-r3-whole              26.0 min  -

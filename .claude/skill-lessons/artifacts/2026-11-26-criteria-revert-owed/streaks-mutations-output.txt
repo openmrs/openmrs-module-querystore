@@ -1,0 +1,6 @@
+RED   M1 owed rounds count under the amendment: 6/8 passed
+RED   M2 a round that neither counts nor breaks breaks the run: 7/8 passed
+RED   M3 an owed round's defect does not break the run: 7/8 passed
+RED   M4 one PR suffices: 6/8 passed
+RED   M5 only the longest run is tested: 7/8 passed
+5/5 mutations turned the self-test red

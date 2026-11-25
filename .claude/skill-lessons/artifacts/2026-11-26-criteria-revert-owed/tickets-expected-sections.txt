@@ -1,0 +1,8 @@
+# The section headings of the tickets behind pr57-r1 and sm68, read from the public tracker on 2026-11-26
+# (GET https://openmrs.atlassian.net/rest/api/2/issue/<key>?fields=summary,description, HTTP 200 for both).
+O3-6248: Stock management: the stock operation permission cache serves one operation a stale permission until restart
+  headings: *Summary* | *Current behaviour* | *Expected behaviour*
+  'acceptance' anywhere in the description: False
+O3-6261: Stock management: lines with the same batch number but different expiry dates share one batch
+  headings: h3. Summary | h3. Cause | h3. Steps to reproduce | h3. Actual | h3. Expected
+  'acceptance' anywhere in the description: False

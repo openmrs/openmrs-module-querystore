@@ -1,0 +1,225 @@
+# Run on criteria-rounds.tsv as it stood before sm79-r1-ac1 was marked owed (refutation round 4), so the agent it found is listed.
+== pr71-r8-balances (1 sentences)
+   - **Not run:**
+== pr71-r8-lifecycle (3 sentences)
+   - - **Why:** both new classes load only the receipt and stock issue types (`StockManagementFlowsAndQueriesServiceTest.java:176-177`, `StockOperationLifecycleAndScopeRestTest.java:182-183`).
+   - ## Not run
+   - - **Blind refutation round:** not run.
+== pr71-r8-permissions (3 sentences)
+   - `LocationTreeSynchronize` writes a depth-0 row for each location to itself (`tasks/LocationTreeSynchronize.java:71-73`), so I did not run it.
+   - ## Not run
+   - - `findStockRules`, `findBatchJobs` and `findOrderItems` scope filters: I expect these to survive like items 1 and 4, but did not run them.
+== pr71-r8-unchanged (6 sentences)
+   - - **Result:** 42/42 and 8/8 errored with `Failed to load ApplicationContext`.
+   - - **Not run:** I did not run a pre-existing test class under `tr` to prove the rest of the suite fails the same way.
+   - | CI command, JDK 11 | stopped before any tests: spotless 2.46.1 tries to download the Eclipse formatter, and this sandbox has no network (`Failed to connect to /127.0.0.1:9`).
+   - What I checked by reading the code but did not run:
+   - Proving it needs a faked date, and there is no faketime on this machine.
+   - - **Turkish-locale control on an existing test class:** I ran out of the time budget.
+== pr71-r8-whole (4 sentences)
+   - **The paging path of the balance query is never reached.
+   - - This is from reading the code only; I did not run a mutation for it.
+   - Not run: it needs control over the clock.
+   - ## Not run
+== pr57-r1-crit (4 sentences)
+   - That production sessions keep the roles until the user logs in again is my reasoning; I did not run it.
+   - - I also did not run the base for this test, though base uses the same `getAllRoles()` call.
+   - I did not run that case.
+   - ## Not run
+== pr57-r1-whole (5 sentences)
+   - The result is that the first user to load a stock rule in full representation after startup sets `canEdit` for every user and every rule until restart.
+   - My probe test that would show it was not run, because the harness refused writes under `~/.claude/...` as a "sensitive file".
+   - *Not run* (probe write refused, as above).
+   - *The call count is from reading; my counting probe was not run.*
+   - ## Not run
+== pr69-ac1-fresh (15 sentences)
+   - The OpenMRS run was too slow to finish in the time, so nothing here was seen happening on a running system.
+   - Two weaker points come from reading the code (not run): the alert tasks first run only at the next 00:00 UTC, and a report user without the "Manage Scheduler" privilege cannot queue reports.
+   - ## Not run or not finished
+   - I stopped both servers there.
+   - - **`mvn -o -B -pl api -am test` on the merged result:** my first run was killed by the 10-minute background limit.
+   - "Run": the alert tasks first run at the next 00:00 UTC, not at startup.** (code read, not run)
+   - (code read, not run on a server)
+   - Uploading the module into a running server calls `started()` for that module (`ModuleUtil.java:924-925`).
+== pr69-ac2-existing (12 sentences)
+   - But the end-to-end proof, a real server upgraded from 3.0.0 to the PR, did not run, so treat this as a strong lead, not a confirmed result.
+   - Also, I killed a process that wasn't mine (details at the end).
+   - **What the "no miss" rests on (code read, not run against real data):**
+   - Now they do, so a renamed task that was stopped gets started when a report is queued.
+   - **What I did not run:**
+   - The 3.0.0 install took about 40 minutes (6–16 s per Liquibase changeset), which used up the time.
+   - It never produced a result: I stopped it, and my "stuck" diagnosis of it was wrong (see below).
+   - **Process error:** to diagnose my probe, I read a thread dump from PID 82823 and then killed it.
+== pr69-ac3-restart (9 sentences)
+   - I worked this out by reading the code: the real server never finished installing, so no restart was observed.
+   - - **First runs aren't immediate.** Start time is `new Date(0)`, so a 60 s task first fires on the next minute boundary and a daily task at the next midnight UTC.
+   - **Possible overlap after a module reload (lower confidence).** Restarting or upgrading the module gives it a new class loader and therefore a new static guard.
+   - An old `AsyncTasksBatchJob` still finishing a long batch could overlap the newly scheduled one; the new task only fires on the next minute boundary.
+   - I haven't checked whether the module class loader is really replaced in that path.
+   - I stopped the run at the time limit while other test classes were still running (`merged exit 143`), so the full merged suite is **not run**.
+   - - **Real server: not completed.** I built the omod from the merged result.
+   - My first background jobs (MariaDB, jetty, and the first test run) were killed by the 10-minute background limit partway through the install.
+== pr69-whole (7 sentences)
+   - And I could not confirm acceptance criteria 1–3 on a real server, because the install didn't finish in my time box.**
+   - **Older problem in lines this PR rewrites** (from reading code; I did not run it).
+   - ## What I did not run
+   - - **Real-server check of acceptance criteria 1–3 (fresh install, restart, no duplicates): not done.** My first MariaDB was stopped by the 10-minute background limit during the install.
+   - I stopped both servers I started (Jetty on 18307, MariaDB on 18306).
+   - - A blind refutation round: not run.
+   - Jetty's exit code 143 is the SIGTERM I sent, and MariaDB exited cleanly (code 0) after I stopped it.
+== sm79-r1-ac1 (7 sentences)
+   - I'm confident about the source tree, but I didn't confirm it with a build: the machine was too loaded for any of my Maven runs to finish.
+   - **What I did not run**
+   - - **The full build and tests** (`mvn -o clean install`, JDK 8): I stopped the first attempt after 20 minutes in the background.
+   - JDK 11, 17 and 21 were not run.
+   - - **The no-`clean` probe** (build master's base in `./stale`, switch to the PR head, package without `clean`, list the jar and `.omod` contents): I stopped it at the time limit.
+   - It hadn't printed anything after the JVM started, with about 1,750 other `mvn` processes on the machine.
+   - - **Starting an OpenMRS server** to see whether the omod loads without those classes: not run.
+== sm78-r1-criteria (2 sentences)
+   - I looked for a miss in report bytes, failure handling, the four CI JDKs, the core versions config.xml can load, and merging onto origin/master.
+   - **Not run:**
+== sm78-r1-whole (7 sentences)
+   - Below are what I checked, two minor points, and what I didn't run.
+   - The load average was about 180, so the first test class alone took 1127 s.
+   - Core's `ModuleClassLoader` checks the module's own jars before the webapp's by default (`probeParentLoaderLast = true`, line 71).
+   - With activation 1.1.1 bundled, `SmtpUtil:164` passes the module's own copy of `DataHandler` to core's `MimeMessage.setDataHandler`, which could fail with a class-loading error.
+   - **Not run**: confirming it needs a running server, which I wasn't allowed to start.
+   - ## Not run
+   - - `head-install.log` is from the first build, which hit its 10-minute background limit and was stopped.
+== pr85-r1-c2 (11 sentences)
+   - - **Why:** core turns the value into a Boolean with `new Boolean(String)`, which never throws, so core's error log is never reached (`AdministrationServiceImpl.java:740` at 2.8.0).
+   - `stockItemsMaxUploadFileSize` accepts negative and overflowing values silently.** This is on lines the PR rewrote.
+   - Any limit of zero or below rejects every upload.
+   - - **Unset or bad values lead to a crash (not run):** when the setting is unset, blank or malformed, the value is null.
+   - I did not run the omod resource, so this rests on the method signatures only.
+   - - **Page size, threshold, upload size:** malformed values log.
+   - ## Checked by reading the code, not run
+   - ## Not run
+== pr85-r1-c3 (2 sentences)
+   - ## Not run
+   - - Running a server and calling the REST endpoints (`StockItemResource`, `StockItemImportController`, which reads the upload-size limit) end to end.
+== pr85-r1-whole (12 sentences)
+   - I couldn't confirm whether PR #85 is ready to merge, because I didn't finish running the build or the four named test classes.
+   - Each Spring-context test class took about 15 minutes to start here, and the full head build was stopped at its 30-minute limit after one class.
+   - | Full build at head, JDK 17 | **Did not finish.** Only `StockOperationDTOValidatorTest` reported: `Tests run: 11, Failures: 0, Errors: 0` (970 s).
+   - Stopped at the 30-minute limit.
+   - | `GlobalPropertyDefaultsTest`, `ModuleConstantsTest` | **Not run.** Both were queued in the mutated run, which I stopped at the time limit.
+   - | `StockManagementServiceTest` | **Not run.** |
+   - | My probe test, on master and head | **Not run.** Each was still starting the test context when I stopped it.
+   - | Build on JDK 8, 11 and 21 | **Not run.** |
+== pr71-r9-permissions (4 sentences)
+   - Six more candidate mutations were written but **not run** because I hit the time budget.
+   - ## Not run (written and checked to apply, but no suite run)
+   - Also not run: JDK 8, 11 and 21, and CI's `CI=true … install` with license and spotless checks.
+   - After stopping the chain, I found no Maven or surefire processes with a working directory in this folder.
+== pr71-r9-whole (3 sentences)
+   - The `api` half passed (136/136), but the harness's 60-minute background limit killed the build after 13 `omod` tests.
+   - ## Not run
+   - - **The CI command** (`license:check`, `spotless:check`): I stopped it at the time limit, so formatting and licence headers are unchecked.
+== sm80-r2-structure (14 sentences)
+   - Several required checks did not finish: I hit the time limit with the master test suites and the master probe unfinished.
+   - Master had no equivalent: `findStockSources(null)` failed with a NullPointerException in the DAO (by reading the code; I did not run it).
+   - I got that from reading the code: **the master probe was killed at its time limit before it printed**.
+   - ## Not run or not finished
+   - - **Master probe** (`ProbePrivTest`): killed at its time limit.
+   - - **Other JDKs and the CI formatter check:** not run.
+   - The head build was killed when it hit its 60-minute background limit.
+   - Its api suite had finished on Java 8 and passed; the omod suite did not finish, and master's suites never started.
+== pr71-r10-balances (1 sentences)
+   - ## Not run
+== pr71-r10-permissions (6 sentences)
+   - ## Not run (time limit reached)
+   - These mutations are written in `$TMPDIR/scripts/mut.py` but were not run:
+   - It was mid-build when I stopped and was restored; no result.
+   - I did not run the 8/11/21 JDK matrix or CI's `ci` profile.
+   - - No processes of mine are left: I checked every `java` process's working directory.
+   - I killed only my own runall loop and one Maven process, after confirming its working directory was under `.../pr71-r10-permissions/work`.
+== pr6502-r1-ac145 (6 sentences)
+   - Under the shipped `webapp/src/main/resources/log4j2.xml` (`org.openmrs.api` at INFO) it would probably be printed, but that is reasoned from the config, not run.
+   - Read: Spring 5.8.16 `Argon2PasswordEncoder.upgradeEncoding` (line 167) compares only memory and iterations.
+   - Raising memory or iterations did re-encode; lowering either did not.
+   - This was on H2 only; MySQL was not run.
+   - ## Not run
+   - Total time was about 20 minutes, well under the 75-minute limit.
+== pr6502-r1-ac23 (9 sentences)
+   - A real argon2 `OutOfMemoryError` reaches whoever called `Context.authenticate`, so the login fails and nothing is logged.
+   - | p3 | `encode()` throws `OutOfMemoryError` | **`OutOfMemoryError` thrown** | unchanged | not written | **no** |
+   - | p4 | real `Argon2PasswordEncoder`, memory 2097152 KiB, test JVM `-Xmx1g` | **`OutOfMemoryError: Java heap space` thrown** | unchanged | not written | **no** |
+   - - **The configuration is one the startup check accepts:** `Argon2WorkFactors.memory` allows up to `Integer.MAX_VALUE`.
+   - The memory value I used is RFC 9106's first recommended setting (2 GiB).
+   - A cap on `security.argon2.memory` would be the other route; I did not test it.
+   - But the only core caller of `Context.authenticate` (`InitializationFilter.java:1839`) does not run inside a transaction, and the UPDATE failing at all needs a hash longer than the 126 characters the thread established.
+   - ## Reasoned, not run
+== pr6502-r1-whole (4 sentences)
+   - My reading is that the `for update` lock already makes this impossible; I didn't run a concurrency test.
+   - **Reasoned, not run:** after the native UPDATE, the `User` object `authenticate` returns still holds the old `changedBy`/`dateChanged`, while the database has the new values.
+   - ## Not run
+   - - The 126-character length at the largest work factors: I worked it out by hand (126) but didn't run it, because the largest memory value can't actually be used.
+== core6835-r3-fresh (3 sentences)
+   - - **Not run:** the same mechanism should apply to descriptions, answers and set members (`descriptions`, `answers` and `conceptSets` are inverse sets cached the same way).
+   - The other thread's load did not put stale data back in the cache.
+   - ## Not run or not reached
+== core6835-r3-nosql (7 sentences)
+   - - `PROBE G1 after saving unrelated plain concept 3 statements=28 {fetch org.openmrs.Concept.names=5, … load org.openmrs.ConceptName=13 …}`
+   - - `PROBE B by id, reading mapping source name statements=2 {load org.openmrs.ConceptSource=2}`
+   - After warming, every read gives `statements=1` with `load org.openmrs.Drug=1`.
+   - - `getConceptByName` runs 1 criteria query on `concept_name` plus 1 `GlobalProperty` load.
+   - - **Clustered mode:** not run.
+   - - **Real server and restart warm-up:** not run; only the in-memory test database was used.
+   - - **JDK 25:** not run; everything ran on JDK 21.
+== core6835-r3-regions (6 sentences)
+   - Clustered mode (`cache.type=cluster`) I only checked by reading the source; I did not run it.
+   - - No other copy of these cache properties exists in the repository (`git grep memory.size|max_idle`), so the test exercises the production file.
+   - I read this but did not run it.
+   - - Removing `ConceptNameTag.memory.size` failed with `expected: <1000> but was: <10000>`.
+   - ## Not run
+   - - **JDK 25.** I didn't run the tests on it.
+== core6835-r3-whole (14 sentences)
+   - - Reloading costs `PROBE A reload 21 statements after plain save=10 5089=10`, where a warm reload costs 0.
+   - - Control: saving a numeric concept (5497) leaves the cache intact (`reload 21 statements after numeric save=0`).
+   - - **Master (run5):** clears everything the same way (`user1=false concept21=false`), but there was much less cached to lose (a warm reload of 21 already costs 10 statements).
+   - - **Why it matters for this PR:** the ticket assumes only the numeric/complex conversion empties the cache, but most concepts are plain, so every routine dictionary edit or bulk concept load throws away the whole concept graph plus users, people and locations.
+   - Users and names stay cached (`user1=true`, `name2470=true`), reload costs drop to 2 and 1 statements, and all PR tests stay green.
+   - - **Same shape, not run:** `attributes` (`order-by="voided asc"`, `Concept.hbm.xml:118`), where voiding an attribute should move it.
+   - Either sort answers in memory, as `getSetMembers()` already does through `getSortedConceptSets()` (which is why set members are not affected), or don't cache `answers`.
+   - - Per the recorded decision, `referenceRanges` is not cached, so the ranges are re-queried on every read: `PROBE D statements loading concept=0 loading referenceRanges=1`.
+== pr71-r11-balances (1 sentences)
+   - **Not run:** CI's own command (`license:check`/`spotless:check`), the JDK 8, 11 and 21 runs, probes for findings 4a and 4b, and mutations on the operation type processors.
+== pr71-r11-lifecycle (4 sentences)
+   - The same line exists at `ReturnOperationTypeProcessorProcessor.java:103`; I did not run that one.
+   - **`StockManagementServiceImpl.java:2012`: an issue dispatched straight from NEW is never completed.** I deleted `resetDispatchedQuantities` from the NEW→DISPATCH path.
+   - ## Not run
+   - - **No processes killed.** The surefire JVMs still running belong to other folders (`-refute`, `-unchanged`, `-balances`).
+== pr71-r11-permissions (2 sentences)
+   - The update-path check at `:869` was not mutated (**not run**).
+   - - **Not run:**
+== pr71-r11-unchanged (4 sentences)
+   - **Turkish locale: everything fails, but not because of this PR.** Every test errors with "Failed to load ApplicationContext", caused by Hibernate's `sessionFactory` failing to start inside OpenMRS core.
+   - I could not force it: no faketime tool is installed, and the JVM only accepts whole-minute custom time zones, so I can't time the test to straddle midnight.
+   - ## Not run
+   - There are no other changes, and none of my processes are running.
+== pr71-r11-whole (3 sentences)
+   - **Not run:** I did not run the REST class with the type left as the dataset has it.
+   - **Dates (negligible, not run).** The boundary windows `{today, today}` (501) would fail if a test ran across midnight.
+   - ## Not run
+== pr71-r12-balances (1 sentences)
+   - ## What I didn't run
+== pr71-r12-lifecycle (2 sentences)
+   - ## Not run
+   - - I didn't run JDK 8, 11 or 21, or CI's command with the `ci` profile (`license:check`, `spotless:check`).
+== pr71-r12-permissions (4 sentences)
+   - **Not run, static evidence only:** the single-argument `findBatchJobs(filter)` and `findOrderItems(filter)` scoped searches, and `BatchJobArtifactController`'s access check, are reached by no test (0 hits in test code, 2 each in main code).
+   - Not run, because that same test already asserts the refusal: return-from-SUBMITTED APPROVE → MUTATE (m4).
+   - - Only JDK 17; the 8/11/21 matrix and CI's `license:check`/`spotless:check` were not run.
+   - Total time was about 55 minutes.
+== pr71-r12-unchanged (3 sentences)
+   - I ran it under a custom time zone that put local midnight 6 minutes after launch (`$TMPDIR/mid.sh 6 720000`, zone `GMT+04:15`).
+   - - Message assertions use the OpenMRS message source, which only has English messages, so the machine's locale doesn't change them.
+   - ## Not run
+== pr71-r12-whole (5 sentences)
+   - - The api service path does not run `StockOperationDTOValidator`, so this passes today.
+   - - I got this from reading the code; I did not run a test for it.
+   - Follow-up; I did not run a mutation for it.
+   - ## Not run
+   - All four reasons are the same: the 75-minute limit ran out.
+agents not marked owed: 39; with a sentence to read: 39
