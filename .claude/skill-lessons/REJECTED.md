@@ -8525,3 +8525,9 @@ was rejecting it in at least 4 of 5. So it would not have prevented #85.
 - A set-aside reason naming a test that pins something else: 2 run records (#71 rounds 7 and 12), unchanged. One
   measurement sighting of a false set-aside reason is added (#85's R9).
 - The others are unchanged from this morning's section.
+
+**Added after the push of 04435e8e, not refuted:** a record written during this pass, after its read, is not one this
+pass read for its proposals or counted: `2026-11-26-pr-review-openmrs-module-stockmanagement-86.md` (stockmanagement
+#86 round 1: a consumer read of a removed field, set aside as an owed check for a future frontend PR, then raised by a
+maintainer). It is the next retro's, which should count it under "count only the records REJECTED.md does not already
+name" as not yet counted.
