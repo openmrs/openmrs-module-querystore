@@ -92,6 +92,7 @@
             ServiceContext.getService() blocks while refresh is still in progress (issue #10).
         -->
         <property name="embeddingProvider" ref="querystore.embedding.dispatcher"/>
+        <property name="bootstrapLauncher" ref="querystore.bootstrap.launcher"/>
     </bean>
 
     <bean id="querystore.bootstrap.progressDao"
@@ -178,6 +179,14 @@
     <bean id="querystore.sync.dispatcher"
           class="org.openmrs.module.querystore.sync.AfterCommitDispatcher">
         <constructor-arg ref="querystore.sync.executor"/>
+    </bean>
+
+    <!-- Re-reads an obs after commit and follows previous_version to its live successor: core edits an
+         obs by cloning it and voiding the original, which the save event cannot show (ADR: Sync
+         reliability and reconciliation, "Obs edits"). -->
+    <bean id="querystore.sync.obsVersions"
+          class="org.openmrs.module.querystore.sync.ObsVersions">
+        <constructor-arg ref="dbSessionFactory"/>
     </bean>
 
     <bean id="querystore.sync.indexer"

@@ -34,9 +34,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.db.hibernate.DbSessionFactory;
+import org.openmrs.module.querystore.SafeLog;
+import org.openmrs.module.querystore.SkipLogFormat;
 import org.openmrs.module.querystore.backend.BackendCapabilities;
 import org.openmrs.module.querystore.backend.BackendDocs;
 import org.openmrs.module.querystore.backend.BackendStore;
@@ -68,8 +68,6 @@ import org.openmrs.module.querystore.model.QueryDocument;
  * {@code last_modified} freshness guard makes each upsert idempotent under concurrent retries.
  */
 public class MysqlBackendStore implements BackendStore {
-
-	private static final Log log = LogFactory.getLog(MysqlBackendStore.class);
 
 	private static final int RECOMMENDED_MAX_CORPUS = 500_000;
 
@@ -128,7 +126,8 @@ public class MysqlBackendStore implements BackendStore {
 				return WriteResult.success();
 			}
 			catch (SQLException e) {
-				log.warn("upsert failed for " + doc.getResourceType() + "/" + doc.getResourceUuid(), e);
+				SafeLog.warn(MysqlBackendStore.class, "upsert failed for " + doc.getResourceType() + "/"
+				        + SkipLogFormat.loggableUuid(doc.getResourceType(), doc.getResourceUuid()), e);
 				return WriteResult.failed(new DocFailure(doc.getResourceType(), doc.getResourceUuid(),
 				        e.getMessage(), isRetryable(e)));
 			}
@@ -145,7 +144,7 @@ public class MysqlBackendStore implements BackendStore {
 				return WriteResult.success();
 			}
 			catch (SQLException e) {
-				log.warn("delete failed for " + resourceType + "/" + resourceUuid, e);
+				SafeLog.warn(MysqlBackendStore.class, "delete failed for " + resourceType + "/" + SkipLogFormat.loggableUuid(resourceType, resourceUuid), e);
 				return WriteResult.failed(new DocFailure(resourceType, resourceUuid, e.getMessage(), isRetryable(e)));
 			}
 		});
@@ -184,7 +183,7 @@ public class MysqlBackendStore implements BackendStore {
 				}
 			}
 			catch (SQLException e) {
-				log.warn("bulkDelete failed for " + resourceType, e);
+				SafeLog.warn(MysqlBackendStore.class, "bulkDelete failed for " + resourceType, e);
 				for (String uuid : resourceUuids) {
 					failures.add(new DocFailure(resourceType, uuid, e.getMessage(), isRetryable(e)));
 				}
@@ -213,7 +212,7 @@ public class MysqlBackendStore implements BackendStore {
 				});
 			}
 			catch (RuntimeException e) {
-				log.warn("bulkDeleteByPatient failed for table " + table, e);
+				SafeLog.warn(MysqlBackendStore.class, "bulkDeleteByPatient failed for table " + table, e);
 				failures.add(new DocFailure(BackendDocs.stripPrefix(table), patientUuid, e.getMessage(),
 				        isRetryableCause(e)));
 			}
@@ -254,7 +253,7 @@ public class MysqlBackendStore implements BackendStore {
 						}
 					}
 					catch (SQLException e) {
-						log.warn("findLastModified failed for " + resourceType, e);
+						SafeLog.warn(MysqlBackendStore.class, "findLastModified failed for " + resourceType, e);
 						return Collections.<String, Instant> emptyMap();
 					}
 				}
@@ -262,7 +261,7 @@ public class MysqlBackendStore implements BackendStore {
 			});
 		}
 		catch (RuntimeException e) {
-			log.warn("findLastModified could not acquire a session for " + resourceType, e);
+			SafeLog.warn(MysqlBackendStore.class, "findLastModified could not acquire a session for " + resourceType, e);
 			return Collections.emptyMap();
 		}
 	}
@@ -292,14 +291,14 @@ public class MysqlBackendStore implements BackendStore {
 					catch (SQLException e) {
 						// One table failing (locked, schema mid-migration) should not poison the probe; the
 						// auto-index caller's contract is "missing data triggers indexing, which converges."
-						log.warn("existsByPatient probe failed for table " + table, e);
+						SafeLog.warn(MysqlBackendStore.class, "existsByPatient probe failed for table " + table, e);
 					}
 				}
 				return false;
 			});
 		}
 		catch (RuntimeException e) {
-			log.warn("existsByPatient could not acquire session for " + patientUuid, e);
+			SafeLog.warn(MysqlBackendStore.class, "existsByPatient could not acquire session", e);
 			return false;
 		}
 	}
@@ -320,13 +319,13 @@ public class MysqlBackendStore implements BackendStore {
 					return rs.next() ? rs.getLong(1) : 0L;
 				}
 				catch (SQLException e) {
-					log.warn("countByType failed for " + resourceType, e);
+					SafeLog.warn(MysqlBackendStore.class, "countByType failed for " + resourceType, e);
 					return -1L;
 				}
 			});
 		}
 		catch (RuntimeException e) {
-			log.warn("countByType could not acquire session for " + resourceType, e);
+			SafeLog.warn(MysqlBackendStore.class, "countByType could not acquire session for " + resourceType, e);
 			return -1L;
 		}
 	}
@@ -365,14 +364,14 @@ public class MysqlBackendStore implements BackendStore {
 					}
 					catch (SQLException e) {
 						incomplete[0] = true;
-						log.warn("findAllByPatient probe failed for table " + table, e);
+						SafeLog.warn(MysqlBackendStore.class, "findAllByPatient probe failed for table " + table, e);
 					}
 				}
 				return null;
 			});
 		}
 		catch (RuntimeException e) {
-			log.warn("findAllByPatient could not acquire session for " + patientUuid, e);
+			SafeLog.warn(MysqlBackendStore.class, "findAllByPatient could not acquire session", e);
 			return new PatientChartRead(Collections.<QueryDocument> emptyList(), true);
 		}
 		all.sort(BackendDocs.CHART_ORDER);
@@ -450,7 +449,7 @@ public class MysqlBackendStore implements BackendStore {
 				}
 			}
 			catch (SQLException e) {
-				log.warn("bulkUpsert failed for " + resourceType, e);
+				SafeLog.warn(MysqlBackendStore.class, "bulkUpsert failed for " + resourceType, e);
 				for (QueryDocument doc : docs) {
 					failures.add(new DocFailure(resourceType, doc.getResourceUuid(), e.getMessage(),
 					        isRetryable(e)));

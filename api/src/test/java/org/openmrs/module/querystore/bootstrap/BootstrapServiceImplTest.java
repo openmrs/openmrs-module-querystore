@@ -829,6 +829,23 @@ public class BootstrapServiceImplTest {
 		service.ensureIndexed("patient-uuid");
 	}
 
+	@Test
+	public void ensureIndexed_withEveryTypeProjected_throwsNothing() {
+		service.setBootstrappers(Arrays.asList(new EmptyPageBootstrapper("obs"), new EmptyPageBootstrapper("encounter")));
+
+		service.ensureIndexed("patient-uuid");
+	}
+
+	@Test
+	public void patientLocks_areBounded_andStableForAUuid() {
+		java.util.Set<Object> locks = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (int i = 0; i < 10_000; i++) {
+			locks.add(service.patientLock("uuid-" + i));
+		}
+		assertTrue("10,000 uuids share at most the fixed stripes", locks.size() <= BootstrapServiceImpl.PATIENT_LOCK_STRIPES);
+		assertTrue(service.patientLock("uuid-7") == service.patientLock("uuid-7"));
+	}
+
 	private void assertColdTouchFails(String patientUuid) {
 		try {
 			service.ensureIndexed(patientUuid);
