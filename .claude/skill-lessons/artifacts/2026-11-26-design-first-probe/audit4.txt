@@ -1,0 +1,2 @@
+calibration flags: 8 (the k5, k7 and k2 reads planted; the k6 run's own reads not)
+runs audited: 30 | total flags: 0

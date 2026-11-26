@@ -33,9 +33,9 @@
       "why": "Step 1 pre-flights the usage limit beside the verifier: a claude.ai usage limit ends the turn with StopFailure hooks rather than Stop, so no gate sees it, while under CLAUDE_CODE_RETRY_WATCHDOG a request at the limit waits for the reset inside the turn (both measured against a stub, artifacts/2026-10-21-retry-watchdog-limit); so a run in a session pool-run does not carry itself, neither CLAUDE_PIPELINE_SESSION nor CLAUDE_PIPELINE_CARRY set, prints the variable and the running binary's version through CLAUDE_CODE_EXECPATH and, unless the variable is 1, true, yes or on in any case and the version reads 2.1.301 (Claude Code) or later, compared number by number, says so at once and carries on, giving the remedy for later sessions as Claude Code 2.1.301 or later started through a literal shell alias with a five-hour usage-limit wait cap, or for a pool-run --work session whose carry is off the same two variables before that command, never ~/.claude/settings.json's env, which the driver and a carried --work refuse to start under, and never a mid-run relaunch; and Step 7's await example records one await per agent, under its own name, so a name listed twice means what pr-harden's State takes it to"
     },
     "pr-review": {
-      "from": 10493,
-      "to": 10543,
-      "why": "Step 2's \"The ticket is evidence, not a spec\" paragraph gains one sentence: a listed acceptance criterion the head misses by its words is raised, unless the thread has since settled it, and asked about where the reviewer reads the ticket's purpose as met. Owner-directed 2026-11-26 (\"fix the pr-review skill so this doesn't happen again\"), after stockmanagement #85 round 1 set aside the criterion miss two of its blind agents reported and the ticket's author raised it. At that round's decision point, 0.42.0 filed it in 0 of 5 blind runs and the sentence in 5 of 5, with no noise item filed in either arm (REJECTED.md's third 2026-11-26 section). It retires no rule; it narrows :83's \"solves it differently ... is fine\" and :79's \"Cost missing, it's taste\" for listed criteria."
+      "from": 10543,
+      "to": 10703,
+      "why": "Step 1 reads the ticket's parent and linked tickets; Step 2 opens with a design verdict for the ticket and one for the plan it belongs to, kept to the round record and the report to the user; and :85 holds back every drafted comment that would add more of what is in question, naming the #85 case. Owner-directed 2026-11-26 (\"yes close the pr-review gap by first state whether the design is right for the ticket and the plan it belongs to, and hold back any drafted comment that adds more of what's in question\"), after Wikum's advice on stockmanagement #85. At #85 round 1's decision point the drafted comment that grew the helpers was held in 2 of 5 runs by the clause alone and in 15 of 15 with the sentence naming #85, which most of those runs give as their reason, against 0 of 15 for 0.43.0; the opening named the ticket's plan in 20 of 20 against 0 of 30. No rule retired (+160 words)."
     },
     "pr-review/posting.md": {
       "from": 2185,
@@ -81,7 +81,7 @@
     "pr-harden/fixer.md": 1264,
     "pr-harden/reviewer.md": 542,
     "pr-harden/verifier.md": 1736,
-    "pr-review": 10543,
+    "pr-review": 10703,
     "pr-review/posting.md": 2226,
     "pr-review/blind-agents.md": 339,
     "resolve-ticket": 8028,

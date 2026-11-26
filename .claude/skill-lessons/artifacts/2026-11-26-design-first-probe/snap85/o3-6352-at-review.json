@@ -1,0 +1,135 @@
+{
+ "key": "O3-6352",
+ "fields": {
+  "summary": "Stock Management: Replace the GlobalProperties utility class",
+  "description": "h3. Why\n\n{{GlobalProperties}} is a 244-line class of 22 static methods that read the module's settings. 19 of them swallow every exception and return {{null}} or a default, so a mistyped or malformed setting fails silently. Its name clashes with core's {{GlobalProperty}}, and it duplicates what core's administration service already provides.\n\nh3. Description\n\nRead settings through core's {{AdministrationService}} and remove the utility class.\n\nh3. Details\n\n* Keep the 13 property-name constants, in a constants class.\n* Replace each getter with core's typed {{getGlobalPropertyValue(key, defaultValue)}}, with the default stated at the call site or in one place per setting.\n* A setting that cannot be parsed should be logged, not silently ignored.\n* 44 call sites in 18 files use the class: the service, the scheduled jobs, the reports and two REST resources.\n\nh3. Acceptance criteria\n\n* No static settings utility remains.\n* No setting read swallows an exception silently.\n* Each setting keeps its current default.\n* The build and all tests pass.",
+  "status": {
+   "name": "In Progress"
+  },
+  "comment": {
+   "comments": [
+    {
+     "created": "2026-11-24T20:28:26.951+1100",
+     "author": {
+      "displayName": "Automation for Jira"
+     },
+     "body": "This item is being transitioned to \"In Progress\" as [a PR|https://github.com/openmrs/openmrs-module-stockmanagement/pull/85] has been opened for it."
+    }
+   ]
+  },
+  "labels": [],
+  "fixVersions": [],
+  "parent": {
+   "key": "O3-6306",
+   "fields": {
+    "summary": "StockManagement v4.0"
+   }
+  },
+  "issuelinks": [
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6316",
+     "fields": {
+      "summary": "Stock Management: Stock source service"
+     }
+    }
+   },
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6317",
+     "fields": {
+      "summary": "Stock Management: Stock item service"
+     }
+    }
+   },
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6318",
+     "fields": {
+      "summary": "Stock Management: User role scope service"
+     }
+    }
+   },
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6319",
+     "fields": {
+      "summary": "Stock Management: Party service"
+     }
+    }
+   },
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6320",
+     "fields": {
+      "summary": "Stock Management: Stock rule service"
+     }
+    }
+   },
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6321",
+     "fields": {
+      "summary": "Stock Management: Stock operation service"
+     }
+    }
+   },
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6322",
+     "fields": {
+      "summary": "Stock Management: Inventory service"
+     }
+    }
+   },
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "outwardIssue": {
+     "key": "O3-6323",
+     "fields": {
+      "summary": "Stock Management: Batch job and report service"
+     }
+    }
+   }
+  ]
+ }
+}

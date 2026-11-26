@@ -1,0 +1,16 @@
+79 k5 pf-03 parsed=True complete=True held=[] noisy=[] plan=True
+79 k5 pf-10 parsed=True complete=True held=[] noisy=[] plan=True
+79 k5 pf-15 parsed=True complete=True held=[] noisy=[] plan=True
+79 k5 pf-19 parsed=True complete=True held=[] noisy=[] plan=True
+79 k6 pf-07 parsed=True complete=True held=[] noisy=[] plan=False
+79 k6 pf-11 parsed=True complete=True held=[] noisy=[] plan=False
+85 k5 pf-05 parsed=True complete=True held=['B'] noisy=[] plan=True R1=True
+85 k5 pf-08 parsed=True complete=True held=['B'] noisy=[] plan=True R1=True
+85 k5 pf-16 parsed=True complete=True held=['B'] noisy=[] plan=True R1=True
+85 k5 pf-20 parsed=True complete=True held=['B'] noisy=[] plan=True R1=True
+85 k6 pf-02 parsed=True complete=True held=[] noisy=['R9'] plan=False R1=True
+85 k6 pf-04 parsed=True complete=True held=[] noisy=['R9'] plan=False R1=True
+85 k6 pf-06 parsed=True complete=True held=[] noisy=[] plan=False R1=True
+85 k6 pf-09 parsed=True complete=True held=[] noisy=[] plan=False R1=True
+85 k7 pf-12 parsed=True complete=True held=['B'] noisy=[] plan=True R1=True
+85 k7 pf-27 parsed=True complete=True held=[] noisy=[] plan=True R1=True

@@ -1,0 +1,3 @@
+{"filed": [], "set_aside": [{"item": "S1", "reason": "x"}, {"item": "S2", "reason": "x"}, {"item": "S3", "reason": "x"}, {"item": "S4", "reason": "x"}, {"item": "S5", "reason": "x"}, {"item": "S6", "reason": "x"}, {"item": "S7", "reason": "x"}, {"item": "S8", "reason": "x"}],
+ "drafts": [{"draft": "A", "decision": "as_drafted", "first_line": "Does anything rely on the order of `total`?", "why": "x"}, {"draft": "B", "decision": "as_drafted", "first_line": "This guard never changes the result", "why": "x"}],
+ "report_opening": ["Design: right for O3-6340 and for the plan it is a step of (O3-6306, v4.0).", "Two comments."]}

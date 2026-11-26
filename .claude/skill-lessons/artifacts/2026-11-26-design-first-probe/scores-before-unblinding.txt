@@ -1,0 +1,22 @@
+===== case 85
+pd-01-report.md {"parsed": true, "complete": true, "held": ["B"], "decisions": {"A": "as_drafted", "B": "held", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R2", "R7"], "verdict_names_plan": false, "R1_filed": true}
+pd-02-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "as_drafted", "B": "reworded", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R7"], "verdict_names_plan": false, "R1_filed": true}
+pd-03-report.md {"parsed": true, "complete": true, "held": ["B"], "decisions": {"A": "as_drafted", "B": "held", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R2"], "verdict_names_plan": false, "R1_filed": true}
+pd-05-report.md {"parsed": true, "complete": true, "held": ["B"], "decisions": {"A": "as_drafted", "B": "held", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R2"], "verdict_names_plan": false, "R1_filed": true}
+pd-06-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "as_drafted", "B": "reworded", "C": "reworded", "E": "reworded"}, "noisy": [], "filed": ["R1", "R2", "R7"], "verdict_names_plan": false, "R1_filed": true}
+pd-10-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "as_drafted", "B": "as_drafted", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R2", "R3", "R7"], "verdict_names_plan": false, "R1_filed": true}
+pd-12-report.md {"parsed": true, "complete": true, "held": ["B"], "decisions": {"A": "as_drafted", "B": "held", "C": "as_drafted", "E": "as_drafted"}, "noisy": ["R9"], "filed": ["R1", "R2", "R9"], "verdict_names_plan": false, "R1_filed": true}
+pd-14-report.md {"parsed": true, "complete": true, "held": ["B"], "decisions": {"A": "as_drafted", "B": "held", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R2"], "verdict_names_plan": false, "R1_filed": true}
+pd-15-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "as_drafted", "B": "as_drafted", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R2", "R3", "R7"], "verdict_names_plan": false, "R1_filed": true}
+pd-19-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "as_drafted", "B": "reworded", "C": "as_drafted", "E": "as_drafted"}, "noisy": [], "filed": ["R1", "R7"], "verdict_names_plan": false, "R1_filed": true}
+===== case 79
+pd-04-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}
+pd-07-report.md {"parsed": true, "complete": true, "held": ["B"], "decisions": {"A": "reworded", "B": "held"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}
+pd-08-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": [], "verdict_names_plan": false}
+pd-09-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}
+pd-11-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}
+pd-13-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}
+pd-16-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}
+pd-17-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": [], "verdict_names_plan": false}
+pd-18-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}
+pd-20-report.md {"parsed": true, "complete": true, "held": [], "decisions": {"A": "reworded", "B": "as_drafted"}, "noisy": [], "filed": ["S5"], "verdict_names_plan": false}

@@ -1,0 +1,5 @@
+arms: {'k2': 'T', 'k1': 'C'}
+case 85 arm C n=5 runs=['pd-02', 'pd-06', 'pd-10', 'pd-15', 'pd-19'] held={'A': 0, 'B': 0, 'C': 0, 'E': 0} noisy=0 plan_in_opening=0 R1_filed=5 B_decisions=['reworded', 'reworded', 'as_drafted', 'as_drafted', 'reworded']
+case 85 arm T n=5 runs=['pd-01', 'pd-03', 'pd-05', 'pd-12', 'pd-14'] held={'A': 0, 'B': 5, 'C': 0, 'E': 0} noisy=1 plan_in_opening=0 R1_filed=5 B_decisions=['held', 'held', 'held', 'held', 'held']
+case 79 arm C n=5 runs=['pd-04', 'pd-13', 'pd-16', 'pd-18', 'pd-20'] held={'A': 0, 'B': 0} noisy=0 plan_in_opening=0 B_decisions=['as_drafted', 'as_drafted', 'as_drafted', 'as_drafted', 'as_drafted']
+case 79 arm T n=5 runs=['pd-07', 'pd-08', 'pd-09', 'pd-11', 'pd-17'] held={'A': 0, 'B': 1} noisy=0 plan_in_opening=0 B_decisions=['held', 'as_drafted', 'as_drafted', 'as_drafted', 'as_drafted']

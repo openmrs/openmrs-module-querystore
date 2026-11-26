@@ -1,0 +1,49 @@
+{
+ "key": "O3-6306",
+ "fields": {
+  "summary": "StockManagement v4.0",
+  "description": "Simplify the stock management backend module and bring it in line with OpenMRS module conventions, the same treatment the billing backend module received.\n\nThe work covers four areas:\n\n* *Foundation:* adopt the shared OpenMRS module parent POM, remove dead code, and add tests that capture current behaviour.\n* *Stop storing what the code already knows:* define stock operation types in code, remove the location tree and its database triggers, and create stock parties on demand.\n* *One service per domain:* split the single large service and data access class into a service per area.\n* *Standard REST API:* put REST resources directly on the entities and remove the DTO layer.\n\nThis changes the REST API, so it ships as 4.0.0 together with matching frontend changes. Frontend, Initializer and content package work is tracked separately.",
+  "status": {
+   "name": "In Progress"
+  },
+  "comment": {
+   "comments": [
+    {
+     "created": "2026-11-19T20:48:11.418+1100",
+     "author": {
+      "displayName": "Dennis Kigen"
+     },
+     "body": "Thanks so much for writing this up, [~accountid:712020:881dcf0b-b7b1-4041-a396-e3aad4792fa2]! A few things that might need sorting out before work begins:\n\n* core-3.x is already on 4.0.0-SNAPSHOT (Platform 3.0). If master moves to 4.0.0-SNAPSHOT as well (O3-6307), we'll have two branches publishing the same version, and every ticket here gets done twice. Can we decide which line gets the rework?\n* The enum in O3-6310 hard-codes the location tags, but O3-6173 ([#58|https://github.com/openmrs/openmrs-module-stockmanagement/pull/58]) makes them configurable and adds Sub Store. We can't have both. Which way are we going?\n* [#57|https://github.com/openmrs/openmrs-module-stockmanagement/pull/57], [#59|https://github.com/openmrs/openmrs-module-stockmanagement/pull/59], [#60|https://github.com/openmrs/openmrs-module-stockmanagement/pull/60], [#61|https://github.com/openmrs/openmrs-module-stockmanagement/pull/61] and [#70|https://github.com/openmrs/openmrs-module-stockmanagement/pull/70] are open against master and touch code this epic moves. Can we get them merged or closed before the refactor starts?"
+    },
+    {
+     "created": "2026-11-19T23:24:10.119+1100",
+     "author": {
+      "displayName": "Wikum Weerakutti"
+     },
+     "body": "@denniskigen We'll have to bump core-3.x to 5.0.0-SNAPSHOT. We'll also have to ignore most of the tickets and PRs created before this epic, since we're going to rewrite a lot of the code and they won't align with what we're planning to do here."
+    },
+    {
+     "created": "2026-11-19T23:27:23.112+1100",
+     "author": {
+      "displayName": "Wikum Weerakutti"
+     },
+     "body": "Also, the core-3.x branch is just a testing branch for Platform 3.x work. We don't need to focus on porting the changes we're making over there right now."
+    },
+    {
+     "created": "2026-11-20T16:53:59.970+1100",
+     "author": {
+      "displayName": "Automation for Jira"
+     },
+     "body": "This item is being transitioned to \"In Progress\" as [a PR|https://github.com/openmrs/openmrs-module-stockmanagement/pull/71] has been opened for it."
+    },
+    {
+     "created": "2026-11-20T19:58:58.068+1100",
+     "author": {
+      "displayName": "Wikum Weerakutti"
+     },
+     "body": "@vanix12 please don't preemptively assign yourself a bunch of tickets. You can't even work on the ones you've already assigned to yourself, as they're blocked by others."
+    }
+   ]
+  }
+ }
+}

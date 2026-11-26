@@ -1,0 +1,33 @@
+**Decision: PR 79 is the right fix for O3-6340 and nothing blocks it. Two comments go out: reworded A as a question and B as drafted. S1–S8 are all set aside, and S5 rides in A.**
+
+## The two comments
+
+**A (reworded, StockManagementServiceImpl.java:2467).** I folded S5 into A because they share one cause, the `Pair` hash. A probe with master's `Pair` source and commons-lang3 3.18.0 gave these results:
+- **Control:** a single item keeps the same order on both.
+- **Draft A's figures:** reproduced exactly (`total` for items 1 to 10 at party 3).
+- **Expiry alerts:** with five expiring items at party 1, the four-alert cap at `StockBatchExpiryJob.java:173` used to pick items 1 to 4 and now picks 1, 3, 2, 5.
+
+Text as it goes out (about 60 words):
+> Does anything rely on the order of maps keyed on `Pair`? Commons `Pair` hashes as `left ^ right`, the old one as `31 * left + right`, so `total` for items 1 to 10 at party 3 comes back 3,2,1,7,6,5,4,10,9,8 (master: 3,4,...,10,1,2), and with five expiring items at party 1 `StockBatchExpiryJob` alerts items 1,3,2,5 instead of 1 to 4. The ticket asks for no behaviour changes.
+
+It stays a question, not a blocker, because master's order was also arbitrary. Neither order follows expiry date, so I can't write a failure-mode sentence.
+
+**B (as drafted).** The pattern ends in `[a-zA-Z]{2,7}$`, so it can never match an address ending in a dot. The guard does nothing, and dropping it changes no result. That makes it a nit, under the skill's rule on guards nothing reaches.
+
+## Why each S item is set aside
+- **S1:** All 10 production call sites (the agent said 9; it is 6 in `StockRuleEvaluationJob`, 2 in `StockBatchExpiryJob`, 2 in the service) are one-for-one swaps with the same pattern and argument. So the test gap hides nothing in this PR. The gap is already on record in greptile's thread, which the approving maintainer can see. Driving the jobs to cover it is test work beyond this refactor.
+- **S2:** The shared `QUANTITY_FORMAT` constant already gives one place to change the format. The ticket asked to remove the helper where it adds nothing.
+- **S3:** The existing tests (`StockManagementServiceTest`, `StockOperationDTOValidatorTest`) already sit in the root package. A probe shows 50,000 repetitions still overflow the old backtracking regex (control: 10 repetitions match on both), so the test still guards the possessive quantifiers.
+- **S4:** The regex and number patterns are byte-identical to master, so the claim it supports holds. Correcting the commit-order wording changes no code.
+- **S6:** `BiConsumer` replaced the `Action2` import on the same line, and the anonymous classes are master's shape with only the type swapped. Converting them to lambdas would be churn the ticket didn't ask for.
+- **S7:** Bamboo builds with `mvn clean package` (`bamboo-specs/bamboo.yml:38`). Stale classes in a local build without `clean` can follow any class deletion, not just this one.
+- **S8:** Nothing in the module changes the JVM default locale outside tests. If something did, reading it on each call would be the more correct behaviour of the two.
+
+## Build
+The head builds with `mvn -o verify` on Temurin 8 (CI's JDK). Exit 0 and BUILD SUCCESS: api 94 tests, omod 47, no failures. Both new test classes ran (4 and 3 tests), and spotless left the tree unchanged.
+
+Not checked: JDK 11, 17 and 21, and the head merged with master. Both need the implementation of a separate run, which I did not start.
+
+I removed the scratch worktree, probes and data directory, and `git status --porcelain` is clean.
+
+{"filed": [], "set_aside": [{"item": "S1", "reason": "All 10 quantity call sites are one-for-one swaps with the same pattern and argument, so the gap hides nothing in this PR; it is already on record in greptile's thread, and driving the jobs is test work beyond this refactor."}, {"item": "S2", "reason": "The shared QUANTITY_FORMAT constant already gives one place to change the format, and the ticket asked to remove the helper where it adds nothing."}, {"item": "S3", "reason": "The root package matches the existing tests (StockManagementServiceTest, StockOperationDTOValidatorTest), and a probe shows 50,000 repetitions still overflow the old backtracking regex, so the test still guards the possessive quantifiers."}, {"item": "S4", "reason": "The regex and number patterns are byte-identical to master, so the claim the wording supports holds, and correcting it changes no code."}, {"item": "S5", "reason": "Same cause as draft A (the Pair hash), so it goes out inside reworded A with the probed alert order (items 1,3,2,5 instead of 1 to 4), not as a separate comment."}, {"item": "S6", "reason": "BiConsumer replaced the Action2 import on the same line and the anonymous classes are master's shape with only the type swapped, so lambdas would be churn the ticket didn't ask for."}, {"item": "S7", "reason": "CI builds with mvn clean package (bamboo-specs/bamboo.yml:38), and stale classes without clean can follow any class deletion, not this PR's in particular."}, {"item": "S8", "reason": "Nothing in the module changes the JVM default locale outside tests, and if something did, reading it on each call is the more correct behaviour of the two."}], "drafts": [{"draft": "A", "decision": "reworded", "first_line": "Does anything rely on the order of maps keyed on `Pair`?", "why": "S5 has the same cause, and a probe showed the more visible effect (expiry job alerts items 1,3,2,5 instead of 1 to 4), so one comment covers both; it stays a question because master's order was arbitrary too."}, {"draft": "B", "decision": "as_drafted", "first_line": "This `!email.endsWith(\".\")` never changes the result, because the pattern has to end in a letter and so never matches an address ending in a dot.", "why": "Verified against the head's regex: the guard on the moved line does nothing, a nit the skill says to raise, worded with the take-or-leave after the point."}], "report_opening": "PR 79 is the right fix for O3-6340 and nothing blocks merge: two comments go out, a question (reworded A) and a nit (B), and S1 to S8 are set aside, with S5 carried inside A.\nThe question: commons-lang3 `Pair` hashes differently, so `totalBy=LocationStockItem` totals come back in a different order and `StockBatchExpiryJob`'s four-alert cap picks different batches (probe: five items at party 1 now alert 1,3,2,5 instead of 1 to 4), against the ticket's \"no behaviour changes\".\nThe head builds and passes on JDK 8 offline (api 94 tests, omod 47, 0 failures, BUILD SUCCESS); JDK 11/17/21 and the head merged with master were not run, and need the implementation of a separate run."}

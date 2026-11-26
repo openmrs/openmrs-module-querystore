@@ -1,0 +1,31 @@
+pf-03 exit=0 start=14:22:13 end=14:25:44 blind-run: 17 turns, $1.30, 3.5 min, 1-minute load median 9, max 12 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-03/log/report.md
+pf-05 exit=0 start=14:22:17 end=14:25:51 blind-run: 19 turns, $1.26, 3.6 min, 1-minute load median 8, max 12 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-05/log/report.md
+pf-09 exit=0 start=14:22:25 end=14:26:03 blind-run: 22 turns, $1.35, 3.6 min, 1-minute load median 9, max 12 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-09/log/report.md
+pf-07 exit=0 start=14:22:21 end=14:26:08 blind-run: 18 turns, $1.28, 3.8 min, 1-minute load median 8, max 14 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-07/log/report.md
+pf-20 exit=0 start=14:22:47 end=14:26:28 blind-run: 18 turns, $1.25, 3.7 min, 1-minute load median 10, max 16 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-20/log/report.md
+pf-11 exit=0 start=14:22:29 end=14:26:28 blind-run: 26 turns, $1.62, 4.0 min, 1-minute load median 9, max 16 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-11/log/report.md
+pf-21 exit=1 start=14:22:49 end=14:26:29 blind-run: exit 1, 19 turns, $1.32, 3.6 min, 1-minute load median 10, max 16 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-21/log/report.md
+pf-08 exit=0 start=14:22:23 end=14:26:29 blind-run: 21 turns, $1.36, 4.1 min, 1-minute load median 11, max 16 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-08/log/report.md
+pf-13 exit=1 start=14:22:33 end=14:26:30 blind-run: exit 1, 19 turns, $1.39, 3.9 min, 1-minute load median 9, max 16 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-13/log/report.md
+pf-30 exit=1 start=14:23:07 end=14:26:30 blind-run: exit 1, 13 turns, $1.05, 3.4 min, 1-minute load median 12, max 16 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-30/log/report.md
+pf-04 exit=0 start=14:22:15 end=14:26:35 blind-run: 24 turns, $1.50, 4.3 min, 1-minute load median 12, max 18 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-04/log/report.md
+pf-23 exit=1 start=14:22:53 end=14:26:35 blind-run: exit 1, 19 turns, $1.50, 3.7 min, 1-minute load median 10, max 18 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-23/log/report.md
+pf-17 exit=1 start=14:22:41 end=14:26:35 blind-run: exit 1, 18 turns, $1.30, 3.9 min, 1-minute load median 9, max 18 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-17/log/report.md
+pf-27 exit=0 start=14:23:01 end=14:26:37 blind-run: 16 turns, $1.18, 3.6 min, 1-minute load median 9, max 18 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-27/log/report.md
+pf-14 exit=1 start=14:22:35 end=14:26:44 blind-run: exit 1, 22 turns, $1.41, 4.1 min, 1-minute load median 11, max 21 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-14/log/report.md
+pf-22 exit=1 start=14:22:51 end=14:26:49 blind-run: exit 1, 22 turns, $1.39, 3.9 min, 1-minute load median 10, max 20 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-22/log/report.md
+pf-19 exit=0 start=14:22:45 end=14:26:54 blind-run: 19 turns, $1.31, 4.1 min, 1-minute load median 11, max 21 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-19/log/report.md
+pf-26 exit=1 start=14:22:59 end=14:26:54 blind-run: exit 1, 21 turns, $1.33, 3.9 min, 1-minute load median 10, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-26/log/report.md
+pf-25 exit=1 start=14:22:57 end=14:26:54 blind-run: exit 1, 24 turns, $1.38, 3.9 min, 1-minute load median 10, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-25/log/report.md
+pf-16 exit=0 start=14:22:39 end=14:26:54 blind-run: 20 turns, $1.41, 4.2 min, 1-minute load median 10, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-16/log/report.md
+pf-24 exit=1 start=14:22:55 end=14:26:58 blind-run: exit 1, 21 turns, $1.29, 4.0 min, 1-minute load median 12, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-24/log/report.md
+pf-01 exit=1 start=14:22:09 end=14:26:59 blind-run: exit 1, 33 turns, $1.82, 4.8 min, 1-minute load median 12, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-01/log/report.md
+pf-15 exit=0 start=14:22:37 end=14:27:02 blind-run: 19 turns, $1.47, 4.4 min, 1-minute load median 10, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-15/log/report.md
+pf-06 exit=0 start=14:22:19 end=14:27:07 blind-run: 22 turns, $1.58, 4.8 min, 1-minute load median 12, max 18 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-06/log/report.md
+pf-28 exit=1 start=14:23:03 end=14:27:08 blind-run: exit 1, 18 turns, $1.29, 4.1 min, 1-minute load median 12, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-28/log/report.md
+pf-02 exit=0 start=14:22:11 end=14:27:13 blind-run: 27 turns, $1.74, 5.0 min, 1-minute load median 12, max 18 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-02/log/report.md
+pf-29 exit=1 start=14:23:05 end=14:27:14 blind-run: exit 1, 18 turns, $1.28, 4.1 min, 1-minute load median 12, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-29/log/report.md
+pf-10 exit=0 start=14:22:27 end=14:27:15 blind-run: 20 turns, $1.49, 4.8 min, 1-minute load median 11, max 18 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-10/log/report.md
+pf-12 exit=0 start=14:22:31 end=14:27:24 blind-run: 20 turns, $1.64, 4.9 min, 1-minute load median 11, max 16 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-12/log/report.md
+pf-18 exit=1 start=14:22:43 end=14:30:39 blind-run: exit 1, 15 turns, $1.04, 7.9 min, 1-minute load median 10, max 21 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pf-18/log/report.md
+wave done 14:30:39

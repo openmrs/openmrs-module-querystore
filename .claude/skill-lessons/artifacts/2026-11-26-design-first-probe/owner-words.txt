@@ -1,0 +1,13 @@
+The owner's own messages in session 7abec84a-e793-4dfb-aa6b-79a4f7a18e1d, extracted from
+/Users/danielkayiwa/.claude/projects/-Users-danielkayiwa-Projects-openmrs-chartsearchai/7abec84a-e793-4dfb-aa6b-79a4f7a18e1d.jsonl
+by type=user, a phrase match, and excluding injected skill bodies and the compaction summary:
+
+- 2026-11-26T09:49:36.482Z (uuid 9a07f5ff-b043-4fa1-8ae0-1904ea01f07c):
+  fix the pr-review skill so this doesn't happen again
+
+- 2026-11-26T13:19:14.825Z (uuid 0d62fcba-4646-423a-9db7-abd4e54fc781):
+  In response to that issue that Wikum raised which you had not, Wikum has just advised me to ask you to take a holistic look at the PR, not just the code. It's important that we confirm people are making the right design choices.
+
+- 2026-11-26T13:40:02.074Z (uuid 7291935d-8b21-4d02-830d-1b68868a642f):
+  yes close the pr-review gap by first state whether the design is right for the ticket and the plan it belongs to, and hold back any drafted comment that adds more of what's in question.
+

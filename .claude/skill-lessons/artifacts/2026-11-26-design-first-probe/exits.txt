@@ -1,0 +1,21 @@
+pd-13 exit=0 start=13:55:23 end=13:58:38 blind-run: 15 turns, $1.05, 3.2 min, 1-minute load median 6, max 8 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-13/log/report.md
+pd-14 exit=0 start=13:55:25 end=13:58:44 blind-run: 16 turns, $1.16, 3.3 min, 1-minute load median 6, max 9 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-14/log/report.md
+pd-17 exit=0 start=13:55:31 end=13:58:45 blind-run: 22 turns, $1.31, 3.2 min, 1-minute load median 6, max 14 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-17/log/report.md
+pd-05 exit=0 start=13:55:07 end=13:59:06 blind-run: 19 turns, $1.35, 4.0 min, 1-minute load median 5, max 19 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-05/log/report.md
+pd-16 exit=0 start=13:55:29 end=13:59:11 blind-run: 20 turns, $1.29, 3.7 min, 1-minute load median 6, max 22 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-16/log/report.md
+pd-02 exit=0 start=13:55:01 end=13:59:38 blind-run: 23 turns, $1.63, 4.6 min, 1-minute load median 6, max 39 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-02/log/report.md
+pd-19 exit=0 start=13:55:35 end=13:59:48 blind-run: 22 turns, $1.40, 4.2 min, 1-minute load median 7, max 49 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-19/log/report.md
+pd-09 exit=0 start=13:55:15 end=13:59:51 blind-run: 20 turns, $1.36, 4.6 min, 1-minute load median 7, max 55 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-09/log/report.md
+pd-12 exit=0 start=13:55:21 end=14:00:28 blind-run: 29 turns, $1.72, 5.1 min, 1-minute load median 8, max 55 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-12/log/report.md
+pd-18 exit=0 start=13:55:33 end=14:00:32 blind-run: 25 turns, $1.56, 5.0 min, 1-minute load median 7, max 49 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-18/log/report.md
+pd-01 exit=0 start=13:54:59 end=14:00:54 blind-run: 34 turns, $1.98, 5.9 min, 1-minute load median 6, max 54 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-01/log/report.md
+pd-20 exit=0 start=13:55:37 end=14:01:02 blind-run: 24 turns, $1.52, 5.4 min, 1-minute load median 7, max 46 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-20/log/report.md
+pd-03 exit=0 start=13:55:03 end=14:01:12 blind-run: 29 turns, $1.80, 6.1 min, 1-minute load median 18, max 56 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-03/log/report.md
+pd-10 exit=0 start=13:55:17 end=14:01:20 blind-run: 25 turns, $1.83, 6.1 min, 1-minute load median 28, max 57 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-10/log/report.md
+pd-04 exit=0 start=13:55:05 end=14:02:37 blind-run: 34 turns, $2.14, 7.5 min, 1-minute load median 15, max 56 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-04/log/report.md
+pd-15 exit=0 start=13:55:27 end=14:02:50 blind-run: 40 turns, $2.27, 7.4 min, 1-minute load median 13, max 53 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-15/log/report.md
+pd-11 exit=0 start=13:55:19 end=14:03:24 blind-run: 30 turns, $2.02, 8.1 min, 1-minute load median 11, max 57 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-11/log/report.md
+pd-08 exit=0 start=13:55:13 end=14:04:45 blind-run: 32 turns, $1.91, 9.5 min, 1-minute load median 8, max 56 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-08/log/report.md
+pd-07 exit=0 start=13:55:11 end=14:05:04 blind-run: 34 turns, $2.09, 9.9 min, 1-minute load median 8, max 56 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-07/log/report.md
+pd-06 exit=0 start=13:55:09 end=14:06:43 blind-run: 44 turns, $2.75, 11.6 min, 1-minute load median 7, max 56 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-pd-06/log/report.md
+wave done 14:06:43

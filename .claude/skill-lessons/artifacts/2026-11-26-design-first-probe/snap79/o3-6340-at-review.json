@@ -1,0 +1,44 @@
+{
+ "key": "O3-6340",
+ "fields": {
+  "summary": "Stock Management: Remove hand-written helper types",
+  "description": "h3. Why\n\nThe module defines its own small helper types that duplicate what Java and Apache Commons already provide. One of them, {{StringUtils}}, shares its name with the Commons class used across the module, which is confusing.\n\nh3. Description\n\nReplace the module's own helper types with their standard equivalents and delete them.\n\nh3. Details\n\n* {{Action2}}: a two-argument callback, used by the stock operation type processors (8 files). Replace with {{java.util.function.BiConsumer}}.\n* {{Pair}}: used in 3 files. Replace with the Apache Commons {{Pair}}.\n* {{StringUtils}}: only holds an email check, used in 2 files. Move the check to where it is used, or use an existing validator.\n* {{NumberFormatUtil}}: used in 4 files. Replace with standard number formatting where it adds nothing.\n\nh3. Acceptance criteria\n\n* {{Action2}}, {{Pair}} and the module's own {{StringUtils}} are removed.\n* {{NumberFormatUtil}} is removed or reduced to what the standard library does not cover.\n* No behaviour changes; the build and all tests pass.",
+  "status": {
+   "name": "In Progress"
+  },
+  "comment": {
+   "comments": [
+    {
+     "created": "2026-11-21T05:41:46.882+1100",
+     "author": {
+      "displayName": "Automation for Jira"
+     },
+     "body": "This item is being transitioned to \"In Progress\" as [a PR|https://github.com/openmrs/openmrs-module-stockmanagement/pull/79] has been opened for it."
+    }
+   ]
+  },
+  "labels": [],
+  "fixVersions": [],
+  "parent": {
+   "key": "O3-6306",
+   "fields": {
+    "summary": "StockManagement v4.0"
+   }
+  },
+  "issuelinks": [
+   {
+    "type": {
+     "name": "Blocks",
+     "inward": "is blocked by",
+     "outward": "blocks"
+    },
+    "inwardIssue": {
+     "key": "O3-6308",
+     "fields": {
+      "summary": "Stock Management: Remove dead code and leftover files"
+     }
+    }
+   }
+  ]
+ }
+}

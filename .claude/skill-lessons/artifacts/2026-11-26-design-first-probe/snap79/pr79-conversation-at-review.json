@@ -1,0 +1,78 @@
+{
+ "issue_comments": [
+  {
+   "id": 7047760663,
+   "user": "greptile-apps[bot]",
+   "created_at": "2026-11-20T18:43:55Z",
+   "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=114447526&amp;sig=ad9908f9b5346ee761b8b6afbb33a359c1509000e78226a70e1040236811c4a4\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"https://app.greptile.com/-/switch-tenant?tenant=openmrs&amp;next=%2Fopenmrs%2Fopenmrs-module-stockmanagement%2Fpull%2F79&amp;utm_source=greptile_review&amp;utm_medium=github&amp;utm_campaign=view_in_greptile\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/ViewInGreptileDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/ViewInGreptile.svg?v=2\"><img alt=\"View in Greptile\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/ViewInGreptile.svg?v=2\" align=\"right\"></picture></a>Confidence Score: 4/5</h2>\n\n**[Medium impact]** The changes reach several stock\\-management workflows but stay within this module\\.\n\nThe PR appears safe to merge, with a non-blocking gap in the quantity-formatting tests.\n\n<h2><a href=\"https://app.greptile.com/ide/claude-code?prompt=%23%23%23%20Issue%201%0Aapi%2Fsrc%2Ftest%2Fjava%2Forg%2Fopenmrs%2Fmodule%2Fstockmanagement%2FHelperFormattingTest.java%3A34-35%0A%60shouldPreserveQuantityDisplayAndHalfEvenRounding%60%20tests%20a%20copied%20%60DecimalFormat%60%20expression%2C%20not%20the%20code%20that%20formats%20stock%20quantities.%20It%20will%20still%20pass%20if%20a%20production%20%60QUANTITY_FORMAT%60%20changes%20or%20a%20caller%20uses%20the%20wrong%20value.%20Test%20an%20actual%20alert%20or%20negative-stock%20message%20with%20these%20examples%20so%20the%20test%20catches%20changes%20to%20the%20output%20users%20receive.%0A%0ANote%3A%20If%20this%20suggestion%20doesn't%20match%20your%20team's%20coding%20style%2C%20reply%20to%20this%20and%20let%20me%20know.%20I'll%20remember%20it%20for%20next%20time!%0A%0A---%0A%0AFor%20each%20issue%20above%2C%20determine%20whether%20it%20is%20valid%20and%20should%20be%20fixed.%20If%20so%2C%20fix%20it%20directly.&repo=openmrs%2Fopenmrs-module-stockmanagement&pr=79&platform=github\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/FixAllInClaudeDark.svg?v=7\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/FixAllInClaude.svg?v=7\"><img alt=\"Fix All in Claude Code\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/FixAllInClaude.svg?v=7\" align=\"right\"></picture></a>Findings</h2>\n\n1. <img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\">&nbsp;**Quantity tests skip production code** <a href=\"https://github.com/openmrs/openmrs-module-stockmanagement/pull/79#discussion_r4646348610\">▶</a>\n\n<details><summary>Fix with agent prompt</summary>\n\n`````markdown\n### Issue 1\napi/src/test/java/org/openmrs/module/stockmanagement/HelperFormattingTest.java:34-35\n`shouldPreserveQuantityDisplayAndHalfEvenRounding` tests a copied `DecimalFormat` expression, not the code that formats stock quantities. It will still pass if a production `QUANTITY_FORMAT` changes or a caller uses the wrong value. Test an actual alert or negative-stock message with these examples so the test catches changes to the output users receive.\n\nNote: If this suggestion doesn't match your team's coding style, reply to this and let me know. I'll remember it for next time!\n\n---\n\nFor each issue above, determine whether it is valid and should be fixed. If so, fix it directly.\n`````\n\n</details>\n\n<details open><summary><h3>Summary</h3></summary>\n\nNo blocking issue found. The new quantity-formatting test should exercise production output rather than a copied expression.\n\n- Operation processors pass their two-value callbacks through Java's `BiConsumer`.\n- Stock operations and scheduled jobs use Apache Commons pairs to carry related values.\n- Stock quantity messages and report counts keep their grouped number display.\n- Stock management keeps its email checks beside the notification code that uses them.\n</details>\n\n<!-- greptile_confidence_score:4 -->\n\n<sub>Reviews (1) · Last reviewed commit: [\"O3-6340: Replace hand-written helper typ...\"](https://github.com/openmrs/openmrs-module-stockmanagement/commit/ee683b474747f6a75daacb10a346a7152ee849b8) · [Reviewed by Greptile](https://www.greptile.com/?utm_source=greptile_review&utm_medium=github&utm_campaign=review_public&utm_content=openmrs/openmrs-module-stockmanagement)</sub>"
+  },
+  {
+   "id": 7103091185,
+   "user": "avanishkasar",
+   "created_at": "2026-11-23T13:49:49Z",
+   "body": "Rebased on master after #76. The moved email check now uses #76's pattern as-is, and since this PR removes `StringUtils`, the long-domain case from `StringUtilsTest` moved into `UserEmailAddressTest`."
+  }
+ ],
+ "review_comments": [
+  {
+   "id": 4646348610,
+   "user": "greptile-apps[bot]",
+   "created_at": "2026-11-20T18:43:58Z",
+   "body": "<a href=\"\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Quantity tests skip production code**\n\n`shouldPreserveQuantityDisplayAndHalfEvenRounding` tests a copied `DecimalFormat` expression, not the code that formats stock quantities. It will still pass if a production `QUANTITY_FORMAT` changes or a caller uses the wrong value. Test an actual alert or negative-stock message with these examples so the test catches changes to the output users receive.\n\n<details><summary>Prompt To Fix With AI</summary>\n\n`````markdown\nThis is a comment left during a code review.\nPath: api/src/test/java/org/openmrs/module/stockmanagement/HelperFormattingTest.java\nLine: 34-35\n\nComment:\n**Quantity tests skip production code**\n\n`shouldPreserveQuantityDisplayAndHalfEvenRounding` tests a copied `DecimalFormat` expression, not the code that formats stock quantities. It will still pass if a production `QUANTITY_FORMAT` changes or a caller uses the wrong value. Test an actual alert or negative-stock message with these examples so the test catches changes to the output users receive.\n\n---\n\nFor each issue above, determine whether it is valid and should be fixed. If so, fix it directly.\n`````\n</details>\n\nNote: If this suggestion doesn't match your team's coding style, reply to this and let me know. I'll remember it for next time!\n\n<a href=\"https://app.greptile.com/ide/claude-code?prompt=This%20is%20a%20comment%20left%20during%20a%20code%20review.%0APath%3A%20api%2Fsrc%2Ftest%2Fjava%2Forg%2Fopenmrs%2Fmodule%2Fstockmanagement%2FHelperFormattingTest.java%0ALine%3A%2034-35%0A%0AComment%3A%0A**Quantity%20tests%20skip%20production%20code**%0A%0A%60shouldPreserveQuantityDisplayAndHalfEvenRounding%60%20tests%20a%20copied%20%60DecimalFormat%60%20expression%2C%20not%20the%20code%20that%20formats%20stock%20quantities.%20It%20will%20still%20pass%20if%20a%20production%20%60QUANTITY_FORMAT%60%20changes%20or%20a%20caller%20uses%20the%20wrong%20value.%20Test%20an%20actual%20alert%20or%20negative-stock%20message%20with%20these%20examples%20so%20the%20test%20catches%20changes%20to%20the%20output%20users%20receive.%0A%0A---%0A%0AFor%20each%20issue%20above%2C%20determine%20whether%20it%20is%20valid%20and%20should%20be%20fixed.%20If%20so%2C%20fix%20it%20directly.&repo=openmrs%2Fopenmrs-module-stockmanagement&pr=79&platform=github\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/FixInClaudeDark.svg?v=7\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/FixInClaude.svg?v=7\"><img alt=\"Fix in Claude Code\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/FixInClaude.svg?v=7\"></picture></a>",
+   "path": "api/src/test/java/org/openmrs/module/stockmanagement/HelperFormattingTest.java",
+   "line": null,
+   "original_line": 35,
+   "side": "RIGHT",
+   "commit_id": "ee683b474747f6a75daacb10a346a7152ee849b8"
+  },
+  {
+   "id": 4651949999,
+   "user": "avanishkasar",
+   "created_at": "2026-11-21T10:17:17Z",
+   "body": "Fair point. The pattern now lives in ModuleConstants and both tests use the production values, so a change to the format will fail them. Also fixed the Sonar regex flag in the same commit: possessive quantifiers, same matches, no stack overflow on long input.",
+   "path": "api/src/test/java/org/openmrs/module/stockmanagement/HelperFormattingTest.java",
+   "line": null,
+   "original_line": 35,
+   "side": "RIGHT",
+   "commit_id": "ee683b474747f6a75daacb10a346a7152ee849b8",
+   "in_reply_to_id": 4646348610
+  },
+  {
+   "id": 4685876001,
+   "user": "denniskigen",
+   "created_at": "2026-11-24T20:09:42Z",
+   "body": "nit: The first sentence describes the change rather than the code.\n\n```suggestion\n\t// Possessive quantifiers match the same addresses without backtracking, so a long address can't overflow the stack.\n```",
+   "path": "api/src/main/java/org/openmrs/module/stockmanagement/api/impl/StockManagementServiceImpl.java",
+   "line": null,
+   "original_line": 59,
+   "side": "RIGHT",
+   "commit_id": "25b913e8b8c5a453a1c129a7583cfc1b48a40f5a"
+  }
+ ],
+ "reviews": [
+  {
+   "id": 5997719256,
+   "user": "greptile-apps[bot]",
+   "state": "COMMENTED",
+   "submitted_at": "2026-11-20T18:43:59Z",
+   "commit_id": "ee683b474747f6a75daacb10a346a7152ee849b8",
+   "body": ""
+  },
+  {
+   "id": 6004576500,
+   "user": "avanishkasar",
+   "state": "COMMENTED",
+   "submitted_at": "2026-11-21T10:17:17Z",
+   "commit_id": "122879b8cd76cc4f78a6d4628ad65a14c94fe112",
+   "body": ""
+  },
+  {
+   "id": 6046555818,
+   "user": "denniskigen",
+   "state": "APPROVED",
+   "submitted_at": "2026-11-24T20:09:42Z",
+   "commit_id": "25b913e8b8c5a453a1c129a7583cfc1b48a40f5a",
+   "body": "LGTM. Thanks for pinning the formatting and email behaviour with tests before swapping anything out, @avanishkasar!"
+  }
+ ]
+}

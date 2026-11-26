@@ -1,0 +1,7 @@
+arms: {'k6': 'C', 'k5': 'T2', 'k7': 'T3'}
+case 85 C  n=5 held={'A': 0, 'B': 0, 'C': 0, 'E': 0} noisy=3 plan_verdict=0 R1=5 B=['as_drafted', 'reworded', 'as_drafted', 'as_drafted', 'as_drafted']
+case 85 T2 n=5 held={'A': 0, 'B': 5, 'C': 0, 'E': 0} noisy=1 plan_verdict=5 R1=5 B=['held', 'held', 'held', 'held', 'held']
+case 85 T3 n=5 held={'A': 0, 'B': 2, 'C': 0, 'E': 0} noisy=0 plan_verdict=5 R1=5 B=['held', 'as_drafted', 'reworded', 'reworded', 'held']
+case 79 C  n=5 held={'A': 1, 'B': 0} noisy=0 plan_verdict=0
+case 79 T2 n=5 held={'A': 0, 'B': 0} noisy=0 plan_verdict=5
+case 79 T3 n=5 held={'A': 0, 'B': 0} noisy=0 plan_verdict=5

@@ -1,0 +1,5 @@
+arms: {'k4': 'T2', 'k3': 'C'}
+case 85 C  runs=['pe-03', 'pe-04', 'pe-07', 'pe-15', 'pe-17'] held={'A': 0, 'B': 0, 'C': 0, 'E': 0} noisy=2 plan_verdict=0 R1=5
+case 85 T2 runs=['pe-01', 'pe-09', 'pe-13', 'pe-16', 'pe-20'] held={'A': 0, 'B': 5, 'C': 0, 'E': 0} noisy=0 plan_verdict=5 R1=5
+case 79 C  runs=['pe-02', 'pe-05', 'pe-11', 'pe-18', 'pe-19'] held={'A': 0, 'B': 0} noisy=0 plan_verdict=0
+case 79 T2 runs=['pe-06', 'pe-08', 'pe-10', 'pe-12', 'pe-14'] held={'A': 0, 'B': 2} noisy=0 plan_verdict=5

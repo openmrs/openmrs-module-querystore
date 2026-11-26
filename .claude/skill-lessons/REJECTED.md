@@ -8531,3 +8531,202 @@ pass read for its proposals or counted: `2026-11-26-pr-review-openmrs-module-sto
 #86 round 1: a consumer read of a removed field, set aside as an owed check for a future frontend PR, then raised by a
 maintainer). It is the next retro's, which should count it under "count only the records REJECTED.md does not already
 name" as not yet counted.
+
+## 2026-11-26 (fourth owner-directed pass: pr-review settles the design first, for the ticket and the plan it belongs to, and holds back a drafted comment that would add more of what is in question) — 1 applied; 2 wordings measured and not proposed; three refutation rounds; linter 18 files, 0 findings; **pr-review 0.44.0**
+
+**Evidence read.** Before the read, the store matched `origin/main` at `39631bd4`: 971 files identical, none missing, none
+local-only but `confidential/`, a `.DS_Store` and the `__pycache__` file earlier sections name. `confidential/` was read for its `PRS`
+only; neither PR this pass measures is listed. One record had not been counted:
+- `2026-11-26-pr-review-openmrs-module-stockmanagement-86.md`, stockmanagement #86 round 1 (head eb4a0e8), which the
+  third 2026-11-26 section left for this retro (:8529-8533). It is counted under the parked counts below.
+
+**The direction.**
+- The owner relayed advice from Wikum, who reported O3-6352, after #85: that the review "take a holistic look at the PR,
+  not just the code". The owner's message adds: "It's important that we confirm people are making the right design
+  choices" (session 7abec84a, 2026-11-26T13:19Z).
+- The owner then directed: "yes close the pr-review gap by first state whether the design is right for the ticket and the
+  plan it belongs to, and hold back any drafted comment that adds more of what's in question" (13:40Z).
+- Both are in `artifacts/2026-11-26-design-first-probe/owner-words.txt`, extracted from the transcript.
+
+**Applied, owner-directed: pr-review 0.44.0.** Three edits:
+- **Step 1 (:17)** asks the ticket's `parent` and `issuelinks` with the rest, and adds, after its private-ticket rules:
+  "Read the plan the ticket belongs
+  to as well: its `parent` ticket, read the same way, with its description and comments, and the summary of each ticket
+  in its `issuelinks`, or on GitHub the issue's `parent` (`gh api graphql`) and the issues it says it blocks or waits
+  on." Both Jira fields were checked on O3-6352 (parent O3-6306, 8
+  links), and GraphQL's `Issue.parent` on cli/cli; a made-up field name errors.
+- **Step 2's opening (:30)** replaces "settle the approach before verifying the details" with: "settle the design first:
+  before any line-level finding, decide whether it is right for the ticket, and whether it is right for the plan the
+  ticket belongs to, naming that plan or saying Step 1 found none, and, outside CI, write both verdicts in the round
+  record and open your report to the user with them."
+- **:85** gains "It is in question once a finding or a question you post says so." It also gains "including every
+  drafted comment that would add more of what is in question, however sound its own point", and the case: "On
+  stockmanagement #85, a request that two settings warn "the way parseUomPriority does" was answered with one more static
+  helper, while the ticket asked that no static settings utility remain."
+- **What it rests on.**
+  - #85 round 1 (8f7bb30) found the design points and reported them to the owner only. It posted four line-level
+    comments.
+  - Comment B asked two settings to warn "the way parseUomPriority does". The author answered by adding `parseBoolean`
+    to the `ModuleConstants` helpers (bc98c50), which the ticket's author then called "worse than what we're replacing"
+    (issuecomment-7185869450).
+  - The third 2026-11-26 section left this open as "The round's own drafts" (:8460-8463).
+  - The author's current head (ae609b2) has no helpers left and reads every setting through core.
+- **Budget:** `pr-review` 10543 -> 10703 words, raised. It retires no rule. Step 2's opening sentence is replaced, not
+  added to, and :85's "hold the rest" now names what it holds.
+- **REVERT ON:** two run records in which a maintainer says a comment held back under :85's new clause should have gone
+  out that round. Or one in which a round's verdict on the plan led it to post an objection the ticket's author calls
+  outside the ticket.
+- **REOPEN ON** (for a clause that holds without its #85 sentence): one run record in which a round under 0.44.0 posts a
+  drafted comment that adds more of a design point its own verdict or posted question has put in question, and the
+  author answers with more of it.
+
+**Measured** (`artifacts/2026-11-26-design-first-probe/`; PROTOCOL.md, each wave pre-registered before it ran and its
+result appended before the next; scored before unblinding; audited, 0 flags after a calibrated re-audit; n = 5 per arm
+per case per wave).
+- **The probe.** Each run gets the frozen head, the snapshots as they stood when the round began, the agents' reports
+  and the round's drafted comments, and decides:
+  - what to file;
+  - what to post, reword or hold;
+  - its report's first three lines.
+- **The cases.** #85 round 1 (21:31Z) is the target. #79 round 1 (21:25Z) is the control: a maintainer had approved its
+  design, and both of its drafts are sound.
+- **The arms.**
+  - C: 0.43.0.
+  - T: the first wording, a single verdict "for the ticket and for the plan".
+  - T2: the applied text.
+  - T3: T2 without the #85 sentence.
+- **Holding #85's comment B.** C 0 of 15. T3, the clause without the sentence naming #85, 2 of 5. T and T2, with that
+  sentence, 15 of 15. All 15 name that sentence in their report, 12 of them in their stated reason (pd-01, pe-13
+  and pf-20 in their text). pf-16, for one: "the request the method records this PR answering with
+  one more static helper". No arm held A, C or E (0 of 35). Every run filed the criterion question R1 (35 of 35).
+- **The plan in the opening.** C 0 of 30; T 0 of 10, though all 20 runs of that wave opened the epic file; T2 20 of 20;
+  T3 10 of 10.
+- **Noise at #85.** R9, the one-line import nit, was the only noise item filed: C 5 of 15; T and T2 2 of 15; T3 0 of
+  5.
+- **Over-holding at #79.** Waves 1 and 2 gave the drafts without the round's blind reads. There the new text held B in 3
+  of 10, and C in 0 of 10. All three cited the blind read Step 3 (:145) asks of a fix before posting, which the probe
+  forbade; the real round had run it (sm79-r1-refute-B). Wave 3 told the runs which blind reads each draft had passed,
+  as both round records show. Then C held A in 1 of 5, and T2 and T3 held nothing (0 of 10). No arm filed a #79 noise
+  item (0 of 35); among them was S2, the shared `formatQuantity` helper, a helper the ticket removes.
+- **The usage limit.** Wave 3 ran into the account's five-hour usage limit at 14:26Z, and 14 of its 30 runs ended
+  mid-review. They were rerun under new names in the same cells after the limit reset (PROTOCOL.md says so before the
+  reruns).
+
+**What the measurement does not show.**
+- **The hold's reach beyond #85.** The hold at #85 comes from the sentence that names #85. Without it (T3) the clause
+  held B in 2 of 5. So on a PR the sentence does not describe, the clause alone may hold little. **Needs the
+  implementation:** the records hold no other round whose own design question met its own drafted comment, and the
+  REOPEN ON above watches for one.
+- **The decision point.** The probe starts with the drafts written. The verdict-first order of Step 2 also acts earlier,
+  on what a round drafts at all, and that is not measured.
+- **The verdict's correctness.** The plan verdict was scored for being there, not for being right. Nothing shows it
+  changed a filing at #79. **Needs the implementation.**
+- **What a held draft loses.**
+  - B asked for a ticket requirement: O3-6352's Details say "A setting that cannot be parsed should be logged, not
+    silently ignored". It is still unmet at ae609b2 (round record :59).
+  - All 15 T and T2 holds deferred B whole. None asked for the logging without the helper, and the probe's labels
+    counted such a reword as posting, so they could not tell the two apart.
+- **A re-review.** :87 reopens an approach the thread settled only on a changed head or new evidence. A round's plan
+  verdict could be offered as that evidence. Neither case was a re-review. **Needs the implementation.**
+- **Sample size.** n = 5 per arm per case per wave, on two cases, both stockmanagement PRs in one epic.
+
+**Measured and not proposed.**
+- **T, one verdict "for the ticket and for the plan".** It named the plan in 0 of 10 openings: the runs gave a ticket
+  verdict and dropped the plan.
+- **T3, T2 without the #85 sentence.** It held B in 2 of 5, failing the pre-registered at-least-4.
+
+**Rejected shapes, with their evidence.**
+- **Posting the design verdict on the PR.** :85 says an approach you agree with earns no comment, and :157 bans
+  architecture grading in the body. Whether an agreeing verdict should be posted is put to the owner below.
+- **A line in `posting.md`'s gate.** It was not needed. The applied text alone put the verdict, the plan named, in 20 of
+  20 openings.
+- **More blind agents, or a blind design reader.** #85's design point was found by two of four agents (:8408); detection
+  was not the miss.
+- **Doing nothing after 0.43.0.** 0.43.0 files the criterion question, 15 of 15 here, and still posts B, 15 of 15.
+
+**Observed, not yet actionable.**
+- **A record written during this pass, after its read:** `2026-11-26-pr-review-openmrs-module-stockmanagement-79.md`.
+  #79 round 1 set aside an agent's "testing the JDK's `DecimalFormat`, not the module", and the maintainer then asked to
+  drop that test class. It is the next retro's, under "count only the records REJECTED.md does not already name".
+- **The probe's own lesson.** A run told it cannot start agents may hold a sound fix whose blind read is owed (:145), and
+  that shows as over-holding. A probe's drafts say which blind reads each draft has passed. 1 probe.
+- **The probe's lock lists** took every `~/.claude/blind-runs/2026-11-26-*` folder, other sessions' included. Among them
+  were four of another session's refuter folders for a private PR, locked during waves 1 and 2 and restored after each.
+  The copies of those lists in this pass's artifacts leave those lines out. A probe locks the folders it names, not a
+  date's. 1 probe.
+
+**Refutation.**
+- **Round 1** (`retro-1126e-design-refute1`, 3.4 min): apply with corrections, nothing blocking. Taken:
+  - "A 404 there" could read as the GitHub call the new sentence ended on. The plan sentence now follows the
+    private-ticket rules instead, so "there" is the REST URL again and the word count stays 10693.
+  - The hold figure now leads with T3's 2 of 5, and says how many T and T2 holds cite the #85 sentence.
+  - A REOPEN ON for the under-hold, which the REVERT ON could not see.
+  - Wikum's role and words, as the files show them.
+  - The noise split by arm.
+  - PROTOCOL.md's wave 3 result.
+  - The script behind `audit4.txt`, saved and re-run (0 flags).
+- **Not taken from round 1:**
+  - "2 of 20 means T and T2 only": the 20 are T, T2 and T3, now split above.
+  - Its note that a minor criterion question could hold every draft: no arm held A, C or E (0 of 35), so no change.
+- **Round 2** (`retro-1126e-design-refute2`, 3.7 min): apply with corrections, nothing blocking. Taken, in its words
+  where it gave them:
+  - Step 1 reads the parent ticket "the same way, with its description and comments", which is what the probe's runs
+    were given. It also puts a parent only the MCP can read under :17's private-ticket chain. This adds 10 words, so
+    10693 -> 10703.
+  - All 15 T and T2 holds of B name the #85 sentence (three in their report's text).
+  - What a held draft loses, and the re-review case, recorded above.
+  - "Still the owner's" now cites :176 for the reach clause. The live :172 is the note bullet, so the old reference,
+    carried from :7833 on, was stale.
+- **Round 3** (`retro-1126e-design-refute3`, 4.0 min): apply, nothing blocking.
+  - It ran the checks left owed: the linter on the final text (18 files, 0 findings), the store against the local
+    `origin/main` ref, the wave-3 audit (0 flags) and every figure above.
+  - Taken in its words:
+    - :85's trigger is now "a finding or a question you post", not "your verdict". A verdict :79 keeps off the PR as
+      taste would otherwise hold drafts behind a direction the author was never told about. In the probe, R1 was
+      posted as a question in 35 of 35 #85 runs, so the narrower trigger is the measured one. Word-neutral.
+    - The store's `.DS_Store`.
+    - The precedents for counting #86, and what the count rests on.
+  - Not taken: "checked against the local `origin/main` ref without a fetch". That describes its own re-check; this
+    pass's check fetched first.
+  - **No fourth round,** since the corrections are round 3's own words narrowing text the earlier rounds settled, as at
+    :7828.
+
+**Still the owner's:**
+- whether `--no-blind` should also stop Step 3's blind readers, of a finding and of a fix the review recommends;
+- whether to direct a change to pr-review :176's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question;
+- whether a load threshold read from `blind-run-load.tsv` makes an agent owed, once Q1's records show the load at which
+  agents lose their runs; #69's first round in this morning's section is a round it would decide;
+- whether a round that posts other comments anyway also posts the verified nits it would set aside (#71 round 9);
+- whether the reading of "a defect" this morning's measurement used becomes part of 0.39.0's amended REVERT ON, the
+  survivor and base-shared readings each deciding its verdict on the record when #57's first round counts, and
+  whether it also governs 0.40.0's (:7782-7784), which uses the same words; and whether, under 0.43.0, a criterion
+  miss an agent reported and the round posted counts as a defect for both;
+- whether a ticket whose only criteria are an "Expected" section lists acceptance criteria, for pr-review's
+  per-criterion agents, for 0.43.0's criterion sentence and for 0.39.0's REVERT ON: #57's and #68's reviews started agents on one (O3-6248, O3-6261);
+- whether to run the pass the set-aside-reason lesson in this morning's section earns now, rather than at the next
+  retro;
+- whether a design verdict that agrees with the PR is posted on it: 0.44.0 keeps it to the round record and the report
+  to the user (:85, "an approach you agree with earns no comment"), where the owner's message relaying Wikum's advice asks that
+  reviews "confirm people are making the right design choices".
+
+**Running parked counts:**
+- "Seen, then set aside" as outside the ticket: run records 2 -> 3, with #86 round 1.
+  - #86 round 1 noted that the current frontend's type filter matches `undefined === undefined` on the head. It filed
+    that as "an owed check for a future frontend PR", a set-aside to outside the PR, and a maintainer then raised it
+    (r4707232941). That meets the REOPEN ON's wording (:6043-6044).
+  - Its reason, a deferral to a later PR, is neither the "nit" of #71 round 9 nor the "met" of #85, which left both
+    uncounted (:8037-8039, :8405-8408). It is counted as 6535's "not realistic" was (:6224).
+  - Its non-blocking status rests on the 2026-11-24 decision. The round record says that decision was made on the
+    understated list and was told to the user to reconsider (:109). If the user now calls it blocking, the count
+    returns to 2.
+  - The three records' reasons differ: R-B's line filter, 6535's realism judgment, and #86's deferral to another PR. No
+    proposed edit reaches all three.
+  - Measurement sightings stay 12.
+- The others are unchanged from the third 2026-11-26 section.

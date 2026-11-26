@@ -1,0 +1,129 @@
+{
+ "arms": {
+  "k6": "C",
+  "k5": "T2",
+  "k7": "T3"
+ },
+ "runs": {
+  "pf-01": {
+   "case": "85",
+   "skill": "k7"
+  },
+  "pf-02": {
+   "case": "85",
+   "skill": "k6"
+  },
+  "pf-03": {
+   "case": "79",
+   "skill": "k5"
+  },
+  "pf-04": {
+   "case": "85",
+   "skill": "k6"
+  },
+  "pf-05": {
+   "case": "85",
+   "skill": "k5"
+  },
+  "pf-06": {
+   "case": "85",
+   "skill": "k6"
+  },
+  "pf-07": {
+   "case": "79",
+   "skill": "k6"
+  },
+  "pf-08": {
+   "case": "85",
+   "skill": "k5"
+  },
+  "pf-09": {
+   "case": "85",
+   "skill": "k6"
+  },
+  "pf-10": {
+   "case": "79",
+   "skill": "k5"
+  },
+  "pf-11": {
+   "case": "79",
+   "skill": "k6"
+  },
+  "pf-12": {
+   "case": "85",
+   "skill": "k7"
+  },
+  "pf-13": {
+   "case": "79",
+   "skill": "k7"
+  },
+  "pf-14": {
+   "case": "85",
+   "skill": "k7"
+  },
+  "pf-15": {
+   "case": "79",
+   "skill": "k5"
+  },
+  "pf-16": {
+   "case": "85",
+   "skill": "k5"
+  },
+  "pf-17": {
+   "case": "79",
+   "skill": "k7"
+  },
+  "pf-18": {
+   "case": "79",
+   "skill": "k7"
+  },
+  "pf-19": {
+   "case": "79",
+   "skill": "k5"
+  },
+  "pf-20": {
+   "case": "85",
+   "skill": "k5"
+  },
+  "pf-21": {
+   "case": "79",
+   "skill": "k7"
+  },
+  "pf-22": {
+   "case": "85",
+   "skill": "k6"
+  },
+  "pf-23": {
+   "case": "79",
+   "skill": "k6"
+  },
+  "pf-24": {
+   "case": "79",
+   "skill": "k6"
+  },
+  "pf-25": {
+   "case": "85",
+   "skill": "k7"
+  },
+  "pf-26": {
+   "case": "79",
+   "skill": "k5"
+  },
+  "pf-27": {
+   "case": "85",
+   "skill": "k7"
+  },
+  "pf-28": {
+   "case": "79",
+   "skill": "k6"
+  },
+  "pf-29": {
+   "case": "85",
+   "skill": "k5"
+  },
+  "pf-30": {
+   "case": "79",
+   "skill": "k7"
+  }
+ }
+}
