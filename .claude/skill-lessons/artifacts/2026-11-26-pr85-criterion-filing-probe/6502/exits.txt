@@ -1,0 +1,11 @@
+q65-09 exit=0 start=10:22:35 end=10:25:04 blind-run: 17 turns, $1.10, 2.5 min, 1-minute load median 5, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-09/log/report.md
+q65-02 exit=0 start=10:22:21 end=10:25:20 blind-run: 19 turns, $1.19, 3.0 min, 1-minute load median 4, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-02/log/report.md
+q65-01 exit=0 start=10:22:19 end=10:25:30 blind-run: 18 turns, $1.28, 3.2 min, 1-minute load median 4, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-01/log/report.md
+q65-08 exit=0 start=10:22:33 end=10:25:34 blind-run: 18 turns, $1.32, 3.0 min, 1-minute load median 4, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-08/log/report.md
+q65-04 exit=0 start=10:22:25 end=10:25:35 blind-run: 20 turns, $1.28, 3.2 min, 1-minute load median 4, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-04/log/report.md
+q65-03 exit=0 start=10:22:23 end=10:25:35 blind-run: 19 turns, $1.40, 3.2 min, 1-minute load median 4, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-03/log/report.md
+q65-05 exit=0 start=10:22:27 end=10:25:43 blind-run: 19 turns, $1.22, 3.3 min, 1-minute load median 4, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-05/log/report.md
+q65-07 exit=0 start=10:22:31 end=10:25:55 blind-run: 17 turns, $1.33, 3.4 min, 1-minute load median 5, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-07/log/report.md
+q65-10 exit=0 start=10:22:37 end=10:25:57 blind-run: 17 turns, $1.30, 3.3 min, 1-minute load median 5, max 5 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-10/log/report.md
+q65-06 exit=0 start=10:22:29 end=10:31:47 blind-run: 49 turns, $2.71, 9.3 min, 1-minute load median 5, max 11 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-q65-06/log/report.md
+wave done 10:31:47

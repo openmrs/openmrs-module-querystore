@@ -1,0 +1,20 @@
+arm C (k1): runs ['p85-01', 'p85-03', 'p85-04', 'p85-07', 'p85-08']
+  R1 filed 0 of 5 []; noisy 0 of 5
+  reported item R2 filed in 1 of 5
+  reported item R3 filed in 3 of 5
+  reported item R6 filed in 0 of 5
+  reported item R7 filed in 5 of 5
+  R1 dispositions: []
+arm A (k2): runs ['p85-02', 'p85-05', 'p85-06', 'p85-09', 'p85-10']
+  R1 filed 5 of 5 ['p85-02', 'p85-05', 'p85-06', 'p85-09', 'p85-10']; noisy 0 of 5
+  reported item R2 filed in 0 of 5
+  reported item R3 filed in 4 of 5
+  reported item R6 filed in 1 of 5
+  reported item R7 filed in 3 of 5
+  R1 dispositions: ['question', 'question', 'question', 'question', 'question']
+reader B: R1's reason rejected in 0 of 5; a NOISE reason rejected in 5 of 5
+  reason for R2 rejected in 1 of 5
+  reason for R3 rejected in 5 of 5
+  reason for R6 rejected in 0 of 5
+  reason for R7 rejected in 5 of 5
+  reason for R9 rejected in 5 of 5

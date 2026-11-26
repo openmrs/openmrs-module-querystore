@@ -1,0 +1,4 @@
+wave 1, arm C: runs ['q65-01', 'q65-02', 'q65-04', 'q65-06', 'q65-10']; R1 filed 5 of 5; noisy (R6/R7/R8 filed) 0 of 5; R2 filed 5; R3 filed 0; R4 filed 0; R5 filed 1
+wave 1, arm A: runs ['q65-03', 'q65-05', 'q65-07', 'q65-08', 'q65-09']; R1 filed 5 of 5; noisy (R6/R7/R8 filed) 0 of 5; R2 filed 5; R3 filed 0; R4 filed 0; R5 filed 1
+wave 2 (anchored), arm C: runs ['q65a-01', 'q65a-02', 'q65a-03', 'q65a-06', 'q65a-07']; R1 filed 5 of 5; noisy (R6/R7/R8 filed) 0 of 5; R2 filed 5; R3 filed 0; R4 filed 0; R5 filed 1
+wave 2 (anchored), arm A: runs ['q65a-04', 'q65a-05', 'q65a-08', 'q65a-09', 'q65a-10']; R1 filed 5 of 5; noisy (R6/R7/R8 filed) 0 of 5; R2 filed 5; R3 filed 0; R4 filed 0; R5 filed 0

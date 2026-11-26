@@ -8384,3 +8384,144 @@ since pr-review 0.40.0 (:7736-7737), so the change is the parameter.
   retro.
 
 **Running parked counts:** unchanged from this morning's section.
+
+## 2026-11-26 (third owner-directed pass: a listed acceptance criterion the head misses by its words is raised, not set aside) — 1 applied; 1 candidate measured and not proposed; three refutation rounds; linter 18 files, 0 findings; **pr-review 0.43.0**
+
+**Evidence read.** Before the read, the store matched `origin/main` at `3efa90fc` but for one new record and the
+`__pycache__` file earlier sections name. `confidential/` was read for its `PRS` only; neither PR this pass measures is
+listed. The one record since `LAST`:
+- `2026-11-26-pr-review-openmrs-module-stockmanagement-85.md`, the record of stockmanagement #85 round 1 (head
+  8f7bb30, review session 04a649fa). It was written in session 7abec84a after the owner asked why that round missed what
+  the ticket's author raised on the PR (issuecomment-7185869450).
+
+**The direction.** The owner asked "fix the pr-review skill so this doesn't happen again" (session 7abec84a,
+2026-11-26T09:49Z), after the session's answer to their question about #85.
+
+**Applied, owner-directed: pr-review 0.43.0.**
+- **The rule.** The end of Step 2's "The ticket is evidence, not a spec" paragraph gains one sentence: "Either way, a
+  listed acceptance criterion the head misses by its words is raised, unless the thread has since settled it: where
+  you read the ticket's purpose as met, ask, naming the criterion and what the head does instead, since what the ticket
+  meant is for its author to say."
+- **A related parked entry, not counted.** "Seen, then set aside as outside the ticket" (:6037-6044) does not take #85
+  round 1. A missed acceptance criterion is blocking (`SKILL.md:47`), and its REOPEN ON asks for a non-blocking defect.
+  The round set the point aside as met by the ticket, not as outside it; #71 round 9 was left uncounted for its reason
+  (:8037-8039). Two of the round's four blind agents reported that `ModuleConstants`' six static helpers miss O3-6352's
+  first criterion, "No static settings utility remains". The round's own pass had not raised it. It set their point
+  aside on its own reading ("they parse values and log, do not read settings, so the ticket's Why objections do not
+  apply"), and the ticket's author then raised it. Detection was not the miss, so this edit is a filing-judgment change
+  of the kind :6408-6409 and :7845 name, narrowed to criteria.
+- **Measured at #85 round 1's decision point** (`artifacts/2026-11-26-pr85-criterion-filing-probe/85/`; pre-registered,
+  blinded, scored before unblinding, n=5 per arm). The probe gives each run the frozen head, the thread and ticket as
+  they stood at the round's start, the four agents' reports and the round's four drafted comments, then asks it to
+  decide nine undecided items. pr-review 0.42.0 filed the criterion miss in 0 of 5 runs; with the sentence, 5 of 5,
+  each as a question naming the criterion and what the head does. Neither arm filed any of the four noise items
+  (0 of 5 each). The 0.42.0 runs set it aside with the real round's reasons: the Why-section reading of :83, and :79's
+  "Cost missing, it's taste", which p85-04 put as "taste with no cost to name".
+- **Held out on openmrs-core #6502** (`…/6502/`; the probe's "round 1" is the 11-25 round's decision point, the sixth
+  review of that PR), where an agent reported TRUNK-6666's fifth criterion missed
+  and the round set it aside. Both texts filed it in 5 of 5, noisy in 0 of 5. With the round's own earlier-round notes on
+  it added verbatim (wave 2), 5 of 5 again for both. So the sentence changed nothing where 0.42.0 already files the miss.
+  The held-out case hit the ceiling and measured nothing about the sentence's effect.
+- **Budget:** `pr-review` 10493 -> 10543 words, raised. It retires no rule. It narrows two for listed acceptance
+  criteria: :83's "a PR that solves it differently from what the ticket proposed is fine", and :79's "Cost missing,
+  it's taste; keep it to yourself". Those are the two the 0.42.0 runs cited.
+- **REVERT ON:** two run records in which the ticket's author dismisses a criterion question posted under this sentence
+  as not what the ticket meant; or a run record of a round under it that sets aside a criterion miss an agent reported,
+  which a maintainer then raises.
+
+**What the measurement does not show.**
+- #85 is the case the sentence was written on, and n=5. The probe's item text says "by its letter", which the
+  sentence's "by its words" echoes.
+- The probe starts after the agents have reported. The sentence acts only on a miss someone has noticed, and #85's own
+  pass had not.
+- Two branches were never exercised. One is "unless the thread has since settled it". The other is a criterion missed
+  by its words that a maintainer would not want raised, which is the sentence's own way of filing too much. No round on
+  record has either case: all eight round records that mention criteria were searched. Each **needs the
+  implementation**, the sentence running in real rounds, and the REVERT ON above watches for it.
+- "What the ticket meant is for its author to say" holds on #85, where the author is the maintainer reviewing the PR.
+  It is not shown in general.
+
+**Measured and not proposed: a blind reader of the round's set-aside reasons** (`…/85/`, runs p85r-01 to p85r-05, given
+round 1's real reasons). It upheld the reason for setting the criterion miss aside in 5 of 5. The pre-registered bar
+was rejecting it in at least 4 of 5. So it would not have prevented #85.
+
+**Rejected shapes, with their evidence.**
+- **Leaving it to the report to the user.** #85's point reached the owner, framed "a maintainer's call", and was not
+  posted before the ticket's author raised it 32 hours later. #6502's criterion reached the owner in six `pr-review` rounds
+  launched on 10-22, 10-23, 11-10, 11-11, 11-12 and 11-25 (sessions 5ccf7c6c, 97874f38, d68355a0, 03d30d8a, 93793db1,
+  792919b5), none of which raised it ("Earlier rounds chose not to raise it", 11-25), and was never posted. The probe's
+  PROTOCOL.md:5 lists five: it omits 11-10 and dates 10-23's round by its 10-26 report.
+- **More reviewers.** #85's miss was not detection: two of four agents found it.
+- **:79 alone.** The 0.42.0 runs also cite :83's reading.
+- **Reframing the per-criterion brief.** #85's criterion agent reported the miss under a brief that told it to judge
+  the criterion against the ticket's Why section.
+
+**Gaps left open (round 1's refuter, not blocking).**
+- **The round's own drafts.** #85 round 1 also posted comment B, asking the booleans to warn "the way parseUomPriority
+  does". The author answered with another static helper, `ModuleConstants.parseBoolean` (bc98c50). Under the sentence,
+  the same round would ask whether the helpers meet the criterion while asking for one more. No clause checks the
+  review's own drafts against a criterion. One would be unmeasured wording (:6033).
+- **The REVERT ONs.** How #85 round 1 counts under 0.39.0's and 0.40.0's REVERT ONs turns on the reading of "a defect"
+  that is still the owner's (:8109-8124). The round confirmed the six helpers exist and judged the criterion met, and
+  that reading does not say whether such a point counts as reproduced (:8116-8117). Its "what the ticket requires"
+  (:8118) is not this case: it covers an agent reporting, as a defect, behaviour the ticket prescribes (#69's round record
+  :14, :16; #78's :18), not a miss of a criterion. Both refutation rounds read :8118 the other way.
+
+**Observed, not yet actionable.**
+- **#6502's criterion** was set aside in those six real rounds. Yet a fresh reviewer at that round's decision point files it
+  in 10 of 10 under either text, also with the round's earlier notes inserted. What carried the real set-asides is not
+  reproduced. On the record are the round's own decision before it read the agents ("prior rounds chose not to raise;
+  no new evidence"), and a brief that told an agent "No metric/counter is required (ticket AC 5)" under "Already decided
+  by the maintainers". No thread decided that; a refuter found so on 11-10. 1 PR.
+- **#85 round 1's other set-aside reasons, as the five readers judged them.** The reason for the import move (R9, "part
+  of the import edit the PR has to make") is false: master already imported `Context`, and the PR needed only the
+  `ModuleConstants` import (checked against the diff). The readers also rejected the reasons for R3 (defaults copied to
+  many call sites) and R7 (an invalid email dropped silently) in 5 of 5. No maintainer has raised either. This is a
+  measurement sighting for the at-the-bar set-aside-reason lesson (#71 rounds 7 and 12), not a run record.
+- **The probe's scorer** first counted braces without JSON's string rules, and two #6502 reports holding "a `{`
+  prefix" did not parse. It now uses `json`'s `raw_decode`, calibrated on that case, and every #85 score was re-derived
+  identically. The 2026-11-23 #6535 probe's scorer had the same shape; all 20 of its reports re-score identically
+  (`…/6535-rescore.txt`).
+
+**Refutation.**
+- **Round 1** (`retro-1126d-pr85-refute1`, 3.1 min): apply as is. It found no blocking objection and asked this entry
+  to record the parked count, what the measurement does not show, the two gaps and a REVERT ON, all above.
+- **Round 2** (`retro-1126d-pr85-refute2`, 2.9 min): apply with corrections, all in this section and the commit
+  message. Taken: a quote of :79 that no file holds; "six" and "five" rounds in one section; the parked count, which
+  this section first moved to 3 run records. Not taken: dropping the 11-10 round, which it could not check (session
+  d68355a0 launched `/pr-review` on #6502 at 2026-11-10T09:23Z and reported "AC 5's metric. … I still didn't raise it"); and its reading of :8118 (above).
+- **Round 3** (`retro-1126d-pr85-refute3`, 2.2 min): commit with corrections. It accepted both departures from round 2
+  on their evidence (the script's output for d68355a0; #69's and #78's round records). Taken in its words: a quote of
+  d68355a0 that its evidence did not show; "each listing it as not raised or not posted", which two sessions' lines do
+  not say; this section's label for #6502's round; "refuters" in the commit message. It wrote two scratch files outside
+  its folder, extracts of its inputs, and deleted them (both checked gone).
+  - **No fourth round,** since the corrections are its own words narrowing text the earlier rounds settled, as at :7828.
+
+**Still the owner's:**
+- whether `--no-blind` should also stop Step 3's blind readers, of a finding and of a fix the review recommends;
+- whether to direct a change to pr-review :172's reach clause now, on one measurement, instead of waiting for its
+  REOPEN ON;
+- `kill-session-scratchpad-procs.sh`: push a fixed draft or remove it (2026-11-05 entry), and with it the
+  working-directory match a 2026-11-22 pass dropped;
+- publishing the 2026-11-13 bash 5 paragraph of the user-level `CLAUDE.md`;
+- whether "push the fix" also replies in that comment's thread;
+- the ninth pass's posting on their own PRs, the CI half of the exploit rule, its `~/.m2` install guard and per-PR
+  claim note, and the Action's "post nothing" when an author has asked a question;
+- whether a load threshold read from `blind-run-load.tsv` makes an agent owed, once Q1's records show the load at which
+  agents lose their runs; #69's first round in this morning's section is a round it would decide;
+- whether a round that posts other comments anyway also posts the verified nits it would set aside (#71 round 9);
+- whether the reading of "a defect" this morning's measurement used becomes part of 0.39.0's amended REVERT ON, the
+  survivor and base-shared readings each deciding its verdict on the record when #57's first round counts, and
+  whether it also governs 0.40.0's (:7782-7784), which uses the same words; and whether, under 0.43.0, a criterion
+  miss an agent reported and the round posted counts as a defect for both;
+- whether a ticket whose only criteria are an "Expected" section lists acceptance criteria, for pr-review's
+  per-criterion agents, for 0.43.0's criterion sentence and for 0.39.0's REVERT ON: #57's and #68's reviews started agents on one (O3-6248, O3-6261);
+- whether to run the pass the set-aside-reason lesson in this morning's section earns now, rather than at the next
+  retro.
+
+**Running parked counts:**
+- "Seen, then set aside" as outside the ticket is unchanged: run records 2, measurement sightings 12. #85 round 1 and
+  the five 0.42.0 runs at its decision point set a criterion miss aside as met, not as outside the ticket (above).
+- A set-aside reason naming a test that pins something else: 2 run records (#71 rounds 7 and 12), unchanged. One
+  measurement sighting of a false set-aside reason is added (#85's R9).
+- The others are unchanged from this morning's section.

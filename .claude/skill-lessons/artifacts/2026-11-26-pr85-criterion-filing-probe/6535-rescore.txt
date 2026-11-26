@@ -1,0 +1,1 @@
+All 20 runs of artifacts/2026-11-23-6535-setaside-probe (sa-01..10, sb-01..10) re-scored with this raw_decode parser give the same result as its brace-counting score.py (checked 2026-11-26).

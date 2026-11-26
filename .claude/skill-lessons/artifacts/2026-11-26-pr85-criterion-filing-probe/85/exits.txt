@@ -1,0 +1,16 @@
+p85-07 exit=0 start=10:04:55 end=10:08:02 blind-run: 27 turns, $1.24, 3.1 min, 1-minute load median 50, max 69 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-07/log/report.md
+p85r-04 exit=0 start=10:05:09 end=10:08:03 blind-run: 20 turns, $1.16, 2.9 min, 1-minute load median 59, max 67 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85r-04/log/report.md
+p85r-05 exit=0 start=10:05:11 end=10:08:13 blind-run: 21 turns, $1.24, 3.0 min, 1-minute load median 58, max 64 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85r-05/log/report.md
+p85-10 exit=0 start=10:05:01 end=10:08:20 blind-run: 20 turns, $1.21, 3.3 min, 1-minute load median 48, max 69 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-10/log/report.md
+p85-01 exit=0 start=10:04:43 end=10:08:26 blind-run: 26 turns, $1.52, 3.7 min, 1-minute load median 53, max 71 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-01/log/report.md
+p85-08 exit=0 start=10:04:57 end=10:08:41 blind-run: 19 turns, $1.28, 3.7 min, 1-minute load median 48, max 69 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-08/log/report.md
+p85-03 exit=0 start=10:04:47 end=10:08:44 blind-run: 25 turns, $1.43, 3.9 min, 1-minute load median 51, max 70 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-03/log/report.md
+p85r-01 exit=0 start=10:05:03 end=10:09:01 blind-run: 28 turns, $1.52, 3.9 min, 1-minute load median 54, max 69 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85r-01/log/report.md
+p85-09 exit=0 start=10:04:59 end=10:09:19 blind-run: 28 turns, $1.53, 4.3 min, 1-minute load median 48, max 69 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-09/log/report.md
+p85-04 exit=0 start=10:04:49 end=10:09:33 blind-run: 31 turns, $1.76, 4.7 min, 1-minute load median 51, max 70 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-04/log/report.md
+p85r-03 exit=0 start=10:05:07 end=10:10:00 blind-run: 31 turns, $1.79, 4.8 min, 1-minute load median 59, max 67 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85r-03/log/report.md
+p85-05 exit=0 start=10:04:51 end=10:10:01 blind-run: 27 turns, $1.64, 5.2 min, 1-minute load median 46, max 70 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-05/log/report.md
+p85r-02 exit=0 start=10:05:05 end=10:10:16 blind-run: 31 turns, $1.66, 5.2 min, 1-minute load median 46, max 69 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85r-02/log/report.md
+p85-06 exit=0 start=10:04:53 end=10:10:55 blind-run: 46 turns, $2.20, 6.0 min, 1-minute load median 46, max 69 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-06/log/report.md
+p85-02 exit=0 start=10:04:45 end=10:12:48 blind-run: 57 turns, $3.01, 8.0 min, 1-minute load median 45, max 71 on 10 cores; report in /Users/danielkayiwa/.claude/blind-runs/2026-11-26-p85-02/log/report.md
+wave done 10:12:48

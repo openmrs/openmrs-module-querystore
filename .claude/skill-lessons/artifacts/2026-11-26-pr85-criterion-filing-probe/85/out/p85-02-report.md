@@ -1,0 +1,25 @@
+I'm filing three: R1 as a question, R3 as a suggestion, and R6 as a nit. R2, R4, R5, R7, R8 and R9 are set aside.
+
+**Filed**
+- **R1 (question):** The ticket's criterion "No static settings utility remains" isn't met by its wording. `ModuleConstants.java:68-131` has a logger and six `public static` helpers that turn a setting's key and value into the value to use. I think the ticket's purpose is met: the helpers log, the name clash is gone, and reads go through core. The method says to ask in that case, since what the ticket meant is for its author to say. Nothing in the thread settles it.
+- **R3 (suggestion):** I re-counted the copies. The page-size default `1000` appears 14 times in 7 reports (the agent said 12 in 6), with two copies per call site. `30.5` appears 6 times in 3 reports, and the pack-size read appears 5 times in the service (lines 1642, 1737, 2106, 2382 and 2500). All seven page-size readers subclass the abstract `ReportGenerator`. A protected method there would hold each default once, which the ticket allows ("in one place per setting"), and it isn't a static utility, so it doesn't make R1 worse. The cost of leaving it is real: nothing reads these copies (finding A), so the next change can miss one. The method wants this recommended alternative given to a blind refuter before it's shown, and I couldn't start one here, so that check is still owed.
+
+**Set aside**
+- **R2:** I ran it. A probe on both refs called `sendStockOperationNotification` the way `StockOperationNotificationTask` does: an anonymous session holding its four proxy privileges.
+  - Head throws `APIAuthenticationException`. Master returns quietly without sending anything.
+  - With "Get Global Properties" added as well, both refs still fail, on `Alert.creator` being null.
+  - So that path never sends a notification on either ref. Head only makes the failure visible, which is what the ticket asks for.
+  - Every logged-in user has the privilege anyway: core's shipped data grants it to the Authenticated role (`liquibase-core-data-2.7.x.xml`).
+  - The broken notification task is an older bug outside this diff. It's worth its own ticket, not a comment here.
+- **R7:** That line can't be reached on either ref, because the read above it throws or the send fails first.
+- **R4:** The two calls return the same value; this is taste.
+- **R5:** Reconciling the defaults would change one, and the ticket requires keeping them.
+- **R8:** This is core's message, and the stack trace core logs shows the caller.
+- **R9:** The formatter doesn't sort imports, and the moved line sits in a hunk the PR needs anyway, so there's nothing for a reviewer to check.
+
+**Cleanup:** I added a probe test and a master worktree and removed both. `rm` was refused on the test file as a sensitive path, so I removed it with `git clean -f` on that one path. `git status --porcelain` is empty.
+
+```json
+{"filed": [{"item": "R1", "disposition": "question", "first_line": "Does this meet the ticket's first criterion, \"No static settings utility remains\"? ModuleConstants now has a logger and six public static helpers that take a setting's key and value and return the value to use."}, {"item": "R3", "disposition": "suggestion", "first_line": "Could the page size be read once, in a protected ReportGenerator method the seven reports call, so its default isn't typed fourteen times across seven files?"}, {"item": "R6", "disposition": "nit", "first_line": "Should the upload-size limit, the excess threshold and the search limit get a logged lower bound too, like the five settings this PR already clamps? A negative or overflowing upload size, a negative threshold or a search limit of 0 or -5 is used as given with no log, as on master."}],
+ "set_aside": [{"item": "R2", "reason": "Core's shipped data grants Get Global Properties to the Authenticated role, and the one caller without it (the notification task) sends nothing on either ref, as the probe showed (head throws, master returns quietly, and adding the privilege still fails on Alert.creator), so the head only surfaces an existing failure, as the ticket intends."}, {"item": "R4", "reason": "getGlobalPropertyValue(key, \"\") and getGlobalProperty(key, \"\") return the same value for every stored value, so this is taste with no cost."}, {"item": "R5", "reason": "Reconciling the code defaults with config.xml would change a default, against the ticket's criterion that each setting keeps its current default, and the mismatch predates the PR."}, {"item": "R7", "reason": "The only caller, the notification task, never gets past the email read on head or past alert creation on either ref, so the line is unreachable, and the PR does not change it."}, {"item": "R8", "reason": "The message is core's, the stack trace core logs names the call site, and adding the key would mean wrapping every read in the static utility the ticket removes."}, {"item": "R9", "reason": "The formatter does not order imports and the moved line sits inside a hunk the PR needs for its ModuleConstants import, so it adds nothing for a reviewer to check."}]}
+```

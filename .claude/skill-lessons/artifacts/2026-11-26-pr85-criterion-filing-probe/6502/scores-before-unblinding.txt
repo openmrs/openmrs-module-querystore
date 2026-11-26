@@ -1,0 +1,10 @@
+q65-01 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2", "R5"], "dispositions": {"R1": "question", "R2": "suggestion", "R5": "nit"}}
+q65-02 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R1": "question", "R2": "suggestion"}}
+q65-03 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R1": "question", "R2": "suggestion"}}
+q65-04 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R1": "question", "R2": "suggestion"}}
+q65-05 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R1": "question", "R2": "question"}}
+q65-06 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R1": "question", "R2": "suggestion"}}
+q65-07 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R1": "question", "R2": "suggestion"}}
+q65-08 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R1": "question", "R2": "question"}}
+q65-09 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2", "R5"], "dispositions": {"R1": "question", "R2": "suggestion", "R5": "nit"}}
+q65-10 {"parsed": true, "kind": "reviewer", "complete": true, "R1": true, "noisy": false, "yes": ["R1", "R2"], "dispositions": {"R2": "suggestion", "R1": "question"}}

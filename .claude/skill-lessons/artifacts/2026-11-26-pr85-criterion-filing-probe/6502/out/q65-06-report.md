@@ -1,0 +1,27 @@
+File R1 as a question and R2 as a suggestion, and set aside R3 to R8.
+
+**Filed**
+
+- **R1, question, on `HibernateContextDAO.java:382` (the INFO line).** Neither the diff nor the 5 changed files contain a counter (0 hits for counter, metric, micrometer, AtomicLong or MBean, while the control `needsUpgrade` hits 4 times). The criterion is still not blocking:
+  - I can't write the failure-mode sentence: no caller or shipped configuration breaks.
+  - The thread already treats this ticket as evidence rather than a spec. It overrode both the ticket's `REQUIRES_NEW` note and its VARCHAR(255) note.
+  - The criterion's wording ("can be exposed") gives no reason for it.
+
+  Whether the criterion stays in the ticket, gets split out or gets dropped is a decision for the people who own the ticket, so it goes to them as a question. Draft: *"Is the ticket's last criterion, a counter of upgraded accounts, meant to come in a separate ticket? Nothing in this PR counts upgrades, and this INFO line is the only trace. If it's split out or dropped, could the ticket say so, so it isn't closed with that criterion still open?"*
+- **R2, suggestion, on `authenticate_shouldStillLogInWhenTheUpgradeFails`.** I ran it: with the `log.error` call removed, the PR's own `ContextDAOTest` still passes 30/30. A `MemoryAppender` assertion, copied from the setup `LoggingAdviceTest` uses, passes 30/30 at the head and fails on its assertion with that line removed.
+  - The first two versions caught nothing, not even a control marker. The test `log4j2.xml:30` sets `org.openmrs.api` to OFF, and `setAdditive(false)` has to come before `setLevel`, as `LoggingAdviceTest:93` says.
+  - CI's formatter only rewrites files and never fails a build, so the formatter rule doesn't apply to the suggested code.
+  - **Still owed:** the method's blind read of this suggested test before it is shown or posted. It **needs access**: this brief forbids starting agents.
+
+**Set aside**
+
+- **R3:** The thread accepted running the upgrade inline because the UPDATE can't fail in practice (largest hash 126 characters, column 128, row already locked). That holds for a caller's writes just as much as for the login's. The only core caller, `InitializationFilter.java:1839`, is not transactional.
+- **R4:** The behaviour this test would pin, a commit that returns normally and drops the login's writes, is the documented trade-off, and committed probes measured it. No line of the PR goes untested because of it.
+- **R5:** I can't show that nothing reaches the guard. The password read at `HibernateContextDAO.java:193` is a plain select, not a locking one. So a login inside a caller's REPEATABLE READ transaction could read a hash older than the row it locked, and the guard would stop that write. This is reasoned only: checking it **needs access** to MySQL.
+- **R6:** This is how Spring's `upgradeEncoding` works, and the thread chose to defer to it.
+- **R7:** The ticket only asks for upgrades to the configured Argon2id encoder. Opt-in was TRUNK-6663's decision.
+- **R8:** `User` doesn't map `password`, and `authenticate` loads no `LoginCredential`. Any later flush of a changed `User` resets the stale fields (`AuditableInterceptor.java:76,152-153`).
+
+I didn't append to the round record because this brief forbids writing under `~/.claude`. `git status --porcelain --ignored` is empty: the test and DAO files are restored, and `api/target` and my backup folder are deleted.
+
+{"filed": [{"item": "R1", "disposition": "question", "first_line": "Is the ticket's last criterion, a counter of upgraded accounts, meant to come in a separate ticket?"}, {"item": "R2", "disposition": "suggestion", "first_line": "Could this test also check that the error is logged? It's part of the ticket's third criterion, and deleting the `log.error` in `upgradePasswordHash` leaves `ContextDAOTest` green."}], "set_aside": [{"item": "R3", "reason": "The thread accepted the inline upgrade because the UPDATE cannot fail in practice (126-character maximum hash, 128-character column, row already locked), which applies to a caller's writes as much as to the login's, and the only core caller (InitializationFilter.java:1839) is not transactional."}, {"item": "R4", "reason": "It would pin the accepted, documented trade-off, which committed probes already measured, and no PR line goes untested because the test runs in the test transaction (R2 covers that test's real gap)."}, {"item": "R5", "reason": "Unreachability cannot be shown because the password read at HibernateContextDAO.java:193 is not a locking read, so a login inside a caller's REPEATABLE READ transaction can read a stale hash that the guard then protects, and the thread asked for the guard."}, {"item": "R6", "reason": "Ignoring parallelism is Spring Argon2PasswordEncoder.upgradeEncoding's own behaviour, which the thread decided to defer to, and work-factor tuning between argon2 hashes is outside a ticket about legacy hashes."}, {"item": "R7", "reason": "The ticket asks only for upgrades to the configured Argon2id encoder, and leaving legacy rows alone without opt-in is TRUNK-6663's decision, enforced by the idForEncode guard the thread requested."}, {"item": "R8", "reason": "User does not map password, authenticate loads no LoginCredential, and any later flush of a changed User has AuditableInterceptor (lines 76, 152-153) reset changedBy and dateChanged, so the stale in-memory values cannot be written back."}]}

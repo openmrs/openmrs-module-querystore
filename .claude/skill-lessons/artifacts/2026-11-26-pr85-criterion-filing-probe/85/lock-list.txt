@@ -1,0 +1,13 @@
+/Users/danielkayiwa/.claude/pr-review-rounds/openmrs__openmrs-module-stockmanagement__85.md
+/Users/danielkayiwa/.claude/skill-lessons/2026-11-26-pr-review-openmrs-module-stockmanagement-85.md
+/Users/danielkayiwa/.claude/skill-lessons/REJECTED.md
+/Users/danielkayiwa/.claude/blind-runs/2026-11-25-pr85-r1-c14
+/Users/danielkayiwa/.claude/blind-runs/2026-11-25-pr85-r1-c2
+/Users/danielkayiwa/.claude/blind-runs/2026-11-25-pr85-r1-c3
+/Users/danielkayiwa/.claude/blind-runs/2026-11-25-pr85-r1-refute
+/Users/danielkayiwa/.claude/blind-runs/2026-11-25-pr85-r1-refute2
+/Users/danielkayiwa/.claude/blind-runs/2026-11-25-pr85-r1-whole
+/Users/danielkayiwa/.claude/projects/-Users-danielkayiwa-Projects-openmrs-openmrs-core/04a649fa-d458-49bb-8838-7c3388d96aee.jsonl
+/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-chartsearchai/7abec84a-e793-4dfb-aa6b-79a4f7a18e1d/scratchpad/pr85miss
+/private/tmp/claude-501/-Users-danielkayiwa-Projects-openmrs-chartsearchai/7abec84a-e793-4dfb-aa6b-79a4f7a18e1d/scratchpad/probe85/private
+/Users/danielkayiwa/.claude/projects/-Users-danielkayiwa-Projects-openmrs-openmrs-core/04a649fa-d458-49bb-8838-7c3388d96aee

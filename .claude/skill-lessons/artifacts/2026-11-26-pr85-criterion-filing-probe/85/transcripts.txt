@@ -1,0 +1,15 @@
+p85-01 ~/.claude/blind-runs/2026-11-26-p85-01/log/out.jsonl
+p85-02 ~/.claude/blind-runs/2026-11-26-p85-02/log/out.jsonl
+p85-03 ~/.claude/blind-runs/2026-11-26-p85-03/log/out.jsonl
+p85-04 ~/.claude/blind-runs/2026-11-26-p85-04/log/out.jsonl
+p85-05 ~/.claude/blind-runs/2026-11-26-p85-05/log/out.jsonl
+p85-06 ~/.claude/blind-runs/2026-11-26-p85-06/log/out.jsonl
+p85-07 ~/.claude/blind-runs/2026-11-26-p85-07/log/out.jsonl
+p85-08 ~/.claude/blind-runs/2026-11-26-p85-08/log/out.jsonl
+p85-09 ~/.claude/blind-runs/2026-11-26-p85-09/log/out.jsonl
+p85-10 ~/.claude/blind-runs/2026-11-26-p85-10/log/out.jsonl
+p85r-01 ~/.claude/blind-runs/2026-11-26-p85r-01/log/out.jsonl
+p85r-02 ~/.claude/blind-runs/2026-11-26-p85r-02/log/out.jsonl
+p85r-03 ~/.claude/blind-runs/2026-11-26-p85r-03/log/out.jsonl
+p85r-04 ~/.claude/blind-runs/2026-11-26-p85r-04/log/out.jsonl
+p85r-05 ~/.claude/blind-runs/2026-11-26-p85r-05/log/out.jsonl
