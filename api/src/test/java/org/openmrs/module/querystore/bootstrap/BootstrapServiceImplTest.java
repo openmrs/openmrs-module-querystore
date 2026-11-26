@@ -829,6 +829,23 @@ public class BootstrapServiceImplTest {
 		service.ensureIndexed("patient-uuid");
 	}
 
+	@Test
+	public void ensureIndexed_withEveryTypeProjected_throwsNothing() {
+		service.setBootstrappers(Arrays.asList(new EmptyPageBootstrapper("obs"), new EmptyPageBootstrapper("encounter")));
+
+		service.ensureIndexed("patient-uuid");
+	}
+
+	@Test
+	public void patientLocks_areBounded_andStableForAUuid() {
+		java.util.Set<Object> locks = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (int i = 0; i < 10_000; i++) {
+			locks.add(service.patientLock("uuid-" + i));
+		}
+		assertTrue("10,000 uuids share at most the fixed stripes", locks.size() <= BootstrapServiceImpl.PATIENT_LOCK_STRIPES);
+		assertTrue(service.patientLock("uuid-7") == service.patientLock("uuid-7"));
+	}
+
 	private void assertColdTouchFails(String patientUuid) {
 		try {
 			service.ensureIndexed(patientUuid);
@@ -990,6 +1007,180 @@ public class BootstrapServiceImplTest {
 	}
 
 	@Test
+	public void projectionProgress_countsTypesDone_whileAPatientProjects_andIsGoneAfter() {
+		List<String> seen = new java.util.ArrayList<String>();
+		java.util.function.Consumer<String> record = t -> {
+			org.openmrs.module.querystore.api.ProjectionProgress p = service.getProjectionProgress("patient-uuid");
+			seen.add(p.getDone() + "/" + p.getTotal());
+			assertNull("another patient is not projecting", service.getProjectionProgress("patient-other"));
+		};
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = record;
+		EmptyPageBootstrapper enc = new EmptyPageBootstrapper("encounter");
+		enc.onFetch = record;
+		enc.perPatientFailure = new IllegalStateException("encounters failed");
+		EmptyPageBootstrapper cond = new EmptyPageBootstrapper("condition");
+		cond.onFetch = record;
+		service.setBootstrappers(Arrays.asList(obs, enc, cond));
+
+		assertNull(service.getProjectionProgress("patient-uuid"));
+		try {
+			service.reindexPatient("patient-uuid");
+			fail("expected the encounter failure to be reported");
+		}
+		catch (IncompleteProjectionException expected) {
+			// a failed type still counts as done: the projection moved past it
+		}
+
+		assertEquals(Arrays.asList("0/3", "1/3", "2/3"), seen);
+		assertNull("no progress once the projection has finished", service.getProjectionProgress("patient-uuid"));
+	}
+
+	@Test
+	public void forgetPatient_checksThatThePatientIsStillDroppable_underItsPatientLock_beforeDeletingAnything() {
+		// code r3 S2: a retry can rebuild the chart while the drop waits for the lock; the check that
+		// the patient is still failed and not warming must run once the lock is held.
+		final int[] deletes = { 0 };
+		service.setQueryStoreService(new RecordingQueryStoreService(new java.util.ArrayList<String>()) {
+
+			@Override
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				deletes[0]++;
+				return super.bulkDeleteByPatient(patientUuid);
+			}
+		});
+		final boolean[] checkedUnderLock = { false };
+
+		boolean gone = service.forgetPatient("patient-uuid", () -> {
+			checkedUnderLock[0] = Thread.holdsLock(service.patientLock("patient-uuid"));
+			return false;
+		});
+
+		assertFalse(gone);
+		assertEquals("nothing deleted", 0, deletes[0]);
+		assertTrue(checkedUnderLock[0]);
+	}
+
+	@Test
+	public void forgetPatient_deletesThePatientsDocuments_underItsPatientLock_andSaysWhetherTheChartIsGone() {
+		final boolean[] locked = { false };
+		final org.openmrs.module.querystore.backend.BulkWriteResult[] result = {
+		        new org.openmrs.module.querystore.backend.BulkWriteResult(2, 2, Collections.emptyList()) };
+		service.setQueryStoreService(new RecordingQueryStoreService(new java.util.ArrayList<String>()) {
+
+			@Override
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				locked[0] = Thread.holdsLock(service.patientLock(patientUuid));
+				return result[0];
+			}
+		});
+		BackendStore store = org.mockito.Mockito.mock(BackendStore.class);
+		service.setBackendSelector(new BackendStoreSelector(Collections.<String, BackendStore> emptyMap()) {
+			@Override
+			public BackendStore getStore() {
+				return store;
+			}
+		});
+
+		assertTrue("every type deleted and nothing left", service.forgetPatient("patient-uuid", () -> true));
+		assertTrue("so it cannot interleave with a projection of the patient", locked[0]);
+
+		org.mockito.Mockito.when(store.existsByPatient("patient-uuid")).thenReturn(true);
+		assertFalse("a document is still there", service.forgetPatient("patient-uuid", () -> true));
+
+		org.mockito.Mockito.when(store.existsByPatient("patient-uuid")).thenReturn(false);
+		result[0] = new org.openmrs.module.querystore.backend.BulkWriteResult(2, 1, Collections.singletonList(
+		    new org.openmrs.module.querystore.backend.DocFailure("obs", "patient-uuid", "IOException", true)));
+		assertFalse("a type's delete failed", service.forgetPatient("patient-uuid", () -> true));
+
+		result[0] = null;
+		assertFalse("no result is no proof", service.forgetPatient("patient-uuid", () -> true));
+		assertFalse(service.forgetPatient(null, () -> true));
+	}
+
+	@Test
+	public void reindexPatient_whoseDeleteReportsAFailure_throws_beforeItsAfterDeleteHookOrAnyProjection() {
+		// code r3 S1: an index whose delete failed still holds the old rows, so the chart is not gone.
+		List<String> events = new java.util.ArrayList<String>();
+		final org.openmrs.module.querystore.backend.BulkWriteResult[] result = {
+		        new org.openmrs.module.querystore.backend.BulkWriteResult(3, 0, Collections.singletonList(
+		            new org.openmrs.module.querystore.backend.DocFailure("obs", "patient-uuid", "IOException", true))) };
+		service.setQueryStoreService(new RecordingQueryStoreService(events) {
+
+			@Override
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				events.add("delete");
+				return result[0];
+			}
+		});
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project:" + t);
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		for (int attempt = 0; attempt < 2; attempt++) {
+			try {
+				service.reindexPatient("patient-uuid", () -> events.add("after-delete"));
+				fail("a delete that did not finish must fail the reindex");
+			}
+			catch (IllegalStateException expected) {
+				// pass
+			}
+			result[0] = null;
+		}
+
+		assertEquals("no hook, no projection, for a failed result or no result", Arrays.asList("delete", "delete"), events);
+	}
+
+	@Test
+	public void reindexPatient_reportsItsDeletePending_fromEntryUntilTheDeleteLands_orTheReindexEnds() {
+		// code r3 S3: the merge path reindexes with no slot, so nothing else marks the delete.
+		List<String> events = new java.util.ArrayList<String>();
+		final boolean[] fail = { false };
+		service.setQueryStoreService(new RecordingQueryStoreService(events) {
+
+			@Override
+			public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
+				events.add("delete, pending=" + service.isDeletePending(patientUuid));
+				if (fail[0]) {
+					throw new IllegalStateException("delete blew up");
+				}
+				return super.bulkDeleteByPatient(patientUuid);
+			}
+		});
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project, pending=" + service.isDeletePending("patient-uuid"));
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		assertFalse(service.isDeletePending("patient-uuid"));
+		service.reindexPatient("patient-uuid");
+		fail[0] = true;
+		try {
+			service.reindexPatient("patient-uuid");
+			fail("expected the delete's failure");
+		}
+		catch (IllegalStateException expected) {
+			// pass
+		}
+
+		assertEquals(Arrays.asList("delete, pending=true", "delete", "project, pending=false", "delete, pending=true"),
+		    events);
+		assertFalse("cleared when the reindex ends, however it ends", service.isDeletePending("patient-uuid"));
+	}
+
+	@Test
+	public void reindexPatient_runsItsAfterDeleteHook_betweenTheDeleteAndTheProjection() {
+		List<String> events = new java.util.ArrayList<String>();
+		service.setQueryStoreService(new RecordingQueryStoreService(events));
+		EmptyPageBootstrapper obs = new EmptyPageBootstrapper("obs");
+		obs.onFetch = t -> events.add("project:" + t);
+		service.setBootstrappers(Collections.singletonList(obs));
+
+		service.reindexPatient("patient-uuid", () -> events.add("after-delete"));
+
+		assertEquals(Arrays.asList("delete", "after-delete", "project:obs"), events);
+	}
+
+	@Test
 	public void reindexPatient_deletesExistingDocsThenReprojectsEveryType() {
 		List<String> events = new java.util.ArrayList<String>();
 		RecordingQueryStoreService qs = new RecordingQueryStoreService(events);
@@ -1063,7 +1254,7 @@ public class BootstrapServiceImplTest {
 
 	/** QueryStoreService that records bulkDeleteByPatient calls (and order, via the shared events
 	 *  list) so reindex tests can pin the delete-before-projection invariant. */
-	private static final class RecordingQueryStoreService implements QueryStoreService {
+	private static class RecordingQueryStoreService implements QueryStoreService {
 
 		private final List<String> events;
 
@@ -1076,10 +1267,11 @@ public class BootstrapServiceImplTest {
 		}
 
 		@Override
-		public void bulkDeleteByPatient(String patientUuid) {
+		public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) {
 			bulkDeleteCount++;
 			lastDeletedPatient = patientUuid;
 			events.add("delete");
+			return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList());
 		}
 
 		@Override
@@ -1333,7 +1525,7 @@ public class BootstrapServiceImplTest {
 			return org.openmrs.module.querystore.backend.WriteResult.success();
 		}
 		@Override public void delete(String resourceType, String resourceUuid) { }
-		@Override public void bulkDeleteByPatient(String patientUuid) { }
+		@Override public org.openmrs.module.querystore.backend.BulkWriteResult bulkDeleteByPatient(String patientUuid) { return new org.openmrs.module.querystore.backend.BulkWriteResult(0, 0, java.util.Collections.<org.openmrs.module.querystore.backend.DocFailure> emptyList()); }
 		@Override public List<QueryDocument> searchByPatient(String p, String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> search(String q, int l) { return Collections.emptyList(); }
 		@Override public List<QueryDocument> getPatientChart(String patientUuid) { return Collections.emptyList(); }

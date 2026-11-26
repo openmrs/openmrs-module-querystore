@@ -22,4 +22,7 @@
     <bean id="querystore.test.mergeListener"
           class="org.openmrs.module.querystore.events.RecordingMergeListener"/>
 
+    <bean id="querystore.test.obsEditListener"
+          class="org.openmrs.module.querystore.events.DeferredObsListener"/>
+
 </beans>

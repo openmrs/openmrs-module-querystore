@@ -14,6 +14,7 @@ import java.util.List;
 import org.apache.commons.lang3.StringUtils;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.querystore.QueryStoreConstants;
+import org.openmrs.module.querystore.SkipLogFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,7 +88,7 @@ public class ConfiguredEmbeddingProvider implements EmbeddingProvider {
 		catch (RuntimeException e) {
 			log.warn("Failed to read {}, falling back to default '{}': {}",
 					QueryStoreConstants.GP_EMBEDDING_PROVIDER_BEAN,
-					QueryStoreConstants.DEFAULT_EMBEDDING_PROVIDER_BEAN, e.getMessage());
+					QueryStoreConstants.DEFAULT_EMBEDDING_PROVIDER_BEAN, SkipLogFormat.scrubUuids(e.getMessage()));
 		}
 		return QueryStoreConstants.DEFAULT_EMBEDDING_PROVIDER_BEAN;
 	}
